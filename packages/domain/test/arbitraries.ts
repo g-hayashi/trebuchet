@@ -11,6 +11,9 @@ import type {
 
 /** fast-check のジェネレーター。他パッケージのテストからは `@trebuchet/domain/testing` で使う */
 
+/** fast-check を依存に持たないパッケージ（db）のテスト用に再エクスポートする */
+export { fc };
+
 const NORMAL_SIDE: Record<AccountCategory, Side> = {
   asset: "debit",
   expense: "debit",

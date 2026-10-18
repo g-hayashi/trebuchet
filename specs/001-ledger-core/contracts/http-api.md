@@ -18,7 +18,7 @@
 | 400 | `VALIDATION` | スキーマ違反（金額が整数でない、必須項目なし） | FR-013, FR-014 |
 | 422 | `UNBALANCED` | 借方合計 ≠ 貸方合計 | FR-015 |
 | 422 | `ACCOUNT_INACTIVE` / `ACCOUNT_NOT_FOUND` | 使用停止・存在しない科目 | FR-015 |
-| 422 | `OUT_OF_PERIOD` | 日付に対応する会計期間がない | FR-015 |
+| 422 | `OUT_OF_PERIOD` | 日付に対応する会計期間がない。最後の会計期間より後の日付（または会計期間がない）ときは `details.suggest = "create_fiscal_period"` | FR-015 |
 | 409 | `PERIOD_CLOSED` | 締め済み年度への登録・訂正・取消。`details.suggest = "correcting_entry"` | FR-015, FR-019a, FR-024 |
 | 422 | `REASON_REQUIRED` | 理由のない訂正・取消・締めの解除。空欄・空白のみの判定はドメインで行う（Zod では `reason` を文字列であることだけ検証する） | FR-019, FR-024 |
 | 422 | `TAX_METHOD_UNSUPPORTED` | 税抜経理の期間の日付の仕訳（001 では未対応） | FR-017 |
@@ -26,8 +26,11 @@
 | 409 | `ACCOUNT_IN_USE` | 使用中の科目の削除 | FR-005 |
 | 422 | `TAX_SETTING_GAP` | 消費税の設定期間の空白・重複 | FR-009 |
 | 404 | `ENTITY_NOT_FOUND` | 事業体がない | FR-002 |
+| 404 | `JOURNAL_NOT_FOUND` | 仕訳がない。`details.journalId` | FR-019a |
 
-成功時の警告（登録は成功）は `warnings: [{ code: "POSSIBLE_DUPLICATE" }]` で返す（FR-018）。
+仕訳の登録で複数の誤りがあるときは、最初の誤りを `code`・`message` とし、`details.errors` にすべての誤り（`{ code, message, details }` の配列）を入れる。行に結び付く誤りの `details` には `lineIndex`（0 始まり）と `field`（`accountId`・`amount` など）を入れる。Zod のスキーマ違反（400）は `details.issues` に Zod の issue（`path` 例: `["lines", 1, "amount"]`）を入れる。
+
+成功時の警告（登録は成功）は `warnings: [{ code: "POSSIBLE_DUPLICATE", message, details: { journalId, journalNo } }]` で返す（FR-018）。直前に登録した有効な仕訳と、日付と行（貸借・科目・金額の組の集合）が同じときに出す。
 
 ## 事業体
 
@@ -83,12 +86,14 @@
 
 | メソッド | パス | 説明 | 要件 |
 |---|---|---|---|
-| POST | `/entities/:id/journals` | JournalInput → `{ journal, warnings }` | FR-013〜018 |
+| POST | `/entities/:id/journals` | JournalInput → 201 `{ journal, warnings }`。`journal` は仕訳番号・行（`id`, `lineNo`, 決定した `taxCategory`, `taxAmount`）を含む | FR-013〜018 |
 | GET | `/entities/:id/journals/:journalId` | 仕訳と行、訂正元・訂正仕訳への参照 | FR-019a |
 | PUT | `/entities/:id/journals/:journalId` | `{ ...JournalInput, reason, version }` 訂正 | FR-019, FR-020 |
 | POST | `/entities/:id/journals/:journalId/void` | `{ reason, version }` 取消 | FR-019, FR-021 |
 | GET | `/entities/:id/journals/:journalId/history` | 変更履歴（変更前後・日時・理由） | FR-020, SC-005 |
 | GET | `/entities/:id/journals?…` | 検索（下記） | FR-023 |
+
+001 の US2 の時点では、検索パラメータは `limit`（1〜200, 既定 50）だけを受け付け、`{ journals }` を日付の新しい順・同じ日付では仕訳番号の大きい順で返す。他の検索パラメータは US3 以降で追加する。
 
 検索パラメータ: `dateFrom`, `dateTo`, `amountMin`, `amountMax`, `partnerId`, `accountId`, `q`（摘要・メモの部分一致）, `tagId`, `includeVoided`（既定 false）, `cursor`, `limit`。金額の範囲は、仕訳のいずれかの行の金額が範囲に入れば一致とする。
 

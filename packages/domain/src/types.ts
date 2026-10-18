@@ -8,6 +8,7 @@ import type {
   Side,
   TaxCategoryCode,
   TaxpayerStatus,
+  WarningCode,
 } from "@trebuchet/schema";
 
 export type {
@@ -29,6 +30,13 @@ export const err = <E>(error: E): { ok: false; error: E } => ({ ok: false, error
 
 export type DomainError = {
   code: ErrorCode;
+  message: string;
+  details?: ErrorDetails | undefined;
+};
+
+/** 登録は成功したが利用者に知らせること（FR-018 など） */
+export type DomainWarning = {
+  code: WarningCode;
   message: string;
   details?: ErrorDetails | undefined;
 };

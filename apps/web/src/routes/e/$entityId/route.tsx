@@ -8,6 +8,7 @@ export const Route = createFileRoute("/e/$entityId")({
 
 type NavTo =
   | "/e/$entityId"
+  | "/e/$entityId/journals"
   | "/e/$entityId/accounts"
   | "/e/$entityId/partners"
   | "/e/$entityId/tags"
@@ -17,6 +18,7 @@ type NavTo =
 /** 事業体ごとの画面の共通レイアウト。ナビの項目は各画面を追加するときに足す（US1〜US5） */
 const NAV: { label: string; to: NavTo }[] = [
   { label: "ホーム", to: "/e/$entityId" },
+  { label: "仕訳", to: "/e/$entityId/journals" },
   { label: "勘定科目", to: "/e/$entityId/accounts" },
   { label: "取引先", to: "/e/$entityId/partners" },
   { label: "タグ", to: "/e/$entityId/tags" },

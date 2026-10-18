@@ -1,10 +1,18 @@
-import type { Clock, IdGenerator, MasterRepository, RegistryRepository } from "../src/ports.ts";
+import type {
+  Clock,
+  IdGenerator,
+  JournalRepository,
+  MasterRepository,
+  NewJournal,
+  RegistryRepository,
+} from "../src/ports.ts";
 import type {
   Account,
   AuditEntry,
   EntityProfile,
   EntitySummary,
   FiscalPeriod,
+  Journal,
   OpeningBalance,
   Partner,
   SubAccount,
@@ -212,5 +220,72 @@ export class InMemoryMasterRepository implements MasterRepository {
       ...this.state.openingBalances.filter((o) => o.fiscalPeriodId !== fiscalPeriodId),
       ...rows,
     ];
+  }
+}
+
+/** JournalRepository のフェイク。transaction は例外のときに状態を巻き戻す */
+export class InMemoryLedgerRepository implements JournalRepository {
+  state: { journals: Journal[]; audits: AuditEntry[] } = { journals: [], audits: [] };
+  /** true なら appendAudit で例外を投げる（ロールバックの確認用） */
+  failOnAppendAudit = false;
+
+  get journals(): Journal[] {
+    return this.state.journals;
+  }
+  get audits(): AuditEntry[] {
+    return this.state.audits;
+  }
+
+  transaction<T>(fn: (tx: JournalRepository) => T): T {
+    const snapshot = structuredClone(this.state);
+    try {
+      return fn(this);
+    } catch (e) {
+      this.state = snapshot;
+      throw e;
+    }
+  }
+
+  appendAudit(entry: AuditEntry): void {
+    if (this.failOnAppendAudit) throw new Error("appendAudit failed");
+    this.state.audits.push(entry);
+  }
+
+  nextJournalNo(): number {
+    return Math.max(0, ...this.state.journals.map((j) => j.journalNo)) + 1;
+  }
+
+  lastJournal(): Journal | undefined {
+    return this.state.journals.reduce<Journal | undefined>(
+      (last, j) => (last === undefined || j.journalNo > last.journalNo ? j : last),
+      undefined,
+    );
+  }
+
+  insertJournal(journal: NewJournal): Journal {
+    if (this.state.journals.some((j) => j.journalNo === journal.journalNo)) {
+      throw new Error("UNIQUE constraint failed: journals.journal_no");
+    }
+    const saved: Journal = {
+      ...journal,
+      status: "active",
+      source: "manual",
+      version: 1,
+      updatedAt: journal.createdAt,
+    };
+    this.state.journals.push(structuredClone(saved));
+    return saved;
+  }
+
+  getJournal(id: string): Journal | undefined {
+    const found = this.state.journals.find((j) => j.id === id);
+    return found === undefined ? undefined : structuredClone(found);
+  }
+
+  recentJournals(limit: number): Journal[] {
+    return [...this.state.journals]
+      .sort((a, b) => b.date.localeCompare(a.date) || b.journalNo - a.journalNo)
+      .slice(0, limit)
+      .map((j) => structuredClone(j));
   }
 }

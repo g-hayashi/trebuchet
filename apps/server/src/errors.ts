@@ -19,6 +19,7 @@ export const ERROR_STATUS = {
   VERSION_CONFLICT: 409,
   ACCOUNT_IN_USE: 409,
   ENTITY_NOT_FOUND: 404,
+  JOURNAL_NOT_FOUND: 404,
 } as const satisfies Record<ErrorCode, ContentfulStatusCode>;
 
 export type ErrorStatus = (typeof ERROR_STATUS)[ErrorCode];

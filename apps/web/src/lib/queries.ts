@@ -11,9 +11,13 @@ export const queryKeys = {
   partners: (entityId: string) => ["entities", entityId, "partners"] as const,
   tags: (entityId: string) => ["entities", entityId, "tags"] as const,
   taxSettings: (entityId: string) => ["entities", entityId, "tax-settings"] as const,
+  taxCategories: (entityId: string) => ["entities", entityId, "tax-categories"] as const,
   fiscalPeriods: (entityId: string) => ["entities", entityId, "fiscal-periods"] as const,
   openingBalances: (entityId: string, year: string) =>
     ["entities", entityId, "fiscal-periods", year, "opening-balances"] as const,
+  journals: (entityId: string) => ["entities", entityId, "journals"] as const,
+  /** 帳票（US4）。仕訳を変更したら前方一致で無効化する */
+  reports: (entityId: string) => ["entities", entityId, "reports"] as const,
 };
 
 const entity = api.api.entities[":entityId"];
@@ -70,6 +74,13 @@ export const taxSettingsQuery = (entityId: string) =>
       (await unwrap(await entity["tax-settings"].$get(param(entityId)))).taxSettings,
   });
 
+export const taxCategoriesQuery = (entityId: string) =>
+  queryOptions({
+    queryKey: queryKeys.taxCategories(entityId),
+    queryFn: async () =>
+      (await unwrap(await entity["tax-categories"].$get(param(entityId)))).taxCategories,
+  });
+
 export const fiscalPeriodsQuery = (entityId: string) =>
   queryOptions({
     queryKey: queryKeys.fiscalPeriods(entityId),
@@ -88,11 +99,21 @@ export const openingBalancesQuery = (entityId: string, year: string) =>
       ),
   });
 
+/** 新しい順（日付の降順、同じ日付は仕訳番号の降順）の最近の仕訳 */
+export const journalsQuery = (entityId: string) =>
+  queryOptions({
+    queryKey: queryKeys.journals(entityId),
+    queryFn: async () =>
+      (await unwrap(await entity.journals.$get({ ...param(entityId), query: {} }))).journals,
+  });
+
 export type Entity = Item<typeof entitiesQuery>;
 export type Account = Item<typeof accountsQuery>;
 export type SubAccount = Item<typeof subAccountsQuery>;
 export type Partner = Item<typeof partnersQuery>;
 export type Tag = Item<typeof tagsQuery>;
 export type TaxSetting = Item<typeof taxSettingsQuery>;
+export type TaxCategory = Item<typeof taxCategoriesQuery>;
 export type FiscalPeriod = Item<typeof fiscalPeriodsQuery>;
 export type OpeningBalancesData = Item<typeof openingBalancesQuery>;
+export type Journal = Item<typeof journalsQuery>;

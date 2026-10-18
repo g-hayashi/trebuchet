@@ -140,21 +140,21 @@ description: "Task list for 001-ledger-core"
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T059 [P] [US2] `packages/domain/test/journal.property.test.ts` を書く（`validateJournal`）: INV-1（arbitraries の任意の仕訳は成功し、1行の金額をずらすと `UNBALANCED` で `details.diff` が差額）、INV-2（借方のみ・貸方のみは拒否）、INV-3（0 以下・1e12 以上・非整数は拒否）、存在しない科目は `ACCOUNT_NOT_FOUND`、使用停止の科目は `ACCOUNT_INACTIVE`、補助科目が別の科目に属していれば拒否、会計期間のない日付は `OUT_OF_PERIOD`、締め済みの期間の日付は `PERIOD_CLOSED`、消費税の設定が `tax_excluded` の期間の日付は `TAX_METHOD_UNSUPPORTED`。複数の違反はすべて返す
-- [ ] T060 [P] [US2] `packages/domain/test/tax-default.test.ts` を書く（FR-017）: 免税期間の既定の税区分は `OUT_OF_SCOPE`、課税・税込の期間で売上の科目は `SALES_10`、費用の科目は `PURCHASE_10`、資産・負債・純資産の科目は `OUT_OF_SCOPE`。税込経理で課税の税区分の行は `tax_amount = computeInclusiveTax(amount, resolveTaxRate(taxCategory, date, rates))`、それ以外は 0。税率のデータに適用開始日の異なる2行を用意し、仕訳の日付によって使われる税率が切り替わることを確認する（Constitution VI）
-- [ ] T061 [P] [US2] `packages/domain/test/create-journal.test.ts` を書く（フェイクのリポジトリ）: 仕訳番号は 1 から登録順に増える（INV-8）、audit_log に `create` が1件追記される、直前の仕訳と日付・科目・金額の組が同じなら `warnings: [{ code: "POSSIBLE_DUPLICATE" }]` を返すが登録はされる（FR-018）、検証エラーのときは何も書き込まない
-- [ ] T062 [P] [US2] `packages/db/test/ledger-repository.test.ts` を書く: 仕訳・行・タグの保存と取得、`nextJournalNo` がトランザクション内で採番される、arbitraries の仕訳を 1,000 件登録しても `v_unbalanced_journals` が空、トランザクション内で例外が起きたら仕訳も audit_log も残らない
-- [ ] T063 [P] [US2] `apps/server/test/journals.create.api.test.ts` を書く: 受け入れシナリオ US2-1（`売掛金 495,000 / 売上高 495,000` → 201 と `journalNo`）、US2-2（`普通預金 487,037 ＋ 事業主貸 7,963 / 売掛金 495,000`）、US2-3（借方 500,000 / 貸方 495,000 → 422 `UNBALANCED` で `diff: 5000`）、US2-4（金額 0 → 400 `VALIDATION`、会計期間外 → 422 `OUT_OF_PERIOD`）、`GET /journals/:id` で行が返る
+- [X] T059 [P] [US2] `packages/domain/test/journal.property.test.ts` を書く（`validateJournal`）: INV-1（arbitraries の任意の仕訳は成功し、1行の金額をずらすと `UNBALANCED` で `details.diff` が差額）、INV-2（借方のみ・貸方のみは拒否）、INV-3（0 以下・1e12 以上・非整数は拒否）、存在しない科目は `ACCOUNT_NOT_FOUND`、使用停止の科目は `ACCOUNT_INACTIVE`、補助科目が別の科目に属していれば拒否、会計期間のない日付は `OUT_OF_PERIOD`、締め済みの期間の日付は `PERIOD_CLOSED`、消費税の設定が `tax_excluded` の期間の日付は `TAX_METHOD_UNSUPPORTED`。複数の違反はすべて返す
+- [X] T060 [P] [US2] `packages/domain/test/tax-default.test.ts` を書く（FR-017）: 免税期間の既定の税区分は `OUT_OF_SCOPE`、課税・税込の期間で売上の科目は `SALES_10`、費用の科目は `PURCHASE_10`、資産・負債・純資産の科目は `OUT_OF_SCOPE`。税込経理で課税の税区分の行は `tax_amount = computeInclusiveTax(amount, resolveTaxRate(taxCategory, date, rates))`、それ以外は 0。税率のデータに適用開始日の異なる2行を用意し、仕訳の日付によって使われる税率が切り替わることを確認する（Constitution VI）
+- [X] T061 [P] [US2] `packages/domain/test/create-journal.test.ts` を書く（フェイクのリポジトリ）: 仕訳番号は 1 から登録順に増える（INV-8）、audit_log に `create` が1件追記される、直前の仕訳と日付・科目・金額の組が同じなら `warnings: [{ code: "POSSIBLE_DUPLICATE" }]` を返すが登録はされる（FR-018）、検証エラーのときは何も書き込まない
+- [X] T062 [P] [US2] `packages/db/test/ledger-repository.test.ts` を書く: 仕訳・行・タグの保存と取得、`nextJournalNo` がトランザクション内で採番される、arbitraries の仕訳を 1,000 件登録しても `v_unbalanced_journals` が空、トランザクション内で例外が起きたら仕訳も audit_log も残らない
+- [X] T063 [P] [US2] `apps/server/test/journals.create.api.test.ts` を書く: 受け入れシナリオ US2-1（`売掛金 495,000 / 売上高 495,000` → 201 と `journalNo`）、US2-2（`普通預金 487,037 ＋ 事業主貸 7,963 / 売掛金 495,000`）、US2-3（借方 500,000 / 貸方 495,000 → 422 `UNBALANCED` で `diff: 5000`）、US2-4（金額 0 → 400 `VALIDATION`、会計期間外 → 422 `OUT_OF_PERIOD`）、`GET /journals/:id` で行が返る
 
 ### Implementation for User Story 2
 
-- [ ] T064 [P] [US2] `packages/schema/src/journals.ts` に `JournalInput` を作成する（contracts/http-api.md のとおり。`lines` は 2 行以上で、`refine` で借方・貸方を1行以上ずつ要求。`amount` は `Yen`、`tagIds` の重複は不可）と、レスポンスの `JournalOutput`（`id`, `journalNo`, `date`, `memo`, `status`, `version`, `correctsJournalId`, `lines`）
-- [ ] T065 [US2] `packages/domain/src/journal.ts` に `validateJournal(draft, ctx)` と `defaultTaxCategory(date, side, account, settings)` を実装する。T059, T060 が通ること
-- [ ] T066 [US2] `packages/domain/src/usecases/create-journal.ts` を実装する: 検証 → `transaction` 内で `nextJournalNo` → `insertJournal` → `appendAudit(create)`。重複の警告を返す。T061 が通ること
-- [ ] T067 [US2] `packages/db/src/ledger-repository.ts` に `transaction`, `nextJournalNo`（`max(journal_no) + 1`）, `insertJournal`, `getJournal`, `lastJournal`, `appendAudit` を実装する。T062 が通ること
-- [ ] T068 [US2] `apps/server/src/routes/journals.ts` に `POST /journals` と `GET /journals/:journalId` を実装する。`OUT_OF_PERIOD` で日付が最後の会計期間より後のときは `details.suggest = "create_fiscal_period"` を付ける。T063 が通ること
-- [ ] T069 [US2] `apps/web/src/features/journals/JournalForm.tsx` を実装する: `useFieldArray` で行を追加・削除、行ごとに借方/貸方・科目（使用停止の科目は選べない）・補助科目・金額・税区分（日付と科目から既定値を入れる）・取引先・摘要・タグ。借方合計・貸方合計・差額を常に表示する。API のエラーを該当の行・項目に表示し、`POSSIBLE_DUPLICATE` は登録後に通知する。`create_fiscal_period` の提案には会計期間の作成へのリンクを出す
-- [ ] T070 [US2] `apps/web/src/routes/e/$entityId/journals/new.tsx`（入力画面）と `apps/web/src/routes/e/$entityId/journals/index.tsx`（仕訳の一覧。新しい順）を実装する。登録後に仕訳と帳票のクエリを無効化する
+- [X] T064 [P] [US2] `packages/schema/src/journals.ts` に `JournalInput` を作成する（contracts/http-api.md のとおり。`lines` は 2 行以上で、`refine` で借方・貸方を1行以上ずつ要求。`amount` は `Yen`、`tagIds` の重複は不可）と、レスポンスの `JournalOutput`（`id`, `journalNo`, `date`, `memo`, `status`, `version`, `correctsJournalId`, `lines`）
+- [X] T065 [US2] `packages/domain/src/journal.ts` に `validateJournal(draft, ctx)` と `defaultTaxCategory(date, side, account, settings)` を実装する。T059, T060 が通ること
+- [X] T066 [US2] `packages/domain/src/usecases/create-journal.ts` を実装する: 検証 → `transaction` 内で `nextJournalNo` → `insertJournal` → `appendAudit(create)`。重複の警告を返す。T061 が通ること
+- [X] T067 [US2] `packages/db/src/ledger-repository.ts` に `transaction`, `nextJournalNo`（`max(journal_no) + 1`）, `insertJournal`, `getJournal`, `lastJournal`, `appendAudit` を実装する。T062 が通ること
+- [X] T068 [US2] `apps/server/src/routes/journals.ts` に `POST /journals` と `GET /journals/:journalId` を実装する。`OUT_OF_PERIOD` で日付が最後の会計期間より後のときは `details.suggest = "create_fiscal_period"` を付ける。T063 が通ること
+- [X] T069 [US2] `apps/web/src/features/journals/JournalForm.tsx` を実装する: `useFieldArray` で行を追加・削除、行ごとに借方/貸方・科目（使用停止の科目は選べない）・補助科目・金額・税区分（日付と科目から既定値を入れる）・取引先・摘要・タグ。借方合計・貸方合計・差額を常に表示する。API のエラーを該当の行・項目に表示し、`POSSIBLE_DUPLICATE` は登録後に通知する。`create_fiscal_period` の提案には会計期間の作成へのリンクを出す
+- [X] T070 [US2] `apps/web/src/routes/e/$entityId/journals/new.tsx`（入力画面）と `apps/web/src/routes/e/$entityId/journals/index.tsx`（仕訳の一覧。新しい順）を実装する。登録後に仕訳と帳票のクエリを無効化する
 
 **Checkpoint**: US1 と US2 で記帳を始められる
 

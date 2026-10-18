@@ -1,4 +1,5 @@
 export * from "./dates.ts";
+export * from "./journal.ts";
 export * from "./money.ts";
 export * from "./opening.ts";
 export * from "./ports.ts";
@@ -9,4 +10,5 @@ export * from "./tax-rates.ts";
 export * from "./tax-settings.ts";
 export * from "./types.ts";
 export * from "./usecases/create-entity.ts";
+export * from "./usecases/create-journal.ts";
 export * from "./usecases/masters.ts";

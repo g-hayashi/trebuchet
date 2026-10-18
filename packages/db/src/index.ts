@@ -1,3 +1,4 @@
+export * from "./ledger-repository.ts";
 export * from "./master-repository.ts";
 export * from "./registry-repository.ts";
 export * as registrySchema from "./schema/registry.ts";

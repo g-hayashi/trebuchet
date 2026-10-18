@@ -5,6 +5,7 @@ import type {
   EntitySummary,
   FiscalPeriod,
   Journal,
+  JournalLine,
   JournalQuery,
   OpeningBalance,
   Page,
@@ -32,22 +33,35 @@ export class RepositoryConflictError extends Error {
   readonly code = "VERSION_CONFLICT" as const;
 }
 
-export type NewJournal = ValidJournal & {
+/** 保存する新しい仕訳。行の ID もドメインで採番する */
+export type NewJournal = Omit<ValidJournal, "lines"> & {
   id: string;
   journalNo: number;
   createdAt: string;
+  lines: JournalLine[];
 };
 
 export interface AuditLog {
   appendAudit(entry: AuditEntry): void;
 }
 
-/** 仕訳の読み書き（packages/db が実装）。メソッドはすべて同期 */
-export interface LedgerRepository extends AuditLog {
-  transaction<T>(fn: (tx: LedgerRepository) => T): T;
+/** 仕訳の登録と参照（packages/db が実装）。メソッドはすべて同期 */
+export interface JournalRepository extends AuditLog {
+  transaction<T>(fn: (tx: JournalRepository) => T): T;
+  /** 次の仕訳番号（INV-8）。同じトランザクションの中で insertJournal する */
   nextJournalNo(): number;
+  /** 仕訳番号が最大の仕訳（取消済みを含む） */
   lastJournal(): Journal | undefined;
+  /** status active、source manual、version 1、updatedAt = createdAt で保存する */
   insertJournal(journal: NewJournal): Journal;
+  getJournal(id: string): Journal | undefined;
+  /** 新しい順（日付の降順、同じ日付は仕訳番号の降順）。取消済みを含む */
+  recentJournals(limit: number): Journal[];
+}
+
+/** 仕訳の訂正・取消・検索と帳票の集計（US3 以降で実装する） */
+export interface LedgerRepository extends JournalRepository {
+  transaction<T>(fn: (tx: LedgerRepository) => T): T;
   /** 行を全件置き換え、version を +1 する。version が一致しなければ RepositoryConflictError */
   replaceJournal(
     id: string,
@@ -57,7 +71,6 @@ export interface LedgerRepository extends AuditLog {
   ): Journal;
   /** status を voided にし、version を +1 する。version が一致しなければ RepositoryConflictError */
   voidJournal(id: string, expectedVersion: number, updatedAt: string): Journal;
-  getJournal(id: string): Journal | undefined;
   journalHistory(id: string): AuditEntry[];
   correctingJournalsOf(id: string): Journal[];
   findJournals(query: JournalQuery): Page<Journal>;
