@@ -122,11 +122,11 @@ description: "Task list for 001-ledger-core"
 - [X] T051 [US1] `apps/server/src/routes/entities.ts` を実装する: `GET /entities`, `POST /entities`, `PATCH /entities/:entityId`
 - [X] T052 [US1] `apps/server/src/routes/masters.ts` を実装する: accounts（GET/POST/PATCH/DELETE）、sub-accounts（GET/POST）、partners（GET/POST/PATCH）、tags（GET/POST）、tax-categories（GET）、tax-settings（GET/PUT）
 - [X] T053 [US1] `apps/server/src/routes/periods.ts` を実装する: `GET/POST /fiscal-periods`、`GET/PUT /fiscal-periods/:year/opening-balances`。T042 が通ること
-- [ ] T054 [P] [US1] `apps/web/src/routes/index.tsx` に事業体の一覧と作成フォームを実装する（React Hook Form ＋ Zod。作成後に `/e/$entityId` へ移動）
-- [ ] T055 [P] [US1] `apps/web/src/routes/e/$entityId/accounts.tsx` に勘定科目の画面を実装する（決算書の順の一覧、追加、名称変更、使用停止、補助科目の追加。使用停止の科目は薄く表示）
-- [ ] T056 [P] [US1] `apps/web/src/routes/e/$entityId/partners.tsx` と `apps/web/src/routes/e/$entityId/tags.tsx` を実装する
-- [ ] T057 [P] [US1] `apps/web/src/routes/e/$entityId/tax-settings.tsx` を実装する（期間の一覧と追加。保存時の `TAX_SETTING_GAP` をフォームに表示）
-- [ ] T058 [P] [US1] `apps/web/src/routes/e/$entityId/periods/index.tsx` と `apps/web/src/routes/e/$entityId/periods/$year/opening-balances.tsx` を実装する（期間の一覧、翌年度の作成、期首残高の入力。借方合計・貸方合計・差額を常に表示し、一致しないと保存ボタンを無効にする）
+- [X] T054 [P] [US1] `apps/web/src/routes/index.tsx` に事業体の一覧と作成フォームを実装する（React Hook Form ＋ Zod。作成後に `/e/$entityId` へ移動）
+- [X] T055 [P] [US1] `apps/web/src/routes/e/$entityId/accounts.tsx` に勘定科目の画面を実装する（決算書の順の一覧、追加、名称変更、使用停止、補助科目の追加。使用停止の科目は薄く表示）
+- [X] T056 [P] [US1] `apps/web/src/routes/e/$entityId/partners.tsx` と `apps/web/src/routes/e/$entityId/tags.tsx` を実装する
+- [X] T057 [P] [US1] `apps/web/src/routes/e/$entityId/tax-settings.tsx` を実装する（期間の一覧と追加。保存時の `TAX_SETTING_GAP` をフォームに表示）
+- [X] T058 [P] [US1] `apps/web/src/routes/e/$entityId/periods/index.tsx` と `apps/web/src/routes/e/$entityId/periods/$year/opening-balances.tsx` を実装する（期間の一覧、翌年度の作成、期首残高の入力。借方合計・貸方合計・差額を常に表示し、一致しないと保存ボタンを無効にする）
 
 **Checkpoint**: 事業体を作成し、マスタと期首残高を登録できる
 

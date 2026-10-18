@@ -12,6 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EEntityIdRouteRouteImport } from './routes/e/$entityId/route'
 import { Route as EEntityIdIndexRouteImport } from './routes/e/$entityId/index'
+import { Route as EEntityIdAccountsRouteImport } from './routes/e/$entityId/accounts'
+import { Route as EEntityIdPartnersRouteImport } from './routes/e/$entityId/partners'
+import { Route as EEntityIdTagsRouteImport } from './routes/e/$entityId/tags'
+import { Route as EEntityIdTaxSettingsRouteImport } from './routes/e/$entityId/tax-settings'
+import { Route as EEntityIdPeriodsIndexRouteImport } from './routes/e/$entityId/periods/index'
+import { Route as EEntityIdPeriodsYearOpeningBalancesRouteImport } from './routes/e/$entityId/periods/$year/opening-balances'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,28 +34,104 @@ const EEntityIdIndexRoute = EEntityIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => EEntityIdRouteRoute,
 } as any)
+const EEntityIdAccountsRoute = EEntityIdAccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdPartnersRoute = EEntityIdPartnersRouteImport.update({
+  id: '/partners',
+  path: '/partners',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdTagsRoute = EEntityIdTagsRouteImport.update({
+  id: '/tags',
+  path: '/tags',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdTaxSettingsRoute = EEntityIdTaxSettingsRouteImport.update({
+  id: '/tax-settings',
+  path: '/tax-settings',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdPeriodsIndexRoute = EEntityIdPeriodsIndexRouteImport.update({
+  id: '/periods/',
+  path: '/periods/',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdPeriodsYearOpeningBalancesRoute =
+  EEntityIdPeriodsYearOpeningBalancesRouteImport.update({
+    id: '/periods/$year/opening-balances',
+    path: '/periods/$year/opening-balances',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
+  '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
+  '/e/$entityId/partners': typeof EEntityIdPartnersRoute
+  '/e/$entityId/tags': typeof EEntityIdTagsRoute
+  '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
   '/e/$entityId/': typeof EEntityIdIndexRoute
+  '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/periods/$year/opening-balances': typeof EEntityIdPeriodsYearOpeningBalancesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
+  '/e/$entityId/partners': typeof EEntityIdPartnersRoute
+  '/e/$entityId/tags': typeof EEntityIdTagsRoute
+  '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
   '/e/$entityId': typeof EEntityIdIndexRoute
+  '/e/$entityId/periods': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/periods/$year/opening-balances': typeof EEntityIdPeriodsYearOpeningBalancesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
+  '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
+  '/e/$entityId/partners': typeof EEntityIdPartnersRoute
+  '/e/$entityId/tags': typeof EEntityIdTagsRoute
+  '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
   '/e/$entityId/': typeof EEntityIdIndexRoute
+  '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/periods/$year/opening-balances': typeof EEntityIdPeriodsYearOpeningBalancesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/e/$entityId' | '/e/$entityId/'
+  fullPaths:
+    | '/'
+    | '/e/$entityId'
+    | '/e/$entityId/accounts'
+    | '/e/$entityId/partners'
+    | '/e/$entityId/tags'
+    | '/e/$entityId/tax-settings'
+    | '/e/$entityId/'
+    | '/e/$entityId/periods/'
+    | '/e/$entityId/periods/$year/opening-balances'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/e/$entityId'
-  id: '__root__' | '/' | '/e/$entityId' | '/e/$entityId/'
+  to:
+    | '/'
+    | '/e/$entityId/accounts'
+    | '/e/$entityId/partners'
+    | '/e/$entityId/tags'
+    | '/e/$entityId/tax-settings'
+    | '/e/$entityId'
+    | '/e/$entityId/periods'
+    | '/e/$entityId/periods/$year/opening-balances'
+  id:
+    | '__root__'
+    | '/'
+    | '/e/$entityId'
+    | '/e/$entityId/accounts'
+    | '/e/$entityId/partners'
+    | '/e/$entityId/tags'
+    | '/e/$entityId/tax-settings'
+    | '/e/$entityId/'
+    | '/e/$entityId/periods/'
+    | '/e/$entityId/periods/$year/opening-balances'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -80,15 +162,70 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EEntityIdIndexRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
+    '/e/$entityId/accounts': {
+      id: '/e/$entityId/accounts'
+      path: '/accounts'
+      fullPath: '/e/$entityId/accounts'
+      preLoaderRoute: typeof EEntityIdAccountsRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/partners': {
+      id: '/e/$entityId/partners'
+      path: '/partners'
+      fullPath: '/e/$entityId/partners'
+      preLoaderRoute: typeof EEntityIdPartnersRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/tags': {
+      id: '/e/$entityId/tags'
+      path: '/tags'
+      fullPath: '/e/$entityId/tags'
+      preLoaderRoute: typeof EEntityIdTagsRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/tax-settings': {
+      id: '/e/$entityId/tax-settings'
+      path: '/tax-settings'
+      fullPath: '/e/$entityId/tax-settings'
+      preLoaderRoute: typeof EEntityIdTaxSettingsRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/periods/': {
+      id: '/e/$entityId/periods/'
+      path: '/periods'
+      fullPath: '/e/$entityId/periods/'
+      preLoaderRoute: typeof EEntityIdPeriodsIndexRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/periods/$year/opening-balances': {
+      id: '/e/$entityId/periods/$year/opening-balances'
+      path: '/periods/$year/opening-balances'
+      fullPath: '/e/$entityId/periods/$year/opening-balances'
+      preLoaderRoute: typeof EEntityIdPeriodsYearOpeningBalancesRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
   }
 }
 
 interface EEntityIdRouteRouteChildren {
+  EEntityIdAccountsRoute: typeof EEntityIdAccountsRoute
+  EEntityIdPartnersRoute: typeof EEntityIdPartnersRoute
+  EEntityIdTagsRoute: typeof EEntityIdTagsRoute
+  EEntityIdTaxSettingsRoute: typeof EEntityIdTaxSettingsRoute
   EEntityIdIndexRoute: typeof EEntityIdIndexRoute
+  EEntityIdPeriodsIndexRoute: typeof EEntityIdPeriodsIndexRoute
+  EEntityIdPeriodsYearOpeningBalancesRoute: typeof EEntityIdPeriodsYearOpeningBalancesRoute
 }
 
 const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
+  EEntityIdAccountsRoute: EEntityIdAccountsRoute,
+  EEntityIdPartnersRoute: EEntityIdPartnersRoute,
+  EEntityIdTagsRoute: EEntityIdTagsRoute,
+  EEntityIdTaxSettingsRoute: EEntityIdTaxSettingsRoute,
   EEntityIdIndexRoute: EEntityIdIndexRoute,
+  EEntityIdPeriodsIndexRoute: EEntityIdPeriodsIndexRoute,
+  EEntityIdPeriodsYearOpeningBalancesRoute:
+    EEntityIdPeriodsYearOpeningBalancesRoute,
 }
 
 const EEntityIdRouteRouteWithChildren = EEntityIdRouteRoute._addFileChildren(
