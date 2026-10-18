@@ -106,8 +106,8 @@ description: "Task list for 001-ledger-core"
 - [X] T038 [P] [US1] `packages/domain/test/opening.property.test.ts` を書く（FR-011）: `validateOpeningBalances` は Σ借方 = Σ貸方 のときだけ成功し、失敗時は `UNBALANCED` で `details: { debit, credit, diff }` を返す。金額 0 以下と、同じ (科目, 補助科目) の重複を拒否する
 - [X] T039 [P] [US1] `packages/domain/test/create-entity.test.ts` を書く（フェイクのリポジトリ）: `createEntity({ name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 })` で、初期の科目セット、2026-01-01〜2026-12-31 の会計期間（`open`）、`effective_from = 2026-01-01` の `exempt`・`tax_included` の設定が作られる。`kind: "corporation"` でも個人用の初期セットで作られる
 - [X] T040 [P] [US1] `packages/domain/test/masters.test.ts` を書く: 仕訳で使われた科目の削除は `ACCOUNT_IN_USE`、使用停止は可能、科目名の変更は audit_log に `rename`（変更前・後の名前）を残す、使用停止は `deactivate` を残す、利用者が追加した科目のコードは自動採番される、補助科目は同じ科目内で名前が重複しない
-- [ ] T041 [P] [US1] `packages/db/test/master-repository.test.ts` を書く: 科目・補助科目・取引先・タグ・消費税の設定・会計期間・期首残高の保存と取得、期首残高の一括置換が1トランザクションで行われる
-- [ ] T042 [P] [US1] `apps/server/test/entities.api.test.ts` と `apps/server/test/masters.api.test.ts` を書く: `POST /api/entities` → 201 で初期データが入る、`GET /entities/:id/accounts` が `sort_order` 順、`PUT tax-settings` の重複 → 422 `TAX_SETTING_GAP`、`PUT opening-balances` の貸借不一致 → 422 `UNBALANCED`、使用中の科目の `DELETE` → 409 `ACCOUNT_IN_USE`、`PATCH /entities/:id` で名称を変更できる
+- [X] T041 [P] [US1] `packages/db/test/master-repository.test.ts` を書く: 科目・補助科目・取引先・タグ・消費税の設定・会計期間・期首残高の保存と取得、期首残高の一括置換が1トランザクションで行われる
+- [X] T042 [P] [US1] `apps/server/test/entities.api.test.ts` と `apps/server/test/masters.api.test.ts` を書く: `POST /api/entities` → 201 で初期データが入る、`GET /entities/:id/accounts` が `sort_order` 順、`PUT tax-settings` の重複 → 422 `TAX_SETTING_GAP`、`PUT opening-balances` の貸借不一致 → 422 `UNBALANCED`、使用中の科目の `DELETE` → 409 `ACCOUNT_IN_USE`、`PATCH /entities/:id` で名称を変更できる
 
 ### Implementation for User Story 1
 
@@ -118,10 +118,10 @@ description: "Task list for 001-ledger-core"
 - [X] T047 [P] [US1] `packages/schema/src/entities.ts` と `packages/schema/src/masters.ts` を作成する: `EntityCreate { name: string(1..100), kind, fiscalStartMonth: int 1..12, firstFiscalYear: int 2000..2100 }`、`EntityPatch { name }`、`AccountCreate { name, category, reportSection, reportLine? }`、`AccountPatch { name?, isActive? }`、`SubAccountCreate { name }`、`PartnerInput { name, honorific: "様" | "御中" | null, memo? }`、`TagCreate { name }`、`TaxSettingsPut = Array<{ effectiveFrom, taxpayerStatus, accountingMethod }>`、`OpeningBalancesPut = Array<{ accountId, subAccountId?, side, amount: Yen }>`
 - [X] T048 [US1] `packages/domain/src/usecases/create-entity.ts` を実装する: `テナントの `MasterRepository` に `entity_profile`、初期の科目、会計期間、消費税の設定（`exempt`・`tax_included`, 適用開始日 = 会計期間の開始日）を1トランザクションで投入し、最後に `RegistryRepository` に登録する（U2: テナントの失敗時は registry に何も残らない。registry の失敗時に残るテナントのファイルは一覧に出ず到達できない）。T039 が通ること
 - [X] T049 [US1] `packages/domain/src/usecases/masters.ts` を実装する: `addAccount`, `renameAccount`（audit `rename`）, `setAccountActive`（audit `deactivate`）, `deleteAccount`（使用中なら `ACCOUNT_IN_USE`）, `addSubAccount`, `upsertPartner`, `addTag`, `replaceTaxSettings`（検証後に audit `replace`）, `createNextFiscalPeriod`（最後の期間の翌日から1年）, `replaceOpeningBalances`（検証後に audit `replace`。締め済みの期間なら `PERIOD_CLOSED`）。T040 が通ること
-- [ ] T050 [US1] `packages/db/src/registry-repository.ts` と `packages/db/src/master-repository.ts` を実装する（`RegistryRepository`, `MasterRepository` のポート）。T041 が通ること
-- [ ] T051 [US1] `apps/server/src/routes/entities.ts` を実装する: `GET /entities`, `POST /entities`, `PATCH /entities/:entityId`
-- [ ] T052 [US1] `apps/server/src/routes/masters.ts` を実装する: accounts（GET/POST/PATCH/DELETE）、sub-accounts（GET/POST）、partners（GET/POST/PATCH）、tags（GET/POST）、tax-categories（GET）、tax-settings（GET/PUT）
-- [ ] T053 [US1] `apps/server/src/routes/periods.ts` を実装する: `GET/POST /fiscal-periods`、`GET/PUT /fiscal-periods/:year/opening-balances`。T042 が通ること
+- [X] T050 [US1] `packages/db/src/registry-repository.ts` と `packages/db/src/master-repository.ts` を実装する（`RegistryRepository`, `MasterRepository` のポート）。T041 が通ること
+- [X] T051 [US1] `apps/server/src/routes/entities.ts` を実装する: `GET /entities`, `POST /entities`, `PATCH /entities/:entityId`
+- [X] T052 [US1] `apps/server/src/routes/masters.ts` を実装する: accounts（GET/POST/PATCH/DELETE）、sub-accounts（GET/POST）、partners（GET/POST/PATCH）、tags（GET/POST）、tax-categories（GET）、tax-settings（GET/PUT）
+- [X] T053 [US1] `apps/server/src/routes/periods.ts` を実装する: `GET/POST /fiscal-periods`、`GET/PUT /fiscal-periods/:year/opening-balances`。T042 が通ること
 - [ ] T054 [P] [US1] `apps/web/src/routes/index.tsx` に事業体の一覧と作成フォームを実装する（React Hook Form ＋ Zod。作成後に `/e/$entityId` へ移動）
 - [ ] T055 [P] [US1] `apps/web/src/routes/e/$entityId/accounts.tsx` に勘定科目の画面を実装する（決算書の順の一覧、追加、名称変更、使用停止、補助科目の追加。使用停止の科目は薄く表示）
 - [ ] T056 [P] [US1] `apps/web/src/routes/e/$entityId/partners.tsx` と `apps/web/src/routes/e/$entityId/tags.tsx` を実装する

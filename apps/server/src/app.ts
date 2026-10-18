@@ -1,13 +1,21 @@
 import { Hono } from "hono";
 import { onError } from "./errors.ts";
+import { entitiesRoutes, entityRoutes } from "./routes/entities.ts";
+import { masterRoutes } from "./routes/masters.ts";
+import { periodRoutes } from "./routes/periods.ts";
 import { type TenantEnv, tenant } from "./tenant.ts";
 
-const entityRoutes = new Hono<TenantEnv>().use(tenant);
+const tenantRoutes = new Hono<TenantEnv>()
+  .use(tenant)
+  .route("/", entityRoutes)
+  .route("/", masterRoutes)
+  .route("/", periodRoutes);
 
 export const app = new Hono()
   .basePath("/api")
   .get("/health", (c) => c.json({ ok: true }))
-  .route("/entities/:entityId", entityRoutes);
+  .route("/entities", entitiesRoutes)
+  .route("/entities/:entityId", tenantRoutes);
 
 app.onError(onError);
 
