@@ -1,0 +1,6 @@
+work/
+.DS_Store
+node_modules/
+*.sqlite
+*.db
+.env*
