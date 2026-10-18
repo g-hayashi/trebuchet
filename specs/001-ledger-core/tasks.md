@@ -23,7 +23,7 @@ description: "Task list for 001-ledger-core"
 - パッケージ名: `@trebuchet/schema`, `@trebuchet/domain`, `@trebuchet/db`, `@trebuchet/server`, `@trebuchet/web`
 - 依存の向き: `apps/* → packages/db → packages/domain → packages/schema`、`apps/web → packages/schema`。`packages/domain` は hono・react・drizzle-orm・better-sqlite3・`node:fs`・`node:sqlite` を import しない
 - 金額は `number` の整数（`0 < amount < 1e12`）。浮動小数の演算をしない
-- ID は `crypto.randomUUIDv7()`。ドメイン層では直接呼ばず、`IdGenerator` ポートから受け取る（純関数を保つため）
+- ID は `import { randomUUIDv7 } from "node:crypto"`（グローバルの `crypto` にはない。T001 で確認）。ドメイン層では直接呼ばず、`IdGenerator` ポートから受け取る（純関数を保つため）
 - **テストの一時ファイルはプロジェクト内の `.tmp/`（`.gitignore` 済み）に作る。`/tmp`・`os.tmpdir()`・プロジェクト外のパスは使わない**（利用者の指示）
 - 実データ（`work/`）をテストやフィクスチャに使わない。フィクスチャは合成データ
 - コミットメッセージは Conventional Commits。末尾に `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
@@ -34,7 +34,7 @@ description: "Task list for 001-ledger-core"
 
 **Purpose**: SQLite ドライバーの検証と monorepo の雛形
 
-- [ ] T001 SQLite ドライバーの PoC（research.md R1 のゲート）を `.poc/sqlite/` で実施する。`.poc/` は `.gitignore` 済み。**`pnpm add` の前に利用者の承認を得る**。確認する項目: (1) Node 26 で `better-sqlite3@13` がインストールできる（ビルド済みバイナリか、ローカルビルドか）、(2) `CREATE TABLE ... STRICT` が使える、(3) `BEFORE DELETE` トリガーの `RAISE(ABORT, ...)` で削除が拒否される、(4) `drizzle-orm/better-sqlite3` で接続し、同期トランザクションが使える、(5) `crypto.randomUUIDv7()` が使える。結果を `specs/001-ledger-core/research.md` の R1 に「PoC 結果（日付）」として追記し、`docs/adr/0001-sqlite-driver.md` にも決定を記録する。あわせて、`tsx` を使わずに `node --watch` で TypeScript を直接実行できるかを確認し、できれば T009 から `tsx` を外す（Constitution VII）。失敗した場合は R1 の Decision を `node:sqlite` に変更し、以降のタスクのドライバー名を読み替える
+- [X] T001 SQLite ドライバーの PoC（research.md R1 のゲート）を `.poc/sqlite/` で実施する。`.poc/` は `.gitignore` 済み。**`pnpm add` の前に利用者の承認を得る**。確認する項目: (1) Node 26 で `better-sqlite3@13` がインストールできる（ビルド済みバイナリか、ローカルビルドか）、(2) `CREATE TABLE ... STRICT` が使える、(3) `BEFORE DELETE` トリガーの `RAISE(ABORT, ...)` で削除が拒否される、(4) `drizzle-orm/better-sqlite3` で接続し、同期トランザクションが使える、(5) `crypto.randomUUIDv7()` が使える。結果を `specs/001-ledger-core/research.md` の R1 に「PoC 結果（日付）」として追記し、`docs/adr/0001-sqlite-driver.md` にも決定を記録する。あわせて、`tsx` を使わずに `node --watch` で TypeScript を直接実行できるかを確認し、できれば T009 から `tsx` を外す（Constitution VII）。失敗した場合は R1 の Decision を `node:sqlite` に変更し、以降のタスクのドライバー名を読み替える
 - [ ] T002 ルートの `package.json`（`"private": true`, `"type": "module"`, `"engines": { "node": ">=26.5.1" }`, `"packageManager": "pnpm@<最新>"`, scripts: `dev`, `test`, `typecheck`, `lint`, `format`, `bench:reports`）と `pnpm-workspace.yaml`（`apps/*`, `packages/*`）、`.nvmrc`（`26`）を作成する
 - [ ] T003 [P] `tsconfig.base.json` を作成する（TypeScript 7.0、`strict: true`, `module`/`moduleResolution: "NodeNext"`、`verbatimModuleSyntax: true`、`noUncheckedIndexedAccess: true`、`exactOptionalPropertyTypes: true`）
 - [ ] T004 [P] `biome.json` を作成する（lint と format を有効化）。`packages/domain/**` に対して `noRestrictedImports` で `hono`, `react`, `drizzle-orm`, `better-sqlite3`, `node:fs`, `node:sqlite` を禁止する
@@ -42,7 +42,7 @@ description: "Task list for 001-ledger-core"
 - [ ] T006 [P] `packages/schema` の雛形を作成する（`package.json` の name `@trebuchet/schema`、依存 `zod@4`、`tsconfig.json`、`src/index.ts`）
 - [ ] T007 [P] `packages/domain` の雛形を作成する（name `@trebuchet/domain`、依存 `@trebuchet/schema`、devDeps `vitest@5`, `fast-check@4`、`exports` に `"."` と `"./testing"`（`test/arbitraries.ts` などのテスト用ヘルパーを他パッケージのテストに公開）、`vitest.config.ts`）
 - [ ] T008 [P] `packages/db` の雛形を作成する（name `@trebuchet/db`、依存 `drizzle-orm@0.45`, `better-sqlite3@13`、devDeps `drizzle-kit@0.31`, `@types/better-sqlite3`、`drizzle.config.ts`（出力先 `packages/db/drizzle/tenant` と `packages/db/drizzle/registry` の2系統）、`vitest.config.ts`）
-- [ ] T009 [P] `apps/server` の雛形を作成する（name `@trebuchet/server`、依存 `hono@4`, `@hono/node-server@>=2.1.3`, `@hono/standard-validator`, `@trebuchet/db`, `@trebuchet/domain`, `@trebuchet/schema`、開発用の `tsx`、`vitest.config.ts`）
+- [ ] T009 [P] `apps/server` の雛形を作成する（name `@trebuchet/server`、依存 `hono@4`, `@hono/node-server@>=2.1.3`, `@hono/standard-validator`, `@trebuchet/db`, `@trebuchet/domain`, `@trebuchet/schema`、`vitest.config.ts`。`tsx` は使わず、dev は `node --watch src/main.ts`（T001 で確認））
 - [ ] T010 [P] `apps/web` の雛形を Vite 8 ＋ React 19 で作成する（name `@trebuchet/web`、TanStack Router のファイルベースルーティングの Vite プラグイン、TanStack Query、TanStack Table、react-hook-form ＋ `@hookform/resolvers`、Tailwind CSS 4、`shadcn` の初期化、`vite.config.ts` で `/api` を `http://127.0.0.1:8787` にプロキシ、dev サーバーは `127.0.0.1:5173`）
 - [ ] T011 [P] ルートの `vitest.config.ts` で各パッケージを projects としてまとめ、`pnpm test` で全体を実行できるようにする
 - [ ] T012 [P] `.github/workflows/ci.yml` を作成する（Node 26、pnpm、`pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm lint` → `pnpm test`）

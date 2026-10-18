@@ -8,7 +8,14 @@
 - **Decision**: `better-sqlite3`（13.x）＋ `drizzle-orm/better-sqlite3`
 - **Rationale**: 同期 API のため、「検証 → 仕訳の書込 → 監査ログの追記」を1トランザクションで素直に書ける。Drizzle の安定版が正式に対応している。実績が多い。
 - **Risk**: Node 26（ABI）向けのビルド済みバイナリがあるかは未確認。ない場合はローカルでのビルドが必要（Xcode Command Line Tools）。
-- **Gate**: tasks の最初に PoC を置く（インストール、STRICT テーブル、トリガーによる削除の禁止、Drizzle からの接続、`crypto.randomUUIDv7`）。
+- **Gate**: tasks の最初に PoC を置く（インストール、STRICT テーブル、トリガーによる削除の禁止、Drizzle からの接続、UUIDv7）。
+- **PoC 結果（2026-10-18, Node 26.9.0 / macOS arm64 / pnpm 11.3.0）**: ✅ 採用を確定。
+  - better-sqlite3 13.0.3 はパッケージに `prebuilds/darwin-arm64.node` を同梱しており、ビルドスクリプト（pnpm の `allowBuilds`）を許可しなくても動く。Xcode Command Line Tools は不要
+  - STRICT（REAL を INTEGER 列に入れると拒否）、`RAISE(ABORT)` の削除禁止トリガー、CHECK 制約、Drizzle 0.45.4 の同期トランザクション（例外でロールバック、戻り値を返せる）をすべて確認。同梱の SQLite は 3.53.4
+  - 型定義は同梱されていないため `@types/better-sqlite3`（9.6）を使う
+  - 参考: `node:sqlite` でも同じ項目（Drizzle を除く）が動いた。代替案として有効
+  - `tsx` は不要。Node 26 は TypeScript の型を取り除いてそのまま実行できる。ただし enum などは使えないため、tsconfig で `erasableSyntaxOnly` を有効にし、import には `.ts` の拡張子を付ける
+  - 記録: [docs/adr/0001-sqlite-driver.md](../../docs/adr/0001-sqlite-driver.md)
 - **Alternatives**:
   - `node:sqlite`（Node 組み込み, Stability 1.2 = RC）: ネイティブのビルドが不要で、Tauri 化にも有利。ただし Drizzle のドライバーは rc 系のみ。**PoC が失敗した場合の代替**とする。リポジトリのポート（[contracts/domain-module.md](./contracts/domain-module.md)）の背後に閉じ込めるため、差し替えの影響は `packages/db` に限られる。
   - `@libsql/client`: 非同期 API でトランザクションの扱いが複雑になる。リモート同期は不要なため不採用。
@@ -62,7 +69,7 @@
 
 ## R8. ID と仕訳番号
 
-- **Decision**: 主キーは UUIDv7（`crypto.randomUUIDv7()`、Node 26.1 以降）。仕訳番号は別に、事業体内の通し番号（`INTEGER`, UNIQUE）をトランザクション内で `max + 1` で採番する。
+- **Decision**: 主キーは UUIDv7（`import { randomUUIDv7 } from "node:crypto"`、Node 26.1 以降。PoC で確認: グローバルの `crypto.randomUUIDv7` は存在しない）。仕訳番号は別に、事業体内の通し番号（`INTEGER`, UNIQUE）をトランザクション内で `max + 1` で採番する。
 - **Rationale**: UUIDv7 は時系列順だが単調性が保証されないため、表示用の番号は別に持つ（FR-016）。
 - **Alternatives**: ULID（外部ライブラリが必要）、自動採番の整数の主キー（後で取込・同期するときに衝突しやすい）。
 
