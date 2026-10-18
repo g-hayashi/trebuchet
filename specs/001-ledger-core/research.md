@@ -26,6 +26,7 @@
 - **Rationale**: v1 は RC のため、安定版を使う。すべてのテナント DB に同じ SQL を当てるだけなので、「起動時・テナントを開くときに migrate」が最も単純。
 - **補足**: トリガー（削除の禁止、監査ログの追記のみ）、ビュー `v_unbalanced_journals`、`STRICT` は Drizzle のスキーマ定義で表現できないため、`drizzle-kit generate --custom` で手書きの SQL マイグレーションとして追加する。
 - **Alternatives**: Kysely（型安全なクエリビルダー、マイグレーションは自前）。Drizzle の方が学習資料が多く、スキーマから型を得られるため不採用。
+- **実装メモ（T024, 2026-10-18）**: drizzle-kit 0.31 は `STRICT` を出力しないため、生成後の `0000_init.sql` の `);` を `) STRICT;` に置き換えた。スキーマを変更して再生成したときも、同じ置き換えが必要（tenant-store のテストで `STRICT` を確認する）。`tax_rates` は `(category_code, effective_from)` を複合主キーにした（UNIQUE と同じ効果）。
 
 ## R3. API 層
 
@@ -101,3 +102,11 @@
 
 - **Decision**: 001 では `127.0.0.1` だけで待ち受ける。Tailscale 経由のアクセスとパスキーは 003 で追加する。データは `data/`（`.gitignore` 済み）に置き、パスは環境変数 `TREBUCHET_DATA_DIR` で変更できる。
 - **Rationale**: 認証がない状態でネットワークに公開しない（Constitution III）。
+
+## R14. 税制の改正の監視（Constitution VI）
+
+- **確認日**: 2026-10-18（国税庁「消費税の軽減税率制度」「消費税率引下げ特設サイト」）
+- **状況**: 「飲食料品消費税率の臨時的な引下げ及び就業者負担軽減支援金の導入に関する大綱」（令和8年9月15日閣議決定）で、**令和9年4月1日〜令和11年3月31日の2年間、飲食料品の譲渡の消費税率を引き下げる**改正案が示された。法案の国会提出・成立はまだ（特設サイトに「可決・成立した場合のもの」と明記）
+- **Decision**: 成立前のため `tax_rates` には追加しない。成立したら、新しい税率の行（`SALES_8R`・`PURCHASE_8R`、`effective_from = 2027-04-01`、引下げ終了日からの 8% の行も）をマイグレーションと `seed/tax-rates.ts` に追加する。データモデル（日付で税率を決める）の変更は不要
+- **影響**: 利用者は免税事業者（税込経理・対象外）のため、001 の記帳には影響しない
+- **出典**: https://www.nta.go.jp/taxes/shiraberu/zeimokubetsu/shohi/keigenzeiritsu/zeiritsuhikisage.htm
