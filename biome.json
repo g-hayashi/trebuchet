@@ -1,0 +1,57 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "**",
+      "!**/routeTree.gen.ts",
+      "!**/drizzle/**/meta",
+      "!specs",
+      "!.specify",
+      "!.github/skills",
+      "!work"
+    ]
+  },
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "javascript": { "formatter": { "quoteStyle": "double" } },
+  "assist": { "enabled": true, "actions": { "source": { "organizeImports": "on" } } },
+  "linter": { "enabled": true, "rules": { "preset": "recommended" } },
+  "overrides": [
+    {
+      "includes": ["packages/domain/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "hono": "domain は HTTP に依存しない（Constitution II）",
+                  "react": "domain は UI に依存しない（Constitution II）",
+                  "drizzle-orm": "domain は DB に依存しない。ports.ts のインターフェースを使う",
+                  "better-sqlite3": "domain は DB に依存しない。ports.ts のインターフェースを使う",
+                  "node:fs": "domain は I/O をしない",
+                  "node:sqlite": "domain は DB に依存しない"
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "hono/*",
+                      "@hono/*",
+                      "react/*",
+                      "react-dom",
+                      "react-dom/*",
+                      "drizzle-orm/*",
+                      "node:fs/*"
+                    ],
+                    "message": "domain は純粋な TypeScript に保つ（Constitution II）"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

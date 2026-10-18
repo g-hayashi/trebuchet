@@ -6,3 +6,11 @@ node_modules/
 .env*
 data/
 .poc/
+
+# build / test artifacts
+.tmp/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.log
