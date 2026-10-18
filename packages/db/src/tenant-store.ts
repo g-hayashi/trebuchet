@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
+import { eq } from "drizzle-orm";
 import { type BetterSQLite3Database, drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as registrySchema from "./schema/registry.ts";
@@ -90,4 +91,15 @@ export function openRegistry(): RegistryDb {
 export function closeAll(): void {
   for (const client of handles.values()) client.close();
   handles.clear();
+}
+
+/** registry に登録済みの事業体なら正規化した ID を返す。DB ファイルは作らない */
+export function findRegisteredEntityId(entityId: string): string | undefined {
+  if (!isValidEntityId(entityId)) return undefined;
+  const row = openRegistry()
+    .select({ id: registrySchema.entities.id })
+    .from(registrySchema.entities)
+    .where(eq(registrySchema.entities.id, entityId.toLowerCase()))
+    .get();
+  return row?.id;
 }

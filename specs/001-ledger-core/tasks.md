@@ -80,12 +80,12 @@ description: "Task list for 001-ledger-core"
 
 ### API とフロントの骨組み
 
-- [ ] T030 `apps/server/src/errors.ts` を作成する: `DomainError` を HTTP に変換する（contracts/http-api.md の表: 400 `VALIDATION`、422 `UNBALANCED`/`ACCOUNT_INACTIVE`/`ACCOUNT_NOT_FOUND`/`OUT_OF_PERIOD`/`REASON_REQUIRED`/`TAX_SETTING_GAP`/`TAX_METHOD_UNSUPPORTED`、409 `PERIOD_CLOSED`/`VERSION_CONFLICT`/`ACCOUNT_IN_USE`、404 `ENTITY_NOT_FOUND`）。Zod のエラーは 400 `VALIDATION` にする
-- [ ] T031 `apps/server/src/app.ts` を作成する: `new Hono().basePath("/api")`、`app.onError` で T030 を使う、`/entities/:entityId/*` のミドルウェアで registry に事業体があるか確認して `openTenant` し、リポジトリを `c.var` に入れる（なければ 404 `ENTITY_NOT_FOUND`）。ルートはメソッドチェーンで定義し、`export type AppType` を出す
-- [ ] T032 `apps/server/src/main.ts` を作成する: `@hono/node-server` の `serve` で `hostname: "127.0.0.1"`, `port: 8787` で待ち受ける（R13）。ルートの `pnpm dev` で server と web を同時に起動する
-- [ ] T033 [P] `apps/server/test/tenant-middleware.test.ts` を書く（`app.request()`）: 存在しない entityId は 404 `ENTITY_NOT_FOUND`、不正な形式の entityId も 404
-- [ ] T034 [P] `apps/web/src/lib/api.ts` を作成する: `hc<AppType>("/api")`、エラーレスポンスを `ApiError`（code, message, details）に変換するヘルパー、`QueryClient`
-- [ ] T035 `apps/web/src/routes/__root.tsx` と `apps/web/src/routes/e/$entityId/route.tsx` を作成する: 共通レイアウト（ヘッダー、ナビゲーション: 仕訳・帳票・マスタ・会計期間）、`entityId` はパスのパラメータから取得する
+- [X] T030 `apps/server/src/errors.ts` を作成する: `DomainError` を HTTP に変換する（contracts/http-api.md の表: 400 `VALIDATION`、422 `UNBALANCED`/`ACCOUNT_INACTIVE`/`ACCOUNT_NOT_FOUND`/`OUT_OF_PERIOD`/`REASON_REQUIRED`/`TAX_SETTING_GAP`/`TAX_METHOD_UNSUPPORTED`、409 `PERIOD_CLOSED`/`VERSION_CONFLICT`/`ACCOUNT_IN_USE`、404 `ENTITY_NOT_FOUND`）。Zod のエラーは 400 `VALIDATION` にする
+- [X] T031 `apps/server/src/app.ts` を作成する: `new Hono().basePath("/api")`、`app.onError` で T030 を使う、`/entities/:entityId/*` のミドルウェアで registry に事業体があるか確認して `openTenant` し、DB のハンドルを `c.var.db` に入れる（リポジトリは US1 以降で `c.var.db` から生成する）（なければ 404 `ENTITY_NOT_FOUND`）。ルートはメソッドチェーンで定義し、`export type AppType` を出す
+- [X] T032 `apps/server/src/main.ts` を作成する: `@hono/node-server` の `serve` で `hostname: "127.0.0.1"`, `port: 8787` で待ち受ける（R13）。ルートの `pnpm dev` で server と web を同時に起動する
+- [X] T033 [P] `apps/server/test/tenant-middleware.test.ts` を書く（`app.request()`）: 存在しない entityId は 404 `ENTITY_NOT_FOUND`、不正な形式の entityId も 404
+- [X] T034 [P] `apps/web/src/lib/api.ts` を作成する: `hc<AppType>("/")`（basePath が `/api` を含むため `api.api...` で呼ぶ）、エラーレスポンスを `ApiError`（code, message, details）に変換するヘルパー、`QueryClient`
+- [X] T035 `apps/web/src/routes/__root.tsx` と `apps/web/src/routes/e/$entityId/route.tsx` を作成する: 共通レイアウト（ヘッダー、ナビゲーション: 仕訳・帳票・マスタ・会計期間。TanStack Router の `Link` は存在するルートしか指定できないため、各項目は該当する画面のタスクで追加する）、`entityId` はパスのパラメータから取得する
 
 **Checkpoint**: 基盤が完成。ユーザーストーリーの実装を始められる
 

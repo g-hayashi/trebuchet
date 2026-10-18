@@ -10,33 +10,51 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as EEntityIdRouteRouteImport } from './routes/e/$entityId/route'
+import { Route as EEntityIdIndexRouteImport } from './routes/e/$entityId/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EEntityIdRouteRoute = EEntityIdRouteRouteImport.update({
+  id: '/e/$entityId',
+  path: '/e/$entityId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EEntityIdIndexRoute = EEntityIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
+  '/e/$entityId/': typeof EEntityIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/e/$entityId': typeof EEntityIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
+  '/e/$entityId/': typeof EEntityIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/e/$entityId' | '/e/$entityId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/e/$entityId'
+  id: '__root__' | '/' | '/e/$entityId' | '/e/$entityId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  EEntityIdRouteRoute: typeof EEntityIdRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +66,38 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/e/$entityId': {
+      id: '/e/$entityId'
+      path: '/e/$entityId'
+      fullPath: '/e/$entityId'
+      preLoaderRoute: typeof EEntityIdRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/e/$entityId/': {
+      id: '/e/$entityId/'
+      path: '/'
+      fullPath: '/e/$entityId/'
+      preLoaderRoute: typeof EEntityIdIndexRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
   }
 }
 
+interface EEntityIdRouteRouteChildren {
+  EEntityIdIndexRoute: typeof EEntityIdIndexRoute
+}
+
+const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
+  EEntityIdIndexRoute: EEntityIdIndexRoute,
+}
+
+const EEntityIdRouteRouteWithChildren = EEntityIdRouteRoute._addFileChildren(
+  EEntityIdRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  EEntityIdRouteRoute: EEntityIdRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
