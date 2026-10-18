@@ -108,8 +108,12 @@ const savedJournal = (body: JournalBody, journalNo = 1) => ({
   })),
 });
 
-function mockJournalApi(post?: Parameters<typeof mockApi>[0][string]) {
+function mockJournalApi(
+  post?: Parameters<typeof mockApi>[0][string],
+  extra: Parameters<typeof mockApi>[0] = {},
+) {
   return mockApi({
+    ...extra,
     [`GET ${ENTITY}/accounts`]: () => ok({ accounts }),
     [`GET ${ENTITY}/partners`]: () => ok({ partners: [partnerA] }),
     [`GET ${ENTITY}/tags`]: () => ok({ tags }),
@@ -428,5 +432,58 @@ describe("仕訳の入力画面（US2）", () => {
     const amount2 = screen.getByLabelText("2行目の金額");
     await waitFor(() => expect(messageOf(amount2)).toBe("金額が大きすぎます"));
     expect(messageOf(date)).toBe("");
+  });
+});
+
+describe("訂正仕訳の起票（US3, FR-019a）", () => {
+  const original = savedJournal(
+    {
+      date: "2025-12-20",
+      lines: [
+        { side: "debit", accountId: receivable.id, amount: 495_000 },
+        { side: "credit", accountId: sales.id, amount: 495_000 },
+      ],
+    },
+    1,
+  );
+
+  it("correctsJournalId の検索パラメータで開くと、訂正元を示し、訂正元を付けて登録する", async () => {
+    let body: unknown;
+    mockJournalApi(
+      (call) => {
+        body = call.body;
+        return ok(
+          {
+            journal: {
+              ...savedJournal(call.body as JournalBody, 2),
+              correctsJournalId: original.id,
+            },
+            warnings: [],
+          },
+          201,
+        );
+      },
+      {
+        [`GET ${ENTITY}/journals/${original.id}`]: () =>
+          ok({ journal: original, correctsJournal: null, correctingJournals: [] }),
+      },
+    );
+    const u = user();
+    renderRoute(Route, {
+      path: "/e/$entityId/journals/new",
+      url: `/e/e1/journals/new?correctsJournalId=${original.id}`,
+    });
+
+    expect(await screen.findByRole("heading", { name: "訂正仕訳の入力" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "No.1（2025-12-20）" })).toHaveAttribute(
+      "href",
+      `/e/e1/journals/${original.id}`,
+    );
+    await fillLine(u, 1, { account: "売掛金", amount: "5000" });
+    await fillLine(u, 2, { account: "売上高", amount: "5000" });
+    await u.click(screen.getByRole("button", { name: "登録する" }));
+
+    await waitFor(() => expect(body).toMatchObject({ correctsJournalId: original.id }));
+    expect(await screen.findByText("仕訳 No.2 を登録しました。")).toBeInTheDocument();
   });
 });

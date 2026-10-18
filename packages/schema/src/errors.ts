@@ -14,6 +14,7 @@ export const ErrorCode = z.enum([
   "TAX_METHOD_UNSUPPORTED",
   "ENTITY_NOT_FOUND",
   "JOURNAL_NOT_FOUND",
+  "JOURNAL_VOIDED",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 

@@ -1,6 +1,7 @@
-import { combineErrors, type JournalContext, validateJournal } from "../journal.ts";
+import { checkPeriod, combineErrors, type JournalContext, validateJournal } from "../journal.ts";
 import type { Clock, IdGenerator, JournalRepository, MasterRepository } from "../ports.ts";
 import {
+  type DomainError,
   type DomainWarning,
   domainError,
   err,
@@ -22,7 +23,7 @@ export type JournalDeps = {
 
 export type CreatedJournal = { journal: Journal; warnings: DomainWarning[] };
 
-function loadContext(masters: MasterRepository): JournalContext {
+export function loadContext(masters: MasterRepository): JournalContext {
   return {
     accounts: masters.listAccounts(),
     subAccounts: masters.listSubAccounts(),
@@ -32,6 +33,30 @@ function loadContext(masters: MasterRepository): JournalContext {
     taxSettings: masters.listTaxSettings(),
     taxRates: masters.listTaxRates(),
   };
+}
+
+/**
+ * 訂正仕訳の訂正元（FR-019a）。訂正元は存在し、締め済みの期間の仕訳でなければならない
+ * （締めていない期間の仕訳は、訂正・取消で直す）
+ */
+export function checkCorrectsTarget(
+  ledger: Pick<JournalRepository, "getJournal">,
+  correctsJournalId: string,
+  ctx: Pick<JournalContext, "periods">,
+): DomainError | undefined {
+  const target = ledger.getJournal(correctsJournalId);
+  if (target === undefined) {
+    return domainError("VALIDATION", "訂正元の仕訳が見つかりません", {
+      field: "correctsJournalId",
+    });
+  }
+  const period = checkPeriod(target.date, ctx.periods);
+  if (period.ok || period.error.code !== "PERIOD_CLOSED") {
+    return domainError("VALIDATION", "訂正仕訳は締め済みの年度の仕訳にだけ起票できます", {
+      field: "correctsJournalId",
+    });
+  }
+  return undefined;
 }
 
 const lineKeys = (lines: readonly Pick<ValidLine, "side" | "accountId" | "amount">[]) =>
@@ -69,16 +94,14 @@ function duplicateWarning(
  */
 export function createJournal(deps: JournalDeps, draft: JournalDraft): Result<CreatedJournal> {
   return deps.ledger.transaction((tx) => {
-    const validated = validateJournal(draft, loadContext(deps.masters));
+    const ctx = loadContext(deps.masters);
+    const validated = validateJournal(draft, ctx);
     if (!validated.ok) return err(combineErrors(validated.error));
     const valid = validated.value;
 
-    if (valid.correctsJournalId !== null && tx.getJournal(valid.correctsJournalId) === undefined) {
-      return err(
-        domainError("VALIDATION", "訂正元の仕訳が見つかりません", {
-          field: "correctsJournalId",
-        }),
-      );
+    if (valid.correctsJournalId !== null) {
+      const targetError = checkCorrectsTarget(tx, valid.correctsJournalId, ctx);
+      if (targetError !== undefined) return err(targetError);
     }
 
     const warnings = duplicateWarning(tx.lastJournal(), valid.date, valid.lines);

@@ -20,9 +20,10 @@
 | 422 | `ACCOUNT_INACTIVE` / `ACCOUNT_NOT_FOUND` | 使用停止・存在しない科目 | FR-015 |
 | 422 | `OUT_OF_PERIOD` | 日付に対応する会計期間がない。最後の会計期間より後の日付（または会計期間がない）ときは `details.suggest = "create_fiscal_period"` | FR-015 |
 | 409 | `PERIOD_CLOSED` | 締め済み年度への登録・訂正・取消。`details.suggest = "correcting_entry"` | FR-015, FR-019a, FR-024 |
-| 422 | `REASON_REQUIRED` | 理由のない訂正・取消・締めの解除。空欄・空白のみの判定はドメインで行う（Zod では `reason` を文字列であることだけ検証する） | FR-019, FR-024 |
+| 422 | `REASON_REQUIRED` | 理由のない訂正・取消・締めの解除。空欄・空白のみ・500 文字を超える理由。判定はドメインで行う（Zod では `reason` を文字列であることだけ検証する）。`details.field = "reason"` | FR-019, FR-024 |
 | 422 | `TAX_METHOD_UNSUPPORTED` | 税抜経理の期間の日付の仕訳（001 では未対応） | FR-017 |
-| 409 | `VERSION_CONFLICT` | 楽観ロックの不一致 | — |
+| 409 | `VERSION_CONFLICT` | 楽観ロックの不一致。仕訳では `details: { journalId, currentVersion }` | — |
+| 409 | `JOURNAL_VOIDED` | 取消済みの仕訳の訂正・取消。`details.journalId` | FR-021 |
 | 409 | `ACCOUNT_IN_USE` | 使用中の科目の削除 | FR-005 |
 | 422 | `TAX_SETTING_GAP` | 消費税の設定期間の空白・重複 | FR-009 |
 | 404 | `ENTITY_NOT_FOUND` | 事業体がない | FR-002 |
@@ -88,14 +89,27 @@
 |---|---|---|---|
 | POST | `/entities/:id/journals` | JournalInput → 201 `{ journal, warnings }`。`journal` は仕訳番号・行（`id`, `lineNo`, 決定した `taxCategory`, `taxAmount`）を含む | FR-013〜018 |
 | GET | `/entities/:id/journals/:journalId` | 仕訳と行、訂正元・訂正仕訳への参照 | FR-019a |
-| PUT | `/entities/:id/journals/:journalId` | `{ ...JournalInput, reason, version }` 訂正 | FR-019, FR-020 |
-| POST | `/entities/:id/journals/:journalId/void` | `{ reason, version }` 取消 | FR-019, FR-021 |
-| GET | `/entities/:id/journals/:journalId/history` | 変更履歴（変更前後・日時・理由） | FR-020, SC-005 |
-| GET | `/entities/:id/journals?…` | 検索（下記） | FR-023 |
+| PUT | `/entities/:id/journals/:journalId` | `{ ...JournalInput, reason, version }`（JournalCorrection）訂正 → 200 `{ journal }`（`version` は +1） | FR-019, FR-020 |
+| POST | `/entities/:id/journals/:journalId/void` | `{ reason, version }`（VoidInput）取消 → 200 `{ journal }`（`status: "voided"`, `version` は +1） | FR-019, FR-021 |
+| GET | `/entities/:id/journals/:journalId/history` | 変更履歴 → `{ history: HistoryEntry[] }`（古い順） | FR-020, SC-005 |
+| GET | `/entities/:id/journals?…` | 検索（下記）→ `{ journals, nextCursor }` | FR-023 |
 
-001 の US2 の時点では、検索パラメータは `limit`（1〜200, 既定 50）だけを受け付け、`{ journals }` を日付の新しい順・同じ日付では仕訳番号の大きい順で返す。他の検索パラメータは US3 以降で追加する。
+詳細の応答: `{ journal, correctsJournal: JournalRef | null, correctingJournals: JournalRef[] }`。`JournalRef = { id, journalNo, date, status }`。`correctingJournals` はこの仕訳を訂正元とする訂正仕訳（仕訳番号の順）。
 
-検索パラメータ: `dateFrom`, `dateTo`, `amountMin`, `amountMax`, `partnerId`, `accountId`, `q`（摘要・メモの部分一致）, `tagId`, `includeVoided`（既定 false）, `cursor`, `limit`。金額の範囲は、仕訳のいずれかの行の金額が範囲に入れば一致とする。
+訂正・取消の判定順: 理由（`REASON_REQUIRED`）→ 仕訳の有無（`JOURNAL_NOT_FOUND`）→ 取消済み（`JOURNAL_VOIDED`）→ `version` の一致（`VERSION_CONFLICT`）→ 元の日付の年度が締め済み（`PERIOD_CLOSED`, `details: { fiscalYear, suggest: "correcting_entry" }`）→ 訂正後の内容の検証（POST と同じ。訂正後の日付が締め済み年度なら `PERIOD_CLOSED`）。訂正では、元の仕訳で使っている科目・補助科目・取引先は使用停止でも使える。
+
+訂正仕訳（`correctsJournalId` を指定した POST、または訂正で `correctsJournalId` を変えたとき）は、訂正元の仕訳がない、または訂正元の年度が締め済みでないと `VALIDATION`（`details.field = "correctsJournalId"`）になる。取消済みの仕訳も訂正元にできる。
+
+`HistoryEntry = { occurredAt, action: "create" | "correct" | "void", reason: string | null, before: Journal | null, after: Journal | null }`。`before`・`after` は仕訳の全内容（行・タグを含む）で、すべての過去の版を戻せる（SC-005）。登録では `before` が null。
+
+検索パラメータ: `dateFrom`, `dateTo`, `amountMin`, `amountMax`, `partnerId`, `accountId`, `q`（摘要・メモの部分一致）, `tagId`, `includeVoided`（既定 false）, `cursor`, `limit`（1〜200, 既定 50）。条件はすべて AND で組み合わせる。
+
+- 金額の範囲は、同じ行の金額が `amountMin` 以上かつ `amountMax` 以下になる行があれば一致とする。
+- `partnerId`・`accountId`・`tagId` は、いずれかの行が一致すれば一致とする。
+- `q` は前後の空白を除いた文字列で、仕訳のメモまたはいずれかの行の摘要の部分一致（大文字・小文字を区別する）。空なら条件なし。
+- 並び順は日付の新しい順、同じ日付では仕訳番号の大きい順。
+- `nextCursor` は続きがあるとき最後の仕訳の `"{date}_{journalNo}"`、なければ null。次のページは `cursor` に渡す。
+- 画面（`/e/:entityId/journals`）は `cursor`・`limit` を除く検索パラメータを URL に入れる。
 
 ## 帳票
 

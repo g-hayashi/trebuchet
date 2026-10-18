@@ -242,8 +242,28 @@ export type AuditEntry = {
   afterJson: string | null;
 };
 
+/** 訂正元・訂正仕訳への参照（FR-019a） */
+export type JournalRef = Pick<Journal, "id" | "journalNo" | "date" | "status">;
+
+/** 仕訳と、訂正元・訂正仕訳への参照 */
+export type JournalDetail = {
+  journal: Journal;
+  correctsJournal: JournalRef | null;
+  correctingJournals: JournalRef[];
+};
+
+/** 仕訳の変更履歴の1項目（FR-020, SC-005）。before・after は audit_log の JSON を戻した仕訳 */
+export type JournalHistoryEntry = {
+  occurredAt: string;
+  action: Extract<AuditAction, "create" | "correct" | "void">;
+  reason: string | null;
+  before: Journal | null;
+  after: Journal | null;
+};
+
 // ---- 検索 ----
 
+/** 検索の条件（FR-023）。cursor は直前のページの最後の仕訳の「日付_仕訳番号」 */
 export type JournalQuery = {
   dateFrom?: string | undefined;
   dateTo?: string | undefined;

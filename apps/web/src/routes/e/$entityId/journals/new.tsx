@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import type { JournalInput } from "@trebuchet/schema";
+import { Id, type JournalInput } from "@trebuchet/schema";
 import { useState } from "react";
+import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { JournalForm } from "@/features/journals/JournalForm";
 import { api, unwrap } from "@/lib/api";
 import {
   accountsQuery,
+  journalQuery,
   partnersQuery,
   queryKeys,
   tagsQuery,
@@ -15,7 +17,11 @@ import {
   taxSettingsQuery,
 } from "@/lib/queries";
 
+/** correctsJournalId を付けて開くと、その仕訳の訂正仕訳を起票する（FR-019a） */
+const NewJournalSearch = z.object({ correctsJournalId: Id.optional() });
+
 export const Route = createFileRoute("/e/$entityId/journals/new")({
+  validateSearch: NewJournalSearch,
   component: NewJournalPage,
 });
 
@@ -28,6 +34,11 @@ function today(): string {
 
 function NewJournalPage() {
   const { entityId } = Route.useParams();
+  const { correctsJournalId } = Route.useSearch();
+  const corrects = useQuery({
+    ...journalQuery(entityId, correctsJournalId ?? ""),
+    enabled: correctsJournalId !== undefined,
+  });
   const queryClient = useQueryClient();
   const accounts = useQuery(accountsQuery(entityId));
   const partners = useQuery(partnersQuery(entityId));
@@ -58,7 +69,9 @@ function NewJournalPage() {
   return (
     <main className="grid gap-6">
       <div className="flex flex-wrap items-baseline gap-4">
-        <h1 className="text-xl font-semibold">仕訳の入力</h1>
+        <h1 className="text-xl font-semibold">
+          {correctsJournalId ? "訂正仕訳の入力" : "仕訳の入力"}
+        </h1>
         <Link
           to="/e/$entityId/journals"
           params={{ entityId }}
@@ -89,13 +102,30 @@ function NewJournalPage() {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>新しい仕訳</CardTitle>
+          <CardTitle>{correctsJournalId ? "訂正仕訳" : "新しい仕訳"}</CardTitle>
           <CardDescription>
             借方と貸方を1行以上ずつ入力します。借方合計と貸方合計が一致すると登録できます。
           </CardDescription>
+          {correctsJournalId && (
+            <p className="text-sm">
+              訂正元の仕訳:{" "}
+              {corrects.data ? (
+                <Link
+                  to="/e/$entityId/journals/$journalId"
+                  params={{ entityId, journalId: correctsJournalId }}
+                  className="text-primary underline underline-offset-4"
+                >
+                  No.{corrects.data.journal.journalNo}（{corrects.data.journal.date}）
+                </Link>
+              ) : (
+                "読み込み中…"
+              )}
+              。締め済みの年度の仕訳は直接直せないため、差額などを当年度の日付で起票します。
+            </p>
+          )}
         </CardHeader>
         <CardContent>
-          <ApiErrorMessage error={loadError} />
+          <ApiErrorMessage error={loadError ?? corrects.error} />
           {queries.some((q) => q.isPending) && !loadError && (
             <p className="text-sm text-muted-foreground">読み込み中…</p>
           )}
@@ -113,6 +143,7 @@ function NewJournalPage() {
                 taxSettings={taxSettings.data}
                 taxCategories={taxCategories.data}
                 defaultDate={defaultDate}
+                correctsJournalId={correctsJournalId}
                 onSubmit={(input) => save.mutateAsync(input)}
               />
             )}

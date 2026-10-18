@@ -60,7 +60,8 @@ export function defaultTaxCategory(
   return "OUT_OF_SCOPE";
 }
 
-function checkPeriod(date: string, periods: readonly FiscalPeriod[]): Result<FiscalPeriod> {
+/** 日付を含む会計期間。期間の外なら OUT_OF_PERIOD、締め済みなら PERIOD_CLOSED（訂正仕訳を案内する） */
+export function checkPeriod(date: string, periods: readonly FiscalPeriod[]): Result<FiscalPeriod> {
   const period = periods.find((p) => p.startDate <= date && date <= p.endDate);
   if (period === undefined) {
     const lastEnd = periods.reduce<string | undefined>(

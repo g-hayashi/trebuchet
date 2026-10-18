@@ -33,6 +33,9 @@ export class RepositoryConflictError extends Error {
   readonly code = "VERSION_CONFLICT" as const;
 }
 
+/** 訂正後の仕訳の内容。行の ID もドメインで採番する */
+export type JournalReplacement = Omit<ValidJournal, "lines"> & { lines: JournalLine[] };
+
 /** 保存する新しい仕訳。行の ID もドメインで採番する */
 export type NewJournal = Omit<ValidJournal, "lines"> & {
   id: string;
@@ -59,21 +62,31 @@ export interface JournalRepository extends AuditLog {
   recentJournals(limit: number): Journal[];
 }
 
-/** 仕訳の訂正・取消・検索と帳票の集計（US3 以降で実装する） */
+/** 仕訳の訂正・取消・履歴・検索（US3） */
 export interface LedgerRepository extends JournalRepository {
   transaction<T>(fn: (tx: LedgerRepository) => T): T;
-  /** 行を全件置き換え、version を +1 する。version が一致しなければ RepositoryConflictError */
+  /**
+   * 日付・メモ・訂正元と行・タグを全件置き換え、version を +1 する。
+   * version が一致しなければ RepositoryConflictError
+   */
   replaceJournal(
     id: string,
-    journal: ValidJournal,
+    journal: JournalReplacement,
     expectedVersion: number,
     updatedAt: string,
   ): Journal;
-  /** status を voided にし、version を +1 する。version が一致しなければ RepositoryConflictError */
+  /** status を voided にし、version を +1 する（行は残す）。version が一致しなければ RepositoryConflictError */
   voidJournal(id: string, expectedVersion: number, updatedAt: string): Journal;
+  /** 仕訳の audit_log（記録の順） */
   journalHistory(id: string): AuditEntry[];
+  /** id を訂正元とする訂正仕訳（仕訳番号の順） */
   correctingJournalsOf(id: string): Journal[];
+  /** 日付の降順・同じ日付は仕訳番号の降順。limit の既定は 50 */
   findJournals(query: JournalQuery): Page<Journal>;
+}
+
+/** 帳票の集計（US4 で実装する） */
+export interface ReportRepository {
   /** 期間内の有効な仕訳の行（取消済みは含まない） */
   linesInRange(from: string, to: string): PostedLine[];
   openingBalances(fiscalYear: number): OpeningBalance[];

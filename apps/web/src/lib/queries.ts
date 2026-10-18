@@ -1,4 +1,5 @@
-import { queryOptions } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
+import type { JournalQuery } from "@trebuchet/schema";
 import { api, unwrap } from "./api";
 
 /** クエリのキー。変更後の invalidateQueries で前方一致を使えるよう、事業体ごとに入れ子にする */
@@ -16,6 +17,12 @@ export const queryKeys = {
   openingBalances: (entityId: string, year: string) =>
     ["entities", entityId, "fiscal-periods", year, "opening-balances"] as const,
   journals: (entityId: string) => ["entities", entityId, "journals"] as const,
+  journalSearch: (entityId: string, search: JournalSearch) =>
+    ["entities", entityId, "journals", "search", search] as const,
+  journal: (entityId: string, journalId: string) =>
+    ["entities", entityId, "journals", journalId] as const,
+  journalHistory: (entityId: string, journalId: string) =>
+    ["entities", entityId, "journals", journalId, "history"] as const,
   /** 帳票（US4）。仕訳を変更したら前方一致で無効化する */
   reports: (entityId: string) => ["entities", entityId, "reports"] as const,
 };
@@ -99,12 +106,51 @@ export const openingBalancesQuery = (entityId: string, year: string) =>
       ),
   });
 
-/** 新しい順（日付の降順、同じ日付は仕訳番号の降順）の最近の仕訳 */
-export const journalsQuery = (entityId: string) =>
+/** 仕訳の検索条件（ページの指定を除く） */
+export type JournalSearch = Omit<JournalQuery, "cursor" | "limit">;
+
+/** API のクエリ文字列にする。指定のない条件と includeVoided=false は送らない */
+function searchParams(search: JournalSearch, cursor: string | undefined): Record<string, string> {
+  const params: Record<string, string> = {};
+  for (const [key, value] of Object.entries({ ...search, cursor })) {
+    if (value === undefined || value === false || value === "") continue;
+    params[key] = String(value);
+  }
+  return params;
+}
+
+/** 仕訳の検索（FR-023）。日付の降順、同じ日付は仕訳番号の降順で、cursor でページを続ける */
+export const journalSearchQuery = (entityId: string, search: JournalSearch) =>
+  infiniteQueryOptions({
+    queryKey: queryKeys.journalSearch(entityId, search),
+    queryFn: async ({ pageParam }) =>
+      unwrap(
+        await entity.journals.$get({
+          ...param(entityId),
+          query: searchParams(search, pageParam),
+        }),
+      ),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+
+/** 仕訳と、訂正元・訂正仕訳への参照 */
+export const journalQuery = (entityId: string, journalId: string) =>
   queryOptions({
-    queryKey: queryKeys.journals(entityId),
+    queryKey: queryKeys.journal(entityId, journalId),
     queryFn: async () =>
-      (await unwrap(await entity.journals.$get({ ...param(entityId), query: {} }))).journals,
+      unwrap(await entity.journals[":journalId"].$get({ param: { entityId, journalId } })),
+  });
+
+export const journalHistoryQuery = (entityId: string, journalId: string) =>
+  queryOptions({
+    queryKey: queryKeys.journalHistory(entityId, journalId),
+    queryFn: async () =>
+      (
+        await unwrap(
+          await entity.journals[":journalId"].history.$get({ param: { entityId, journalId } }),
+        )
+      ).history,
   });
 
 export type Entity = Item<typeof entitiesQuery>;
@@ -116,4 +162,7 @@ export type TaxSetting = Item<typeof taxSettingsQuery>;
 export type TaxCategory = Item<typeof taxCategoriesQuery>;
 export type FiscalPeriod = Item<typeof fiscalPeriodsQuery>;
 export type OpeningBalancesData = Item<typeof openingBalancesQuery>;
-export type Journal = Item<typeof journalsQuery>;
+export type JournalDetail = DataOf<typeof journalQuery>;
+export type Journal = JournalDetail["journal"];
+export type JournalRef = JournalDetail["correctingJournals"][number];
+export type HistoryEntry = Item<typeof journalHistoryQuery>;

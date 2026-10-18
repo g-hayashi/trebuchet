@@ -33,19 +33,45 @@ type Result<T, E> = { ok: true; value: T } | { ok: false; error: E }
 ## リポジトリのポート（packages/db が実装）
 
 ```ts
-interface LedgerRepository {
-  transaction<T>(fn: (tx: LedgerRepository) => T): T
+interface JournalRepository extends AuditLog {     // 仕訳の登録（US2）。appendAudit は AuditLog
+  transaction<T>(fn: (tx: JournalRepository) => T): T
   nextJournalNo(): number
-  insertJournal(j: ValidJournal): Journal
-  replaceJournal(id: string, j: ValidJournal, expectedVersion: number): Journal
-  voidJournal(id: string, expectedVersion: number): Journal
-  appendAudit(entry: AuditEntry): void
-  findJournals(query: JournalQuery): Page<Journal>
+  lastJournal(): Journal | undefined
+  insertJournal(j: NewJournal): Journal
+  getJournal(id: string): Journal | undefined
+  recentJournals(limit: number): Journal[]
+}
+
+interface LedgerRepository extends JournalRepository {   // 訂正・取消・履歴・検索（US3）
+  transaction<T>(fn: (tx: LedgerRepository) => T): T
+  // 行・タグを全件置き換えて version +1。version 不一致は RepositoryConflictError
+  replaceJournal(id: string, j: JournalReplacement, expectedVersion: number, updatedAt: string): Journal
+  voidJournal(id: string, expectedVersion: number, updatedAt: string): Journal
+  journalHistory(id: string): AuditEntry[]          // 記録の順
+  correctingJournalsOf(id: string): Journal[]       // 仕訳番号の順
+  findJournals(query: JournalQuery): Page<Journal>  // 日付の降順・同じ日付は仕訳番号の降順
+}
+
+interface ReportRepository {                       // 帳票（US4）
   linesInRange(from: string, to: string): PostedLine[]   // 有効な仕訳のみ
   openingBalances(fiscalYear: number): OpeningBalance[]
-  // マスタの取得・保存は省略
 }
+// マスタの取得・保存（MasterRepository）は省略
 ```
+
+`Page<T> = { items: T[]; nextCursor: string | null }`。カーソルは最後の仕訳の `"{date}_{journalNo}"`。
+
+## ユースケース（US3）
+
+| 関数 | 結果 | 要件 |
+|---|---|---|
+| `correctJournal(deps, id, { ...JournalInput, reason, version })` | `Result<Journal>`。audit_log に `correct`（before・after に仕訳の全内容） | FR-019, FR-020 |
+| `voidJournal(deps, id, { reason, version })` | `Result<Journal>`。audit_log に `void` | FR-019, FR-021 |
+| `getJournalDetail({ ledger }, id)` | `Result<JournalDetail>`（訂正元・訂正仕訳への参照） | FR-019a |
+| `getJournalHistory({ ledger }, id)` | `Result<JournalHistoryEntry[]>`（古い順） | FR-020, SC-005 |
+
+判定順は REASON_REQUIRED → JOURNAL_NOT_FOUND → JOURNAL_VOIDED → VERSION_CONFLICT → PERIOD_CLOSED → `validateJournal`。
+`createJournal` は `correctsJournalId` があるとき、訂正元が存在し締め済みの年度にあることを確かめる（FR-019a）。
 
 ユースケース（`packages/domain/src/usecases`）は、このポートと純関数を組み合わせて
 「検証 → トランザクション内で書込 + 監査ログ追記」を行う。

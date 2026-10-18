@@ -1,13 +1,17 @@
-import type {
-  AuditEntry,
-  Journal,
-  JournalLine,
-  JournalRepository,
-  NewJournal,
-  TaxCategoryCode,
+import {
+  type AuditEntry,
+  type Journal,
+  type JournalLine,
+  type JournalQuery,
+  type JournalReplacement,
+  type LedgerRepository,
+  type NewJournal,
+  type Page,
+  RepositoryConflictError,
+  type TaxCategoryCode,
 } from "@trebuchet/domain";
 import type { RunResult } from "better-sqlite3";
-import { asc, desc, eq, inArray, max, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, max, type SQL, sql } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import type * as tenantSchema from "./schema/tenant.ts";
 import { auditLog, journalLines, journalLineTags, journals } from "./schema/tenant.ts";
@@ -17,11 +21,13 @@ type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
 
 type JournalRow = typeof journals.$inferSelect;
 
+const DEFAULT_LIMIT = 50;
+
 /**
- * JournalRepository の Drizzle（better-sqlite3）による実装。メソッドはすべて同期。
- * 訂正・取消・検索・帳票の集計（LedgerRepository の残り）は US3 以降で加える
+ * LedgerRepository の Drizzle（better-sqlite3）による実装。メソッドはすべて同期。
+ * 帳票の集計（ReportRepository）は US4 で加える
  */
-export class DrizzleLedgerRepository implements JournalRepository {
+export class DrizzleLedgerRepository implements LedgerRepository {
   private readonly db: TenantConn;
 
   constructor(db: TenantConn) {
@@ -29,7 +35,7 @@ export class DrizzleLedgerRepository implements JournalRepository {
   }
 
   /** SQLite のトランザクション（入れ子は SAVEPOINT）。例外でロールバックする */
-  transaction<T>(fn: (tx: JournalRepository) => T): T {
+  transaction<T>(fn: (tx: LedgerRepository) => T): T {
     return this.db.transaction((tx) => fn(new DrizzleLedgerRepository(tx)));
   }
 
@@ -61,16 +67,82 @@ export class DrizzleLedgerRepository implements JournalRepository {
     };
     this.db.transaction((tx) => {
       tx.insert(journals).values(row).run();
-      for (const { tagIds, ...line } of lines) {
-        tx.insert(journalLines)
-          .values({ ...line, journalId: journal.id })
-          .run();
-        for (const tagId of tagIds) {
-          tx.insert(journalLineTags).values({ journalLineId: line.id, tagId }).run();
-        }
-      }
+      insertLines(tx, journal.id, lines);
     });
     return { ...row, lines: lines.map((l) => ({ ...l, tagIds: [...l.tagIds] })) };
+  }
+
+  replaceJournal(
+    id: string,
+    journal: JournalReplacement,
+    expectedVersion: number,
+    updatedAt: string,
+  ): Journal {
+    this.db.transaction((tx) => {
+      const result = tx
+        .update(journals)
+        .set({
+          date: journal.date,
+          memo: journal.memo,
+          correctsJournalId: journal.correctsJournalId,
+          version: sql`${journals.version} + 1`,
+          updatedAt,
+        })
+        .where(and(eq(journals.id, id), eq(journals.version, expectedVersion)))
+        .run();
+      if (result.changes === 0) throw conflict(id, expectedVersion);
+      // journal_line_tags は ON DELETE CASCADE で消える
+      tx.delete(journalLines).where(eq(journalLines.journalId, id)).run();
+      insertLines(tx, id, journal.lines);
+    });
+    return this.mustGet(id);
+  }
+
+  voidJournal(id: string, expectedVersion: number, updatedAt: string): Journal {
+    const result = this.db
+      .update(journals)
+      .set({ status: "voided", version: sql`${journals.version} + 1`, updatedAt })
+      .where(and(eq(journals.id, id), eq(journals.version, expectedVersion)))
+      .run();
+    if (result.changes === 0) throw conflict(id, expectedVersion);
+    return this.mustGet(id);
+  }
+
+  journalHistory(id: string): AuditEntry[] {
+    return this.db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.targetType, "journal"), eq(auditLog.targetId, id)))
+      .orderBy(sql`${auditLog}.rowid`)
+      .all();
+  }
+
+  correctingJournalsOf(id: string): Journal[] {
+    const rows = this.db
+      .select()
+      .from(journals)
+      .where(eq(journals.correctsJournalId, id))
+      .orderBy(asc(journals.journalNo))
+      .all();
+    return this.withLines(rows);
+  }
+
+  findJournals(query: JournalQuery): Page<Journal> {
+    const limit = query.limit ?? DEFAULT_LIMIT;
+    const rows = this.db
+      .select()
+      .from(journals)
+      .where(and(...searchConditions(query)))
+      .orderBy(desc(journals.date), desc(journals.journalNo))
+      .limit(limit + 1)
+      .all();
+    const page = rows.slice(0, limit);
+    const last = page.at(-1);
+    return {
+      items: this.withLines(page),
+      nextCursor:
+        rows.length > limit && last !== undefined ? `${last.date}_${last.journalNo}` : null,
+    };
   }
 
   getJournal(id: string): Journal | undefined {
@@ -86,6 +158,12 @@ export class DrizzleLedgerRepository implements JournalRepository {
       .limit(limit)
       .all();
     return this.withLines(rows);
+  }
+
+  private mustGet(id: string): Journal {
+    const journal = this.getJournal(id);
+    if (journal === undefined) throw new Error(`journal not found: ${id}`);
+    return journal;
   }
 
   /** 仕訳の行（行番号の順）とタグ（登録の順）を読み込んで Journal にする */
@@ -125,4 +203,67 @@ export class DrizzleLedgerRepository implements JournalRepository {
     }
     return rows.map((r) => ({ ...r, lines: linesByJournal.get(r.id) ?? [] }));
   }
+}
+
+function insertLines(tx: TenantConn, journalId: string, lines: readonly JournalLine[]): void {
+  for (const { tagIds, ...line } of lines) {
+    tx.insert(journalLines)
+      .values({ ...line, journalId })
+      .run();
+    for (const tagId of tagIds) {
+      tx.insert(journalLineTags).values({ journalLineId: line.id, tagId }).run();
+    }
+  }
+}
+
+const conflict = (id: string, expectedVersion: number) =>
+  new RepositoryConflictError(`journal ${id} is not at version ${expectedVersion}`);
+
+/** 行の条件（いずれかの行が満たせば一致） */
+const anyLine = (condition: SQL) =>
+  sql`exists (select 1 from ${journalLines} where ${journalLines.journalId} = ${journals.id} and ${condition})`;
+
+/** 検索の条件（FR-023）。カーソルは直前のページの最後の仕訳の「日付_仕訳番号」 */
+function searchConditions(query: JournalQuery): SQL[] {
+  const conditions: SQL[] = [];
+  if (query.includeVoided !== true) conditions.push(eq(journals.status, "active"));
+  if (query.dateFrom !== undefined) conditions.push(sql`${journals.date} >= ${query.dateFrom}`);
+  if (query.dateTo !== undefined) conditions.push(sql`${journals.date} <= ${query.dateTo}`);
+  if (query.amountMin !== undefined || query.amountMax !== undefined) {
+    const bounds: SQL[] = [];
+    if (query.amountMin !== undefined)
+      bounds.push(sql`${journalLines.amount} >= ${query.amountMin}`);
+    if (query.amountMax !== undefined)
+      bounds.push(sql`${journalLines.amount} <= ${query.amountMax}`);
+    conditions.push(anyLine(sql.join(bounds, sql` and `)));
+  }
+  if (query.partnerId !== undefined) {
+    conditions.push(anyLine(sql`${journalLines.partnerId} = ${query.partnerId}`));
+  }
+  if (query.accountId !== undefined) {
+    conditions.push(anyLine(sql`${journalLines.accountId} = ${query.accountId}`));
+  }
+  if (query.tagId !== undefined) {
+    conditions.push(
+      anyLine(
+        sql`exists (select 1 from ${journalLineTags} where ${journalLineTags.journalLineId} = ${journalLines.id} and ${journalLineTags.tagId} = ${query.tagId})`,
+      ),
+    );
+  }
+  const q = query.q?.trim() ?? "";
+  if (q.length > 0) {
+    // instr は大文字・小文字を区別する部分一致
+    conditions.push(
+      sql`(instr(coalesce(${journals.memo}, ''), ${q}) > 0 or ${anyLine(
+        sql`instr(coalesce(${journalLines.description}, ''), ${q}) > 0`,
+      )})`,
+    );
+  }
+  if (query.cursor !== undefined) {
+    const [date, no] = query.cursor.split("_");
+    conditions.push(
+      sql`(${journals.date} < ${date} or (${journals.date} = ${date} and ${journals.journalNo} < ${Number(no)}))`,
+    );
+  }
+  return conditions;
 }

@@ -1,7 +1,13 @@
 import type { ErrorCode } from "@trebuchet/schema";
 import { vi } from "vitest";
 
-export type ApiCall = { method: string; path: string; body: unknown };
+/** query はクエリ文字列（キーと値） */
+export type ApiCall = {
+  method: string;
+  path: string;
+  query: Record<string, string>;
+  body: unknown;
+};
 export type ApiReply = { status: number; body: unknown };
 type Handler = (call: ApiCall) => ApiReply | Promise<ApiReply>;
 
@@ -27,7 +33,12 @@ export function mockApi(routes: Record<string, Handler>): ApiCall[] {
       const url = new URL(input instanceof Request ? input.url : input, "http://localhost");
       const method = (init?.method ?? "GET").toUpperCase();
       const body: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
-      const call = { method, path: url.pathname, body };
+      const call = {
+        method,
+        path: url.pathname,
+        query: Object.fromEntries(url.searchParams),
+        body,
+      };
       calls.push(call);
       const handler = routes[`${method} ${url.pathname}`];
       const reply = handler

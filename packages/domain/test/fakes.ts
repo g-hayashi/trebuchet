@@ -1,10 +1,12 @@
-import type {
-  Clock,
-  IdGenerator,
-  JournalRepository,
-  MasterRepository,
-  NewJournal,
-  RegistryRepository,
+import {
+  type Clock,
+  type IdGenerator,
+  type JournalReplacement,
+  type LedgerRepository,
+  type MasterRepository,
+  type NewJournal,
+  type RegistryRepository,
+  RepositoryConflictError,
 } from "../src/ports.ts";
 import type {
   Account,
@@ -13,7 +15,9 @@ import type {
   EntitySummary,
   FiscalPeriod,
   Journal,
+  JournalQuery,
   OpeningBalance,
+  Page,
   Partner,
   SubAccount,
   Tag,
@@ -223,8 +227,8 @@ export class InMemoryMasterRepository implements MasterRepository {
   }
 }
 
-/** JournalRepository のフェイク。transaction は例外のときに状態を巻き戻す */
-export class InMemoryLedgerRepository implements JournalRepository {
+/** LedgerRepository のフェイク。transaction は例外のときに状態を巻き戻す */
+export class InMemoryLedgerRepository implements LedgerRepository {
   state: { journals: Journal[]; audits: AuditEntry[] } = { journals: [], audits: [] };
   /** true なら appendAudit で例外を投げる（ロールバックの確認用） */
   failOnAppendAudit = false;
@@ -236,7 +240,7 @@ export class InMemoryLedgerRepository implements JournalRepository {
     return this.state.audits;
   }
 
-  transaction<T>(fn: (tx: JournalRepository) => T): T {
+  transaction<T>(fn: (tx: LedgerRepository) => T): T {
     const snapshot = structuredClone(this.state);
     try {
       return fn(this);
@@ -287,5 +291,58 @@ export class InMemoryLedgerRepository implements JournalRepository {
       .sort((a, b) => b.date.localeCompare(a.date) || b.journalNo - a.journalNo)
       .slice(0, limit)
       .map((j) => structuredClone(j));
+  }
+
+  replaceJournal(
+    id: string,
+    journal: JournalReplacement,
+    expectedVersion: number,
+    updatedAt: string,
+  ): Journal {
+    const current = this.lockForUpdate(id, expectedVersion);
+    const saved: Journal = {
+      ...current,
+      ...structuredClone(journal),
+      version: current.version + 1,
+      updatedAt,
+    };
+    this.state.journals = this.state.journals.map((j) => (j.id === id ? saved : j));
+    return structuredClone(saved);
+  }
+
+  voidJournal(id: string, expectedVersion: number, updatedAt: string): Journal {
+    const current = this.lockForUpdate(id, expectedVersion);
+    const saved: Journal = {
+      ...current,
+      status: "voided",
+      version: current.version + 1,
+      updatedAt,
+    };
+    this.state.journals = this.state.journals.map((j) => (j.id === id ? saved : j));
+    return structuredClone(saved);
+  }
+
+  journalHistory(id: string): AuditEntry[] {
+    return this.state.audits.filter((a) => a.targetType === "journal" && a.targetId === id);
+  }
+
+  correctingJournalsOf(id: string): Journal[] {
+    return this.state.journals
+      .filter((j) => j.correctsJournalId === id)
+      .sort((a, b) => a.journalNo - b.journalNo)
+      .map((j) => structuredClone(j));
+  }
+
+  findJournals(_query: JournalQuery): Page<Journal> {
+    throw new Error("検索はフェイクでは扱わない（packages/db のテストで確認する）");
+  }
+
+  private lockForUpdate(id: string, expectedVersion: number): Journal {
+    const current = this.state.journals.find((j) => j.id === id);
+    if (current === undefined) throw new Error(`journal not found: ${id}`);
+    if (current.version !== expectedVersion) {
+      throw new RepositoryConflictError("仕訳は他の操作で変更されています");
+    }
+    return current;
   }
 }

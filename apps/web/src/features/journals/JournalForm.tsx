@@ -9,7 +9,7 @@ import {
   type TaxCategoryCode,
   Yen,
 } from "@trebuchet/schema";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   type Control,
   type FieldError as RhfFieldError,
@@ -27,6 +27,7 @@ import { ApiError } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
 import {
   type Account,
+  type Journal,
   type Partner,
   subAccountsQuery,
   type Tag,
@@ -79,6 +80,37 @@ function defaultTaxCategory(
   if (account.category === "revenue") return "SALES_10";
   if (account.category === "expense") return "PURCHASE_10";
   return "OUT_OF_SCOPE";
+}
+
+/** 訂正する仕訳をフォームの値にする。税区分は既定値と同じなら「自動」にする */
+function valuesOf(
+  journal: Journal,
+  accounts: readonly Account[],
+  settings: readonly TaxSetting[],
+): FormInput {
+  return {
+    date: journal.date,
+    memo: journal.memo ?? undefined,
+    correctsJournalId: journal.correctsJournalId ?? undefined,
+    lines: journal.lines.map((l) => ({
+      side: l.side,
+      accountId: l.accountId,
+      subAccountId: l.subAccountId ?? undefined,
+      amount: l.amount,
+      taxCategory:
+        l.taxCategory ===
+        defaultTaxCategory(
+          journal.date,
+          accounts.find((a) => a.id === l.accountId),
+          settings,
+        )
+          ? undefined
+          : l.taxCategory,
+      partnerId: l.partnerId ?? undefined,
+      description: l.description ?? undefined,
+      tagIds: l.tagIds,
+    })),
+  };
 }
 
 // ---- API のエラーを項目に対応づける ----
@@ -160,6 +192,10 @@ export type JournalFormProps = {
   taxSettings: TaxSetting[];
   taxCategories: TaxCategory[];
   defaultDate: string;
+  /** 訂正する仕訳。その内容で始め、使っている使用停止の科目・補助科目・取引先も選べるようにする */
+  journal?: Journal | undefined;
+  /** 訂正仕訳として登録するときの訂正元（FR-019a） */
+  correctsJournalId?: string | undefined;
   submitLabel?: string | undefined;
   /** 失敗したら ApiError を投げる。エラーはフォームが該当の行・項目に表示する */
   onSubmit: (input: JournalInput) => Promise<unknown>;
@@ -174,13 +210,30 @@ export function JournalForm({
   taxSettings,
   taxCategories,
   defaultDate,
+  journal,
+  correctsJournalId,
   submitLabel = "登録する",
   onSubmit,
 }: JournalFormProps) {
   const form: Form = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(FormSchema),
-    defaultValues: { date: defaultDate, lines: [emptyLine("debit"), emptyLine("credit")] },
+    defaultValues: journal
+      ? valuesOf(journal, accounts, taxSettings)
+      : {
+          date: defaultDate,
+          correctsJournalId,
+          lines: [emptyLine("debit"), emptyLine("credit")],
+        },
   });
+  const keep = useMemo(
+    () =>
+      new Set(
+        journal?.lines.flatMap((l) =>
+          [l.accountId, l.subAccountId ?? [], l.partnerId ?? []].flat(),
+        ),
+      ),
+    [journal],
+  );
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "lines" });
   const [generalErrors, setGeneralErrors] = useState<string[]>([]);
   const [unexpected, setUnexpected] = useState<unknown>();
@@ -287,6 +340,7 @@ export function JournalForm({
               tags={tags}
               taxSettings={taxSettings}
               taxCategories={taxCategories}
+              keep={keep}
               canRemove={fields.length > 2}
               onRemove={() => remove(index)}
             />
@@ -355,6 +409,7 @@ function JournalLineRow({
   tags,
   taxSettings,
   taxCategories,
+  keep,
   canRemove,
   onRemove,
 }: {
@@ -366,6 +421,8 @@ function JournalLineRow({
   tags: Tag[];
   taxSettings: TaxSetting[];
   taxCategories: TaxCategory[];
+  /** 使用停止でも選べる科目・補助科目・取引先の ID */
+  keep: ReadonlySet<string>;
   canRemove: boolean;
   onRemove: () => void;
 }) {
@@ -376,9 +433,16 @@ function JournalLineRow({
     enabled: accountId !== "",
   });
   const groups = useMemo(
-    () => groupAccountsBySection(accounts.filter((a) => a.isActive)),
-    [accounts],
+    () => groupAccountsBySection(accounts.filter((a) => a.isActive || keep.has(a.id))),
+    [accounts, keep],
   );
+  // 補助科目の選択肢は後から読み込まれるので、読み込んだら選択中の値を選択肢に反映する
+  useEffect(() => {
+    if (subAccounts.data) {
+      const name = `lines.${index}.subAccountId` as const;
+      form.setValue(name, form.getValues(name));
+    }
+  }, [subAccounts.data, form, index]);
   const account = accounts.find((a) => a.id === accountId);
   const autoTax = defaultTaxCategory(date, account, taxSettings);
   const taxName = (code: TaxCategoryCode) =>
@@ -435,7 +499,7 @@ function JournalLineRow({
         >
           <option value="">（なし）</option>
           {subAccounts.data
-            ?.filter((s) => s.isActive)
+            ?.filter((s) => s.isActive || keep.has(s.id))
             .map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -492,7 +556,7 @@ function JournalLineRow({
         >
           <option value="">（なし）</option>
           {partners
-            .filter((p) => p.isActive)
+            .filter((p) => p.isActive || keep.has(p.id))
             .map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}

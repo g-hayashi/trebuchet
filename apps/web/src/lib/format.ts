@@ -12,3 +12,14 @@ export function parseYenInput(raw: string): number | undefined {
   const value = Number(normalized);
   return Number.isFinite(value) ? value : undefined;
 }
+
+/** ISO 8601 の日時を、ローカル時刻の「2026/10/31 18:00」の形で表示する */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

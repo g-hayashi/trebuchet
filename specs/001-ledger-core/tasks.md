@@ -168,22 +168,22 @@ description: "Task list for 001-ledger-core"
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T071 [P] [US3] `packages/domain/test/correct-journal.test.ts` を書く（フェイクのリポジトリ）: 理由が空・空白のみなら `REASON_REQUIRED`、`version` の不一致は `VERSION_CONFLICT`、締め済みの期間の仕訳は `PERIOD_CLOSED` で `details.suggest = "correcting_entry"`、新しい日付が締め済みの期間でも `PERIOD_CLOSED`、成功すると `version` が +1 され、audit_log の `before_json` に変更前の行・タグを含む全内容が入る（FR-020）。取消済みの仕訳は訂正できない
-- [ ] T072 [P] [US3] `packages/domain/test/void-journal.test.ts` を書く: 理由が必須、取消後の `status` は `voided`、audit_log に `void` と変更前の内容が残る、締め済みの期間なら `PERIOD_CLOSED`
-- [ ] T073 [P] [US3] `packages/domain/test/correcting-entry.test.ts` を書く（FR-019a）: `correctsJournalId` は締め済みの期間の仕訳だけを指せる（締めていない期間の仕訳を指すと `VALIDATION`）、訂正仕訳の日付は締めていない期間、元の仕訳から `correctingJournalsOf` で訂正仕訳をたどれる
-- [ ] T074 [P] [US3] `packages/domain/test/history.property.test.ts` を書く（SC-005）: 任意の回数の訂正・取消の列を適用した後、`journalHistory` の各項目の `before_json` をたどると、すべての過去の版と理由を復元できる
-- [ ] T075 [P] [US3] `packages/db/test/search.property.test.ts` を書く（FR-023, SC-006）: arbitraries で生成した仕訳群と、任意の `dateFrom`/`dateTo`/`amountMin`/`amountMax`/`partnerId`/`accountId`/`q`/`tagId`/`includeVoided` の組み合わせについて、`findJournals` の結果がメモリ上のオラクルのフィルターと一致する（漏れも余分もない）。金額の範囲は「いずれかの行の金額が範囲内」で一致。`cursor` で全ページをたどると重複も欠落もない
-- [ ] T076 [P] [US3] `packages/db/test/ledger-repository.correct.test.ts` を書く: `replaceJournal` は行とタグを全件置き換え `version` を +1 する、`expectedVersion` の不一致で失敗する、`voidJournal` は行を残す、仕訳の更新と audit_log の追記が同じトランザクション（途中で例外なら両方とも残らない）
-- [ ] T077 [P] [US3] `apps/server/test/journals.correct.api.test.ts` を書く: `PUT /journals/:id`（理由なし → 422 `REASON_REQUIRED`、古い version → 409 `VERSION_CONFLICT`）、`POST /journals/:id/void`、`GET /journals/:id/history`、`GET /journals?...` の検索、取消済みは既定で検索結果に出ない（`includeVoided=true` で出る）
+- [X] T071 [P] [US3] `packages/domain/test/correct-journal.test.ts` を書く（フェイクのリポジトリ）: 理由が空・空白のみなら `REASON_REQUIRED`、`version` の不一致は `VERSION_CONFLICT`、締め済みの期間の仕訳は `PERIOD_CLOSED` で `details.suggest = "correcting_entry"`、新しい日付が締め済みの期間でも `PERIOD_CLOSED`、成功すると `version` が +1 され、audit_log の `before_json` に変更前の行・タグを含む全内容が入る（FR-020）。取消済みの仕訳は訂正できない
+- [X] T072 [P] [US3] `packages/domain/test/void-journal.test.ts` を書く: 理由が必須、取消後の `status` は `voided`、audit_log に `void` と変更前の内容が残る、締め済みの期間なら `PERIOD_CLOSED`
+- [X] T073 [P] [US3] `packages/domain/test/correcting-entry.test.ts` を書く（FR-019a）: `correctsJournalId` は締め済みの期間の仕訳だけを指せる（締めていない期間の仕訳を指すと `VALIDATION`）、訂正仕訳の日付は締めていない期間、元の仕訳から `correctingJournalsOf` で訂正仕訳をたどれる
+- [X] T074 [P] [US3] `packages/domain/test/history.property.test.ts` を書く（SC-005）: 任意の回数の訂正・取消の列を適用した後、`journalHistory` の各項目の `before_json` をたどると、すべての過去の版と理由を復元できる
+- [X] T075 [P] [US3] `packages/db/test/search.property.test.ts` を書く（FR-023, SC-006）: arbitraries で生成した仕訳群と、任意の `dateFrom`/`dateTo`/`amountMin`/`amountMax`/`partnerId`/`accountId`/`q`/`tagId`/`includeVoided` の組み合わせについて、`findJournals` の結果がメモリ上のオラクルのフィルターと一致する（漏れも余分もない）。金額の範囲は「いずれかの行の金額が範囲内」で一致。`cursor` で全ページをたどると重複も欠落もない
+- [X] T076 [P] [US3] `packages/db/test/ledger-repository.correct.test.ts` を書く: `replaceJournal` は行とタグを全件置き換え `version` を +1 する、`expectedVersion` の不一致で失敗する、`voidJournal` は行を残す、仕訳の更新と audit_log の追記が同じトランザクション（途中で例外なら両方とも残らない）
+- [X] T077 [P] [US3] `apps/server/test/journals.correct.api.test.ts` を書く: `PUT /journals/:id`（理由なし → 422 `REASON_REQUIRED`、古い version → 409 `VERSION_CONFLICT`）、`POST /journals/:id/void`、`GET /journals/:id/history`、`GET /journals?...` の検索、取消済みは既定で検索結果に出ない（`includeVoided=true` で出る）
 
 ### Implementation for User Story 3
 
-- [ ] T078 [P] [US3] `packages/schema/src/journals.ts` に追加する: `JournalCorrection = JournalInput & { reason: z.string(), version: int }`、`VoidInput { reason: z.string(), version }`、`ReopenInput { reason: z.string() }`（`reason` の空欄・空白のみ・500文字超の判定は Zod ではなくドメインで行い、`REASON_REQUIRED` を返す。contracts/http-api.md）、`JournalQuery { dateFrom?, dateTo?, amountMin?, amountMax?, partnerId?, accountId?, q?, tagId?, includeVoided: boolean = false, cursor?, limit: int 1..200 = 50 }`、`HistoryEntry { occurredAt, action, reason, before, after }`
-- [ ] T079 [US3] `packages/domain/src/usecases/correct-journal.ts` と `packages/domain/src/usecases/void-journal.ts` を実装し、`create-journal.ts` に訂正仕訳（`correctsJournalId`）の検証を追加する。T071〜T074 が通ること
-- [ ] T080 [US3] `packages/db/src/ledger-repository.ts` に `replaceJournal`, `voidJournal`, `findJournals`（カーソルは `journal_no`）, `journalHistory`, `correctingJournalsOf` を実装する。T075, T076 が通ること
-- [ ] T081 [US3] `apps/server/src/routes/journals.ts` に `PUT /journals/:id`, `POST /journals/:id/void`, `GET /journals/:id/history`, `GET /journals`（検索）を追加し、`GET /journals/:id` に訂正元と訂正仕訳の参照を含める。T077 が通ること
-- [ ] T082 [US3] `apps/web/src/routes/e/$entityId/journals/$journalId.tsx` を実装する: 仕訳の詳細、訂正（JournalForm を再利用し、理由の入力ダイアログ）、取消（理由の入力）、変更履歴のタイムライン（変更前後の差分・日時・理由）、訂正元・訂正仕訳へのリンク、「取消済み」の表示。`PERIOD_CLOSED` のときは「当年度に訂正仕訳を起票」ボタンを出し、`correctsJournalId` を入れた入力画面を開く
-- [ ] T083 [US3] `apps/web/src/routes/e/$entityId/journals/index.tsx` に検索フォームを追加する。検索条件は TanStack Router の `validateSearch`（`JournalQuery` の Zod スキーマ）で URL に持つ
+- [X] T078 [P] [US3] `packages/schema/src/journals.ts` に追加する: `JournalCorrection = JournalInput & { reason: z.string(), version: int }`、`VoidInput { reason: z.string(), version }`、`ReopenInput { reason: z.string() }`（`reason` の空欄・空白のみ・500文字超の判定は Zod ではなくドメインで行い、`REASON_REQUIRED` を返す。contracts/http-api.md）、`JournalQuery { dateFrom?, dateTo?, amountMin?, amountMax?, partnerId?, accountId?, q?, tagId?, includeVoided: boolean = false, cursor?, limit: int 1..200 = 50 }`、`HistoryEntry { occurredAt, action, reason, before, after }`
+- [X] T079 [US3] `packages/domain/src/usecases/correct-journal.ts` と `packages/domain/src/usecases/void-journal.ts` を実装し、`create-journal.ts` に訂正仕訳（`correctsJournalId`）の検証を追加する。T071〜T074 が通ること
+- [X] T080 [US3] `packages/db/src/ledger-repository.ts` に `replaceJournal`, `voidJournal`, `findJournals`（カーソルは `{date}_{journalNo}`。並び順が「日付→仕訳番号」の降順のため）, `journalHistory`, `correctingJournalsOf` を実装する。T075, T076 が通ること
+- [X] T081 [US3] `apps/server/src/routes/journals.ts` に `PUT /journals/:id`, `POST /journals/:id/void`, `GET /journals/:id/history`, `GET /journals`（検索）を追加し、`GET /journals/:id` に訂正元と訂正仕訳の参照を含める。T077 が通ること
+- [X] T082 [US3] `apps/web/src/routes/e/$entityId/journals/$journalId.tsx` を実装する: 仕訳の詳細、訂正（JournalForm を再利用し、理由の入力ダイアログ）、取消（理由の入力）、変更履歴のタイムライン（変更前後の差分・日時・理由）、訂正元・訂正仕訳へのリンク、「取消済み」の表示。`PERIOD_CLOSED` のときは「当年度に訂正仕訳を起票」ボタンを出し、`correctsJournalId` を入れた入力画面を開く
+- [X] T083 [US3] `apps/web/src/routes/e/$entityId/journals/index.tsx` に検索フォームを追加する。検索条件は TanStack Router の `validateSearch`（`JournalQuery` の Zod スキーマ）で URL に持つ
 
 **Checkpoint**: US1〜3（P1）が完成。日常の記帳と訂正ができる
 
