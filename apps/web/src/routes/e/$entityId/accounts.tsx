@@ -24,12 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  CATEGORY_LABELS,
-  groupAccountsBySection,
-  SECTION_LABELS,
-  sectionsForCategory,
-} from "@/lib/accounts";
+import { groupAccountsBySection, SECTION_LABELS } from "@/lib/accounts";
 import { api, unwrap } from "@/lib/api";
 import { type Account, accountsQuery, queryKeys, subAccountsQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -39,6 +34,23 @@ export const Route = createFileRoute("/e/$entityId/accounts")({
 });
 
 const accountApi = api.api.entities[":entityId"].accounts;
+
+const CATEGORY_LABELS: Record<AccountCategory, string> = {
+  asset: "資産",
+  liability: "負債",
+  equity: "純資産",
+  revenue: "収益",
+  expense: "費用",
+};
+
+/** 科目の区分ごとに選べる決算書の区分（packages/domain の ALLOWED_SECTIONS と同じ） */
+const ALLOWED_SECTIONS: Record<AccountCategory, readonly ReportSection[]> = {
+  asset: ["BS_ASSET"],
+  liability: ["BS_LIABILITY"],
+  equity: ["BS_EQUITY", "BS_ASSET"],
+  revenue: ["PL_SALES", "PL_OTHER"],
+  expense: ["PL_COGS", "PL_EXPENSE", "PL_OTHER"],
+};
 
 function AccountsPage() {
   const { entityId } = Route.useParams();
@@ -139,7 +151,7 @@ function AddAccountForm({ entityId }: { entityId: string }) {
               {...form.register("category", {
                 onChange: (e: { target: { value: string } }) => {
                   const parsed = AccountCategory.safeParse(e.target.value);
-                  const first = parsed.success ? sectionsForCategory(parsed.data)[0] : undefined;
+                  const first = parsed.success ? ALLOWED_SECTIONS[parsed.data][0] : undefined;
                   if (first) form.setValue("reportSection", first);
                 },
               })}
@@ -153,8 +165,9 @@ function AddAccountForm({ entityId }: { entityId: string }) {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="account-section">決算書の区分</Label>
-            <NativeSelect id="account-section" {...form.register("reportSection")}>
-              {sectionsForCategory(category).map((s: ReportSection) => (
+            {/* 区分を変えると選択肢が入れ替わるため、作り直して選んだ値を表示に反映する */}
+            <NativeSelect key={category} id="account-section" {...form.register("reportSection")}>
+              {ALLOWED_SECTIONS[category].map((s) => (
                 <option key={s} value={s}>
                   {SECTION_LABELS[s]}
                 </option>

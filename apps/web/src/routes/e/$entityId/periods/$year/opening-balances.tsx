@@ -27,7 +27,6 @@ import {
 import { groupAccountsBySection } from "@/lib/accounts";
 import { api, unwrap } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
-import { openingTotals } from "@/lib/opening-balances";
 import {
   type Account,
   accountsQuery,
@@ -326,9 +325,17 @@ function BalanceRow({
   );
 }
 
+/** 借方合計・貸方合計・差額（借方 − 貸方）。未入力の金額は 0 として数える */
 function useTotals(control: Control<FormInput, unknown, FormOutput>) {
   const rows = useWatch({ control, name: "rows" });
-  return openingTotals(rows);
+  let debit = 0;
+  let credit = 0;
+  for (const row of rows) {
+    const amount = typeof row.amount === "number" && Number.isFinite(row.amount) ? row.amount : 0;
+    if (row.side === "debit") debit += amount;
+    else credit += amount;
+  }
+  return { debit, credit, diff: debit - credit, balanced: debit === credit };
 }
 
 function Totals({ control }: { control: Control<FormInput, unknown, FormOutput> }) {
