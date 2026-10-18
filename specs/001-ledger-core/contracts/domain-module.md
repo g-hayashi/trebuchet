@@ -18,6 +18,7 @@ type Result<T, E> = { ok: true; value: T } | { ok: false; error: E }
 |---|---|---|---|
 | `validateJournal(draft, ctx)` | 下書き、科目・会計期間・消費税設定の参照 | `Result<ValidJournal, JournalError[]>` | INV-1〜3, INV-7 |
 | `computeInclusiveTax(amount, rate)` | 税込額、税率 | 内税額（切り捨て） | INV-10 |
+| `resolveTaxRate(categoryCode, date, rates)` | 税区分、日付、税率のデータ | 税率（課税の区分以外は `undefined`） | INV-10, Constitution VI |
 | `defaultTaxCategory(date, side, account, settings)` | | 税区分コード | FR-017 |
 | `resolveTaxSetting(date, settings)` | | 適用される設定 | FR-009 |
 | `validateTaxSettings(settings, firstPeriodStart)` | | `Result` | FR-009 |

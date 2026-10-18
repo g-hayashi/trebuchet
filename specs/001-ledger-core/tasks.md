@@ -34,7 +34,7 @@ description: "Task list for 001-ledger-core"
 
 **Purpose**: SQLite ドライバーの検証と monorepo の雛形
 
-- [ ] T001 SQLite ドライバーの PoC（research.md R1 のゲート）を `.poc/sqlite/` で実施する。`.poc/` は `.gitignore` 済み。**`pnpm add` の前に利用者の承認を得る**。確認する項目: (1) Node 26 で `better-sqlite3@13` がインストールできる（ビルド済みバイナリか、ローカルビルドか）、(2) `CREATE TABLE ... STRICT` が使える、(3) `BEFORE DELETE` トリガーの `RAISE(ABORT, ...)` で削除が拒否される、(4) `drizzle-orm/better-sqlite3` で接続し、同期トランザクションが使える、(5) `crypto.randomUUIDv7()` が使える。結果を `specs/001-ledger-core/research.md` の R1 に「PoC 結果（日付）」として追記する。失敗した場合は R1 の Decision を `node:sqlite` に変更し、以降のタスクのドライバー名を読み替える
+- [ ] T001 SQLite ドライバーの PoC（research.md R1 のゲート）を `.poc/sqlite/` で実施する。`.poc/` は `.gitignore` 済み。**`pnpm add` の前に利用者の承認を得る**。確認する項目: (1) Node 26 で `better-sqlite3@13` がインストールできる（ビルド済みバイナリか、ローカルビルドか）、(2) `CREATE TABLE ... STRICT` が使える、(3) `BEFORE DELETE` トリガーの `RAISE(ABORT, ...)` で削除が拒否される、(4) `drizzle-orm/better-sqlite3` で接続し、同期トランザクションが使える、(5) `crypto.randomUUIDv7()` が使える。結果を `specs/001-ledger-core/research.md` の R1 に「PoC 結果（日付）」として追記し、`docs/adr/0001-sqlite-driver.md` にも決定を記録する。あわせて、`tsx` を使わずに `node --watch` で TypeScript を直接実行できるかを確認し、できれば T009 から `tsx` を外す（Constitution VII）。失敗した場合は R1 の Decision を `node:sqlite` に変更し、以降のタスクのドライバー名を読み替える
 - [ ] T002 ルートの `package.json`（`"private": true`, `"type": "module"`, `"engines": { "node": ">=26.5.1" }`, `"packageManager": "pnpm@<最新>"`, scripts: `dev`, `test`, `typecheck`, `lint`, `format`, `bench:reports`）と `pnpm-workspace.yaml`（`apps/*`, `packages/*`）、`.nvmrc`（`26`）を作成する
 - [ ] T003 [P] `tsconfig.base.json` を作成する（TypeScript 7.0、`strict: true`, `module`/`moduleResolution: "NodeNext"`、`verbatimModuleSyntax: true`、`noUncheckedIndexedAccess: true`、`exactOptionalPropertyTypes: true`）
 - [ ] T004 [P] `biome.json` を作成する（lint と format を有効化）。`packages/domain/**` に対して `noRestrictedImports` で `hono`, `react`, `drizzle-orm`, `better-sqlite3`, `node:fs`, `node:sqlite` を禁止する
@@ -59,7 +59,7 @@ description: "Task list for 001-ledger-core"
 ### 共有スキーマとドメインの型
 
 - [ ] T014 [P] `packages/schema/src/primitives.ts` を作成する: `Yen = z.number().int().positive().lt(1e12)`、`DateString`（`YYYY-MM-DD` で実在する日付）、`Id`（UUID）、`Side = "debit" | "credit"`、`TaxCategoryCode = "OUT_OF_SCOPE" | "SALES_10" | "SALES_8R" | "PURCHASE_10" | "PURCHASE_8R" | "EXEMPT" | "NON_TAXABLE"`、`AccountCategory = "asset" | "liability" | "equity" | "revenue" | "expense"`、`ReportSection = "PL_SALES" | "PL_COGS" | "PL_EXPENSE" | "PL_OTHER" | "BS_ASSET" | "BS_LIABILITY" | "BS_EQUITY"`、`EntityKind = "individual" | "corporation"`、`TaxpayerStatus = "exempt" | "general" | "simplified" | "two_tenths"`、`AccountingMethod = "tax_included" | "tax_excluded"`
-- [ ] T015 [P] `packages/schema/src/errors.ts` を作成する: エラーコード `VALIDATION`, `UNBALANCED`, `ACCOUNT_INACTIVE`, `ACCOUNT_NOT_FOUND`, `OUT_OF_PERIOD`, `PERIOD_CLOSED`, `REASON_REQUIRED`, `VERSION_CONFLICT`, `ACCOUNT_IN_USE`, `TAX_SETTING_GAP`, `ENTITY_NOT_FOUND`、エラーレスポンス `{ error: { code, message, details? } }`、警告コード `POSSIBLE_DUPLICATE`, `NEGATIVE_BALANCE`, `OPENING_BALANCE_MISSING`（contracts/http-api.md のエラー形式）
+- [ ] T015 [P] `packages/schema/src/errors.ts` を作成する: エラーコード `VALIDATION`, `UNBALANCED`, `ACCOUNT_INACTIVE`, `ACCOUNT_NOT_FOUND`, `OUT_OF_PERIOD`, `PERIOD_CLOSED`, `REASON_REQUIRED`, `VERSION_CONFLICT`, `ACCOUNT_IN_USE`, `TAX_SETTING_GAP`, `TAX_METHOD_UNSUPPORTED`, `ENTITY_NOT_FOUND`、エラーレスポンス `{ error: { code, message, details? } }`、警告コード `POSSIBLE_DUPLICATE`, `NEGATIVE_BALANCE`, `OPENING_BALANCE_MISSING`（contracts/http-api.md のエラー形式）
 - [ ] T016 [P] `packages/domain/test/money.property.test.ts` を書く（INV-10）: 任意の `amount`（1〜1e12-1）と `rate ∈ {8, 10}` で `computeInclusiveTax(amount, rate) === Math.floor(amount * rate / (100 + rate))`、`0 <= tax < amount`、結果が安全な整数。`sumYen` が結合的で、安全な整数に収まる
 - [ ] T017 `packages/domain/src/money.ts` を実装する: ブランド型 `Yen`、`toYen(n): Result<Yen>`、`computeInclusiveTax(amount, rate)`、`sumYen(values)`。T016 が通ること
 - [ ] T018 [P] `packages/domain/src/types.ts` を作成する: `Result<T, E>`、`Account`, `SubAccount`, `Partner`, `Tag`, `FiscalPeriod`（`status: "open" | "closed"`）, `TaxSetting`, `TaxCategory`, `OpeningBalance`, `LineDraft`, `JournalDraft`, `ValidJournal`, `Journal`（`status: "active" | "voided"`, `version`, `correctsJournalId`）, `JournalLine`, `PostedLine`, `AuditEntry`（`targetType`, `action`, `reason`, `beforeJson`, `afterJson`）, `JournalQuery`, `Page<T>`, `DomainError`（`code` は T015 と同じ集合 ＋ `details`）
@@ -68,11 +68,11 @@ description: "Task list for 001-ledger-core"
 
 ### DB スキーマとマイグレーション
 
-- [ ] T021 `packages/db/src/schema/tenant.ts` にマスタのテーブルを Drizzle で定義する（data-model §2 のとおり）: `entity_profile`（`fiscal_start_month` 1〜12）、`fiscal_periods`（`fiscal_year` UNIQUE、`status` は `open` | `closed`、`closed_at` NULL 可）、`accounts`（`code` UNIQUE、`name` NOT NULL UNIQUE、`category`, `normal_side`, `report_section`, `report_line` NULL 可, `sort_order`, `is_system`, `is_active`）、`sub_accounts`（`account_id` FK、`(account_id, name)` UNIQUE）、`partners`（`name` NOT NULL UNIQUE、`honorific` は `様` | `御中` | NULL）、`tags`（`name` UNIQUE）、`tax_categories`（`code` PK, `name`, `kind`, `rate`）、`consumption_tax_settings`（`effective_from` UNIQUE）
+- [ ] T021 `packages/db/src/schema/tenant.ts` にマスタのテーブルを Drizzle で定義する（data-model §2 のとおり）: `entity_profile`（`fiscal_start_month` 1〜12）、`fiscal_periods`（`fiscal_year` UNIQUE、`status` は `open` | `closed`、`closed_at` NULL 可）、`accounts`（`code` UNIQUE、`name` NOT NULL UNIQUE、`category`, `normal_side`, `report_section`, `report_line` NULL 可, `sort_order`, `is_system`, `is_active`）、`sub_accounts`（`account_id` FK、`(account_id, name)` UNIQUE）、`partners`（`name` NOT NULL UNIQUE、`honorific` は `様` | `御中` | NULL）、`tags`（`name` UNIQUE）、`tax_categories`（`code` PK, `name`, `kind`）、`tax_rates`（`category_code`, `rate` INTEGER, `effective_from`, `source_url` NOT NULL、`(category_code, effective_from)` UNIQUE）、`consumption_tax_settings`（`effective_from` UNIQUE）
 - [ ] T022 `packages/db/src/schema/tenant.ts` に残高・仕訳・監査のテーブルを追加する（data-model §3, §5）: `opening_balances`（`amount` > 0、`(fiscal_period_id, account_id, sub_account_id)` UNIQUE）、`journals`（`journal_no` UNIQUE、`status` は `active` | `voided`、`corrects_journal_id` FK → journals NULL 可、`source` 既定 `manual`、`version` 既定 1）、`journal_lines`（`CHECK (amount > 0 AND amount < 1000000000000)`、`tax_amount` >= 0、`(journal_id, line_no)` UNIQUE）、`journal_line_tags`（複合 PK）、`audit_log`（`target_type` は `journal` | `account` | `fiscal_period` | `opening_balance` | `tax_setting`、`action` は `create` | `correct` | `void` | `rename` | `deactivate` | `close` | `reopen` | `replace`）
 - [ ] T023 [P] `packages/db/src/schema/registry.ts` に `entities`（`id` PK, `name`, `kind`, `db_file`, `created_at`）を定義する
 - [ ] T024 `drizzle-kit generate` で `packages/db/drizzle/tenant/` と `packages/db/drizzle/registry/` に SQL を生成する。生成された `CREATE TABLE` に `STRICT` を付ける（Drizzle が出力しないため、生成後の SQL を編集する。編集できない場合は research.md R2 に理由を記録する）
-- [ ] T025 `drizzle-kit generate --custom` でテナント用の手書きマイグレーション `packages/db/drizzle/tenant/<番号>_integrity.sql` を作成する: トリガー `journals_no_delete`（`BEFORE DELETE ON journals` → `RAISE(ABORT, 'journals cannot be deleted')`）、`audit_log_no_update`、`audit_log_no_delete`、ビュー `v_unbalanced_journals`（有効な仕訳で Σ借方 ≠ Σ貸方 のもの）、インデックス `journals(date)`, `journal_lines(account_id)`, `journal_lines(partner_id)`、`tax_categories` の7行の投入（data-model §2 の表）
+- [ ] T025 `drizzle-kit generate --custom` でテナント用の手書きマイグレーション `packages/db/drizzle/tenant/<番号>_integrity.sql` を作成する: トリガー `journals_no_delete`（`BEFORE DELETE ON journals` → `RAISE(ABORT, 'journals cannot be deleted')`）、`audit_log_no_update`、`audit_log_no_delete`、ビュー `v_unbalanced_journals`（有効な仕訳で Σ借方 ≠ Σ貸方 のもの）、インデックス `journals(date)`, `journal_lines(account_id)`, `journal_lines(partner_id)`、`tax_categories` の7行と `tax_rates` の4行（10%・8%、`effective_from = 2019-10-01`、出典 URL つき）の投入（data-model §2 の表）
 - [ ] T026 [P] `packages/db/test/integrity.test.ts` を書く（`.tmp/` の一時 DB）: journals の DELETE が失敗する、audit_log の UPDATE・DELETE が失敗する（INV-9）、`amount = 0` と `amount = 1e12` の行が CHECK で失敗する（INV-3）、`PRAGMA foreign_keys` が ON、`v_unbalanced_journals` が貸借不一致の仕訳を検出する
 - [ ] T027 `packages/db/src/tenant-store.ts` を実装する: `openTenant(entityId)` は `entityId` を UUID の正規表現で検証（パストラバーサル防止）し、`${TREBUCHET_DATA_DIR ?? "./data"}/tenants/<entityId>.sqlite` を開き、`PRAGMA foreign_keys = ON`, `journal_mode = WAL` を設定して `migrate()` を実行する。開いたハンドルはキャッシュする。`openRegistry()` も同様
 - [ ] T028 [P] `packages/db/src/testing.ts` にテスト用ヘルパーを作成する: `.tmp/<uuid>/` を `TREBUCHET_DATA_DIR` にして DB を開き、終了時に削除する
@@ -80,7 +80,7 @@ description: "Task list for 001-ledger-core"
 
 ### API とフロントの骨組み
 
-- [ ] T030 `apps/server/src/errors.ts` を作成する: `DomainError` を HTTP に変換する（contracts/http-api.md の表: 400 `VALIDATION`、422 `UNBALANCED`/`ACCOUNT_INACTIVE`/`ACCOUNT_NOT_FOUND`/`OUT_OF_PERIOD`/`REASON_REQUIRED`/`TAX_SETTING_GAP`、409 `PERIOD_CLOSED`/`VERSION_CONFLICT`/`ACCOUNT_IN_USE`、404 `ENTITY_NOT_FOUND`）。Zod のエラーは 400 `VALIDATION` にする
+- [ ] T030 `apps/server/src/errors.ts` を作成する: `DomainError` を HTTP に変換する（contracts/http-api.md の表: 400 `VALIDATION`、422 `UNBALANCED`/`ACCOUNT_INACTIVE`/`ACCOUNT_NOT_FOUND`/`OUT_OF_PERIOD`/`REASON_REQUIRED`/`TAX_SETTING_GAP`/`TAX_METHOD_UNSUPPORTED`、409 `PERIOD_CLOSED`/`VERSION_CONFLICT`/`ACCOUNT_IN_USE`、404 `ENTITY_NOT_FOUND`）。Zod のエラーは 400 `VALIDATION` にする
 - [ ] T031 `apps/server/src/app.ts` を作成する: `new Hono().basePath("/api")`、`app.onError` で T030 を使う、`/entities/:entityId/*` のミドルウェアで registry に事業体があるか確認して `openTenant` し、リポジトリを `c.var` に入れる（なければ 404 `ENTITY_NOT_FOUND`）。ルートはメソッドチェーンで定義し、`export type AppType` を出す
 - [ ] T032 `apps/server/src/main.ts` を作成する: `@hono/node-server` の `serve` で `hostname: "127.0.0.1"`, `port: 8787` で待ち受ける（R13）。ルートの `pnpm dev` で server と web を同時に起動する
 - [ ] T033 [P] `apps/server/test/tenant-middleware.test.ts` を書く（`app.request()`）: 存在しない entityId は 404 `ENTITY_NOT_FOUND`、不正な形式の entityId も 404
@@ -112,7 +112,7 @@ description: "Task list for 001-ledger-core"
 ### Implementation for User Story 1
 
 - [ ] T043 [P] [US1] `packages/domain/src/seed/accounts.individual.ts` を実装する（data-model §2 の初期セット、R10。青色申告決算書（一般用）の欄番号と科目順を持つ）。T036 が通ること
-- [ ] T044 [P] [US1] `packages/domain/src/seed/tax-categories.ts` を実装する（7つの税区分、`kind` と `rate`）。DB への投入（T025）と同じ値であることをテストで確認する
+- [ ] T044 [P] [US1] `packages/domain/src/seed/tax-categories.ts`（7つの税区分と `kind`）と `packages/domain/src/seed/tax-rates.ts`（data-model §2 の `tax_rates` の初期データ。各行に `sourceUrl`）を実装し、`packages/domain/src/tax-rates.ts` に `resolveTaxRate(categoryCode, date, rates)`（`effective_from <= date` のうち最新の税率。課税の区分以外は `undefined`）を実装する。DB への投入（T025）と同じ値であること、`source_url` が空でないことをテストで確認する
 - [ ] T045 [P] [US1] `packages/domain/src/tax-settings.ts` に `validateTaxSettings` と `resolveTaxSetting` を実装する。T037 が通ること
 - [ ] T046 [P] [US1] `packages/domain/src/opening.ts` に `validateOpeningBalances` を実装する。T038 が通ること
 - [ ] T047 [P] [US1] `packages/schema/src/entities.ts` と `packages/schema/src/masters.ts` を作成する: `EntityCreate { name: string(1..100), kind, fiscalStartMonth: int 1..12, firstFiscalYear: int 2000..2100 }`、`EntityPatch { name }`、`AccountCreate { name, category, reportSection, reportLine? }`、`AccountPatch { name?, isActive? }`、`SubAccountCreate { name }`、`PartnerInput { name, honorific: "様" | "御中" | null, memo? }`、`TagCreate { name }`、`TaxSettingsPut = Array<{ effectiveFrom, taxpayerStatus, accountingMethod }>`、`OpeningBalancesPut = Array<{ accountId, subAccountId?, side, amount: Yen }>`
@@ -140,11 +140,11 @@ description: "Task list for 001-ledger-core"
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T059 [P] [US2] `packages/domain/test/journal.property.test.ts` を書く（`validateJournal`）: INV-1（arbitraries の任意の仕訳は成功し、1行の金額をずらすと `UNBALANCED` で `details.diff` が差額）、INV-2（借方のみ・貸方のみは拒否）、INV-3（0 以下・1e12 以上・非整数は拒否）、存在しない科目は `ACCOUNT_NOT_FOUND`、使用停止の科目は `ACCOUNT_INACTIVE`、補助科目が別の科目に属していれば拒否、会計期間のない日付は `OUT_OF_PERIOD`、締め済みの期間の日付は `PERIOD_CLOSED`。複数の違反はすべて返す
-- [ ] T060 [P] [US2] `packages/domain/test/tax-default.test.ts` を書く（FR-017）: 免税期間の既定の税区分は `OUT_OF_SCOPE`、課税・税込の期間で売上の科目は `SALES_10`、費用の科目は `PURCHASE_10`、資産・負債・純資産の科目は `OUT_OF_SCOPE`。税込経理で課税の税区分の行は `tax_amount = computeInclusiveTax(amount, rate)`、それ以外は 0
+- [ ] T059 [P] [US2] `packages/domain/test/journal.property.test.ts` を書く（`validateJournal`）: INV-1（arbitraries の任意の仕訳は成功し、1行の金額をずらすと `UNBALANCED` で `details.diff` が差額）、INV-2（借方のみ・貸方のみは拒否）、INV-3（0 以下・1e12 以上・非整数は拒否）、存在しない科目は `ACCOUNT_NOT_FOUND`、使用停止の科目は `ACCOUNT_INACTIVE`、補助科目が別の科目に属していれば拒否、会計期間のない日付は `OUT_OF_PERIOD`、締め済みの期間の日付は `PERIOD_CLOSED`、消費税の設定が `tax_excluded` の期間の日付は `TAX_METHOD_UNSUPPORTED`。複数の違反はすべて返す
+- [ ] T060 [P] [US2] `packages/domain/test/tax-default.test.ts` を書く（FR-017）: 免税期間の既定の税区分は `OUT_OF_SCOPE`、課税・税込の期間で売上の科目は `SALES_10`、費用の科目は `PURCHASE_10`、資産・負債・純資産の科目は `OUT_OF_SCOPE`。税込経理で課税の税区分の行は `tax_amount = computeInclusiveTax(amount, resolveTaxRate(taxCategory, date, rates))`、それ以外は 0。税率のデータに適用開始日の異なる2行を用意し、仕訳の日付によって使われる税率が切り替わることを確認する（Constitution VI）
 - [ ] T061 [P] [US2] `packages/domain/test/create-journal.test.ts` を書く（フェイクのリポジトリ）: 仕訳番号は 1 から登録順に増える（INV-8）、audit_log に `create` が1件追記される、直前の仕訳と日付・科目・金額の組が同じなら `warnings: [{ code: "POSSIBLE_DUPLICATE" }]` を返すが登録はされる（FR-018）、検証エラーのときは何も書き込まない
 - [ ] T062 [P] [US2] `packages/db/test/ledger-repository.test.ts` を書く: 仕訳・行・タグの保存と取得、`nextJournalNo` がトランザクション内で採番される、arbitraries の仕訳を 1,000 件登録しても `v_unbalanced_journals` が空、トランザクション内で例外が起きたら仕訳も audit_log も残らない
-- [ ] T063 [P] [US2] `apps/server/test/journals.create.api.test.ts` を書く: 受け入れシナリオ US2-1（`売掛金 495,000 / 売上高 495,000` → 201 と `journalNo`）、US2-2（`普通預金 487,037 ＋ 支払手数料 7,963 / 売掛金 495,000`）、US2-3（借方 500,000 / 貸方 495,000 → 422 `UNBALANCED` で `diff: 5000`）、US2-4（金額 0 → 400 `VALIDATION`、会計期間外 → 422 `OUT_OF_PERIOD`）、`GET /journals/:id` で行が返る
+- [ ] T063 [P] [US2] `apps/server/test/journals.create.api.test.ts` を書く: 受け入れシナリオ US2-1（`売掛金 495,000 / 売上高 495,000` → 201 と `journalNo`）、US2-2（`普通預金 487,037 ＋ 事業主貸 7,963 / 売掛金 495,000`）、US2-3（借方 500,000 / 貸方 495,000 → 422 `UNBALANCED` で `diff: 5000`）、US2-4（金額 0 → 400 `VALIDATION`、会計期間外 → 422 `OUT_OF_PERIOD`）、`GET /journals/:id` で行が返る
 
 ### Implementation for User Story 2
 
@@ -178,7 +178,7 @@ description: "Task list for 001-ledger-core"
 
 ### Implementation for User Story 3
 
-- [ ] T078 [P] [US3] `packages/schema/src/journals.ts` に追加する: `JournalCorrection = JournalInput & { reason: string(trim, 1..500), version: int }`、`VoidInput { reason, version }`、`JournalQuery { dateFrom?, dateTo?, amountMin?, amountMax?, partnerId?, accountId?, q?, tagId?, includeVoided: boolean = false, cursor?, limit: int 1..200 = 50 }`、`HistoryEntry { occurredAt, action, reason, before, after }`
+- [ ] T078 [P] [US3] `packages/schema/src/journals.ts` に追加する: `JournalCorrection = JournalInput & { reason: z.string(), version: int }`、`VoidInput { reason: z.string(), version }`、`ReopenInput { reason: z.string() }`（`reason` の空欄・空白のみ・500文字超の判定は Zod ではなくドメインで行い、`REASON_REQUIRED` を返す。contracts/http-api.md）、`JournalQuery { dateFrom?, dateTo?, amountMin?, amountMax?, partnerId?, accountId?, q?, tagId?, includeVoided: boolean = false, cursor?, limit: int 1..200 = 50 }`、`HistoryEntry { occurredAt, action, reason, before, after }`
 - [ ] T079 [US3] `packages/domain/src/usecases/correct-journal.ts` と `packages/domain/src/usecases/void-journal.ts` を実装し、`create-journal.ts` に訂正仕訳（`correctsJournalId`）の検証を追加する。T071〜T074 が通ること
 - [ ] T080 [US3] `packages/db/src/ledger-repository.ts` に `replaceJournal`, `voidJournal`, `findJournals`（カーソルは `journal_no`）, `journalHistory`, `correctingJournalsOf` を実装する。T075, T076 が通ること
 - [ ] T081 [US3] `apps/server/src/routes/journals.ts` に `PUT /journals/:id`, `POST /journals/:id/void`, `GET /journals/:id/history`, `GET /journals`（検索）を追加し、`GET /journals/:id` に訂正元と訂正仕訳の参照を含める。T077 が通ること
@@ -234,13 +234,14 @@ description: "Task list for 001-ledger-core"
 ### Tests for User Story 5 ⚠️
 
 - [ ] T104 [P] [US5] `packages/domain/test/close-period.test.ts` を書く: `closePeriod` で `status = closed`・`closed_at` が入り audit_log に `close`、`reopenPeriod` は理由が必須（`REASON_REQUIRED`）で audit_log に `reopen` と理由、締め済みの期間に対する登録・訂正・取消・期首残高の置換がすべて `PERIOD_CLOSED`（INV-7）、締め済みの期間を再度締めても状態は変わらない
-- [ ] T105 [P] [US5] `apps/server/test/periods.close.api.test.ts` を書く: `POST /fiscal-periods/2026/close` → 以降の 2026 年の日付の `POST /journals` は 409 `PERIOD_CLOSED`、`POST /reopen` で理由なし → 422、理由ありで再び登録できる
+- [ ] T105 [P] [US5] `packages/domain/test/ledger-ops.property.test.ts` を書く（INV-7, INV-8 のプロパティテスト, Constitution I・V）: フェイクのリポジトリに対して、登録・訂正・取消・締め・解除・訂正仕訳の起票をランダムな順に並べた操作列（fast-check の `fc.commands` または操作の配列）を実行する。各ステップの後で、(1) 締め済みの期間に属する仕訳の内容・状態・version が、締めた時点のスナップショットと一致する（INV-7）、(2) 仕訳番号が 1 から抜けなく増え、重複しない（INV-8）、(3) 有効な仕訳がすべて貸借一致している（INV-1）ことを検証する
+- [ ] T106 [P] [US5] `apps/server/test/periods.close.api.test.ts` を書く: `POST /fiscal-periods/2026/close` → 以降の 2026 年の日付の `POST /journals` は 409 `PERIOD_CLOSED`、`POST /reopen` で理由なし → 422、理由ありで再び登録できる
 
 ### Implementation for User Story 5
 
-- [ ] T106 [US5] `packages/domain/src/usecases/close-period.ts` に `closePeriod` と `reopenPeriod` を実装する（audit_log の `target_type = fiscal_period`）。T104 が通ること
-- [ ] T107 [US5] `packages/db/src/master-repository.ts` に会計期間の状態の更新を追加し、`apps/server/src/routes/periods.ts` に `POST /fiscal-periods/:year/close` と `POST /fiscal-periods/:year/reopen` を追加する。T105 が通ること
-- [ ] T108 [US5] `apps/web/src/routes/e/$entityId/periods/index.tsx` に締め・解除のボタン（確認ダイアログ、解除は理由の入力）と、締めと解除の履歴を追加する
+- [ ] T107 [US5] `packages/domain/src/usecases/close-period.ts` に `closePeriod` と `reopenPeriod` を実装する（audit_log の `target_type = fiscal_period`）。T104 と T105 が通ること
+- [ ] T108 [US5] `packages/db/src/master-repository.ts` に会計期間の状態の更新を追加し、`apps/server/src/routes/periods.ts` に `POST /fiscal-periods/:year/close` と `POST /fiscal-periods/:year/reopen` を追加する。T106 が通ること
+- [ ] T109 [US5] `apps/web/src/routes/e/$entityId/periods/index.tsx` に締め・解除のボタン（確認ダイアログ、解除は理由の入力）と、締めと解除の履歴を追加する
 
 **Checkpoint**: 申告後の帳簿を保護できる
 
@@ -254,13 +255,13 @@ description: "Task list for 001-ledger-core"
 
 ### Tests for User Story 6 ⚠️
 
-- [ ] T109 [P] [US6] `packages/db/test/isolation.property.test.ts` を書く（FR-002, SC-007）: 2つのテナントに arbitraries の仕訳を登録し、それぞれの `findJournals`・`linesInRange`・`openingBalances` の結果が自分のテナントの ID だけを含む。DB ファイルが2つ別に存在する
-- [ ] T110 [P] [US6] `apps/server/test/isolation.api.test.ts` を書く: 事業体 A の仕訳の ID・摘要が、事業体 B の検索・5つの帳票の JSON と CSV・`GET /journals/:id`（A の ID を B のパスで指定 → 404）に一切現れない。`kind: "corporation"` の事業体を作成できる（US6-2）
+- [ ] T110 [P] [US6] `packages/db/test/isolation.property.test.ts` を書く（FR-002, SC-007）: 2つのテナントに arbitraries の仕訳を登録し、それぞれの `findJournals`・`linesInRange`・`openingBalances` の結果が自分のテナントの ID だけを含む。DB ファイルが2つ別に存在する
+- [ ] T111 [P] [US6] `apps/server/test/isolation.api.test.ts` を書く: 事業体 A の仕訳の ID・摘要が、事業体 B の検索・5つの帳票の JSON と CSV・`GET /journals/:id`（A の ID を B のパスで指定 → 404）に一切現れない。`kind: "corporation"` の事業体を作成できる（US6-2）
 
 ### Implementation for User Story 6
 
-- [ ] T111 [US6] テストで漏れが見つかった箇所を修正する（想定では T027・T031 の構造で満たされる。修正がなければ、その旨をこのタスクに記録して完了とする）
-- [ ] T112 [US6] `apps/web/src/features/entities/EntitySwitcher.tsx` を実装して `__root.tsx` のヘッダーに置く: 事業体の一覧から選んで `/e/$entityId` に移動する、最後に選んだ事業体を `localStorage` に保存してトップ画面で復元する、切り替え時に TanStack Query のキャッシュを破棄する（別の事業体のデータが一瞬表示されるのを防ぐ）
+- [ ] T112 [US6] テストで漏れが見つかった箇所を修正する（想定では T027・T031 の構造で満たされる。修正がなければ、その旨をこのタスクに記録して完了とする）
+- [ ] T113 [US6] `apps/web/src/features/entities/EntitySwitcher.tsx` を実装して `__root.tsx` のヘッダーに置く: 事業体の一覧から選んで `/e/$entityId` に移動する、最後に選んだ事業体を `localStorage` に保存してトップ画面で復元する、切り替え時に TanStack Query のキャッシュを破棄する（別の事業体のデータが一瞬表示されるのを防ぐ）
 
 **Checkpoint**: すべてのユーザーストーリーが独立して動く
 
@@ -268,12 +269,13 @@ description: "Task list for 001-ledger-core"
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
-- [ ] T113 [P] `apps/web/e2e/ledger-flow.spec.ts` に Playwright の E2E を書く: 事業体の作成 → 期首残高 → 仕訳2件（単一・複合）→ 貸借不一致の拒否 → 試算表の合計の一致。`TREBUCHET_DATA_DIR` は `.tmp/e2e-<uuid>`。`pnpm --filter @trebuchet/web e2e` で実行する
-- [ ] T114 [P] `scripts/bench-reports.ts` と ルートの `bench:reports` を作成する（SC-004）: `.tmp/` のテナントに 2,000 件 × 平均3行の仕訳を登録し、5つの帳票の API の応答時間を測って、いずれかが 1 秒を超えたら非ゼロで終了する
-- [ ] T115 [P] `AGENTS.md` を作成する: 構成と依存の向き、コマンド（`pnpm dev`/`test`/`typecheck`/`lint`/`bench:reports`）、テストファーストと不変条件、テストの一時ファイルは `.tmp/`、実データ（`work/`, `data/`）を読まない・コミットしない、Spec Kit の成果物の場所
-- [ ] T116 [P] `README.md` を作成する（概要、前提、セットアップ、`pnpm dev`、データの保存先と `TREBUCHET_DATA_DIR`）
-- [ ] T117 `pnpm typecheck && pnpm lint && pnpm test` を実行し、Biome の `noRestrictedImports` で `packages/domain` の境界違反がないことを確認する
-- [ ] T118 `specs/001-ledger-core/quickstart.md` の手順（自動テスト・手動確認の1〜9）を実施し、SC-001（10分以内）と SC-002（30秒・1分以内）を含めて結果を確認する。手順と実装に食い違いがあれば quickstart.md を更新する
+- [ ] T114 [P] `apps/web/e2e/ledger-flow.spec.ts` に Playwright の E2E を書く: 事業体の作成 → 期首残高 → 仕訳2件（単一・複合）→ 貸借不一致の拒否 → 試算表の合計の一致。`TREBUCHET_DATA_DIR` は `.tmp/e2e-<uuid>`。`pnpm --filter @trebuchet/web e2e` で実行する
+- [ ] T115 [P] `scripts/bench-reports.ts` と ルートの `bench:reports` を作成する（SC-004）: `.tmp/` のテナントに 2,000 件 × 平均3行の仕訳を登録し、5つの帳票の API の応答時間を測って、いずれかが 1 秒を超えたら非ゼロで終了する
+- [ ] T116 [P] `AGENTS.md` を作成する: 構成と依存の向き、コマンド（`pnpm dev`/`test`/`typecheck`/`lint`/`bench:reports`）、テストファーストと不変条件、テストの一時ファイルは `.tmp/`、実データ（`work/`, `data/`）を読まない・コミットしない、Spec Kit の成果物の場所
+- [ ] T117 [P] `README.md` を作成する（概要、前提、セットアップ、`pnpm dev`、データの保存先と `TREBUCHET_DATA_DIR`）
+- [ ] T118 [P] 設計判断を ADR として記録する（Constitution の Development Workflow）: `docs/adr/0002-tenant-per-db-file.md`（事業体ごとの DB ファイル分離と `entity_id` 列を持たない理由、research.md R9・data-model §0）、`docs/adr/0003-correction-policy.md`（訂正方式 C 案、research.md R11、spec の Assumptions）。形式は「状況・決定・理由・検討した代替案・影響」。0001 は T001 で作成済みであることを確認する
+- [ ] T119 `pnpm typecheck && pnpm lint && pnpm test` を実行し、Biome の `noRestrictedImports` で `packages/domain` の境界違反がないことを確認する
+- [ ] T120 `specs/001-ledger-core/quickstart.md` の手順（自動テスト・手動確認の1〜9）を実施し、SC-001（10分以内）と SC-002（30秒・1分以内）を含めて結果を確認する。手順と実装に食い違いがあれば quickstart.md を更新する
 
 ---
 

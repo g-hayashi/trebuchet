@@ -20,7 +20,8 @@
 | 422 | `ACCOUNT_INACTIVE` / `ACCOUNT_NOT_FOUND` | 使用停止・存在しない科目 | FR-015 |
 | 422 | `OUT_OF_PERIOD` | 日付に対応する会計期間がない | FR-015 |
 | 409 | `PERIOD_CLOSED` | 締め済み年度への登録・訂正・取消。`details.suggest = "correcting_entry"` | FR-015, FR-019a, FR-024 |
-| 422 | `REASON_REQUIRED` | 理由のない訂正・取消・締めの解除 | FR-019, FR-024 |
+| 422 | `REASON_REQUIRED` | 理由のない訂正・取消・締めの解除。空欄・空白のみの判定はドメインで行う（Zod では `reason` を文字列であることだけ検証する） | FR-019, FR-024 |
+| 422 | `TAX_METHOD_UNSUPPORTED` | 税抜経理の期間の日付の仕訳（001 では未対応） | FR-017 |
 | 409 | `VERSION_CONFLICT` | 楽観ロックの不一致 | — |
 | 409 | `ACCOUNT_IN_USE` | 使用中の科目の削除 | FR-005 |
 | 422 | `TAX_SETTING_GAP` | 消費税の設定期間の空白・重複 | FR-009 |

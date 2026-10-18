@@ -89,17 +89,27 @@
 `id`, `name`（UNIQUE）
 
 ### tax_categories（税区分, 固定の参照データ）
-| code | 名称 | 区分 | 税率 |
-|---|---|---|---|
-| `OUT_OF_SCOPE` | 対象外 | — | — |
-| `SALES_10` | 課税売上10% | sales | 10 |
-| `SALES_8R` | 課税売上8%（軽） | sales | 8 |
-| `PURCHASE_10` | 課対仕入10% | purchase | 10 |
-| `PURCHASE_8R` | 課対仕入8%（軽） | purchase | 8 |
-| `EXEMPT` | 非課税 | — | — |
-| `NON_TAXABLE` | 不課税 | — | — |
+| code | 名称 | 区分 |
+|---|---|---|
+| `OUT_OF_SCOPE` | 対象外 | — |
+| `SALES_10` | 課税売上10% | sales |
+| `SALES_8R` | 課税売上8%（軽） | sales |
+| `PURCHASE_10` | 課対仕入10% | purchase |
+| `PURCHASE_8R` | 課対仕入8%（軽） | purchase |
+| `EXEMPT` | 非課税 | — |
+| `NON_TAXABLE` | 不課税 | — |
 
-コードとして持ち、マイグレーションで投入する（FR-010）。freee の税区分名との対応表は 002 で扱う。
+コードとして持ち、マイグレーションで投入する（FR-010）。freee の税区分名との対応表は 002 で扱う。税率は持たない（次の `tax_rates` で管理する）。
+
+### tax_rates（税率, Constitution VI）
+| 列 | 型 | 制約 |
+|---|---|---|
+| category_code | TEXT | tax_categories.code |
+| rate | INTEGER | 百分率の整数（10, 8） |
+| effective_from | TEXT | 適用開始日。(category_code, effective_from) UNIQUE |
+| source_url | TEXT | NOT NULL。出典（国税庁などの URL） |
+
+初期データ: `SALES_10`・`PURCHASE_10` は 10、`SALES_8R`・`PURCHASE_8R` は 8。いずれも `effective_from = 2019-10-01`、出典は国税庁「消費税の軽減税率制度」のページ。仕訳行の税率は、仕訳の日付以前で最新の `effective_from` の行から決める。正本は `packages/domain/src/seed/tax-rates.ts` とし、マイグレーションの投入値と一致することをテストで確認する。
 
 ### consumption_tax_settings（消費税の設定）
 | 列 | 型 | 制約 |
@@ -109,7 +119,7 @@
 | taxpayer_status | TEXT | `exempt` \| `general` \| `simplified` \| `two_tenths` |
 | accounting_method | TEXT | `tax_included` \| `tax_excluded` |
 
-**規則**（FR-009）: 適用期間は `effective_from` 順に連続し、次の行の前日までが適用範囲。最初の行の `effective_from` は最初の会計期間の開始日以前。空白・重複は保存時に拒否する。`exempt` のとき `accounting_method` は `tax_included` に固定する。
+**規則**（FR-009）: 適用期間は `effective_from` 順に連続し、次の行の前日までが適用範囲。最初の行の `effective_from` は最初の会計期間の開始日以前。空白・重複は保存時に拒否する。`exempt` のとき `accounting_method` は `tax_included` に固定する。`tax_excluded` の設定は登録できるが、001 ではその期間の日付の仕訳を `TAX_METHOD_UNSUPPORTED` で拒否する（spec FR-017）。
 
 ## 3. 残高・仕訳
 
@@ -172,10 +182,10 @@
 | INV-4 | 試算表の借方合計 = 貸方合計 | 帳票の導出関数（INV-1 と期首残高の一致から従う） |
 | INV-5 | 資産 = 負債 + 純資産 + 当期利益 | 帳票の導出関数 |
 | INV-6 | 取消済みの仕訳は集計に影響しない | 帳票の導出関数 |
-| INV-7 | 締め済み年度の仕訳は変更されない | ドメイン（会計期間の状態を確認）＋ audit_log |
-| INV-8 | 仕訳番号は単調増加で重複しない | DB の UNIQUE と採番トランザクション |
+| INV-7 | 締め済み年度の仕訳は変更されない | ドメイン（会計期間の状態を確認）＋ audit_log。操作列のプロパティテスト |
+| INV-8 | 仕訳番号は単調増加で重複しない | DB の UNIQUE と採番トランザクション。操作列のプロパティテスト |
 | INV-9 | audit_log は追記のみ | DB トリガー（UPDATE/DELETE を ABORT） |
-| INV-10 | 内税額 = floor(税込額 × 税率 / (100 + 税率)) | ドメインの純関数 |
+| INV-10 | 内税額 = floor(税込額 × 税率 / (100 + 税率))。税率は仕訳の日付で `tax_rates` から決める | ドメインの純関数 |
 
 ## 5. 監査（Constitution II）
 
