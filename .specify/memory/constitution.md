@@ -1,13 +1,3 @@
-<!--
-Sync Impact Report
-- Version change: (template) → 1.0.0
-- Modified principles: 初版のため全項目を新規定義
-- Added sections: Core Principles (I–VII), Technical Constraints, Development Workflow, Governance
-- Removed sections: なし
-- Templates requiring updates: なし（テンプレートは実行時に constitution を参照する）
-- Follow-up TODOs: なし
--->
-
 # Trebuchet Constitution
 
 個人事業主（将来は法人も）向けの、ローカルで動くプライベート会計ソフト。
@@ -19,7 +9,8 @@ Sync Impact Report
 
 - 金額は MUST 整数（円）で扱う。浮動小数点で金額を計算・保存してはならない。
 - すべての仕訳は MUST 借方合計 = 貸方合計 を満たす。満たさない仕訳は永続化層に到達させない。
-- 確定済みの仕訳は MUST 変更・削除しない。訂正は取消仕訳と再登録で行う。
+- 仕訳は MUST 物理削除しない。締めていない年度の仕訳は、変更前の内容を履歴に残す場合に限り
+  訂正・取消できる。締め済み年度の仕訳は MUST 変更せず、当年度に訂正仕訳を起票する。
 - 試算表・PL・BS は MUST 仕訳から導出する。集計値を独立して保存・編集しない。
 - 上記の不変条件は MUST fast-check のプロパティベーステストで検証する。
 
@@ -27,7 +18,7 @@ Sync Impact Report
 
 ### II. 監査可能性（電子帳簿保存法）
 
-- 仕訳と証憑は MUST 追記のみとし、訂正・取消の履歴（誰が・いつ・何を・なぜ）を残す。
+- 仕訳と証憑の変更履歴は MUST 追記のみとし、訂正・取消の履歴（いつ・何を・なぜ）を残す。
 - 仕訳と証憑は MUST 取引年月日・金額・取引先で検索できる。
 - 証憑ファイルは MUST 内容ハッシュで識別し、仕訳との紐づけを保持する。
 - データは MUST 7年以上保持できる形式（SQLite と元ファイル）で保存する。
@@ -97,4 +88,4 @@ Sync Impact Report
 - plan.md の Constitution Check で各原則への適合を確認する。違反は Complexity Tracking で
   正当化されない限り認めない。
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-18 | **Last Amended**: 2026-10-18
+**Version**: 2.0.0 | **Ratified**: 2026-10-18 | **Last Amended**: 2026-10-18
