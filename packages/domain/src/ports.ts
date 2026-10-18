@@ -73,11 +73,14 @@ export interface MasterRepository extends AuditLog {
   getProfile(): EntityProfile | undefined;
   saveProfile(profile: EntityProfile): void;
 
+  /** sortOrder, code の順 */
   listAccounts(): Account[];
   getAccount(id: string): Account | undefined;
   insertAccount(account: Account): void;
   updateAccount(account: Account): void;
+  /** 科目とその補助科目を削除する（未使用であることは呼び出し側が isAccountUsed で確認済み） */
   deleteAccount(id: string): void;
+  /** 仕訳行（取消済みを含む）または期首残高から参照されているか */
   isAccountUsed(accountId: string): boolean;
 
   listSubAccounts(accountId?: string): SubAccount[];
@@ -92,9 +95,11 @@ export interface MasterRepository extends AuditLog {
 
   listTaxCategories(): TaxCategory[];
   listTaxRates(): TaxRate[];
+  /** effectiveFrom の順 */
   listTaxSettings(): TaxSetting[];
   replaceTaxSettings(settings: TaxSetting[]): void;
 
+  /** fiscalYear の順 */
   listFiscalPeriods(): FiscalPeriod[];
   getFiscalPeriodByYear(fiscalYear: number): FiscalPeriod | undefined;
   insertFiscalPeriod(period: FiscalPeriod): void;

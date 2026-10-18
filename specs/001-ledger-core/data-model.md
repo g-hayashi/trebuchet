@@ -52,7 +52,7 @@
 | category | TEXT | `asset` \| `liability` \| `equity` \| `revenue` \| `expense` |
 | normal_side | TEXT | `debit` \| `credit`。category から決まる（事業主貸は資産側に表示するが性質は equity の控除） |
 | report_section | TEXT | 決算書の区分（`PL_SALES`, `PL_COGS`, `PL_EXPENSE`, `PL_OTHER`, `BS_ASSET`, `BS_LIABILITY`, `BS_EQUITY`） |
-| report_line | INTEGER | 決算書の欄番号（例: 売上=1、地代家賃=24、任意科目=25〜30）。NULL 可 |
+| report_line | INTEGER | 決算書の欄番号（例: 売上=1、地代家賃=23、任意科目=25〜30）。NULL 可 |
 | sort_order | INTEGER | 決算書の科目順 |
 | is_system | INTEGER | 初期セットの科目（コード変更不可） |
 | is_active | INTEGER | 使用停止なら 0（FR-005） |
