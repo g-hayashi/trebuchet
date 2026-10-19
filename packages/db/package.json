@@ -1,0 +1,26 @@
+{
+  "name": "@trebuchet/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "db:generate": "drizzle-kit generate --config drizzle.tenant.config.ts && drizzle-kit generate --config drizzle.registry.config.ts"
+  },
+  "dependencies": {
+    "@trebuchet/domain": "workspace:*",
+    "@trebuchet/schema": "workspace:*",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-orm": "^0.45.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.5",
+    "drizzle-kit": "^0.31.11",
+    "vitest": "^5.0.5"
+  }
+}

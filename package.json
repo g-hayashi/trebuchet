@@ -1,0 +1,27 @@
+{
+  "name": "trebuchet",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.3.0",
+  "engines": {
+    "node": ">=26.5.1"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c blue,green \"pnpm --filter @trebuchet/server dev\" \"pnpm --filter @trebuchet/web dev\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r --parallel typecheck && tsc -p scripts",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "bench:reports": "node scripts/bench-reports.ts",
+    "bench:import": "node scripts/bench-import.ts",
+    "verify:freee": "node scripts/verify-freee-import.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "^26.6.5",
+    "concurrently": "^10.0.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

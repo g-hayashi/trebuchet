@@ -4,3 +4,16 @@ node_modules/
 *.sqlite
 *.db
 .env*
+data/
+.poc/
+
+# build / test artifacts
+.tmp/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.log
+
+# Claude Code (machine-local settings)
+.claude/settings.local.json

@@ -1,0 +1,26 @@
+{
+  "name": "@trebuchet/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/app.ts"
+  },
+  "scripts": {
+    "dev": "node --watch src/main.ts",
+    "start": "node src/main.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "@hono/standard-validator": "^0.4.0",
+    "@trebuchet/db": "workspace:*",
+    "@trebuchet/domain": "workspace:*",
+    "@trebuchet/schema": "workspace:*",
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "vitest": "^5.0.5"
+  }
+}
