@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { formatYen, parseYenInput } from "./format";
+import { formatSignedYen, formatYen, parseYenInput } from "./format";
 
 describe("formatYen", () => {
   it("3桁区切りで表示する", () => {
     expect(formatYen(1234567)).toBe("1,234,567");
     expect(formatYen(0)).toBe("0");
     expect(formatYen(-5000)).toBe("-5,000");
+  });
+});
+
+describe("formatSignedYen", () => {
+  it("帳票の金額: 3桁区切りで、マイナスは ▲ を付ける", () => {
+    expect(formatSignedYen(1234567)).toBe("1,234,567");
+    expect(formatSignedYen(0)).toBe("0");
+    expect(formatSignedYen(-15000)).toBe("▲15,000");
   });
 });
 

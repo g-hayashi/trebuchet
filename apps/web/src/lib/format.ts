@@ -3,6 +3,11 @@ export function formatYen(amount: number): string {
   return amount.toLocaleString("ja-JP");
 }
 
+/** 帳票の金額を 3 桁区切りで表示する。マイナスは ▲ を付ける（決算書の表記） */
+export function formatSignedYen(amount: number): string {
+  return amount < 0 ? `▲${formatYen(-amount)}` : formatYen(amount);
+}
+
 /** 金額の入力欄の文字列を数値にする。全角数字とカンマを許す。数値でなければ undefined */
 export function parseYenInput(raw: string): number | undefined {
   const normalized = raw

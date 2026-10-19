@@ -197,29 +197,29 @@ description: "Task list for 001-ledger-core"
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T084 [P] [US4] `packages/domain/test/fixtures/sample-year.ts` を作成する: 合成した1年分の期首残高と約30件の仕訳（売上・入金・振込手数料・家賃・消耗品・取消済みの仕訳1件を含む）と、手計算した試算表・PL・BS・普通預金の元帳の期待値
-- [ ] T085 [P] [US4] `packages/domain/test/reports/trial-balance.property.test.ts` を書く: INV-4（任意の期首残高と仕訳で借方合計 = 貸方合計。**1万件の仕訳**で1回以上実行する, SC-003）、INV-6（取消済みの仕訳を加えても結果が変わらない）、フィクスチャの期待値と一致
-- [ ] T086 [P] [US4] `packages/domain/test/reports/balance-sheet.property.test.ts` を書く: INV-5（任意の入力で資産 = 負債 + 純資産 + 当期利益。1万件の仕訳でも成立）、当期利益 = PL の差引金額、フィクスチャと一致
-- [ ] T087 [P] [US4] `packages/domain/test/reports/general-ledger.test.ts` を書く: 前期繰越 = 期首残高 ＋ 会計期間の開始日から期間の開始日の前日までの累計、残高の推移が日付・仕訳番号順、相手科目（複合仕訳は「諸口」）、補助科目別の絞り込み、収益・費用の科目は会計期間ごとに 0 から始まる
-- [ ] T088 [P] [US4] `packages/domain/test/reports/profit-and-loss.test.ts` を書く: 決算書の科目順、売上・経費の合計・差引、前年比較で `増減 = 当年 − 前年`、前年のデータがない科目は 0
-- [ ] T089 [P] [US4] `packages/domain/test/reports/warnings.test.ts` を書く（FR-033, Edge Cases）: 資産の科目の残高がマイナス（例: 売掛金 ▲15,000）、負債の科目の残高が借方なら `NEGATIVE_BALANCE`（科目と金額）、期首残高が未登録なら `OPENING_BALANCE_MISSING`
-- [ ] T090 [P] [US4] `packages/domain/test/reports/csv.test.ts` を書く（FR-032）: UTF-8 の BOM 付き、改行は CRLF、カンマ・引用符・改行を含む値のエスケープ、CSV の数値が帳票オブジェクトの数値と一致する（プロパティテスト）
-- [ ] T091 [P] [US4] `apps/server/test/reports.api.test.ts` を書く: 5つの帳票の JSON、`format=csv` で `text/csv; charset=utf-8`、`compare=previous-year`、取消済みの仕訳が集計に含まれない（US4-5）、`warnings` が含まれる
+- [X] T084 [P] [US4] `packages/domain/test/fixtures/sample-year.ts` を作成する: 合成した1年分の期首残高と約30件の仕訳（売上・入金・振込手数料・家賃・消耗品・取消済みの仕訳1件を含む）と、手計算した試算表・PL・BS・普通預金の元帳の期待値
+- [X] T085 [P] [US4] `packages/domain/test/reports/trial-balance.property.test.ts` を書く: INV-4（任意の期首残高と仕訳で借方合計 = 貸方合計。**1万件の仕訳**で1回以上実行する, SC-003）、INV-6（取消済みの仕訳を加えても結果が変わらない）、フィクスチャの期待値と一致
+- [X] T086 [P] [US4] `packages/domain/test/reports/balance-sheet.property.test.ts` を書く: INV-5（任意の入力で資産 = 負債 + 純資産 + 当期利益。1万件の仕訳でも成立）、当期利益 = PL の差引金額、フィクスチャと一致
+- [X] T087 [P] [US4] `packages/domain/test/reports/general-ledger.test.ts` を書く: 前期繰越 = 期首残高 ＋ 会計期間の開始日から期間の開始日の前日までの累計、残高の推移が日付・仕訳番号順、相手科目（複合仕訳は「諸口」）、補助科目別の絞り込み、収益・費用の科目は会計期間ごとに 0 から始まる
+- [X] T088 [P] [US4] `packages/domain/test/reports/profit-and-loss.test.ts` を書く: 決算書の科目順、売上・経費の合計・差引、前年比較で `増減 = 当年 − 前年`、前年のデータがない科目は 0
+- [X] T089 [P] [US4] `packages/domain/test/reports/warnings.test.ts` を書く（FR-033, Edge Cases）: 資産の科目の残高がマイナス（例: 売掛金 ▲15,000）、負債の科目の残高が借方なら `NEGATIVE_BALANCE`（科目と金額）、期首残高が未登録なら `OPENING_BALANCE_MISSING`
+- [X] T090 [P] [US4] `packages/domain/test/reports/csv.test.ts` を書く（FR-032）: UTF-8 の BOM 付き、改行は CRLF、カンマ・引用符・改行を含む値のエスケープ、CSV の数値が帳票オブジェクトの数値と一致する（プロパティテスト）
+- [X] T091 [P] [US4] `apps/server/test/reports.api.test.ts` を書く: 5つの帳票の JSON、`format=csv` で `text/csv; charset=utf-8`、`compare=previous-year`、取消済みの仕訳が集計に含まれない（US4-5）、`warnings` が含まれる
 
 ### Implementation for User Story 4
 
-- [ ] T092 [P] [US4] `packages/schema/src/reports.ts` を作成する: 各帳票のクエリ（`from`, `to`, `asOf`, `accountId`, `subAccountId?`, `compare?: "previous-year"`, `format?: "json" | "csv"`）とレスポンスの型（各帳票 ＋ `warnings`）
-- [ ] T093 [US4] `packages/domain/src/reports/balances.ts` に共通の集計（科目・補助科目別の期首・借方・貸方・期末。取消済みを除外）を実装する
-- [ ] T094 [US4] `packages/domain/src/reports/trial-balance.ts`（`buildTrialBalance`）と `packages/domain/src/reports/journal-book.ts` を実装する。T085 が通ること
-- [ ] T095 [US4] `packages/domain/src/reports/general-ledger.ts`（`buildGeneralLedger`）を実装する。T087 が通ること
-- [ ] T096 [US4] `packages/domain/src/reports/profit-and-loss.ts`（`buildProfitAndLoss`）と `packages/domain/src/reports/balance-sheet.ts`（`buildBalanceSheet`、当期利益を純資産に含める）を実装する。前年比較は同じ関数を前年の期間で呼んで差分を取る。T086, T088 が通ること
-- [ ] T097 [P] [US4] `packages/domain/src/reports/warnings.ts`（`detectWarnings`）を実装する。T089 が通ること
-- [ ] T098 [P] [US4] `packages/domain/src/reports/csv.ts`（`toCsv`）を実装する。T090 が通ること
-- [ ] T099 [US4] `packages/db/src/ledger-repository.ts` の `linesInRange(from, to)`（有効な仕訳の行を科目・補助科目・取引先と結合して1クエリで取得, R12）と `openingBalances(fiscalYear)` を実装する
-- [ ] T100 [US4] `packages/domain/src/usecases/reports.ts` を実装する（期間 → 会計期間の解決、リポジトリからの取得、純関数の呼び出し、警告の付与）
-- [ ] T101 [US4] `apps/server/src/routes/reports.ts` に5つの帳票のエンドポイントを実装する（contracts/http-api.md）。`format=csv` のときは `toCsv` の結果を返す。T091 が通ること
-- [ ] T102 [US4] `apps/web/src/features/reports/` に共通の部品（期間の選択、比較の切替、警告のバナー、CSV のダウンロード、TanStack Table の金額列（3桁区切り、マイナスは ▲））を作成する
-- [ ] T103 [US4] `apps/web/src/routes/e/$entityId/reports/` に `journal-book.tsx`, `general-ledger.tsx`, `trial-balance.tsx`, `profit-and-loss.tsx`, `balance-sheet.tsx` を実装する。期間などの条件は URL の検索パラメータに持つ。元帳の行から仕訳の詳細に移動できる
+- [X] T092 [P] [US4] `packages/schema/src/reports.ts` を作成する: 各帳票のクエリ（`from`, `to`, `asOf`, `accountId`, `subAccountId?`, `compare?: "previous-year"`, `format?: "json" | "csv"`）とレスポンスの型（各帳票 ＋ `warnings`）
+- [X] T093 [US4] `packages/domain/src/reports/balances.ts` に共通の集計（科目・補助科目別の期首・借方・貸方・期末。取消済みを除外）を実装する
+- [X] T094 [US4] `packages/domain/src/reports/trial-balance.ts`（`buildTrialBalance`）と `packages/domain/src/reports/journal-book.ts` を実装する。T085 が通ること
+- [X] T095 [US4] `packages/domain/src/reports/general-ledger.ts`（`buildGeneralLedger`）を実装する。T087 が通ること
+- [X] T096 [US4] `packages/domain/src/reports/profit-and-loss.ts`（`buildProfitAndLoss`）と `packages/domain/src/reports/balance-sheet.ts`（`buildBalanceSheet`、当期利益を純資産に含める）を実装する。前年比較は同じ関数を前年の期間で呼んで差分を取る。T086, T088 が通ること
+- [X] T097 [P] [US4] `packages/domain/src/reports/warnings.ts`（`detectWarnings`）を実装する。T089 が通ること
+- [X] T098 [P] [US4] `packages/domain/src/reports/csv.ts`（`toCsv`）を実装する。T090 が通ること
+- [X] T099 [US4] `packages/db/src/ledger-repository.ts` の `linesInRange(from, to)`（有効な仕訳の行を科目・補助科目・取引先と結合して1クエリで取得, R12）と `openingBalances(fiscalYear)` を実装する
+- [X] T100 [US4] `packages/domain/src/usecases/reports.ts` を実装する（期間 → 会計期間の解決、リポジトリからの取得、純関数の呼び出し、警告の付与）
+- [X] T101 [US4] `apps/server/src/routes/reports.ts` に5つの帳票のエンドポイントを実装する（contracts/http-api.md）。`format=csv` のときは `toCsv` の結果を返す。T091 が通ること
+- [X] T102 [US4] `apps/web/src/features/reports/` に共通の部品（期間の選択、比較の切替、警告のバナー、CSV のダウンロード、TanStack Table の金額列（3桁区切り、マイナスは ▲））を作成する
+- [X] T103 [US4] `apps/web/src/routes/e/$entityId/reports/` に `journal-book.tsx`, `general-ledger.tsx`, `trial-balance.tsx`, `profit-and-loss.tsx`, `balance-sheet.tsx` を実装する。期間などの条件は URL の検索パラメータに持つ。元帳の行から仕訳の詳細に移動できる
 
 **Checkpoint**: 記帳の結果を帳票で確認できる
 
@@ -233,15 +233,15 @@ description: "Task list for 001-ledger-core"
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T104 [P] [US5] `packages/domain/test/close-period.test.ts` を書く: `closePeriod` で `status = closed`・`closed_at` が入り audit_log に `close`、`reopenPeriod` は理由が必須（`REASON_REQUIRED`）で audit_log に `reopen` と理由、締め済みの期間に対する登録・訂正・取消・期首残高の置換がすべて `PERIOD_CLOSED`（INV-7）、締め済みの期間を再度締めても状態は変わらない
-- [ ] T105 [P] [US5] `packages/domain/test/ledger-ops.property.test.ts` を書く（INV-7, INV-8 のプロパティテスト, Constitution I・V）: フェイクのリポジトリに対して、登録・訂正・取消・締め・解除・訂正仕訳の起票をランダムな順に並べた操作列（fast-check の `fc.commands` または操作の配列）を実行する。各ステップの後で、(1) 締め済みの期間に属する仕訳の内容・状態・version が、締めた時点のスナップショットと一致する（INV-7）、(2) 仕訳番号が 1 から抜けなく増え、重複しない（INV-8）、(3) 有効な仕訳がすべて貸借一致している（INV-1）ことを検証する
-- [ ] T106 [P] [US5] `apps/server/test/periods.close.api.test.ts` を書く: `POST /fiscal-periods/2026/close` → 以降の 2026 年の日付の `POST /journals` は 409 `PERIOD_CLOSED`、`POST /reopen` で理由なし → 422、理由ありで再び登録できる
+- [X] T104 [P] [US5] `packages/domain/test/close-period.test.ts` を書く: `closePeriod` で `status = closed`・`closed_at` が入り audit_log に `close`、`reopenPeriod` は理由が必須（`REASON_REQUIRED`）で audit_log に `reopen` と理由、締め済みの期間に対する登録・訂正・取消・期首残高の置換がすべて `PERIOD_CLOSED`（INV-7）、締め済みの期間を再度締めても状態は変わらない
+- [X] T105 [P] [US5] `packages/domain/test/ledger-ops.property.test.ts` を書く（INV-7, INV-8 のプロパティテスト, Constitution I・V）: フェイクのリポジトリに対して、登録・訂正・取消・締め・解除・訂正仕訳の起票をランダムな順に並べた操作列（fast-check の `fc.commands` または操作の配列）を実行する。各ステップの後で、(1) 締め済みの期間に属する仕訳の内容・状態・version が、締めた時点のスナップショットと一致する（INV-7）、(2) 仕訳番号が 1 から抜けなく増え、重複しない（INV-8）、(3) 有効な仕訳がすべて貸借一致している（INV-1）ことを検証する
+- [X] T106 [P] [US5] `apps/server/test/periods.close.api.test.ts` を書く: `POST /fiscal-periods/2026/close` → 以降の 2026 年の日付の `POST /journals` は 409 `PERIOD_CLOSED`、`POST /reopen` で理由なし → 422、理由ありで再び登録できる
 
 ### Implementation for User Story 5
 
-- [ ] T107 [US5] `packages/domain/src/usecases/close-period.ts` に `closePeriod` と `reopenPeriod` を実装する（audit_log の `target_type = fiscal_period`）。T104 と T105 が通ること
-- [ ] T108 [US5] `packages/db/src/master-repository.ts` に会計期間の状態の更新を追加し、`apps/server/src/routes/periods.ts` に `POST /fiscal-periods/:year/close` と `POST /fiscal-periods/:year/reopen` を追加する。T106 が通ること
-- [ ] T109 [US5] `apps/web/src/routes/e/$entityId/periods/index.tsx` に締め・解除のボタン（確認ダイアログ、解除は理由の入力）と、締めと解除の履歴を追加する
+- [X] T107 [US5] `packages/domain/src/usecases/close-period.ts` に `closePeriod` と `reopenPeriod` を実装する（audit_log の `target_type = fiscal_period`）。T104 と T105 が通ること
+- [X] T108 [US5] `packages/db/src/master-repository.ts` に会計期間の状態の更新を追加し、`apps/server/src/routes/periods.ts` に `POST /fiscal-periods/:year/close` と `POST /fiscal-periods/:year/reopen` を追加する。T106 が通ること
+- [X] T109 [US5] `apps/web/src/routes/e/$entityId/periods/index.tsx` に締め・解除のボタン（確認ダイアログ、解除は理由の入力）と、締めと解除の履歴を追加する
 
 **Checkpoint**: 申告後の帳簿を保護できる
 

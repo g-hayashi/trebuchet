@@ -59,9 +59,14 @@
 | メソッド | パス | 説明 | 要件 |
 |---|---|---|---|
 | GET / POST | `/entities/:id/fiscal-periods` | 一覧・翌年度の作成 | FR-012 |
-| POST | `/entities/:id/fiscal-periods/:year/close` | 締め | FR-024 |
-| POST | `/entities/:id/fiscal-periods/:year/reopen` | `{ reason }` 締めの解除 | FR-024, FR-025 |
+| POST | `/entities/:id/fiscal-periods/:year/close` | 締め → 200 `{ fiscalPeriod }`（`status: "closed"`, `closedAt` に締めた日時） | FR-024 |
+| POST | `/entities/:id/fiscal-periods/:year/reopen` | `{ reason }`（ReopenInput）締めの解除 → 200 `{ fiscalPeriod }`（`status: "open"`, `closedAt: null`） | FR-024, FR-025 |
+| GET | `/entities/:id/fiscal-periods/history` | 締めと解除の履歴（全年度, 記録の順）→ 200 `{ history: PeriodHistoryEntry[] }` | FR-025 |
 | GET / PUT | `/entities/:id/fiscal-periods/:year/opening-balances` | 期首残高の取得・一括置換（貸借一致が必須） | FR-011 |
+
+締め・解除は audit_log に `target_type = fiscal_period`、`action = close | reopen`（解除は理由つき）、変更前後の会計期間を記録する。締め済みの年度を締める・締めていない年度を解除するときは、状態を変えず audit_log も残さずに 200 で現在の会計期間を返す。解除の判定順は `REASON_REQUIRED` → 年度の有無。ない年度・`:year` が4桁の数字でないときは 400 `VALIDATION`（`details.fiscalYear`）。
+
+`PeriodHistoryEntry = { occurredAt, fiscalYear, action: "close" | "reopen", reason: string | null }`。年度ごとではなく事業体の全年度の履歴を1回で返す（会計期間の画面に一覧で表示するため）。
 
 ## 仕訳
 
@@ -124,3 +129,34 @@
 | GET | `/entities/:id/reports/balance-sheet` | `asOf`, `compare=previous-year?` | FR-029, FR-030 |
 
 各帳票のレスポンスには `warnings`（例: `NEGATIVE_BALANCE` で科目と金額, `OPENING_BALANCE_MISSING`）を含める（FR-033, Edge Cases）。
+
+- 期間: `from` を含む会計期間がなければ 422 `OUT_OF_PERIOD`。`to` がその会計期間の外、`from > to` は 400 `VALIDATION`（仕訳帳は会計期間をまたいでよい）。`accountId` の科目がなければ 422 `ACCOUNT_NOT_FOUND`
+- CSV: `Content-Type: text/csv; charset=utf-8`、`Content-Disposition: attachment; filename="<kind>-<from>_<to>.csv"`（BS は `<asOf>`、元帳は `<科目コード>_<from>_<to>`）。BOM 付き UTF-8、改行は CRLF
+- 金額は円の整数。試算表・元帳の残高は科目の通常の側を正とし、マイナスは負の数（画面では ▲）
+- レスポンスの形（`packages/schema/src/reports.ts` が正。すべて `kind` と `warnings` を持つ）:
+
+```ts
+// 共通
+type ReportAccount = { accountId; code; name; category; normalSide }
+type Figure = { amount: number; previous?: number; change?: number }   // 比較時のみ previous・change
+
+// journal-book
+{ kind: "journal-book", from, to,
+  entries: { journalId, journalNo, date, memo, lines: { lineNo, side, accountId, accountName,
+    subAccountId, subAccountName, partnerId, partnerName, amount, taxCategory, taxAmount, description }[] }[],
+  totals: { debit, credit }, warnings }
+// general-ledger
+{ kind: "general-ledger", from, to, account: ReportAccount, subAccount: { id, name } | null,
+  broughtForward, entries: { journalId, journalNo, date, lineNo, counterpart /* 複数なら「諸口」 */,
+    description, debit, credit, balance }[], totals: { debit, credit }, closing, warnings }
+// trial-balance
+{ kind: "trial-balance", from, to, rows: (ReportAccount & { opening, debit, credit, closing })[],
+  totals: { debit, credit, closingDebit, closingCredit }, balanced, warnings }
+// profit-and-loss（sections は PL_SALES → PL_COGS → PL_EXPENSE → PL_OTHER のうち行のある区分）
+{ kind: "profit-and-loss", from, to, previous: { from, to } | null,
+  sections: { section, rows: ({ accountId, code, name, reportLine } & Figure)[], total: Figure }[],
+  grossProfit: Figure, netIncome: Figure, warnings }
+// balance-sheet（sections は常に BS_ASSET・BS_LIABILITY・BS_EQUITY。純資産の total は当期利益を含まない）
+{ kind: "balance-sheet", asOf, previousAsOf: string | null, sections: [...同上], netIncome: Figure,
+  totalAssets: Figure, totalLiabilitiesAndEquity: Figure, balanced, warnings }
+```

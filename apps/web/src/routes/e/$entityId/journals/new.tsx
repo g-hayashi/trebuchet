@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { JournalForm } from "@/features/journals/JournalForm";
 import { api, unwrap } from "@/lib/api";
+import { today } from "@/lib/dates";
 import {
   accountsQuery,
   journalQuery,
@@ -24,13 +25,6 @@ export const Route = createFileRoute("/e/$entityId/journals/new")({
   validateSearch: NewJournalSearch,
   component: NewJournalPage,
 });
-
-/** 今日の日付（ローカル時刻の YYYY-MM-DD） */
-function today(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 
 function NewJournalPage() {
   const { entityId } = Route.useParams();

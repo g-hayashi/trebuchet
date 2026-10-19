@@ -6,15 +6,28 @@ import {
   type JournalReplacement,
   type LedgerRepository,
   type NewJournal,
+  type OpeningBalance,
   type Page,
+  type PostedLine,
+  type ReportRepository,
   RepositoryConflictError,
   type TaxCategoryCode,
 } from "@trebuchet/domain";
 import type { RunResult } from "better-sqlite3";
-import { and, asc, desc, eq, inArray, max, type SQL, sql } from "drizzle-orm";
+import { and, asc, between, desc, eq, inArray, max, type SQL, sql } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import type * as tenantSchema from "./schema/tenant.ts";
-import { auditLog, journalLines, journalLineTags, journals } from "./schema/tenant.ts";
+import {
+  accounts,
+  auditLog,
+  fiscalPeriods,
+  journalLines,
+  journalLineTags,
+  journals,
+  openingBalances,
+  partners,
+  subAccounts,
+} from "./schema/tenant.ts";
 
 /** テナントの DB、またはそのトランザクション */
 type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
@@ -24,10 +37,10 @@ type JournalRow = typeof journals.$inferSelect;
 const DEFAULT_LIMIT = 50;
 
 /**
- * LedgerRepository の Drizzle（better-sqlite3）による実装。メソッドはすべて同期。
- * 帳票の集計（ReportRepository）は US4 で加える
+ * LedgerRepository と帳票の読み出し（ReportRepository）の Drizzle（better-sqlite3）による実装。
+ * メソッドはすべて同期
  */
-export class DrizzleLedgerRepository implements LedgerRepository {
+export class DrizzleLedgerRepository implements LedgerRepository, ReportRepository {
   private readonly db: TenantConn;
 
   constructor(db: TenantConn) {
@@ -202,6 +215,56 @@ export class DrizzleLedgerRepository implements LedgerRepository {
       linesByJournal.set(journalId, list);
     }
     return rows.map((r) => ({ ...r, lines: linesByJournal.get(r.id) ?? [] }));
+  }
+
+  /** 有効な仕訳の行（from〜to、両端を含む）。1 本の結合クエリで読む（R12） */
+  linesInRange(from: string, to: string): PostedLine[] {
+    return this.db
+      .select({
+        journalId: journals.id,
+        journalNo: journals.journalNo,
+        date: journals.date,
+        memo: journals.memo,
+        status: journals.status,
+        lineNo: journalLines.lineNo,
+        side: journalLines.side,
+        accountId: journalLines.accountId,
+        accountName: accounts.name,
+        subAccountId: journalLines.subAccountId,
+        subAccountName: subAccounts.name,
+        amount: journalLines.amount,
+        taxCategory: journalLines.taxCategory,
+        taxAmount: journalLines.taxAmount,
+        partnerId: journalLines.partnerId,
+        partnerName: partners.name,
+        description: journalLines.description,
+      })
+      .from(journalLines)
+      .innerJoin(journals, eq(journals.id, journalLines.journalId))
+      .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
+      .leftJoin(subAccounts, eq(subAccounts.id, journalLines.subAccountId))
+      .leftJoin(partners, eq(partners.id, journalLines.partnerId))
+      .where(and(eq(journals.status, "active"), between(journals.date, from, to)))
+      .orderBy(asc(journals.date), asc(journals.journalNo), asc(journalLines.lineNo))
+      .all()
+      .map((row) => ({ ...row, taxCategory: row.taxCategory as TaxCategoryCode }));
+  }
+
+  /** 会計年度の期首残高。年度がなければ空 */
+  openingBalances(fiscalYear: number): OpeningBalance[] {
+    return this.db
+      .select({
+        id: openingBalances.id,
+        fiscalPeriodId: openingBalances.fiscalPeriodId,
+        accountId: openingBalances.accountId,
+        subAccountId: openingBalances.subAccountId,
+        side: openingBalances.side,
+        amount: openingBalances.amount,
+      })
+      .from(openingBalances)
+      .innerJoin(fiscalPeriods, eq(fiscalPeriods.id, openingBalances.fiscalPeriodId))
+      .where(eq(fiscalPeriods.fiscalYear, fiscalYear))
+      .all();
   }
 }
 

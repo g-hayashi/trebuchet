@@ -195,20 +195,27 @@ export type Journal = {
   lines: JournalLine[];
 };
 
-/** 帳票の集計に使う、有効な仕訳の行（仕訳の情報つき） */
+/**
+ * 帳票の集計に使う仕訳の行（仕訳の情報と、科目・補助科目・取引先の名前つき）。
+ * リポジトリは有効な仕訳だけを返すが、帳票の関数も status で取消済みを除く（INV-6）
+ */
 export type PostedLine = {
   journalId: string;
   journalNo: number;
   date: string;
   memo: string | null;
+  status: JournalStatus;
   lineNo: number;
   side: Side;
   accountId: string;
+  accountName: string;
   subAccountId: string | null;
+  subAccountName: string | null;
   amount: number;
   taxCategory: TaxCategoryCode;
   taxAmount: number;
   partnerId: string | null;
+  partnerName: string | null;
   description: string | null;
 };
 

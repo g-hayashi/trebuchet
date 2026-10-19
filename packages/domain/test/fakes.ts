@@ -215,6 +215,9 @@ export class InMemoryMasterRepository implements MasterRepository {
   updateFiscalPeriod(period: FiscalPeriod): void {
     this.state.periods = this.state.periods.map((p) => (p.id === period.id ? period : p));
   }
+  fiscalPeriodHistory(): AuditEntry[] {
+    return this.state.audits.filter((a) => a.targetType === "fiscal_period");
+  }
 
   listOpeningBalances(fiscalPeriodId: string): OpeningBalance[] {
     return this.state.openingBalances.filter((o) => o.fiscalPeriodId === fiscalPeriodId);

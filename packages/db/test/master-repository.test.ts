@@ -360,6 +360,29 @@ describe("DrizzleMasterRepository", () => {
       .all();
     expect(rows).toEqual([entry]);
   });
+
+  it("会計期間の audit_log（締め・解除）だけを記録の順で取得できる", () => {
+    const entry = (
+      targetType: AuditEntry["targetType"],
+      action: AuditEntry["action"],
+      occurredAt: string,
+    ): AuditEntry => ({
+      id: randomUUIDv7(),
+      occurredAt,
+      targetType,
+      targetId: randomUUIDv7(),
+      action,
+      reason: action === "reopen" ? "修正申告" : null,
+      beforeJson: null,
+      afterJson: null,
+    });
+    // 日時の順と記録の順が異なっても、記録の順で返す
+    const close = entry("fiscal_period", "close", "2027-03-15T00:00:00.000Z");
+    const rename = entry("account", "rename", "2027-03-16T00:00:00.000Z");
+    const reopen = entry("fiscal_period", "reopen", "2027-03-01T00:00:00.000Z");
+    for (const e of [close, rename, reopen]) repo.appendAudit(e);
+    expect(repo.fiscalPeriodHistory()).toEqual([close, reopen]);
+  });
 });
 
 describe("DrizzleRegistryRepository", () => {

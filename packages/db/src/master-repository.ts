@@ -201,6 +201,15 @@ export class DrizzleMasterRepository implements MasterRepository {
     this.db.update(fiscalPeriods).set(rest).where(eq(fiscalPeriods.id, id)).run();
   }
 
+  fiscalPeriodHistory(): AuditEntry[] {
+    return this.db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.targetType, "fiscal_period"))
+      .orderBy(sql`${auditLog}.rowid`)
+      .all();
+  }
+
   // ---- 期首残高 ----
 
   listOpeningBalances(fiscalPeriodId: string): OpeningBalance[] {

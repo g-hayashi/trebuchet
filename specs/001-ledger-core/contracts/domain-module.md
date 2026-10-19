@@ -23,12 +23,16 @@ type Result<T, E> = { ok: true; value: T } | { ok: false; error: E }
 | `resolveTaxSetting(date, settings)` | | 適用される設定 | FR-009 |
 | `validateTaxSettings(settings, firstPeriodStart)` | | `Result` | FR-009 |
 | `validateOpeningBalances(rows)` | | `Result` | FR-011 |
-| `buildTrialBalance(opening, lines, period)` | | 試算表 | INV-4, INV-6 |
-| `buildGeneralLedger(opening, lines, account, range)` | | 元帳 | |
-| `buildProfitAndLoss(lines, accounts, range)` | | PL | |
-| `buildBalanceSheet(opening, lines, accounts, asOf)` | | BS | INV-5 |
-| `detectWarnings(balances, accounts)` | | 警告の一覧 | FR-033 |
-| `toCsv(report)` | | CSV 文字列 | FR-032 |
+| `computeBalances({opening, lines, periodStart, from?, to})` | 期首残高、会計期間の開始日からの行 | 科目・補助科目ごとの期首・借方・貸方・期末（借方を正） | 取消済み・範囲外の行は含まない。`[periodStart, from)` の行は期首に繰り込む |
+| `buildTrialBalance({accounts, opening, lines, periodStart, from, to})` | | 試算表（残高は科目の通常の側を正） | INV-4, INV-6 |
+| `buildJournalBook({lines, from, to})` | | 仕訳帳（日付・仕訳番号・行番号の順） | FR-026 |
+| `buildGeneralLedger({accounts, opening, lines, periodStart, from, to, accountId, subAccount})` | | 元帳（前期繰越・残高の推移。相手科目が複数なら「諸口」） | FR-027 |
+| `buildProfitAndLoss({accounts, lines, from, to})` / `compareProfitAndLoss(cur, prev, accounts)` | | PL（区分の計・売上総利益・差引金額。比較は前年・増減） | FR-029, FR-030 |
+| `buildBalanceSheet({accounts, opening, lines, periodStart, asOf})` / `compareBalanceSheet(cur, prev, accounts)` | | BS（純資産の区分の計は当期利益を含まない） | INV-5 |
+| `detectWarnings(balances, accounts, {fiscalYear, openingRegistered}?)` | | 警告の一覧（期首残高の未登録 → マイナス残高の順） | FR-033 |
+| `toCsv(report)` | | CSV 文字列（BOM 付き UTF-8、CRLF、RFC 4180 の引用） | FR-032 |
+
+帳票のユースケース（`usecases/reports.ts`）は `getJournalBook` / `getTrialBalance` / `getGeneralLedger` / `getProfitAndLoss` / `getBalanceSheet`。依存は `{masters: MasterRepository, reports: ReportRepository}`。`from`（BS は `asOf`）を含む会計期間がなければ `OUT_OF_PERIOD`、`to` がその会計期間の外なら `VALIDATION`（仕訳帳は会計期間をまたいでよい）。前年比較は日付を 1 年戻し（2/29 は 2/28）、前年の会計期間がなければ前年の値を 0 とする。警告は `to`（BS は `asOf`）を含む会計期間で判定する。
 
 ## リポジトリのポート（packages/db が実装）
 
@@ -53,7 +57,9 @@ interface LedgerRepository extends JournalRepository {   // 訂正・取消・�
 }
 
 interface ReportRepository {                       // 帳票（US4）
-  linesInRange(from: string, to: string): PostedLine[]   // 有効な仕訳のみ
+  // 有効な仕訳の行（両端を含む）。日付・仕訳番号・行番号の順。科目・補助科目・取引先の名前を結合した 1 クエリ（R12）
+  linesInRange(from: string, to: string): PostedLine[]
+  // 会計年度の期首残高。年度がなければ空
   openingBalances(fiscalYear: number): OpeningBalance[]
 }
 // マスタの取得・保存（MasterRepository）は省略
@@ -72,6 +78,18 @@ interface ReportRepository {                       // 帳票（US4）
 
 判定順は REASON_REQUIRED → JOURNAL_NOT_FOUND → JOURNAL_VOIDED → VERSION_CONFLICT → PERIOD_CLOSED → `validateJournal`。
 `createJournal` は `correctsJournalId` があるとき、訂正元が存在し締め済みの年度にあることを確かめる（FR-019a）。
+
+## ユースケース（US5）
+
+| 関数 | 結果 | 要件 |
+|---|---|---|
+| `closePeriod({ repo, ids, clock }, fiscalYear)` | `Result<FiscalPeriod>`。`closedAt` に締めた日時。audit_log に `close`（before・after に会計期間） | FR-024, FR-025 |
+| `reopenPeriod({ repo, ids, clock }, fiscalYear, { reason })` | `Result<FiscalPeriod>`。`closedAt` は null。audit_log に `reopen` と理由 | FR-024, FR-025 |
+| `getFiscalPeriodHistory({ repo })` | `FiscalPeriodHistoryEntry[]`（全年度, 記録の順） | FR-025 |
+
+締め済みの年度の締め・締めていない年度の解除は、状態も audit_log も変えずに現在の会計期間を返す。
+`MasterRepository.fiscalPeriodHistory()` は `target_type = fiscal_period` の audit_log を記録の順で返す。
+締め済みの年度への登録・訂正・取消・期首残高の置換は、それぞれのユースケースが `PERIOD_CLOSED` で拒否する（INV-7）。
 
 ユースケース（`packages/domain/src/usecases`）は、このポートと純関数を組み合わせて
 「検証 → トランザクション内で書込 + 監査ログ追記」を行う。

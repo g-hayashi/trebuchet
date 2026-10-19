@@ -1,19 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { JournalCorrection, JournalInput } from "@trebuchet/schema";
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
+import { ReasonDialog } from "@/components/reason-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
-import { Input } from "@/components/ui/input";
+import { ApiErrorMessage } from "@/components/ui/form-error";
 import {
   Table,
   TableBody,
@@ -477,106 +469,5 @@ function HistoryItem({ entry, names }: { entry: HistoryEntry; names: Names }) {
         <Changes before={entry.before} after={entry.after} names={names} />
       )}
     </li>
-  );
-}
-
-/** 訂正・取消の理由を入力するダイアログ（FR-019）。確定の失敗はダイアログの中に表示する */
-function ReasonDialog({
-  open,
-  title,
-  description,
-  confirmLabel,
-  onConfirm,
-  onCancel,
-}: {
-  open: boolean;
-  title: string;
-  description: string;
-  confirmLabel: string;
-  onConfirm: (reason: string) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [reason, setReason] = useState("");
-  const [error, setError] = useState<unknown>();
-  const [submitting, setSubmitting] = useState(false);
-  const blank = reason.trim().length === 0;
-  const tooLong = reason.trim().length > 500;
-
-  const reset = () => {
-    setReason("");
-    setError(undefined);
-  };
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (blank || tooLong) return;
-    setSubmitting(true);
-    setError(undefined);
-    try {
-      await onConfirm(reason);
-      reset();
-    } catch (err) {
-      setError(err);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-  const reasonError =
-    error instanceof ApiError && error.code === "REASON_REQUIRED"
-      ? error.message
-      : tooLong
-        ? "理由は 500 文字以内で入力してください"
-        : undefined;
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next && !submitting) {
-          reset();
-          onCancel();
-        }
-      }}
-    >
-      <DialogContent>
-        <form noValidate onSubmit={submit} className="grid gap-4">
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-1">
-            <label htmlFor="reason" className="text-sm font-medium">
-              理由
-            </label>
-            <Input
-              id="reason"
-              autoComplete="off"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              aria-invalid={reasonError ? true : undefined}
-              aria-describedby="reason-error"
-            />
-            <FieldError id="reason-error" message={reasonError} />
-          </div>
-          {!(error instanceof ApiError && error.code === "REASON_REQUIRED") && (
-            <ApiErrorMessage error={error} />
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={submitting}
-              onClick={() => {
-                reset();
-                onCancel();
-              }}
-            >
-              戻る
-            </Button>
-            <Button type="submit" disabled={blank || tooLong || submitting}>
-              {confirmLabel}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

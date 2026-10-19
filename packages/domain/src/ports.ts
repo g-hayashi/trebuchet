@@ -130,6 +130,8 @@ export interface MasterRepository extends AuditLog {
   getFiscalPeriodByYear(fiscalYear: number): FiscalPeriod | undefined;
   insertFiscalPeriod(period: FiscalPeriod): void;
   updateFiscalPeriod(period: FiscalPeriod): void;
+  /** target_type = fiscal_period の audit_log（締め・解除。全期間, 記録の順） */
+  fiscalPeriodHistory(): AuditEntry[];
 
   listOpeningBalances(fiscalPeriodId: string): OpeningBalance[];
   replaceOpeningBalances(fiscalPeriodId: string, rows: OpeningBalance[]): void;
