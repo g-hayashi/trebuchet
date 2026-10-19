@@ -1,4 +1,4 @@
-import type { ImportPreview } from "@trebuchet/schema";
+import type { ImportPreview, ReconciliationResult } from "@trebuchet/schema";
 import { type FreeeOpeningProposal, proposeOpeningBalances } from "../import/freee/opening.ts";
 import {
   type ImportPlan,
@@ -8,11 +8,13 @@ import {
 } from "../import/freee/plan.ts";
 import {
   type FreeeFile,
+  type FreeeLedgerAccount,
   groupFreeeJournals,
   normalizeName,
   parseFreeeLedger,
   readFreeeFile,
 } from "../import/freee/read.ts";
+import { type ReconcileDecision, reconcile } from "../import/freee/reconcile.ts";
 import type { AccountMapping, ImportBatch, ImportRef, TaxMapping } from "../import/types.ts";
 import type {
   Clock,
@@ -34,6 +36,7 @@ import {
   ok,
   type Result,
 } from "../types.ts";
+import { checkReason } from "./journal-edit.ts";
 
 // 仕訳帳の取込（US1, contracts/domain-module.md のユースケース）
 
@@ -84,6 +87,16 @@ function buildPlan(tx: ImportTx, file: FreeeFile, options: PlanOptions): ImportP
   const dates = grouped.journals.map((j) => j.date).sort();
   const from = dates[0];
   const to = dates[dates.length - 1];
+  const activeRefs = tx.imports.activeRefsByFreeeIds(ids);
+  const rangeRefs =
+    from === undefined || to === undefined ? [] : tx.imports.activeRefsInRange(from, to);
+  // 変更・削除の警告に帳簿の仕訳番号を付ける（research R9）
+  const journalNos = new Map<string, number>();
+  for (const r of [...activeRefs, ...rangeRefs]) {
+    if (journalNos.has(r.journalId)) continue;
+    const journal = tx.ledger.getJournal(r.journalId);
+    if (journal !== undefined) journalNos.set(r.journalId, journal.journalNo);
+  }
   return planImport({
     journals: grouped.journals,
     rejected: grouped.rejected,
@@ -99,10 +112,12 @@ function buildPlan(tx: ImportTx, file: FreeeFile, options: PlanOptions): ImportP
     taxSettings: tx.masters.listTaxSettings(),
     taxRates: tx.masters.listTaxRates(),
     taxCategories: tx.masters.listTaxCategories(),
-    activeRefs: tx.imports.activeRefsByFreeeIds(ids),
+    activeRefs,
     manualSignatures:
       from === undefined || to === undefined ? [] : tx.imports.manualJournalSignatures(from, to),
     options,
+    rangeRefs,
+    journalNos,
   });
 }
 
@@ -405,16 +420,8 @@ export function saveImportMappings(
 
 export type FreeeOpeningInput = { bytes: Uint8Array; fiscalYear: number };
 
-/**
- * freee の総勘定元帳から、年度の期首残高の案を作る（FR-018〜020a）。帳簿は変えない（読むだけ）。
- * 登録済みの期首残高と、前年度の仕訳があれば前年度の期末からの繰越（carryForward）を比べる。
- * 保存は 001 の期首残高の保存（replaceOpeningBalances）で行う
- */
-export function proposeFreeeOpening(
-  deps: { uow: ImportUnitOfWork; reports: ReportRepository },
-  input: FreeeOpeningInput,
-): Result<FreeeOpeningProposal> {
-  const read = readFreeeFile(input.bytes);
+function readLedgerFile(bytes: Uint8Array): Result<FreeeLedgerAccount[]> {
+  const read = readFreeeFile(bytes);
   if (!read.ok) {
     return err(
       domainError("IMPORT_UNKNOWN_FORMAT", "freee の総勘定元帳として読めないファイルです", {
@@ -442,6 +449,20 @@ export function proposeFreeeOpening(
       }),
     );
   }
+  return ledger;
+}
+
+/**
+ * freee の総勘定元帳から、年度の期首残高の案を作る（FR-018〜020a）。帳簿は変えない（読むだけ）。
+ * 登録済みの期首残高と、前年度の仕訳があれば前年度の期末からの繰越（carryForward）を比べる。
+ * 保存は 001 の期首残高の保存（replaceOpeningBalances）で行う
+ */
+export function proposeFreeeOpening(
+  deps: { uow: ImportUnitOfWork; reports: ReportRepository },
+  input: FreeeOpeningInput,
+): Result<FreeeOpeningProposal> {
+  const ledger = readLedgerFile(input.bytes);
+  if (!ledger.ok) return ledger;
 
   return deps.uow.transaction((tx) => {
     const periods = tx.masters.listFiscalPeriods();
@@ -475,5 +496,179 @@ export function proposeFreeeOpening(
       registered: tx.masters.listOpeningBalances(period.id),
       priorBalances,
     });
+  });
+}
+
+// 元帳との照合（US3, contracts/domain-module.md のユースケース）
+
+export type FreeeReconcileInput = {
+  /** その年度の総勘定元帳 */
+  bytes: Uint8Array;
+  fiscalYear: number;
+  /** 同じ年度の仕訳帳（任意）。渡すと、取込対象外・取込不可の仕訳を原因の候補で分けられる */
+  journal?: { bytes: Uint8Array; options?: PlanOptions | undefined } | undefined;
+};
+
+/** 取消済みの取込の回の参照のうち、取引日が from〜to のもの（VOIDED_IMPORT の判定に使う） */
+function revokedRefsInRange(tx: ImportTx, from: string, to: string): ImportRef[] {
+  return tx.imports
+    .listBatches()
+    .filter((b) => b.status === "voided")
+    .flatMap((b) => tx.imports.journalsOfBatch(b.id).map((x) => x.ref))
+    .filter((r) => r.revokedAt !== null && r.freeeDate >= from && r.freeeDate <= to);
+}
+
+/**
+ * freee の総勘定元帳と帳簿を科目ごとに照合する（FR-021〜023, research R7）。帳簿は変えない（読むだけ）。
+ * 帳簿の残高は 001 の computeBalances（その年度の期首残高と仕訳）で求める
+ */
+export function reconcileFreee(
+  deps: { uow: ImportUnitOfWork; reports: ReportRepository },
+  input: FreeeReconcileInput,
+): Result<ReconciliationResult> {
+  const ledger = readLedgerFile(input.bytes);
+  if (!ledger.ok) return ledger;
+  let journalFile: FreeeFile | undefined;
+  if (input.journal !== undefined) {
+    const file = readJournalFile(input.journal.bytes);
+    if (!file.ok) return file;
+    journalFile = file.value;
+  }
+
+  return deps.uow.transaction((tx) => {
+    const periods = tx.masters.listFiscalPeriods();
+    const period = periods.find((p) => p.fiscalYear === input.fiscalYear);
+    if (period === undefined) {
+      return err(
+        domainError("OUT_OF_PERIOD", "会計期間が登録されていない年度です", {
+          fiscalYear: input.fiscalYear,
+        }),
+      );
+    }
+    const { startDate, endDate } = period;
+    const balances = computeBalances({
+      opening: deps.reports.openingBalances(period.fiscalYear),
+      lines: deps.reports.linesInRange(startDate, endDate),
+      periodStart: startDate,
+      to: endDate,
+    });
+    const decisions: ReconcileDecision[] =
+      journalFile === undefined
+        ? []
+        : buildPlan(tx, journalFile, input.journal?.options ?? {}).preview.items.flatMap((i) =>
+            i.freeeJournalNo !== null && (i.decision === "excluded" || i.decision === "rejected")
+              ? [{ freeeJournalNo: i.freeeJournalNo, decision: i.decision, reason: i.reason }]
+              : [],
+          );
+    return reconcile({
+      fiscalYear: input.fiscalYear,
+      ledger: ledger.value,
+      savedMappings: tx.imports.listAccountMappings(),
+      accounts: tx.masters.listAccounts(),
+      subAccounts: tx.masters.listSubAccounts(),
+      periods,
+      balances,
+      refs: [
+        ...tx.imports.activeRefsInRange(startDate, endDate),
+        ...revokedRefsInRange(tx, startDate, endDate),
+      ],
+      decisions,
+    });
+  });
+}
+
+// 取込の取消（US4, contracts/domain-module.md のユースケース）
+
+export type VoidImportBatchInput = {
+  batchId: string;
+  reason: string;
+  /** 取込の後に訂正された仕訳があっても取り消す（FR-026） */
+  confirmCorrected?: boolean | undefined;
+};
+
+export type VoidImportBatchResult = { batch: ImportBatch; voidedCount: number };
+
+/**
+ * 1回分の取込を理由つきで取り消す（FR-024〜027, research R12, INV-15）。
+ * 締め済みの確認 → 訂正済みの確認 → 有効な仕訳の取消（001 の取消と同じ監査ログ）→ 参照の revoked_at → 取込の回の voided。
+ * 利用者が個別に取り消した仕訳はそのまま。作った補助科目・取引先・タグと対応表は残す。
+ * エラー: REASON_REQUIRED、IMPORT_BATCH_NOT_FOUND、IMPORT_BATCH_VOIDED、PERIOD_CLOSED、CORRECTED_JOURNALS
+ */
+export function voidImportBatch(
+  deps: { uow: ImportUnitOfWork; ids: IdGenerator; clock: Clock },
+  input: VoidImportBatchInput,
+): Result<VoidImportBatchResult> {
+  const reason = checkReason(input.reason);
+  if (!reason.ok) return reason;
+
+  return deps.uow.transaction((tx): Result<VoidImportBatchResult> => {
+    const batch = tx.imports.getBatch(input.batchId);
+    if (batch === undefined) {
+      return err(
+        domainError("IMPORT_BATCH_NOT_FOUND", "取込の回が見つかりません", {
+          batchId: input.batchId,
+        }),
+      );
+    }
+    if (batch.status === "voided") {
+      return err(
+        domainError("IMPORT_BATCH_VOIDED", "この取込はすでに取り消されています", {
+          batchId: batch.id,
+          voidedAt: batch.voidedAt,
+        }),
+      );
+    }
+
+    const journals = tx.imports
+      .journalsOfBatch(batch.id)
+      .map((x) => x.journal)
+      .filter((j) => j.status === "active");
+
+    const periods = tx.masters.listFiscalPeriods();
+    const closedYears = new Set<number>();
+    for (const j of journals) {
+      const period = periods.find((p) => p.startDate <= j.date && j.date <= p.endDate);
+      if (period?.status === "closed") closedYears.add(period.fiscalYear);
+    }
+    if (closedYears.size > 0) {
+      const fiscalYears = [...closedYears].sort((a, b) => a - b);
+      return err(
+        domainError(
+          "PERIOD_CLOSED",
+          `${fiscalYears.join("・")}年度は締め済みです。取込を取り消すには、先に締めを解除してください`,
+          { fiscalYears },
+        ),
+      );
+    }
+
+    const corrected = journals.filter((j) => j.version > 1);
+    if (corrected.length > 0 && input.confirmCorrected !== true) {
+      return err(
+        domainError(
+          "CORRECTED_JOURNALS",
+          `取り込んだ後に訂正された仕訳が ${corrected.length} 件あります。訂正も含めて取り消しますか`,
+          { count: corrected.length, journalIds: corrected.map((j) => j.id) },
+        ),
+      );
+    }
+
+    const now = deps.clock.now();
+    for (const before of journals) {
+      const after = tx.ledger.voidJournal(before.id, before.version, now);
+      tx.ledger.appendAudit({
+        id: deps.ids.next(),
+        occurredAt: now,
+        targetType: "journal",
+        targetId: before.id,
+        action: "void",
+        reason: reason.value,
+        beforeJson: JSON.stringify(before),
+        afterJson: JSON.stringify(after),
+      });
+    }
+    tx.imports.voidBatch(batch.id, reason.value, now);
+    const voided = tx.imports.getBatch(batch.id);
+    if (voided === undefined) throw new Error(`import batch not found: ${batch.id}`);
+    return ok({ batch: voided, voidedCount: journals.length });
   });
 }

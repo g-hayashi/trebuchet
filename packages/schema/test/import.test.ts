@@ -10,6 +10,8 @@ import {
   ImportReasonCode,
   ImportWarningCode,
   MappingRow,
+  OpeningBalancesPut,
+  OpeningProposal,
   TaxMapping,
   VoidImportInput,
 } from "../src/index.ts";
@@ -264,6 +266,42 @@ describe("ImportPreview", () => {
     expect(
       ImportPreview.safeParse({ ...preview, file: { ...preview.file, kind: "ledger" } }).success,
     ).toBe(false);
+  });
+});
+
+describe("OpeningProposal", () => {
+  const proposal = {
+    fiscalYear: 2025,
+    rows: [
+      { accountId: ID, subAccountId: null, side: "debit", amount: 1000, sourceNames: ["現金"] },
+      { accountId: ID2, subAccountId: ID, side: "credit", amount: 1000, sourceNames: ["Aカード"] },
+    ],
+    totals: { debit: 1000, credit: 1000 },
+    comparisons: [
+      { accountId: ID, subAccountId: null, proposed: 1000, registered: null, carryForward: -200 },
+    ],
+    unmapped: ["ABCカード"],
+    missingSubAccounts: [{ sourceName: "ABCカード", accountId: ID2, subAccountName: "ABCカード" }],
+    warnings: [{ code: "NEGATIVE_OPENING", message: "マイナス" }],
+  };
+  it("補助科目がまだない科目（missingSubAccounts）を含む案を受け付ける", () => {
+    expect(OpeningProposal.safeParse(proposal).success).toBe(true);
+    expect(OpeningProposal.safeParse({ ...proposal, missingSubAccounts: [] }).success).toBe(true);
+  });
+  it("missingSubAccounts は必須で、科目の ID が必要", () => {
+    const { missingSubAccounts: _, ...without } = proposal;
+    expect(OpeningProposal.safeParse(without).success).toBe(false);
+    expect(
+      OpeningProposal.safeParse({
+        ...proposal,
+        missingSubAccounts: [{ sourceName: "ABCカード", accountId: "x", subAccountName: "ABC" }],
+      }).success,
+    ).toBe(false);
+  });
+  it("案の行は、そのまま 001 の期首残高の保存（OpeningBalancesPut）に渡せる", () => {
+    const parsed = OpeningBalancesPut.safeParse(proposal.rows);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.map((r) => r.subAccountId)).toEqual([null, ID]);
   });
 });
 

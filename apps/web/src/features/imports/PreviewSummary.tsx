@@ -32,6 +32,10 @@ export function PreviewSummary({
     ["借方合計", `${formatYen(totals.debit)}円`],
     ["貸方合計", `${formatYen(totals.credit)}円`],
   ];
+  // freee 側の変更・削除は FreeeChangesPanel に内容つきで出す
+  const warnings = preview.warnings.filter(
+    (w) => w.code !== "FREEE_CHANGED" && w.code !== "FREEE_DELETED",
+  );
   const creates = [
     ...toCreate.subAccounts.map((s) => `補助科目: ${accountName(s.accountId)} ／ ${s.name}`),
     ...toCreate.partners.map((p) => `取引先: ${p}`),
@@ -64,11 +68,11 @@ export function PreviewSummary({
           <p className="text-muted-foreground">ありません。</p>
         )}
       </div>
-      {preview.warnings.length > 0 && (
+      {warnings.length > 0 && (
         <div className="grid gap-1 text-sm">
           <h3 className="font-medium">警告（取込は妨げません）</h3>
           <ul aria-label="警告の一覧" className="grid gap-1">
-            {preview.warnings.map((w, index) => (
+            {warnings.map((w, index) => (
               <li
                 // 同じ仕訳に同じコードの警告が重なることがあるため、順番も使う
                 // biome-ignore lint/suspicious/noArrayIndexKey: 警告は並べ替えない

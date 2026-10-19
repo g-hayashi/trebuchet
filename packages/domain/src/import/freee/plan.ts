@@ -59,6 +59,13 @@ export type PlanImportInput = {
   /** 手入力の有効な仕訳の要約（POSSIBLE_DUPLICATE, research R16） */
   manualSignatures: readonly JournalSignature[];
   options: PlanOptions;
+  /**
+   * ファイルの日付の範囲の参照（FREEE_DELETED の検出, research R9）。省略すると削除を検出しない。
+   * 取り消し済みが混ざっていても使わない
+   */
+  rangeRefs?: readonly ImportRef[] | undefined;
+  /** 帳簿の仕訳 ID → 仕訳番号（FREEE_CHANGED・FREEE_DELETED の details.journalNo）。ないものは null */
+  journalNos?: ReadonlyMap<string, number> | undefined;
 };
 
 /** 仕訳ごとの判定。OUT_OF_PERIOD は案内の文（research R19）を message に入れる */
@@ -327,6 +334,8 @@ export function planImport(input: PlanImportInput): ImportPlan {
     }
   }
 
+  warnings.push(...changesFromRefs(input, ordered, items));
+
   const counts = { new: 0, already: 0, excluded: 0, rejected: 0 };
   const byYear = new Map<number, typeof counts>();
   ordered.forEach((e, i) => {
@@ -375,6 +384,95 @@ export function planImport(input: PlanImportInput): ImportPlan {
     planned,
     creations,
   };
+}
+
+/**
+ * 取込済みの仕訳の変更（FREEE_CHANGED）と、ファイルから消えた仕訳（FREEE_DELETED）を検出する（FR-028〜030, research R9）。
+ * 変更は already の仕訳の正準 JSON と参照の snapshot_json の違い。削除は、選んだ年度の仕訳の日付の最小〜最大にある
+ * 取り消されていない参照のうち、ファイル（取込不可を含む）にないもの。帳簿は変えず、警告だけを返す。
+ * FREEE_CHANGED は items の warnings にも付ける
+ */
+function changesFromRefs(
+  input: PlanImportInput,
+  ordered: readonly { freeeJournalId: string; fiscalYear: number | undefined }[],
+  items: PlanItem[],
+): ImportWarning[] {
+  const selectedYears =
+    input.options.fiscalYears === undefined ? undefined : new Set(input.options.fiscalYears);
+  const selected = (fiscalYear: number | undefined) =>
+    selectedYears === undefined || fiscalYear === undefined || selectedYears.has(fiscalYear);
+  const journalNoOf = (journalId: string) => input.journalNos?.get(journalId) ?? null;
+  const label = (no: string | null) => (no === null ? "" : `（仕訳番号 ${no}）`);
+  const bookLabel = (journalId: string) => {
+    const no = journalNoOf(journalId);
+    return no === null ? "帳簿の仕訳" : `帳簿の仕訳 No.${no}`;
+  };
+
+  const activeRefs = new Map(
+    input.activeRefs.filter((r) => r.revokedAt === null).map((r) => [r.freeeJournalId, r]),
+  );
+  const journals = new Map(input.journals.map((j) => [j.freeeJournalId, j]));
+  const warnings: ImportWarning[] = [];
+  ordered.forEach((e, i) => {
+    const item = items[i];
+    const ref = activeRefs.get(e.freeeJournalId);
+    const journal = journals.get(e.freeeJournalId);
+    if (item?.decision !== "already" || ref === undefined || journal === undefined) return;
+    if (!selected(e.fiscalYear)) return;
+    const after = canonicalSnapshot(journal);
+    if (after === ref.snapshotJson) return;
+    item.warnings = [...item.warnings, "FREEE_CHANGED"];
+    warnings.push({
+      code: "FREEE_CHANGED",
+      message: `freee の仕訳${label(journal.freeeJournalNo)}は、取り込んだ後に freee で変更されています。${bookLabel(ref.journalId)}を確認してください`,
+      freeeJournalId: e.freeeJournalId,
+      details: {
+        journalId: ref.journalId,
+        journalNo: journalNoOf(ref.journalId),
+        before: ref.snapshotJson,
+        after,
+      },
+    });
+  });
+
+  if (input.rangeRefs === undefined) return warnings;
+  const dates = input.journals
+    .filter((j) => selected(fiscalYearOf(j.date, input.periods)))
+    .map((j) => j.date)
+    .sort();
+  const from = dates[0];
+  const to = dates[dates.length - 1];
+  if (from === undefined || to === undefined) return warnings;
+  const inFile = new Set(
+    [...input.journals, ...input.rejected].map((j) => j.freeeJournalId as string),
+  );
+  const deleted = input.rangeRefs
+    .filter(
+      (r) =>
+        r.revokedAt === null &&
+        r.freeeDate >= from &&
+        r.freeeDate <= to &&
+        selected(fiscalYearOf(r.freeeDate, input.periods)) &&
+        !inFile.has(r.freeeJournalId),
+    )
+    .sort(
+      (a, b) =>
+        a.freeeDate.localeCompare(b.freeeDate) || a.freeeJournalId.localeCompare(b.freeeJournalId),
+    );
+  for (const r of deleted) {
+    warnings.push({
+      code: "FREEE_DELETED",
+      message: `取り込んだ freee の仕訳${label(r.freeeJournalNo)}が、ファイルにありません。freee で削除した場合は、${bookLabel(r.journalId)}を確認してください`,
+      freeeJournalId: r.freeeJournalId,
+      details: {
+        journalId: r.journalId,
+        journalNo: journalNoOf(r.journalId),
+        freeeJournalNo: r.freeeJournalNo,
+        before: r.snapshotJson,
+      },
+    });
+  }
+  return warnings;
 }
 
 /** 帳簿の ID（既存）または仮の ID（新規）を引き、新規のものを覚えておく */

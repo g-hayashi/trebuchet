@@ -8,6 +8,8 @@ import type {
   ImportOptions,
   ImportPreview,
   OpeningProposal,
+  ReconciliationResult,
+  VoidImportInput,
 } from "@trebuchet/schema";
 import { unwrap } from "@/lib/api";
 import { queryKeys } from "@/lib/queries";
@@ -17,6 +19,7 @@ import { untypedEndpoint, uploadForm } from "./upload";
 
 type GetEndpoint = { $get(): Promise<Response> };
 type PutEndpoint = { $put(args: { json: unknown }): Promise<Response> };
+type PostEndpoint = { $post(args: { json: unknown }): Promise<Response> };
 
 const entityPath = (entityId: string) => `/api/entities/${encodeURIComponent(entityId)}`;
 
@@ -99,3 +102,35 @@ export async function proposeFreeeOpening(
   );
   return body.proposal;
 }
+
+/** 取込の取消（FR-024〜027）。訂正済みの仕訳があれば 409 CORRECTED_JOURNALS */
+export async function voidImportBatch(
+  entityId: string,
+  batchId: string,
+  json: VoidImportInput,
+): Promise<{ batch: ImportBatch; voidedCount: number }> {
+  return unwrap(
+    await untypedEndpoint<PostEndpoint>(
+      `${entityPath(entityId)}/imports/${encodeURIComponent(batchId)}/void`,
+    ).$post({ json }),
+  );
+}
+
+/** 元帳との照合（POST だが帳簿は変えない）。fileKey はファイルを選び直すたびに変える番号 */
+export const reconcileFreeeQuery = (
+  entityId: string,
+  year: string | undefined,
+  file: File | undefined,
+  fileKey: number,
+) =>
+  queryOptions({
+    queryKey: [...queryKeys.entity(entityId), "reconcile-freee", year, fileKey] as const,
+    queryFn: async (): Promise<ReconciliationResult> => {
+      if (!file || !year) throw new Error("年度とファイルが選ばれていません");
+      return uploadForm(
+        `${entityPath(entityId)}/fiscal-periods/${encodeURIComponent(year)}/reconcile/freee`,
+        { file },
+      );
+    },
+    enabled: file !== undefined && year !== undefined,
+  });

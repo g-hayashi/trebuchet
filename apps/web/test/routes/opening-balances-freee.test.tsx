@@ -47,7 +47,12 @@ const capital = account(3020, "元入金", {
   normalSide: "credit",
   reportSection: "BS_EQUITY",
 });
-const accounts = [cash, receivable, payable, capital];
+const deferred = account(1300, "開業費", {
+  category: "asset",
+  normalSide: "debit",
+  reportSection: "BS_ASSET",
+});
+const accounts = [cash, receivable, deferred, payable, capital];
 const card = { id: uuid(9001), accountId: payable.id, name: "Aカード", isActive: true };
 
 const period = (status: FiscalPeriod["status"]): FiscalPeriod => ({
@@ -132,6 +137,7 @@ const proposal = (rest: Partial<OpeningProposal> = {}): OpeningProposal => ({
     },
   ],
   unmapped: [],
+  missingSubAccounts: [],
   warnings: [
     {
       code: "NEGATIVE_OPENING",
@@ -159,6 +165,7 @@ function mockPage(
   data: OpeningBalancesData,
   propose: (call: ApiCall) => ApiReply,
   put?: (call: ApiCall) => ApiReply,
+  extra: Record<string, (call: ApiCall) => ApiReply> = {},
 ) {
   return mockApi({
     [`GET ${PATH}`]: () => ok(data),
@@ -171,6 +178,7 @@ function mockPage(
     ),
     [`POST ${PROPOSAL}`]: propose,
     ...(put && { [`PUT ${PATH}`]: put }),
+    ...extra,
   });
 }
 
@@ -413,5 +421,123 @@ describe("期首残高の画面: freee の元帳から読み込む", () => {
     renderOpeningBalances();
 
     expect(await screen.findByLabelText("総勘定元帳のファイル")).toBeDisabled();
+  });
+});
+
+describe("期首残高の画面: 対応が未定の科目の解消", () => {
+  const withoutCard = (rest: Partial<OpeningProposal> = {}) =>
+    proposal({
+      rows: proposal().rows.filter((r) => r.subAccountId !== card.id),
+      totals: { debit: 50_000, credit: 30_000 },
+      comparisons: proposal().comparisons.filter((c) => c.subAccountId !== card.id),
+      warnings: [],
+      ...rest,
+    });
+
+  it("補助科目がまだないカードは「補助科目を作成」で作り、同じファイルで案を作り直すと未定が消える", async () => {
+    let created = false;
+    const calls = mockPage(
+      { fiscalPeriod: period("open"), openingBalances: [] },
+      () =>
+        ok({
+          proposal: created
+            ? proposal({ warnings: [] })
+            : withoutCard({
+                unmapped: ["Ａカード"],
+                missingSubAccounts: [
+                  { sourceName: "Ａカード", accountId: payable.id, subAccountName: "Aカード" },
+                ],
+              }),
+        }),
+      undefined,
+      {
+        [`POST ${ENTITY}/accounts/${payable.id}/sub-accounts`]: () => {
+          created = true;
+          return ok({ subAccount: card }, 201);
+        },
+      },
+    );
+    const user = userEvent.setup();
+    renderOpeningBalances();
+    const panel = await chooseLedger(user);
+
+    const unmapped = within(panel).getByRole("list", { name: "対応が未定の freee の科目" });
+    expect(unmapped).toHaveTextContent("「未払金」の補助科目「Aカード」がまだありません");
+    // カードだけなので、対応表は出さない
+    expect(within(panel).queryByRole("table", { name: "勘定科目の対応表" })).toBeNull();
+    expect(screen.getByRole("button", { name: "保存する" })).toBeDisabled();
+    expect(screen.queryByLabelText("4行目の勘定科目")).toBeNull();
+
+    await user.click(within(unmapped).getByRole("button", { name: "補助科目を作成（Ａカード）" }));
+
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("list", { name: "対応が未定の freee の科目" })).toBeNull(),
+    );
+    const create = calls.find((c) => c.path.endsWith("/sub-accounts") && c.method === "POST");
+    expect(create?.body).toEqual({ name: "Aカード" });
+    const proposals = calls.filter((c) => c.method === "POST" && c.path === PROPOSAL);
+    expect(proposals).toHaveLength(2);
+    expect(formFields(proposals[1]?.form)).toEqual(formFields(proposals[0]?.form));
+    expect(calls.indexOf(create as ApiCall)).toBeLessThan(calls.indexOf(proposals[1] as ApiCall));
+
+    // 作り直した案が入力欄に入り、保存できる
+    expect(screen.getByLabelText("4行目の勘定科目")).toHaveValue(capital.id);
+    await vi.waitFor(() => expect(screen.getByLabelText("3行目の補助科目")).toHaveValue(card.id));
+    expect(screen.getByRole("button", { name: "保存する" })).toBeEnabled();
+  });
+
+  it("元帳にしか出てこない未定の科目は、勘定科目を選んで対応表を保存すると案を作り直す", async () => {
+    let saved = false;
+    const opening = {
+      accountId: deferred.id,
+      subAccountId: null,
+      side: "debit" as const,
+      amount: 10_000,
+      sourceNames: ["開業費"],
+    };
+    const calls = mockPage(
+      { fiscalPeriod: period("open"), openingBalances: [] },
+      () =>
+        ok({
+          proposal: saved
+            ? proposal({
+                rows: [...proposal().rows, opening],
+                totals: { debit: 60_000, credit: 50_000 },
+                warnings: [],
+              })
+            : proposal({ unmapped: ["開業費"], warnings: [] }),
+        }),
+      undefined,
+      {
+        [`PUT ${ENTITY}/import-mappings`]: (call) => {
+          saved = true;
+          return ok({ ...(call.body as object), taxes: [] });
+        },
+      },
+    );
+    const user = userEvent.setup();
+    renderOpeningBalances();
+    const panel = await chooseLedger(user);
+
+    const table = within(panel).getByRole("table", { name: "勘定科目の対応表" });
+    expect(within(panel).queryByRole("table", { name: "税区分の対応表" })).toBeNull();
+    expect(screen.getByRole("button", { name: "保存する" })).toBeDisabled();
+    const saveMapping = within(panel).getByRole("button", { name: "対応表を保存" });
+    expect(saveMapping).toBeDisabled();
+
+    await user.selectOptions(within(table).getByLabelText("「開業費」の勘定科目"), "開業費");
+    await user.click(saveMapping);
+
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("list", { name: "対応が未定の freee の科目" })).toBeNull(),
+    );
+    expect(
+      calls.find((c) => c.method === "PUT" && c.path.endsWith("/import-mappings"))?.body,
+    ).toEqual({ accounts: [{ sourceName: "開業費", accountId: deferred.id }] });
+    const proposals = calls.filter((c) => c.method === "POST" && c.path === PROPOSAL);
+    expect(proposals).toHaveLength(2);
+    expect(formFields(proposals[1]?.form)).toEqual(formFields(proposals[0]?.form));
+    expect(screen.getByLabelText("5行目の勘定科目")).toHaveValue(deferred.id);
+    expect(screen.getByLabelText("5行目の金額")).toHaveValue("10000");
   });
 });

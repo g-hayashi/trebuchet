@@ -99,6 +99,15 @@ export function describeError(error: unknown): ErrorDescription {
     }
     case "IMPORT_BATCH_NOT_FOUND":
       return { message: "取込が見つかりません。", details: [] };
+    case "IMPORT_BATCH_VOIDED":
+      return { message: "この取込はすでに取り消されています。", details: [] };
+    case "CORRECTED_JOURNALS": {
+      const count = asNumber(error.details?.count);
+      return {
+        message: `取込の後に訂正された仕訳が${count ?? ""}件あります。確かめてから取り消してください。`,
+        details: [],
+      };
+    }
     case "FILE_TOO_LARGE":
       return { message: "ファイルが大きすぎます（5 MB まで）。", details: [] };
     case "INTERNAL":

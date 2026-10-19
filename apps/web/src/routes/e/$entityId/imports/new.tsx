@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { commitImport, importPreviewQuery } from "@/features/imports/api";
 import { FilePicker } from "@/features/imports/FilePicker";
+import { FreeeChangesPanel } from "@/features/imports/FreeeChangesPanel";
 import {
   type AccountEdits,
   type AccountTarget,
@@ -186,6 +187,8 @@ function NewImportPage() {
               <PreviewSummary preview={data} accounts={accounts.data} />
             </CardContent>
           </Card>
+
+          <FreeeChangesPanel entityId={entityId} warnings={data.warnings} items={data.items} />
 
           <Card>
             <CardHeader>

@@ -7,6 +7,7 @@ export * from "./import/freee/mapping.ts";
 export * from "./import/freee/opening.ts";
 export * from "./import/freee/plan.ts";
 export * from "./import/freee/read.ts";
+export * from "./import/freee/reconcile.ts";
 export * from "./import/types.ts";
 export * from "./journal.ts";
 export * from "./money.ts";

@@ -84,6 +84,8 @@ export function MappingEditor({
   onAccountEdit,
   onTaxEdit,
   onSaved,
+  hideTaxes = false,
+  saveNote = "保存すると、次の取込でも使います。保存の後にプレビューを作り直します。",
 }: {
   entityId: string;
   mappings: { accounts: readonly MappingRow[]; taxes: readonly MappingRow[] };
@@ -94,6 +96,10 @@ export function MappingEditor({
   onAccountEdit: (sourceName: string, target: AccountTarget) => void;
   onTaxEdit: (sourceName: string, taxCategory: TaxCategoryCode | undefined) => void;
   onSaved: () => Promise<void>;
+  /** 税区分の対応表を出さない（期首残高の案のように、科目だけを決める画面） */
+  hideTaxes?: boolean | undefined;
+  /** 「対応表を保存」の横の説明 */
+  saveNote?: string | undefined;
 }) {
   const queryClient = useQueryClient();
   const [creatingFor, setCreatingFor] = useState<string>();
@@ -145,57 +151,59 @@ export function MappingEditor({
         </TableBody>
       </Table>
 
-      <Table aria-label="税区分の対応表">
-        <TableHeader>
-          <TableRow>
-            <TableHead>freee の税区分</TableHead>
-            <TableHead className="w-24">状態</TableHead>
-            <TableHead>帳簿の税区分</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {mappings.taxes.map((row) => {
-            const edited = Object.hasOwn(taxEdits, row.sourceName);
-            const value = edited ? taxEdits[row.sourceName] : row.taxCategory;
-            const missing = value === undefined;
-            return (
-              <TableRow
-                key={row.sourceName}
-                data-status={edited ? "edited" : row.status}
-                className={cn(missing && "bg-destructive/10 hover:bg-destructive/15")}
-              >
-                <TableHead scope="row" className="font-normal text-foreground">
-                  {row.sourceName}
-                </TableHead>
-                <TableCell>
-                  <StatusLabel status={row.status} edited={edited} missing={missing} />
-                </TableCell>
-                <TableCell>
-                  <NativeSelect
-                    aria-label={`「${row.sourceName}」の税区分`}
-                    aria-invalid={missing ? true : undefined}
-                    className="h-8 max-w-64"
-                    value={value ?? ""}
-                    onChange={(e) => {
-                      const code = taxCategories.find(
-                        (c) => c.code === e.currentTarget.value,
-                      )?.code;
-                      onTaxEdit(row.sourceName, code);
-                    }}
-                  >
-                    <option value="">選んでください</option>
-                    {taxCategories.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      {!hideTaxes && (
+        <Table aria-label="税区分の対応表">
+          <TableHeader>
+            <TableRow>
+              <TableHead>freee の税区分</TableHead>
+              <TableHead className="w-24">状態</TableHead>
+              <TableHead>帳簿の税区分</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {mappings.taxes.map((row) => {
+              const edited = Object.hasOwn(taxEdits, row.sourceName);
+              const value = edited ? taxEdits[row.sourceName] : row.taxCategory;
+              const missing = value === undefined;
+              return (
+                <TableRow
+                  key={row.sourceName}
+                  data-status={edited ? "edited" : row.status}
+                  className={cn(missing && "bg-destructive/10 hover:bg-destructive/15")}
+                >
+                  <TableHead scope="row" className="font-normal text-foreground">
+                    {row.sourceName}
+                  </TableHead>
+                  <TableCell>
+                    <StatusLabel status={row.status} edited={edited} missing={missing} />
+                  </TableCell>
+                  <TableCell>
+                    <NativeSelect
+                      aria-label={`「${row.sourceName}」の税区分`}
+                      aria-invalid={missing ? true : undefined}
+                      className="h-8 max-w-64"
+                      value={value ?? ""}
+                      onChange={(e) => {
+                        const code = taxCategories.find(
+                          (c) => c.code === e.currentTarget.value,
+                        )?.code;
+                        onTaxEdit(row.sourceName, code);
+                      }}
+                    >
+                      <option value="">選んでください</option>
+                      {taxCategories.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <Button
@@ -205,9 +213,7 @@ export function MappingEditor({
         >
           対応表を保存
         </Button>
-        <p className="text-sm text-muted-foreground">
-          保存すると、次の取込でも使います。保存の後にプレビューを作り直します。
-        </p>
+        <p className="text-sm text-muted-foreground">{saveNote}</p>
       </div>
       <ApiErrorMessage error={save.error} />
 

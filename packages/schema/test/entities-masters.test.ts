@@ -59,4 +59,10 @@ describe("マスタの入力", () => {
       OpeningBalancesPut.safeParse([{ accountId: ID, side: "credit", amount: 100 }]).success,
     ).toBe(true);
   });
+  it("OpeningBalancesPut の補助科目は省略・null・ID を受け付ける", () => {
+    const row = { accountId: ID, side: "debit", amount: 100 } as const;
+    expect(OpeningBalancesPut.safeParse([{ ...row, subAccountId: null }]).success).toBe(true);
+    expect(OpeningBalancesPut.safeParse([{ ...row, subAccountId: ID }]).success).toBe(true);
+    expect(OpeningBalancesPut.safeParse([{ ...row, subAccountId: "x" }]).success).toBe(false);
+  });
 });

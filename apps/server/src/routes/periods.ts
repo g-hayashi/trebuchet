@@ -23,7 +23,7 @@ const yearError = (year: string): DomainError =>
   domainError("VALIDATION", "会計期間が見つかりません", { fiscalYear: year });
 
 /** パスの `:year`（4桁の数字）を数値にする */
-function parseYear(year: string): Result<number> {
+export function parseYear(year: string): Result<number> {
   return /^\d{4}$/.test(year) ? ok(Number(year)) : err(yearError(year));
 }
 

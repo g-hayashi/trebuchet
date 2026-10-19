@@ -4,6 +4,7 @@ import type {
   ImportReasonCode,
   ImportWarningCode,
   MappingStatus,
+  ReconciliationCause,
 } from "@trebuchet/schema";
 
 // 取込の判定・理由・警告などのコードの日本語の表示（画面はすべてここを使う。data-model §3）
@@ -49,4 +50,12 @@ export const MAPPING_STATUS_LABELS: Record<MappingStatus, string> = {
 export const BATCH_STATUS_LABELS: Record<ImportBatchStatus, string> = {
   active: "有効",
   voided: "取消済み",
+};
+
+/** 照合の差の原因の候補（FR-023） */
+export const RECONCILIATION_CAUSE_LABELS: Record<ReconciliationCause, string> = {
+  EXCLUDED: "取込対象外",
+  REJECTED: "取込不可",
+  VOIDED_IMPORT: "取り消した取込",
+  NOT_IMPORTED: "取り込んでいない",
 };

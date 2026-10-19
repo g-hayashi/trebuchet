@@ -142,9 +142,20 @@ function OpeningBalancesForm({
   });
   // 最後に読み込めた案。読み込み直しが失敗しても、入力欄に入れた案の未定の科目で保存を止め続ける
   const [proposal, setProposal] = useState<OpeningProposal>();
+  // 案を作った元帳。未定の科目を解消した後に、同じファイルで案を作り直す
+  const [ledger, setLedger] = useState<File>();
   const applyProposal = (p: OpeningProposal) => replace(proposalToFormRows(p));
+  const loadProposal = (file: File) =>
+    propose.mutate(file, {
+      onSuccess: (p) => {
+        setLedger(file);
+        setProposal(p);
+        applyProposal(p);
+      },
+    });
   const closeProposal = () => {
     setProposal(undefined);
+    setLedger(undefined);
     propose.reset();
     setPickerKey((k) => k + 1);
   };
@@ -192,22 +203,25 @@ function OpeningBalancesForm({
             onChange={(file) => {
               // 選択を取り消したときは、案と入力欄をそのままにする
               if (!file) return;
-              propose.mutate(file, {
-                onSuccess: (p) => {
-                  setProposal(p);
-                  applyProposal(p);
-                },
-              });
+              loadProposal(file);
             }}
           />
-          {propose.isPending && <p className="text-sm text-muted-foreground">元帳を読み込み中…</p>}
+          {propose.isPending && (
+            <p className="text-sm text-muted-foreground">
+              {proposal ? "案を作り直しています…" : "元帳を読み込み中…"}
+            </p>
+          )}
           <ApiErrorMessage error={propose.error} />
           {proposal && (
             <OpeningProposalPanel
               entityId={entityId}
               proposal={proposal}
               accounts={accounts}
+              resolving={propose.isPending}
               onApply={() => applyProposal(proposal)}
+              onResolved={() => {
+                if (ledger) loadProposal(ledger);
+              }}
               onDiscard={() => {
                 closeProposal();
                 form.reset({ rows: toFormRows(data) });

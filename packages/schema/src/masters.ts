@@ -53,7 +53,8 @@ export type TaxSettingsPut = z.infer<typeof TaxSettingsPut>;
 
 export const OpeningBalanceInput = z.object({
   accountId: Id,
-  subAccountId: Id.optional(),
+  /** 補助科目なしは省略または null（GET の応答・freee の期首残高の案の行をそのまま送れる） */
+  subAccountId: Id.nullish(),
   side: Side,
   amount: Yen,
 });

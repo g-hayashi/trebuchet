@@ -77,6 +77,7 @@ TaxMapping     = { sourceName: string; taxCategory: TaxCategoryCode }
 
 保存は 001 の `PUT /entities/:id/fiscal-periods/:year/opening-balances` に案の行を渡す（新しい書き込みの経路は作らない, research R6）。
 対応が未定の科目があるときは、`proposal.unmapped` に名前を入れ、その科目の行は案に含めない（画面は保存を押せない）。
+そのうち対応先の補助科目がまだないもの（カードなど）は `proposal.missingSubAccounts`（`{ sourceName, accountId, subAccountName }[]`）にも入れる。画面は、これを 001 の `POST /entities/:id/accounts/:accountId/sub-accounts` で作るか、それ以外の名前を `PUT /entities/:id/import-mappings` で対応づけてから、同じファイルで案を作り直す。案の行の `subAccountId: null` は、そのまま PUT に渡せる（001 の `OpeningBalanceInput.subAccountId` は省略または null）。
 
 ## 照合
 

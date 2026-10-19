@@ -322,13 +322,24 @@ export const OpeningComparison = z.object({
 });
 export type OpeningComparison = z.infer<typeof OpeningComparison>;
 
+/** 対応先の補助科目がまだない freee の科目（カードなど）。001 の補助科目の作成で解消する */
+export const MissingSubAccount = z.object({
+  sourceName: z.string(),
+  accountId: Id,
+  /** 作る補助科目の名前 */
+  subAccountName: z.string(),
+});
+export type MissingSubAccount = z.infer<typeof MissingSubAccount>;
+
 export const OpeningProposal = z.object({
   fiscalYear: FiscalYear,
   rows: z.array(OpeningProposalRow),
   totals: z.object({ debit: Count, credit: Count }),
   comparisons: z.array(OpeningComparison),
-  /** 対応が未定の freee の科目名。この科目の行は rows に含めない */
+  /** 対応が未定の freee の科目名（missingSubAccounts の科目を含む）。この科目の行は rows に含めない */
   unmapped: z.array(z.string()),
+  /** unmapped のうち、対応先の補助科目がまだないもの */
+  missingSubAccounts: z.array(MissingSubAccount),
   warnings: z.array(ImportWarning),
 });
 export type OpeningProposal = z.infer<typeof OpeningProposal>;

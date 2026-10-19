@@ -19,6 +19,7 @@ import { Route as EEntityIdTaxSettingsRouteImport } from './routes/e/$entityId/t
 import { Route as EEntityIdImportsIndexRouteImport } from './routes/e/$entityId/imports/index'
 import { Route as EEntityIdImportsBatchIdRouteImport } from './routes/e/$entityId/imports/$batchId'
 import { Route as EEntityIdImportsNewRouteImport } from './routes/e/$entityId/imports/new'
+import { Route as EEntityIdImportsReconcileRouteImport } from './routes/e/$entityId/imports/reconcile'
 import { Route as EEntityIdJournalsIndexRouteImport } from './routes/e/$entityId/journals/index'
 import { Route as EEntityIdJournalsJournalIdRouteImport } from './routes/e/$entityId/journals/$journalId'
 import { Route as EEntityIdJournalsNewRouteImport } from './routes/e/$entityId/journals/new'
@@ -81,6 +82,12 @@ const EEntityIdImportsNewRoute = EEntityIdImportsNewRouteImport.update({
   path: '/imports/new',
   getParentRoute: () => EEntityIdRouteRoute,
 } as any)
+const EEntityIdImportsReconcileRoute =
+  EEntityIdImportsReconcileRouteImport.update({
+    id: '/imports/reconcile',
+    path: '/imports/reconcile',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
 const EEntityIdJournalsIndexRoute = EEntityIdJournalsIndexRouteImport.update({
   id: '/journals/',
   path: '/journals/',
@@ -154,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/': typeof EEntityIdIndexRoute
   '/e/$entityId/imports/$batchId': typeof EEntityIdImportsBatchIdRoute
   '/e/$entityId/imports/new': typeof EEntityIdImportsNewRoute
+  '/e/$entityId/imports/reconcile': typeof EEntityIdImportsReconcileRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -176,6 +184,7 @@ export interface FileRoutesByTo {
   '/e/$entityId': typeof EEntityIdIndexRoute
   '/e/$entityId/imports/$batchId': typeof EEntityIdImportsBatchIdRoute
   '/e/$entityId/imports/new': typeof EEntityIdImportsNewRoute
+  '/e/$entityId/imports/reconcile': typeof EEntityIdImportsReconcileRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -200,6 +209,7 @@ export interface FileRoutesById {
   '/e/$entityId/': typeof EEntityIdIndexRoute
   '/e/$entityId/imports/$batchId': typeof EEntityIdImportsBatchIdRoute
   '/e/$entityId/imports/new': typeof EEntityIdImportsNewRoute
+  '/e/$entityId/imports/reconcile': typeof EEntityIdImportsReconcileRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -225,6 +235,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/'
     | '/e/$entityId/imports/$batchId'
     | '/e/$entityId/imports/new'
+    | '/e/$entityId/imports/reconcile'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -247,6 +258,7 @@ export interface FileRouteTypes {
     | '/e/$entityId'
     | '/e/$entityId/imports/$batchId'
     | '/e/$entityId/imports/new'
+    | '/e/$entityId/imports/reconcile'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -270,6 +282,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/'
     | '/e/$entityId/imports/$batchId'
     | '/e/$entityId/imports/new'
+    | '/e/$entityId/imports/reconcile'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -361,6 +374,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EEntityIdImportsNewRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
+    '/e/$entityId/imports/reconcile': {
+      id: '/e/$entityId/imports/reconcile'
+      path: '/imports/reconcile'
+      fullPath: '/e/$entityId/imports/reconcile'
+      preLoaderRoute: typeof EEntityIdImportsReconcileRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
     '/e/$entityId/journals/': {
       id: '/e/$entityId/journals/'
       path: '/journals'
@@ -449,6 +469,7 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdIndexRoute: typeof EEntityIdIndexRoute
   EEntityIdImportsBatchIdRoute: typeof EEntityIdImportsBatchIdRoute
   EEntityIdImportsNewRoute: typeof EEntityIdImportsNewRoute
+  EEntityIdImportsReconcileRoute: typeof EEntityIdImportsReconcileRoute
   EEntityIdJournalsJournalIdRoute: typeof EEntityIdJournalsJournalIdRoute
   EEntityIdJournalsNewRoute: typeof EEntityIdJournalsNewRoute
   EEntityIdReportsBalanceSheetRoute: typeof EEntityIdReportsBalanceSheetRoute
@@ -471,6 +492,7 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdIndexRoute: EEntityIdIndexRoute,
   EEntityIdImportsBatchIdRoute: EEntityIdImportsBatchIdRoute,
   EEntityIdImportsNewRoute: EEntityIdImportsNewRoute,
+  EEntityIdImportsReconcileRoute: EEntityIdImportsReconcileRoute,
   EEntityIdJournalsJournalIdRoute: EEntityIdJournalsJournalIdRoute,
   EEntityIdJournalsNewRoute: EEntityIdJournalsNewRoute,
   EEntityIdReportsBalanceSheetRoute: EEntityIdReportsBalanceSheetRoute,

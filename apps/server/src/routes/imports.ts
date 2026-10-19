@@ -1,11 +1,17 @@
-import { commitFreeeImport, previewFreeeImport, saveImportMappings } from "@trebuchet/domain";
+import {
+  commitFreeeImport,
+  previewFreeeImport,
+  proposeFreeeOpening,
+  saveImportMappings,
+} from "@trebuchet/domain";
 import { ImportExpected, ImportMappingsPut, ImportOptions } from "@trebuchet/schema";
 import { type Context, Hono } from "hono";
-import { importDeps } from "../deps.ts";
+import { importDeps, reportDeps } from "../deps.ts";
 import { errorBody, fail } from "../errors.ts";
 import { readJsonField, readUpload, sha256Hex, uploadLimit } from "../lib/upload.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
+import { parseYear } from "./periods.ts";
 
 /** multipart の file と options（JSON 文字列。なければ {}）を読み、ハッシュを計算する */
 async function readImportForm(c: Context) {
@@ -17,6 +23,7 @@ async function readImportForm(c: Context) {
 /** `/api/entities/:entityId` の下の取込（002-freee-import、contracts/http-api.md） */
 export const importRoutes = new Hono<TenantEnv>()
   .use("/imports/freee/*", uploadLimit)
+  .use("/fiscal-periods/:year/opening-balances/freee-proposal", uploadLimit)
   .post("/imports/freee/preview", async (c) => {
     const form = await readImportForm(c);
     const result = previewFreeeImport(importDeps(c.var.db), form);
@@ -29,6 +36,17 @@ export const importRoutes = new Hono<TenantEnv>()
     const result = commitFreeeImport(importDeps(c.var.db), { ...form, expected });
     if (!result.ok) return fail(c, result.error);
     return c.json(result.value, 201);
+  })
+  .post("/fiscal-periods/:year/opening-balances/freee-proposal", async (c) => {
+    const year = parseYear(c.req.param("year"));
+    if (!year.ok) return fail(c, year.error);
+    const upload = await readUpload(c);
+    const result = proposeFreeeOpening(
+      { uow: importDeps(c.var.db).uow, reports: reportDeps(c.var.db).reports },
+      { bytes: upload.bytes, fiscalYear: year.value },
+    );
+    if (!result.ok) return fail(c, result.error);
+    return c.json({ proposal: result.value }, 200);
   })
   .get("/imports", (c) => c.json({ batches: importDeps(c.var.db).imports.listBatches() }, 200))
   .get("/imports/:batchId", (c) => {
