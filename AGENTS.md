@@ -82,6 +82,8 @@ apps/server ──→ packages/schema
 
 - Spec Kit の成果物は `specs/<feature>/`（現在は `specs/001-ledger-core/`）に置く: `spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`tasks.md`。
 - Spec Kit のテンプレート、スクリプト、憲法（`.specify/memory/constitution.md`）は `.specify/` に置く。
+- Spec Kit のスキルは、Claude Code 用が `.claude/skills/speckit-*`、GitHub Copilot CLI 用が `.github/skills/speckit-*` にある。両方の統合を入れてあり、既定は claude。どちらも `uvx --from git+https://github.com/github/spec-kit.git@v1.2.1 specify integration upgrade <claude|copilot>` で更新する（手で片方だけを直さない）。
+- Claude Code は、CLAUDE.md がないときにこの AGENTS.md を読む。リポジトリに CLAUDE.md を作らない（作る場合は `@AGENTS.md` を取り込む）。`work/` と `data/` の読み取りは `.claude/settings.json` で拒否している。
 - 設計判断は `docs/adr/` に ADR として書く（`NNNN-短い名前.md`、番号は連番）。書式は `docs/adr/0001-sqlite-driver.md` に合わせる。
 - AGENTS.md は憲法と矛盾させない。
 - コミットメッセージは Conventional Commits に従う。
