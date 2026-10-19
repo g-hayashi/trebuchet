@@ -206,8 +206,8 @@ description: "Task list for 002-freee-import"
 - [X] T070 `scripts/verify-freee-import.ts` に通常のモードを加える: `--journal`・`--ledger`・`--year` を受け、`.tmp/verify-freee/` に使い捨ての事業体（開始年度 = `--year`）を作り、対応表の初期案のまま未定が残れば一覧を出して止まる（`--mapping <json>` で対応を渡せる。JSON は `.tmp/` に置く）。取込 → 元帳の期首残高の保存 → 照合 → PL・BS の科目別の金額を標準出力に出す（research R18）
 - [X] T071 T070 を `work/` の 2025年分で実行し、照合がすべて一致すること（SC-003）と、PL・BS の各科目が 2025年分の青色申告決算書（R7）と一致すること（SC-004、001 の SC-008）を確かめる。決算書の値はセッションの分析メモ（`analysis-tax-return.md`）を使い、**結果の数値はリポジトリに書かない**。一致しなければ原因を調べて直す。続けて 2026年分（途中経過）でも取り込み、FR-020a の警告が出ないことを確かめる
 - [X] T072 [P] 文書を更新する: `AGENTS.md`（取込のモジュールの置き場所、実データを扱うのは verify スクリプトだけ、フィクスチャの作り方）、`README.md`（freee からの移行の手順）、`docs/adr/0004-freee-closing-entries.md`（年初付の決算振替を期首に繰り込む判断。research R5）、`specs/001-ledger-core/quickstart.md` §3（SC-008 は 002 の T071 で確認した旨と日付）
-- [ ] T073 quickstart.md §2 の手順1〜8を手で確かめ、画面の文言と違うところを直す
-- [ ] T074 `pnpm lint && pnpm --filter @trebuchet/web build && pnpm typecheck && pnpm test && pnpm --filter @trebuchet/web e2e` がすべて成功することを確かめる
+- [X] T073 quickstart.md §2 の手順1〜8を手で確かめ、画面の文言と違うところを直す
+- [X] T074 `pnpm lint && pnpm --filter @trebuchet/web build && pnpm typecheck && pnpm test && pnpm --filter @trebuchet/web e2e` がすべて成功することを確かめる
 
 ---
 
