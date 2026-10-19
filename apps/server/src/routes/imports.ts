@@ -2,9 +2,16 @@ import {
   commitFreeeImport,
   previewFreeeImport,
   proposeFreeeOpening,
+  reconcileFreee,
   saveImportMappings,
+  voidImportBatch,
 } from "@trebuchet/domain";
-import { ImportExpected, ImportMappingsPut, ImportOptions } from "@trebuchet/schema";
+import {
+  ImportExpected,
+  ImportMappingsPut,
+  ImportOptions,
+  VoidImportInput,
+} from "@trebuchet/schema";
 import { type Context, Hono } from "hono";
 import { importDeps, reportDeps } from "../deps.ts";
 import { errorBody, fail } from "../errors.ts";
@@ -24,6 +31,7 @@ async function readImportForm(c: Context) {
 export const importRoutes = new Hono<TenantEnv>()
   .use("/imports/freee/*", uploadLimit)
   .use("/fiscal-periods/:year/opening-balances/freee-proposal", uploadLimit)
+  .use("/fiscal-periods/:year/reconcile/freee", uploadLimit)
   .post("/imports/freee/preview", async (c) => {
     const form = await readImportForm(c);
     const result = previewFreeeImport(importDeps(c.var.db), form);
@@ -48,6 +56,23 @@ export const importRoutes = new Hono<TenantEnv>()
     if (!result.ok) return fail(c, result.error);
     return c.json({ proposal: result.value }, 200);
   })
+  .post("/fiscal-periods/:year/reconcile/freee", async (c) => {
+    const year = parseYear(c.req.param("year"));
+    if (!year.ok) return fail(c, year.error);
+    const upload = await readUpload(c);
+    const result = reconcileFreee(
+      { uow: importDeps(c.var.db).uow, reports: reportDeps(c.var.db).reports },
+      { bytes: upload.bytes, fiscalYear: year.value },
+    );
+    if (!result.ok) {
+      // 元帳の取引日が会計期間の外（details.ledgerDate）は 422。ファイルの中身の誤り（行・列つき）は 400 VALIDATION のまま
+      if (result.error.code === "VALIDATION" && result.error.details?.ledgerDate !== undefined) {
+        return c.json(errorBody(result.error), 422);
+      }
+      return fail(c, result.error);
+    }
+    return c.json(result.value, 200);
+  })
   .get("/imports", (c) => c.json({ batches: importDeps(c.var.db).imports.listBatches() }, 200))
   .get("/imports/:batchId", (c) => {
     const batchId = c.req.param("batchId");
@@ -69,6 +94,14 @@ export const importRoutes = new Hono<TenantEnv>()
       version: journal.version,
     }));
     return c.json({ batch, journals }, 200);
+  })
+  .post("/imports/:batchId/void", validate("json", VoidImportInput), (c) => {
+    const result = voidImportBatch(importDeps(c.var.db), {
+      batchId: c.req.param("batchId"),
+      ...c.req.valid("json"),
+    });
+    if (!result.ok) return fail(c, result.error);
+    return c.json(result.value, 200);
   })
   .get("/import-mappings", (c) => {
     const { imports } = importDeps(c.var.db);
