@@ -43,8 +43,10 @@ TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart-002" pnpm dev   # http://127.0.0.1:5173
 node scripts/verify-freee-import.ts \
   --journal work/<2025年分の仕訳帳>.csv \
   --ledger  work/<2025年分の総勘定元帳>.csv \
-  --year 2025
+  --year 2025 [--mapping .tmp/<対応表>.json] [--keep]
 ```
+
+使い捨ての事業体を `.tmp/verify-freee/` に作り、取込 → 元帳からの期首残高の保存 → 照合 → PL・BS の科目別の金額を標準出力に出す（フラグの詳細はスクリプトの先頭のコメント）。対応が未定の科目が残ると一覧を出して止まる（終了コード 1）ので、`--mapping` の JSON（`.tmp/` の下に置く。ImportMappingsPut と同じ形で、科目は `accountName` でも指定できる）を渡して再実行する。2026年分は、2025年分を `--keep` で実行したあとに `--continue --year 2026 --journal … --ledger …` で足す。
 
 1. ヘッダの照合（research R3）で、必須の列がすべて見つかる。メモタグの区切り文字を確かめる（R4）
 2. 照合がすべての科目で一致する（SC-003）
