@@ -74,7 +74,7 @@
 | 型 | 内容 |
 |---|---|
 | `FreeeFile` | `{ kind: "journal" \| "ledger", encoding: "utf-8" \| "shift_jis", header: string[], rows: Record<string,string>[] }` |
-| `FreeeJournal` | 仕訳ID、仕訳番号、日付、決算整理仕訳、登録方法、備考、行の配列（`side`, `accountName`, `subAccountName?`, `amount`, `taxName`, `taxAmount`, `partnerName?`, `tagNames[]`, `description`）。名前は NFKC 済み、摘要は元の文字 |
+| `FreeeJournal` | 仕訳ID、仕訳番号、日付、決算整理仕訳、登録した方法、備考、行の配列（`side`, `accountName`, `subAccountName?`, `amount`, `taxName`, `taxAmount`, `partnerName?`, `tagNames[]`, `description`）。名前は NFKC 済み、摘要は元の文字 |
 | `FreeeLedgerAccount` | 科目名、開始行の残高（符号つき）、行の配列（日付、決算整理仕訳、相手科目、借方、貸方、残高） |
 | `MappingProposal` | ファイルに出てくる名前ごとに、保存済み・初期案・未定のどれか、と対応先 |
 | `ImportPlanItem` | 仕訳ごとの判定 `new` \| `already` \| `excluded` \| `rejected`、理由のコード、組み立てた `JournalDraft`（new のとき）、警告 |
