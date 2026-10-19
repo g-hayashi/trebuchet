@@ -40,7 +40,7 @@
 | IV. AIは提案 | N/A | AI は使わない。仕訳の案は規則による提案で、利用者が登録するまで帳簿に入らない |
 | V. テストファースト | ✅ | tasks でテストを先に置く。INV-18〜24 は fast-check。実データはフィクスチャにしない |
 | VI. 税制ルールはデータ | ✅ | 少額減価償却資産の基準額・年間の上限・適用期間、控除の上限額を `tax_parameters`（適用開始日・終了日・出典 URL）に持つ（R3）。消費税の区分は 001 の設定を使う（R11） |
-| VII. シンプルさと境界 | ✅ | 依存を追加しない。様式はコードの定数（R2）。既存の表（`journals.source`、`audit_log`）の CHECK を変えず、参照の表と専用の履歴の表で足りる（R4, R12）。償却の方法は表の形にするが、実装は1つだけ（R7）。新しいポートは `ClosingStore` と `ClosingUnitOfWork` |
+| VII. シンプルさと境界 | ✅ | 依存を追加しない。様式はコードの定数（R2）。既存の表（`journals.source`、`audit_log`）の CHECK を変えず、参照の表と専用の履歴の表で足りる（R4, R12）。償却の方法は `small_asset_28_2` の1つだけで、方法の表や差し替えの仕組みは作らない（R7）。科目の欄番号の変更は 001 の科目の API に1項目を足すだけ（R12a）。新しいポートは `ClosingStore` と `ClosingUnitOfWork` |
 
 **Post-design re-check（Phase 1 後）**: ✅ 違反なし。Complexity Tracking は空。
 
@@ -77,7 +77,7 @@ packages/
 │   │   │   ├── form.ts            # BLUE_RETURN_FORMS, formForYear（R2）
 │   │   │   ├── tax-parameters.ts  # resolveTaxParameter（R3）
 │   │   │   ├── home-use.ts        # computeHomeUse, validateHomeUseAllocation, proposeHomeUseAdjustment（R4〜R6）
-│   │   │   ├── depreciation.ts    # DEPRECIATION_METHODS, validateFixedAsset, depreciate, proposeDepreciationAdjustment（R7）
+│   │   │   ├── depreciation.ts    # validateFixedAsset, depreciate, proposeDepreciationAdjustment（R7）
 │   │   │   ├── deduction.ts       # blueDeductionCap, blueDeduction（R9）
 │   │   │   ├── sales.ts           # summarizeMonthlySales, summarizeSalesPartners（R10）
 │   │   │   ├── opening-check.ts   # checkOpeningCarryForward（R8）
@@ -89,7 +89,7 @@ packages/
 │   │   └── usecases/blue-return.ts
 │   └── test/
 │       ├── blue-return-arbitraries.ts
-│       └── blue-return-*.test.ts / *.property.test.ts
+│       └── blue-return/*.test.ts / *.property.test.ts
 └── db/
     ├── src/
     │   ├── schema/tenant.ts       # 10表
@@ -109,6 +109,7 @@ apps/
     └── features/blue-return/      # FormPage1〜4, AdjustmentPanel, WarningList, print.css など
 
 scripts/
+├── lib/freee-import-runner.ts     # verify の2本が使う取込の処理（R12b）
 └── verify-tax-return.ts           # 実データでの照合（ローカル専用, R15）。package.json に verify:tax-return
 ```
 
@@ -116,8 +117,8 @@ scripts/
 
 ## Phase の進め方（tasks への入力）
 
-1. **Setup**: 様式の値の確認（R2 のゲート。利用者が原本と照らす）、`verify-tax-return.ts` の骨組み（`work/` の JSON の形をコメントに書く。値は書かない）
-2. **Foundational**: Zod スキーマ、マイグレーション `0003_tax_return`（10表、投入、トリガー）、`ClosingStore`・`ClosingUnitOfWork`、`resolveTaxParameter`、様式の定数、arbitraries、`buildBlueReturn` の骨組み（1ページだけ）
+1. **Setup**: 様式の値の確認（R2 のゲート。利用者が原本と照らす。US1 の着手の前に済ませる）、AGENTS.md の実データの規則の更新、取込の処理の切り出し（R12b）と `verify-tax-return.ts` の骨組み（`work/` の JSON の形をコメントに書く。値は書かない）
+2. **Foundational**: Zod スキーマ、マイグレーション `0003_tax_return`（10表、投入、トリガー）、`ClosingStore`・`ClosingUnitOfWork`、`resolveTaxParameter`、様式の定数、arbitraries（`buildBlueReturn` は US1 で1ページから作る）
 3. **US1**（損益計算書・控除・CSV・印刷）→ **US2**（家事按分・地代家賃の内訳・案の登録）→ **US3**（固定資産台帳）→ **US4**（貸借対照表・元入金の繰越）→ **US5**（月別売上・売上先）→ **US6**（控え・書類）→ **US7**（免税の期間の警告）
 4. 各ユーザーストーリーで「プロパティ／ユニットテスト → ドメイン → リポジトリ → API → 画面」の順。テストと実装の対を1体の部下に渡す
 5. US7 は警告のコードを足すため、`TAX_CATEGORY_SUSPICIOUS` を参照するテストを domain・server・web で grep して直す

@@ -13,6 +13,9 @@
 | 422 | `SMALL_ASSET_ANNUAL_LIMIT_EXCEEDED` | 年間の上限を超える。`details.limit`、`details.total` | FR-020 |
 | 422 | `SMALL_ASSET_NOT_APPLICABLE` | 取得の日が特例の適用期間外 | Edge Cases |
 | 422 | `DEPRECIATION_METHOD_UNSUPPORTED` | 少額の特例以外の方法 | FR-019 |
+| 422 | `HOME_USE_ACCOUNT_INVALID` | 按分の対象が費用の科目でない | FR-012 |
+| 422 | `ASSET_ACCOUNT_INVALID` | 資産の勘定が資産の科目でない | FR-018 |
+| 422 | `REPORT_LINE_INVALID` | 科目の欄番号の変更で、費用以外の科目、または費用の欄（8〜31）以外の番号 | FR-006 |
 | 422 | `ADJUSTMENT_NOT_NEEDED` | 確定のときに作り直した案がない（差がない、帳簿の金額 ≤ 0、資産に仕訳が結びついている） | FR-014, FR-022 |
 | 409 | `ADJUSTMENT_CHANGED` | 確定のときに作り直した案の金額が、画面が見た金額と違う。`details.proposal` に新しい案 | FR-015 |
 
@@ -22,8 +25,14 @@
 
 | メソッド | パス | 入力 | 出力 | 要件 |
 |---|---|---|---|---|
-| GET | `/entities/:id/blue-return/:year` | `?blankUnused=true` | 200 `{ blueReturn: BlueReturn }` | FR-001〜011, FR-023〜032 |
+| GET | `/entities/:id/blue-return/:year` | — （使わない欄は常に 0。空欄の表示は画面が行う、R14） | 200 `{ blueReturn: BlueReturn }` | FR-001〜011, FR-023〜032 |
 | GET | `/entities/:id/blue-return/:year/csv` | `?blankUnused=true` | 200 `text/csv` | FR-003 |
+
+## 科目の決算書の欄（001 の変更）
+
+| メソッド | パス | 入力 | 出力 | 要件 |
+|---|---|---|---|---|
+| PATCH | `/entities/:id/accounts/:accountId`（001） | `AccountPatch` に `reportLine?: number \| null` を足す | 200 `{ account }`。変更は `closing_audit_log`（`account_report_line`） | FR-006, R12a |
 
 ## 決算整理の仕訳の案
 

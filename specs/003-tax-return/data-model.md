@@ -26,7 +26,7 @@
 |---|---|---|
 | `id` | text | PK |
 | `fiscal_year` | integer | `fiscal_periods` に存在 |
-| `account_id` | text | FK `accounts`（区分が費用） |
+| `account_id` | text | FK `accounts`。区分が費用であることはドメインで検査（`HOME_USE_ACCOUNT_INVALID`、R7） |
 | `sub_account_id` | text | NULL 可、FK |
 | `business_ratio` | integer | 0〜10000 |
 | `basis` | text | 空でない（根拠のメモ） |
@@ -62,7 +62,7 @@
 | `method` | text | `small_asset_28_2`（CHECK。後で値を足す） |
 | `useful_life_years` | integer | NULL 可（少額の特例では空） |
 | `business_ratio` | integer | 0〜10000 |
-| `asset_account_id` | text | FK `accounts`（区分が資産。既定 1060 工具器具備品） |
+| `asset_account_id` | text | FK `accounts`。区分が資産であることはドメインで検査（`ASSET_ACCOUNT_INVALID`）。既定 1060 工具器具備品 |
 | `linked_journal_id` | text | NULL 可、FK `journals`（取得がすでに仕訳されている場合。FR-022） |
 | `note` | text | 摘要 |
 | `disposed_on` | text | NULL 可（除却の日） |
@@ -113,7 +113,7 @@
 | `kind` | text | `salary` / `social_insurance` / `small_business_mutual_aid` / `life_insurance` / `earthquake_insurance` / `donation` / `medical` / `stocks` / `crypto` / `foreign_tax_credit` / `other`（CHECK） |
 | `label` | text | NULL 可（`other` のとき必須） |
 | `amount` | integer | NULL 可、≥ 0 |
-| `file_path` | text | NULL 可（絶対パス） |
+| `file_path` | text | NULL 可。`/` で始まる絶対パス（Zod で検査、R13） |
 | `memo` | text | |
 
 - 削除可（計算に使わない控え）
@@ -125,7 +125,7 @@
 | `id` | text | PK |
 | `fiscal_year` | integer | |
 | `kind` | text | `blue_return` / `tax_return` / `attachment` / `other`（CHECK） |
-| `file_path` | text | 絶対パス、空でない |
+| `file_path` | text | `/` で始まる絶対パス（Zod で検査、R13） |
 | `filed_on` | text | NULL 可 |
 | `memo` | text | |
 
@@ -137,7 +137,7 @@
 |---|---|---|
 | `id` | text | PK |
 | `occurred_at` | text | |
-| `target_type` | text | `home_use_allocation` / `rent_detail` / `fixed_asset` / `blue_deduction_answer` / `closing_note`（CHECK） |
+| `target_type` | text | `home_use_allocation` / `rent_detail` / `fixed_asset` / `blue_deduction_answer` / `closing_note` / `account_report_line`（CHECK。`account_report_line` は科目の欄番号の変更、R12a） |
 | `target_id` | text | |
 | `action` | text | `create` / `update` / `dispose` / `delete`（CHECK） |
 | `reason` | text | NULL 可 |
@@ -148,8 +148,8 @@
 ## 2. ドメインの型（保存しない）
 
 - **`BlueReturnForm`**（R2）: 年分、`pl: FormLine[]`（欄番号、欄名、`kind: account | optional | computed | unused`）、`optionalLines: [25..30]`、`salesPartnerRows: number`、`bsRows: { label, side, accountCodes[] }[]`
-- **`BlueReturn`**: `fiscalYear`、`status: open | closed`、`page1: { lines: { no, label, amount | null }[] }`、`page2: { monthly, rentDetails, deduction }`、`page3: { salesPartners, depreciation }`、`page4: { opening, closing }`、`transfer: { businessIncome /* 欄45 */, blueDeduction /* 欄44 */ }`、`warnings: BlueReturnWarning[]`
-- **`BlueReturnWarning`** のコード: `OPTIONAL_LINES_OVERFLOW`、`PL_MISMATCH`、`HOME_USE_ADJUSTMENT_STALE`、`RENT_DETAILS_MISMATCH`、`DEPRECIATION_MISMATCH`、`SALES_TOTAL_MISMATCH`、`SALES_WITHOUT_PARTNER`、`DUPLICATE_PARTNER_NAME`、`OPENING_MISMATCH`、`DEFERRED_ASSET_NOT_AMORTIZED`、`NEGATIVE_BALANCE`（001）、`DEDUCTION_ANSWERS_MISSING`、`PRIOR_PERIOD_OPEN`
+- **`BlueReturn`**: `fiscalYear`、`formYear`（使った様式の年分、R2）、`status: open | closed`、`page1: { lines: { no, label, amount | null }[] }`、`page2: { monthly, rentDetails, deduction }`、`page3: { salesPartners, depreciation }`、`page4: { opening, closing }`、`transfer: { businessIncome /* 欄45 */, blueDeduction /* 欄44 */ }`、`warnings: BlueReturnWarning[]`
+- **`BlueReturnWarning`** のコード: `OPTIONAL_LINES_OVERFLOW`、`PL_MISMATCH`、`HOME_USE_ADJUSTMENT_STALE`、`RENT_DETAILS_MISMATCH`、`DEPRECIATION_MISMATCH`、`SALES_TOTAL_MISMATCH`、`SALES_WITHOUT_PARTNER`、`DUPLICATE_PARTNER_NAME`、`OPENING_MISMATCH`、`DEFERRED_ASSET_NOT_AMORTIZED`、`OPENING_OWNER_ACCOUNTS`（期首に事業主貸・借の残高がある、R8）、`NEGATIVE_BALANCE`（001）、`DEDUCTION_ANSWERS_MISSING`、`PRIOR_PERIOD_OPEN`
 - **`AdjustmentProposal`**: `kind`、元の ID、`journal: JournalDraft`（年度末日付）、`breakdown`（帳簿の金額、割合、事業分、家事分 または 取得価額、算入額）
 
 ## 3. 状態の移り変わり
@@ -161,7 +161,7 @@
 ## 4. 不変条件（001 の INV-1〜10、002 の INV-11〜17 に追加）
 
 - **INV-18**: 決算書の経費計（欄32）と差引金額（欄33）は、同じ年度の 001 の損益計算書の費用合計と利益に等しい。欄43 = 欄33 + 欄34〜42 の加減（この機能では 0）、欄45 = 欄43 − 欄44
-- **INV-19**: 決算書4ページの期首・期末とも、資産合計 = 負債・資本合計（期末は控除前の所得を含む）
+- **INV-19**: 決算書4ページの期首・期末とも、資産合計 = 負債・資本合計（期末は控除前の所得を含む）。期首は表示した金額（事業主貸・借が 0 なら空欄）で合計する（R8）
 - **INV-20**: 按分で、0 ≤ 事業分 ≤ 帳簿の金額、事業分 + 家事分 = 帳簿の金額（帳簿の金額 > 0 のとき）。割合 10000 なら家事分 0、0 なら事業分 0
 - **INV-21**: 少額減価償却資産の特例の資産は、取得価額 < 取得の日の基準額、かつ同じ年の特例の資産の取得価額の合計 ≤ 年間の上限。必要経費算入額 ≤ 取得価額
 - **INV-22**: 青色申告特別控除額 = min(上限額, max(0, 欄43))。0 ≤ 控除額 ≤ 上限額

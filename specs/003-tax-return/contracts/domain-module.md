@@ -8,7 +8,6 @@
 |---|---|---|
 | `BLUE_RETURN_FORMS` / `formForYear(year)` | `blue-return/form.ts` | 様式（R2）。年度から様式を選ぶ |
 | `TAX_PARAMETERS` | `seed/tax-parameters.ts` | 税制の値の seed（R3）。マイグレーションの投入と同じ値 |
-| `DEPRECIATION_METHODS` | `blue-return/depreciation.ts` | 方法 → 計算関数の表。`small_asset_28_2` だけ（R7） |
 
 ## 関数
 
@@ -17,9 +16,9 @@
 | `resolveTaxParameter(key, date, params)` | | `TaxParameter \| undefined` | R3 |
 | `computeHomeUse(bookAmount, ratio)` | 帳簿の金額、万分率 | `{ business, home }` | INV-20, R5 |
 | `proposeHomeUseAdjustment(input)` | 按分の登録、科目、年度の仕訳の行、登録済みの振替（refs） | `Result<AdjustmentProposal \| null>`（帳簿の金額 ≤ 0 なら null と理由） | FR-014, FR-016, INV-23 |
-| `validateHomeUseAllocation(draft, previous)` | 登録の案、前の年度の同じ科目の登録 | `Result<HomeUseAllocation>`（根拠の必須、割合の範囲、割合を変えたときの理由の必須） | FR-012, FR-013 |
-| `validateFixedAsset(draft, sameYearAssets, params)` | 資産の案、同じ年の特例の資産、税制の値 | `Result<FixedAsset>`（`SMALL_ASSET_OVER_THRESHOLD`、`SMALL_ASSET_ANNUAL_LIMIT_EXCEEDED`、`SMALL_ASSET_NOT_APPLICABLE`（適用期間外）、`DEPRECIATION_METHOD_UNSUPPORTED`） | FR-019〜020, INV-21 |
-| `depreciate(asset, fiscalYear)` | | `{ cost, base, ordinary, total, businessRatio, deductible, closingBookValue }`（3ページのイ〜ヌ） | FR-021, INV-21 |
+| `validateHomeUseAllocation(draft, previous)` | 登録の案、前の年度の同じ科目の登録 | `Result<HomeUseAllocation>`（区分が費用の科目に限る `HOME_USE_ACCOUNT_INVALID`、根拠の必須、割合の範囲、割合を変えたときの理由の必須） | FR-012, FR-013 |
+| `validateFixedAsset(draft, sameYearAssets, params)` | 資産の案、同じ年の特例の資産、税制の値 | `Result<FixedAsset>`（`ASSET_ACCOUNT_INVALID`、`SMALL_ASSET_OVER_THRESHOLD`、`SMALL_ASSET_ANNUAL_LIMIT_EXCEEDED`、`SMALL_ASSET_NOT_APPLICABLE`（適用期間外）、`DEPRECIATION_METHOD_UNSUPPORTED`） | FR-019〜020, INV-21 |
+| `depreciate(asset, fiscalYear)` | 方法は `small_asset_28_2` だけ。方法の表は作らない（R7） | `{ cost, base, ordinary, total, businessRatio, deductible, closingBookValue }`（3ページのイ〜ヌ） | FR-021, INV-21 |
 | `proposeDepreciationAdjustment(asset, fiscalYear, accounts)` | | `AdjustmentProposal \| null`（`linkedJournalId` があれば null） | FR-021〜022, INV-23 |
 | `blueDeductionCap(answers, date, params)` | 要件の回答 | `{ cap, tier: "max" \| "standard" \| "basic", unmet: string[] } \| undefined`（回答なしは undefined） | FR-010, R9 |
 | `blueDeduction(cap, incomeBefore)` | | 控除額 | FR-009, INV-22 |
@@ -27,9 +26,15 @@
 | `summarizeSalesPartners(lines, accounts, partners, rows)` | | 個別の行・上記以外の計・取引先なしの件数と金額 | FR-025〜026, INV-24 |
 | `checkOpeningCarryForward(priorClosing, opening, accounts)` | 前の年度の期末の残高、今の年度の期首残高 | `{ accountId, expected, actual, diff }[]`（002 の `carryForward` を使う） | FR-029, R8 |
 | `buildBlueReturn(input)` | 様式、科目、取引先、期首残高、年度の仕訳の行、前の年度の期末の残高（任意）、按分の登録、決算整理の refs、資産、地代家賃の内訳、控除の回答、税制の値、メモ、年度の状態 | `BlueReturn`（data-model §2） | FR-001〜032 の表示、INV-18〜24 |
-| `blueReturnToCsv(blueReturn)` | | CSV の文字列（`ページ,欄番号,欄名,金額`） | FR-003, R14 |
+| `blueReturnToCsv(blueReturn, { blankUnused })` | `blankUnused` なら `kind = unused` の欄を空にする（R14） | CSV の文字列（`ページ,欄番号,欄名,金額`） | FR-003, R14 |
 
 `buildBlueReturn` は 001 の `buildProfitAndLoss`・`buildBalanceSheet`・`detectWarnings` を呼び、結果を様式に並べ替える。PL の費用合計・利益との一致（INV-18）を自分で確かめ、合わなければ `PL_MISMATCH` を出す。
+
+## 科目の欄番号の変更（001 の変更）
+
+| 関数 | 変更 |
+|---|---|
+| `setAccountReportLine(deps, accountId, reportLine)`（新規、`usecases/masters.ts`。`renameAccount`・`setAccountActive` と同じ形） | server の `PATCH /accounts/:accountId`（`apps/server/src/routes/masters.ts:38`）が `patch.reportLine !== undefined` のときに呼ぶ。費用の科目で、様式の費用の欄（8〜31）の番号か `null` のときだけ許す（それ以外は `REPORT_LINE_INVALID`）。変更は `ClosingStore.appendClosingAudit`（`account_report_line`、`update`）に残す（R12a） |
 
 ## 免税の期間の警告（002 の変更）
 
