@@ -25,7 +25,7 @@
 
 | メソッド | パス | 入力 | 出力 | 要件 |
 |---|---|---|---|---|
-| POST | `/entities/:id/imports/freee/preview` | form: `file`、`options`（JSON 文字列の `ImportOptions`） | 200 `{ preview: ImportPreview }`。帳簿は変えない | FR-001〜006, FR-015, FR-016, FR-029, FR-030 |
+| POST | `/entities/:id/imports/freee/preview` | form: `file`、`options`（JSON 文字列の `ImportOptions`） | 200 `{ preview: ImportPreview }`。帳簿は変えない | FR-001〜006, FR-015, FR-016, FR-028〜030 |
 | POST | `/entities/:id/imports/freee/commit` | form: `file`、`options`、`expected`（JSON 文字列の `{ fileSha256, countNew }`） | 201 `{ batch: ImportBatch, preview }` | FR-012〜015, FR-018 |
 | GET | `/entities/:id/imports` | — | 200 `{ batches: ImportBatch[] }`（新しい順） | FR-018 |
 | GET | `/entities/:id/imports/:batchId` | — | 200 `{ batch, journals: { journalId, journalNo, date, freeeJournalId, status, version }[] }` | FR-018 |

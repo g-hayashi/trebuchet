@@ -6,6 +6,7 @@
 
 ### journals.source
 `manual` | `import_freee`。SQL の CHECK はないため、Drizzle の列挙を変えるだけ（research R12）。
+取り込んだ仕訳は、001 の仕訳と同じテーブル・同じ規則で扱い、表示・検索・訂正・取消・帳票の集計で区別しない（FR-017）。訂正・取消は 001 の API をそのまま使う。
 
 ### audit_log
 スキーマは変えない。取り込んだ仕訳は `target_type = journal`、`action = create`。`after_json` に `source`、`importBatchId`、`freeeJournalId` を含める。取込の取消は仕訳ごとに `action = void` と理由（research R12）。
