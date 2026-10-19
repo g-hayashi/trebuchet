@@ -255,13 +255,14 @@ description: "Task list for 001-ledger-core"
 
 ### Tests for User Story 6 ⚠️
 
-- [ ] T110 [P] [US6] `packages/db/test/isolation.property.test.ts` を書く（FR-002, SC-007）: 2つのテナントに arbitraries の仕訳を登録し、それぞれの `findJournals`・`linesInRange`・`openingBalances` の結果が自分のテナントの ID だけを含む。DB ファイルが2つ別に存在する
-- [ ] T111 [P] [US6] `apps/server/test/isolation.api.test.ts` を書く: 事業体 A の仕訳の ID・摘要が、事業体 B の検索・5つの帳票の JSON と CSV・`GET /journals/:id`（A の ID を B のパスで指定 → 404）に一切現れない。`kind: "corporation"` の事業体を作成できる（US6-2）
+- [X] T110 [P] [US6] `packages/db/test/isolation.property.test.ts` を書く（FR-002, SC-007）: 2つのテナントに arbitraries の仕訳を登録し、それぞれの `findJournals`・`linesInRange`・`openingBalances` の結果が自分のテナントの ID だけを含む。DB ファイルが2つ別に存在する
+- [X] T111 [P] [US6] `apps/server/test/isolation.api.test.ts` を書く: 事業体 A の仕訳の ID・摘要が、事業体 B の検索・5つの帳票の JSON と CSV・`GET /journals/:id`（A の ID を B のパスで指定 → 404）に一切現れない。`kind: "corporation"` の事業体を作成できる（US6-2）
 
 ### Implementation for User Story 6
 
-- [ ] T112 [US6] テストで漏れが見つかった箇所を修正する（想定では T027・T031 の構造で満たされる。修正がなければ、その旨をこのタスクに記録して完了とする）
-- [ ] T113 [US6] `apps/web/src/features/entities/EntitySwitcher.tsx` を実装して `__root.tsx` のヘッダーに置く: 事業体の一覧から選んで `/e/$entityId` に移動する、最後に選んだ事業体を `localStorage` に保存してトップ画面で復元する、切り替え時に TanStack Query のキャッシュを破棄する（別の事業体のデータが一瞬表示されるのを防ぐ）
+- [X] T112 [US6] テストで漏れが見つかった箇所を修正する（想定では T027・T031 の構造で満たされる。修正がなければ、その旨をこのタスクに記録して完了とする）
+  - 結果: 漏れなし。T110・T111 は実装前から合格した（事業体ごとの DB ファイルと、事業体の DB だけを開くミドルウェアで分離が保証される）。修正は不要
+- [X] T113 [US6] `apps/web/src/features/entities/EntitySwitcher.tsx` を実装して `__root.tsx` のヘッダーに置く: 事業体の一覧から選んで `/e/$entityId` に移動する、最後に選んだ事業体を `localStorage` に保存してトップ画面で復元する、切り替え時に TanStack Query のキャッシュを破棄する（別の事業体のデータが一瞬表示されるのを防ぐ）
 
 **Checkpoint**: すべてのユーザーストーリーが独立して動く
 
@@ -269,12 +270,12 @@ description: "Task list for 001-ledger-core"
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
-- [ ] T114 [P] `apps/web/e2e/ledger-flow.spec.ts` に Playwright の E2E を書く: 事業体の作成 → 期首残高 → 仕訳2件（単一・複合）→ 貸借不一致の拒否 → 試算表の合計の一致。`TREBUCHET_DATA_DIR` は `.tmp/e2e-<uuid>`。`pnpm --filter @trebuchet/web e2e` で実行する
-- [ ] T115 [P] `scripts/bench-reports.ts` と ルートの `bench:reports` を作成する（SC-004）: `.tmp/` のテナントに 2,000 件 × 平均3行の仕訳を登録し、5つの帳票の API の応答時間を測って、いずれかが 1 秒を超えたら非ゼロで終了する
-- [ ] T116 [P] `AGENTS.md` を作成する: 構成と依存の向き、コマンド（`pnpm dev`/`test`/`typecheck`/`lint`/`bench:reports`）、テストファーストと不変条件、テストの一時ファイルは `.tmp/`、実データ（`work/`, `data/`）を読まない・コミットしない、Spec Kit の成果物の場所
-- [ ] T117 [P] `README.md` を作成する（概要、前提、セットアップ、`pnpm dev`、データの保存先と `TREBUCHET_DATA_DIR`）
-- [ ] T118 [P] 設計判断を ADR として記録する（Constitution の Development Workflow）: `docs/adr/0002-tenant-per-db-file.md`（事業体ごとの DB ファイル分離と `entity_id` 列を持たない理由、research.md R9・data-model §0）、`docs/adr/0003-correction-policy.md`（訂正方式 C 案、research.md R11、spec の Assumptions）。形式は「状況・決定・理由・検討した代替案・影響」。0001 は T001 で作成済みであることを確認する
-- [ ] T119 `pnpm typecheck && pnpm lint && pnpm test` を実行し、Biome の `noRestrictedImports` で `packages/domain` の境界違反がないことを確認する
+- [X] T114 [P] `apps/web/e2e/ledger-flow.spec.ts` に Playwright の E2E を書く: 事業体の作成 → 期首残高 → 仕訳2件（単一・複合）→ 貸借不一致の拒否 → 試算表の合計の一致。`TREBUCHET_DATA_DIR` は `.tmp/e2e-<uuid>`。`pnpm --filter @trebuchet/web e2e` で実行する
+- [X] T115 [P] `scripts/bench-reports.ts` と ルートの `bench:reports` を作成する（SC-004）: `.tmp/` のテナントに 2,000 件 × 平均3行の仕訳を登録し、5つの帳票の API の応答時間を測って、いずれかが 1 秒を超えたら非ゼロで終了する
+- [X] T116 [P] `AGENTS.md` を作成する: 構成と依存の向き、コマンド（`pnpm dev`/`test`/`typecheck`/`lint`/`bench:reports`）、テストファーストと不変条件、テストの一時ファイルは `.tmp/`、実データ（`work/`, `data/`）を読まない・コミットしない、Spec Kit の成果物の場所
+- [X] T117 [P] `README.md` を作成する（概要、前提、セットアップ、`pnpm dev`、データの保存先と `TREBUCHET_DATA_DIR`）
+- [X] T118 [P] 設計判断を ADR として記録する（Constitution の Development Workflow）: `docs/adr/0002-tenant-per-db-file.md`（事業体ごとの DB ファイル分離と `entity_id` 列を持たない理由、research.md R9・data-model §0）、`docs/adr/0003-correction-policy.md`（訂正方式 C 案、research.md R11、spec の Assumptions）。形式は「状況・決定・理由・検討した代替案・影響」。0001 は T001 で作成済みであることを確認する
+- [X] T119 `pnpm typecheck && pnpm lint && pnpm test` を実行し、Biome の `noRestrictedImports` で `packages/domain` の境界違反がないことを確認する
 - [ ] T120 `specs/001-ledger-core/quickstart.md` の手順（自動テスト・手動確認の1〜9）を実施し、SC-001（10分以内）と SC-002（30秒・1分以内）を含めて結果を確認する。手順と実装に食い違いがあれば quickstart.md を更新する
 
 ---

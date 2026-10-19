@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { EntityCreate } from "@trebuchet/schema";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
@@ -17,10 +17,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { entityToRestore } from "@/features/entities/EntitySwitcher";
 import { api, unwrap } from "@/lib/api";
 import { entitiesQuery, queryKeys } from "@/lib/queries";
 
 export const Route = createFileRoute("/")({
+  // タブの最初の表示なら、前回の事業体の画面を開く（US6）
+  beforeLoad: async ({ context }) => {
+    const entityId = await entityToRestore(context.queryClient);
+    if (entityId !== undefined) {
+      throw redirect({ to: "/e/$entityId", params: { entityId }, replace: true });
+    }
+  },
   component: HomePage,
 });
 
@@ -145,9 +153,7 @@ function EntityCreateForm() {
             <Label htmlFor="entity-kind">種別</Label>
             <NativeSelect id="entity-kind" {...form.register("kind")}>
               <option value="individual">個人</option>
-              <option value="corporation" disabled>
-                法人（未対応）
-              </option>
+              <option value="corporation">法人（科目は個人用の初期セット）</option>
             </NativeSelect>
           </div>
           <div className="grid grid-cols-2 gap-4">

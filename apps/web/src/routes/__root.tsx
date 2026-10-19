@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
+import { EntitySwitcher } from "@/features/entities/EntitySwitcher";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: RootLayout,
@@ -13,7 +14,9 @@ function RootLayout() {
           <Link to="/" className="font-semibold">
             Trebuchet
           </Link>
-          <div id="header-slot" className="flex flex-1 items-center gap-4" />
+          <div id="header-slot" className="flex flex-1 items-center gap-4">
+            <EntitySwitcher />
+          </div>
         </div>
       </header>
       <Outlet />
