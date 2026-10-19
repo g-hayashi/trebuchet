@@ -1,4 +1,4 @@
-import type { ReportSection } from "@trebuchet/schema";
+import type { AccountCategory, ReportSection } from "@trebuchet/schema";
 
 export const SECTION_LABELS: Record<ReportSection, string> = {
   BS_ASSET: "資産",
@@ -8,6 +8,23 @@ export const SECTION_LABELS: Record<ReportSection, string> = {
   PL_COGS: "売上原価",
   PL_EXPENSE: "経費",
   PL_OTHER: "その他の損益",
+};
+
+export const CATEGORY_LABELS: Record<AccountCategory, string> = {
+  asset: "資産",
+  liability: "負債",
+  equity: "純資産",
+  revenue: "収益",
+  expense: "費用",
+};
+
+/** 科目の区分ごとに選べる決算書の区分（packages/domain の ALLOWED_SECTIONS と同じ） */
+export const ALLOWED_SECTIONS: Record<AccountCategory, readonly ReportSection[]> = {
+  asset: ["BS_ASSET"],
+  liability: ["BS_LIABILITY"],
+  equity: ["BS_EQUITY", "BS_ASSET"],
+  revenue: ["PL_SALES", "PL_OTHER"],
+  expense: ["PL_COGS", "PL_EXPENSE", "PL_OTHER"],
 };
 
 export type AccountGroup<A> = { section: ReportSection; label: string; accounts: A[] };

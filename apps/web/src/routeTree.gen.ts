@@ -17,6 +17,8 @@ import { Route as EEntityIdPartnersRouteImport } from './routes/e/$entityId/part
 import { Route as EEntityIdTagsRouteImport } from './routes/e/$entityId/tags'
 import { Route as EEntityIdTaxSettingsRouteImport } from './routes/e/$entityId/tax-settings'
 import { Route as EEntityIdImportsIndexRouteImport } from './routes/e/$entityId/imports/index'
+import { Route as EEntityIdImportsBatchIdRouteImport } from './routes/e/$entityId/imports/$batchId'
+import { Route as EEntityIdImportsNewRouteImport } from './routes/e/$entityId/imports/new'
 import { Route as EEntityIdJournalsIndexRouteImport } from './routes/e/$entityId/journals/index'
 import { Route as EEntityIdJournalsJournalIdRouteImport } from './routes/e/$entityId/journals/$journalId'
 import { Route as EEntityIdJournalsNewRouteImport } from './routes/e/$entityId/journals/new'
@@ -67,6 +69,16 @@ const EEntityIdTaxSettingsRoute = EEntityIdTaxSettingsRouteImport.update({
 const EEntityIdImportsIndexRoute = EEntityIdImportsIndexRouteImport.update({
   id: '/imports/',
   path: '/imports/',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdImportsBatchIdRoute = EEntityIdImportsBatchIdRouteImport.update({
+  id: '/imports/$batchId',
+  path: '/imports/$batchId',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdImportsNewRoute = EEntityIdImportsNewRouteImport.update({
+  id: '/imports/new',
+  path: '/imports/new',
   getParentRoute: () => EEntityIdRouteRoute,
 } as any)
 const EEntityIdJournalsIndexRoute = EEntityIdJournalsIndexRouteImport.update({
@@ -140,6 +152,8 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
   '/e/$entityId/': typeof EEntityIdIndexRoute
+  '/e/$entityId/imports/$batchId': typeof EEntityIdImportsBatchIdRoute
+  '/e/$entityId/imports/new': typeof EEntityIdImportsNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -160,6 +174,8 @@ export interface FileRoutesByTo {
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
   '/e/$entityId': typeof EEntityIdIndexRoute
+  '/e/$entityId/imports/$batchId': typeof EEntityIdImportsBatchIdRoute
+  '/e/$entityId/imports/new': typeof EEntityIdImportsNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -182,6 +198,8 @@ export interface FileRoutesById {
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
   '/e/$entityId/': typeof EEntityIdIndexRoute
+  '/e/$entityId/imports/$batchId': typeof EEntityIdImportsBatchIdRoute
+  '/e/$entityId/imports/new': typeof EEntityIdImportsNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -205,6 +223,8 @@ export interface FileRouteTypes {
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
     | '/e/$entityId/'
+    | '/e/$entityId/imports/$batchId'
+    | '/e/$entityId/imports/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -225,6 +245,8 @@ export interface FileRouteTypes {
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
     | '/e/$entityId'
+    | '/e/$entityId/imports/$batchId'
+    | '/e/$entityId/imports/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -246,6 +268,8 @@ export interface FileRouteTypes {
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
     | '/e/$entityId/'
+    | '/e/$entityId/imports/$batchId'
+    | '/e/$entityId/imports/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -321,6 +345,20 @@ declare module '@tanstack/react-router' {
       path: '/imports'
       fullPath: '/e/$entityId/imports/'
       preLoaderRoute: typeof EEntityIdImportsIndexRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/imports/$batchId': {
+      id: '/e/$entityId/imports/$batchId'
+      path: '/imports/$batchId'
+      fullPath: '/e/$entityId/imports/$batchId'
+      preLoaderRoute: typeof EEntityIdImportsBatchIdRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/imports/new': {
+      id: '/e/$entityId/imports/new'
+      path: '/imports/new'
+      fullPath: '/e/$entityId/imports/new'
+      preLoaderRoute: typeof EEntityIdImportsNewRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
     '/e/$entityId/journals/': {
@@ -409,6 +447,8 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdTagsRoute: typeof EEntityIdTagsRoute
   EEntityIdTaxSettingsRoute: typeof EEntityIdTaxSettingsRoute
   EEntityIdIndexRoute: typeof EEntityIdIndexRoute
+  EEntityIdImportsBatchIdRoute: typeof EEntityIdImportsBatchIdRoute
+  EEntityIdImportsNewRoute: typeof EEntityIdImportsNewRoute
   EEntityIdJournalsJournalIdRoute: typeof EEntityIdJournalsJournalIdRoute
   EEntityIdJournalsNewRoute: typeof EEntityIdJournalsNewRoute
   EEntityIdReportsBalanceSheetRoute: typeof EEntityIdReportsBalanceSheetRoute
@@ -429,6 +469,8 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdTagsRoute: EEntityIdTagsRoute,
   EEntityIdTaxSettingsRoute: EEntityIdTaxSettingsRoute,
   EEntityIdIndexRoute: EEntityIdIndexRoute,
+  EEntityIdImportsBatchIdRoute: EEntityIdImportsBatchIdRoute,
+  EEntityIdImportsNewRoute: EEntityIdImportsNewRoute,
   EEntityIdJournalsJournalIdRoute: EEntityIdJournalsJournalIdRoute,
   EEntityIdJournalsNewRoute: EEntityIdJournalsNewRoute,
   EEntityIdReportsBalanceSheetRoute: EEntityIdReportsBalanceSheetRoute,

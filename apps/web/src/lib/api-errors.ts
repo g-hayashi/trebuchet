@@ -4,6 +4,8 @@ import { formatYen } from "./format";
 export type ErrorDescription = { message: string; details: string[] };
 
 const asNumber = (v: unknown) => (typeof v === "number" ? v : undefined);
+const asStrings = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : [];
 
 function validationIssues(details: Record<string, unknown> | undefined): string[] {
   const issues = details?.issues;
@@ -61,6 +63,44 @@ export function describeError(error: unknown): ErrorDescription {
         ? { message: "入力が正しくありません。", details: issues }
         : { message: error.message, details: [] };
     }
+    case "IMPORT_UNKNOWN_FORMAT": {
+      const missing = asStrings(error.details?.missingColumns);
+      return {
+        message:
+          error.details?.expected === "ledger"
+            ? "freee の総勘定元帳として読み取れませんでした。freee から書き出した総勘定元帳の CSV を選んでください。"
+            : "freee の仕訳帳として読み取れませんでした。freee から書き出した仕訳帳の CSV を選んでください。",
+        details: missing.length > 0 ? [`見つからない列: ${missing.join("、")}`] : [],
+      };
+    }
+    case "IMPORT_WRONG_KIND":
+      return {
+        message:
+          "ファイルの種類が違います。仕訳帳と総勘定元帳を取り違えていないか確認してください。",
+        details: [],
+      };
+    case "IMPORT_FILE_CHANGED":
+      return {
+        message: "プレビューの後にファイルの内容が変わりました。ファイルを選び直してください。",
+        details: [],
+      };
+    case "IMPORT_PLAN_CHANGED":
+      return {
+        message:
+          "プレビューの後に帳簿が変わったため、プレビューを作り直しました。内容を確かめてから、もう一度取り込んでください。",
+        details: [],
+      };
+    case "IMPORT_NOT_READY": {
+      const unmapped = asStrings(error.details?.unmapped);
+      return {
+        message: "まだ取り込めません。対応表と、新しく取り込む仕訳を確かめてください。",
+        details: unmapped.length > 0 ? [`対応が未定: ${unmapped.join("、")}`] : [],
+      };
+    }
+    case "IMPORT_BATCH_NOT_FOUND":
+      return { message: "取込が見つかりません。", details: [] };
+    case "FILE_TOO_LARGE":
+      return { message: "ファイルが大きすぎます（5 MB まで）。", details: [] };
     case "INTERNAL":
       return {
         message: "サーバーでエラーが発生しました。時間をおいて再度お試しください。",

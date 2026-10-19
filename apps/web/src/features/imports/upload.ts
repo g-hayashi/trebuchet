@@ -7,15 +7,22 @@ export type UploadForm = { file: File } & Record<string, string | File>;
 type FormEndpoint = { $post(args: { form: UploadForm }): Promise<Response> };
 
 /**
- * ファイルを hc の `form` で `POST` し、JSON の応答を返す。失敗なら `ApiError` を投げる（`unwrap` と同じ）。
+ * サーバーのルートの型（hc<AppType>）に頼らずに、hc のエンドポイントを得る。
  * path は `/api/...` の形の完全なパス（パラメーターは埋めた後）。
- * サーバーのルートの型に頼らないため、最後の区切りの手前を hc の基点にし、最後の区切りの `$post` を呼ぶ
+ * 最後の区切りの手前を hc の基点にし、最後の区切りをエンドポイントにする（`$get`・`$put`・`$post` を呼ぶ）
  */
-export async function uploadForm<T = unknown>(path: string, form: UploadForm): Promise<T> {
+export function untypedEndpoint<E>(path: string): E {
   const slash = path.lastIndexOf("/");
   const segment = path.slice(slash + 1);
   if (slash < 0 || segment === "") throw new Error(`送り先のパスが正しくありません: ${path}`);
-  const client = hc(path.slice(0, slash)) as unknown as { [segment: string]: FormEndpoint };
-  const endpoint = client[segment] as FormEndpoint;
-  return unwrap(await endpoint.$post({ form }));
+  const client = hc(path.slice(0, slash)) as unknown as { [segment: string]: E };
+  return client[segment] as E;
+}
+
+/**
+ * ファイルを hc の `form` で `POST` し、JSON の応答を返す。失敗なら `ApiError` を投げる（`unwrap` と同じ）。
+ * path は `/api/...` の形の完全なパス（パラメーターは埋めた後）
+ */
+export async function uploadForm<T = unknown>(path: string, form: UploadForm): Promise<T> {
+  return unwrap(await untypedEndpoint<FormEndpoint>(path).$post({ form }));
 }

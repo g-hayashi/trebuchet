@@ -1,6 +1,7 @@
-import type { Result } from "../../types.ts";
+import { isValidDate } from "../../dates.ts";
+import type { Result, Side } from "../../types.ts";
 import { decodeText, parseCsv, type TextEncodingName } from "../csv.ts";
-import { JOURNAL_COLUMN_NAMES, LEDGER_COLUMN_NAMES } from "./columns.ts";
+import { JOURNAL_COLUMN_NAMES, JOURNAL_COLUMNS, LEDGER_COLUMN_NAMES } from "./columns.ts";
 
 export type FreeeFileKind = "journal" | "ledger";
 
@@ -77,4 +78,198 @@ function toRecords(header: readonly string[], data: readonly string[][]): Record
     records.push(record);
   }
   return records;
+}
+
+// ---- 仕訳帳の仕訳（research R4） ----
+
+/** freee の仕訳の1行（借方または貸方の一方）。名前は normalizeName 済み、摘要は元の文字のまま */
+export type FreeeJournalLine = {
+  side: Side;
+  accountName: string;
+  subAccountName?: string | undefined;
+  amount: number;
+  taxName: string;
+  taxAmount: number;
+  partnerName?: string | undefined;
+  /** メモタグ。区切り文字はなく、列の値全体を1つのタグとする（T005） */
+  tagNames: string[];
+  description: string;
+};
+
+/** freee の仕訳（仕訳ID でまとめたもの） */
+export type FreeeJournal = {
+  freeeJournalId: string;
+  freeeJournalNo: string | null;
+  /** YYYY-MM-DD */
+  date: string;
+  /** 決算整理仕訳 = 1 */
+  adjustment: boolean;
+  /** 登録した方法 */
+  entryMethod: string;
+  /** 借方・貸方の備考（元の文字のまま、重複を除いて改行でつなぐ） */
+  memo?: string | undefined;
+  /** 仕訳行番号の順に、各行の借方 → 貸方 */
+  lines: FreeeJournalLine[];
+};
+
+export type FreeeGroupRejectCode = "MISSING_FIELD" | "LINE_COUNT_MISMATCH" | "INVALID_AMOUNT";
+
+/** まとめる段階で取込不可になった仕訳。date は読めれば YYYY-MM-DD、読めなければ元の文字 */
+export type RejectedFreeeJournal = {
+  freeeJournalId: string;
+  freeeJournalNo: string | null;
+  date: string;
+  adjustment: boolean;
+  code: FreeeGroupRejectCode;
+};
+
+export type GroupedFreeeJournals = {
+  journals: FreeeJournal[];
+  rejected: RejectedFreeeJournal[];
+};
+
+const C = JOURNAL_COLUMNS;
+const DATE_PATTERN = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/;
+const INTEGER_PATTERN = /^\d+$/;
+
+/** YYYY/MM/DD・YYYY-M-D を YYYY-MM-DD にする。存在しない日付は undefined */
+function parseFreeeDate(value: string): string | undefined {
+  const m = DATE_PATTERN.exec(value.trim());
+  if (m === null) return undefined;
+  const date = `${m[1]}-${m[2]?.padStart(2, "0")}-${m[3]?.padStart(2, "0")}`;
+  return isValidDate(date) ? date : undefined;
+}
+
+/** 0 以上の整数。空・小数・マイナス・数字以外は undefined */
+function parseNonNegativeInt(value: string): number | undefined {
+  const v = value.trim();
+  if (!INTEGER_PATTERN.test(v)) return undefined;
+  const n = Number(v);
+  return Number.isSafeInteger(n) ? n : undefined;
+}
+
+const optionalName = (value: string | undefined): string | undefined => {
+  const name = normalizeName(value ?? "");
+  return name === "" ? undefined : name;
+};
+
+type LineResult = { ok: true; line: FreeeJournalLine } | { ok: false; code: FreeeGroupRejectCode };
+
+function readSide(
+  row: Record<string, string>,
+  side: Side,
+  description: string,
+): LineResult | undefined {
+  const cols = C[side];
+  const accountName = normalizeName(row[cols.account] ?? "");
+  if (accountName === "") return undefined;
+  const amount = parseNonNegativeInt(row[cols.amount] ?? "");
+  if (amount === undefined || amount === 0) return { ok: false, code: "INVALID_AMOUNT" };
+  const taxAmountText = (row[cols.taxAmount] ?? "").trim();
+  const taxAmount = taxAmountText === "" ? 0 : parseNonNegativeInt(taxAmountText);
+  if (taxAmount === undefined) return { ok: false, code: "INVALID_AMOUNT" };
+  const taxName = normalizeName(row[cols.taxCategory] ?? "");
+  if (taxName === "") return { ok: false, code: "MISSING_FIELD" };
+  const tag = optionalName(row[cols.memo]);
+  return {
+    ok: true,
+    line: {
+      side,
+      accountName,
+      subAccountName: optionalName(row[cols.subAccount]),
+      amount,
+      taxName,
+      taxAmount,
+      partnerName: optionalName(row[cols.partner]),
+      tagNames: tag === undefined ? [] : [tag],
+      description,
+    },
+  };
+}
+
+/** 取込不可の理由の優先順（複数あれば先のもの） */
+const REJECT_ORDER: readonly FreeeGroupRejectCode[] = [
+  "MISSING_FIELD",
+  "LINE_COUNT_MISMATCH",
+  "INVALID_AMOUNT",
+];
+
+/**
+ * 仕訳帳の行を仕訳ID でまとめ、freee の仕訳にする（FR-002, research R4）。
+ * 仕訳は初出の順、行は仕訳行番号の順で、各行を借方 → 貸方の順に仕訳行にする。勘定科目が空の側は行にしない。
+ * 欠けた値・行数の不一致・不正な金額の仕訳は rejected に入れる（仕訳ID のない行は行ごとに仮の ID を付ける）
+ */
+export function groupFreeeJournals(file: FreeeFile): GroupedFreeeJournals {
+  const groups = new Map<string, Record<string, string>[]>();
+  file.rows.forEach((row, index) => {
+    const id = (row[C.journalId] ?? "").trim();
+    const key = id === "" ? `#${index + 1}` : id;
+    const rows = groups.get(key);
+    if (rows === undefined) groups.set(key, [row]);
+    else rows.push(row);
+  });
+
+  const journals: FreeeJournal[] = [];
+  const rejected: RejectedFreeeJournal[] = [];
+  for (const [id, rows] of groups) {
+    const result = groupOne(id, rows);
+    if ("code" in result) rejected.push(result);
+    else journals.push(result);
+  }
+  return { journals, rejected };
+}
+
+function groupOne(id: string, rows: Record<string, string>[]): FreeeJournal | RejectedFreeeJournal {
+  const first = rows[0] ?? {};
+  const rawDate = (first[C.date] ?? "").trim();
+  const date = parseFreeeDate(rawDate);
+  const journalNo = (first[C.journalNo] ?? "").trim();
+  const header = {
+    freeeJournalId: id,
+    freeeJournalNo: journalNo === "" ? null : journalNo,
+    date: date ?? rawDate,
+    adjustment: (first[C.adjustment] ?? "").trim() === "1",
+  };
+  const codes = new Set<FreeeGroupRejectCode>();
+
+  if (id.startsWith("#") || date === undefined) codes.add("MISSING_FIELD");
+  if (rows.some((r) => parseFreeeDate(r[C.date] ?? "") !== date)) codes.add("MISSING_FIELD");
+
+  const lineCount = parseNonNegativeInt(first[C.lineCount] ?? "");
+  const numbered = rows.map((row) => ({ row, no: parseNonNegativeInt(row[C.lineNo] ?? "") }));
+  if (lineCount === undefined || numbered.some((n) => n.no === undefined)) {
+    codes.add("MISSING_FIELD");
+  } else {
+    const nos = numbered.map((n) => n.no ?? 0).sort((a, b) => a - b);
+    if (rows.length !== lineCount || nos.some((no, i) => no !== i + 1)) {
+      codes.add("LINE_COUNT_MISMATCH");
+    }
+  }
+
+  const ordered = [...numbered].sort((a, b) => (a.no ?? 0) - (b.no ?? 0));
+  const lines: FreeeJournalLine[] = [];
+  const remarks: string[] = [];
+  for (const { row } of ordered) {
+    const description = row[C.description] ?? "";
+    for (const side of ["debit", "credit"] as const) {
+      const r = (row[C[side].remarks] ?? "").trim();
+      if (r !== "" && !remarks.includes(r)) remarks.push(r);
+      const result = readSide(row, side, description);
+      if (result === undefined) continue;
+      if (result.ok) lines.push(result.line);
+      else codes.add(result.code);
+    }
+  }
+
+  const code = REJECT_ORDER.find((c) => codes.has(c));
+  if (code !== undefined) return { ...header, code };
+  return {
+    freeeJournalId: id,
+    freeeJournalNo: header.freeeJournalNo,
+    date: header.date,
+    adjustment: header.adjustment,
+    entryMethod: (first[C.entryMethod] ?? "").trim(),
+    memo: remarks.length === 0 ? undefined : remarks.join("\n"),
+    lines,
+  };
 }

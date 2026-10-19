@@ -1,20 +1,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  AccountCategory,
-  AccountCreate,
-  AccountPatch,
-  type ReportSection,
-  SubAccountCreate,
-} from "@trebuchet/schema";
+import { AccountPatch, SubAccountCreate } from "@trebuchet/schema";
 import { Fragment, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
-import { Input, NativeSelect } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Table,
@@ -24,7 +18,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { groupAccountsBySection, SECTION_LABELS } from "@/lib/accounts";
+import { AccountCreateForm } from "@/features/accounts/AccountCreateForm";
+import { CATEGORY_LABELS, groupAccountsBySection } from "@/lib/accounts";
 import { api, unwrap } from "@/lib/api";
 import { type Account, accountsQuery, queryKeys, subAccountsQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -34,23 +29,6 @@ export const Route = createFileRoute("/e/$entityId/accounts")({
 });
 
 const accountApi = api.api.entities[":entityId"].accounts;
-
-const CATEGORY_LABELS: Record<AccountCategory, string> = {
-  asset: "資産",
-  liability: "負債",
-  equity: "純資産",
-  revenue: "収益",
-  expense: "費用",
-};
-
-/** 科目の区分ごとに選べる決算書の区分（packages/domain の ALLOWED_SECTIONS と同じ） */
-const ALLOWED_SECTIONS: Record<AccountCategory, readonly ReportSection[]> = {
-  asset: ["BS_ASSET"],
-  liability: ["BS_LIABILITY"],
-  equity: ["BS_EQUITY", "BS_ASSET"],
-  revenue: ["PL_SALES", "PL_OTHER"],
-  expense: ["PL_COGS", "PL_EXPENSE", "PL_OTHER"],
-};
 
 function AccountsPage() {
   const { entityId } = Route.useParams();
@@ -102,97 +80,14 @@ function AccountsPage() {
   );
 }
 
-type AccountCreateInput = z.input<typeof AccountCreate>;
-
 function AddAccountForm({ entityId }: { entityId: string }) {
-  const queryClient = useQueryClient();
-  const form = useForm<AccountCreateInput, unknown, AccountCreate>({
-    resolver: zodResolver(AccountCreate),
-    defaultValues: { name: "", category: "expense", reportSection: "PL_EXPENSE" },
-  });
-  const { errors } = form.formState;
-  const category = form.watch("category");
-
-  const create = useMutation({
-    mutationFn: async (input: AccountCreate) =>
-      (await unwrap(await accountApi.$post({ param: { entityId }, json: input }))).account,
-    onSuccess: async () => {
-      form.reset({ name: "", category, reportSection: form.getValues("reportSection") });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(entityId) });
-    },
-  });
-
   return (
     <Card>
       <CardHeader>
         <CardTitle>科目を追加</CardTitle>
       </CardHeader>
       <CardContent>
-        <form
-          noValidate
-          className="grid gap-4 md:grid-cols-[2fr_1fr_1fr_6rem_auto] md:items-start"
-          onSubmit={form.handleSubmit((values) => create.mutate(values))}
-        >
-          <div className="grid gap-2">
-            <Label htmlFor="account-name">名称</Label>
-            <Input
-              id="account-name"
-              autoComplete="off"
-              aria-invalid={errors.name ? true : undefined}
-              aria-describedby="account-name-error"
-              {...form.register("name")}
-            />
-            <FieldError id="account-name-error" message={errors.name?.message} />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="account-category">区分</Label>
-            <NativeSelect
-              id="account-category"
-              {...form.register("category", {
-                onChange: (e: { target: { value: string } }) => {
-                  const parsed = AccountCategory.safeParse(e.target.value);
-                  const first = parsed.success ? ALLOWED_SECTIONS[parsed.data][0] : undefined;
-                  if (first) form.setValue("reportSection", first);
-                },
-              })}
-            >
-              {AccountCategory.options.map((c) => (
-                <option key={c} value={c}>
-                  {CATEGORY_LABELS[c]}
-                </option>
-              ))}
-            </NativeSelect>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="account-section">決算書の区分</Label>
-            {/* 区分を変えると選択肢が入れ替わるため、作り直して選んだ値を表示に反映する */}
-            <NativeSelect key={category} id="account-section" {...form.register("reportSection")}>
-              {ALLOWED_SECTIONS[category].map((s) => (
-                <option key={s} value={s}>
-                  {SECTION_LABELS[s]}
-                </option>
-              ))}
-            </NativeSelect>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="account-line">欄番号</Label>
-            <Input
-              id="account-line"
-              inputMode="numeric"
-              placeholder="任意"
-              aria-invalid={errors.reportLine ? true : undefined}
-              aria-describedby="account-line-error"
-              {...form.register("reportLine", {
-                setValueAs: (v: unknown) => (v === "" || v === undefined ? undefined : Number(v)),
-              })}
-            />
-            <FieldError id="account-line-error" message={errors.reportLine?.message} />
-          </div>
-          <Button type="submit" className="md:mt-6" disabled={create.isPending}>
-            追加する
-          </Button>
-          <ApiErrorMessage error={create.error} className="md:col-span-5" />
-        </form>
+        <AccountCreateForm entityId={entityId} submitLabel="追加する" layout="inline" />
       </CardContent>
     </Card>
   );

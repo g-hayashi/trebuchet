@@ -21,7 +21,10 @@ const entity = {
 } as const;
 
 beforeEach(() => {
-  mockApi({ "GET /api/entities": () => ok({ entities: [entity] }) });
+  mockApi({
+    "GET /api/entities": () => ok({ entities: [entity] }),
+    "GET /api/entities/e1/imports": () => ok({ batches: [] }),
+  });
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -75,7 +78,10 @@ describe("事業体のメニューの「取込」（T017）", () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/e/e1/imports"));
     expect(await screen.findByRole("heading", { level: 1, name: "取込" })).toBeInTheDocument();
-    expect(screen.getByLabelText("仕訳帳のファイル")).toHaveAttribute("type", "file");
+    expect(screen.getByRole("link", { name: "新しい取込" })).toHaveAttribute(
+      "href",
+      "/e/e1/imports/new",
+    );
     expect(within(nav).getByRole("link", { name: "取込" })).toHaveAttribute("aria-current", "page");
   });
 });

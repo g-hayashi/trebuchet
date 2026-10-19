@@ -31,6 +31,13 @@ export const queryKeys = {
     ["entities", entityId, "journals", journalId] as const,
   journalHistory: (entityId: string, journalId: string) =>
     ["entities", entityId, "journals", journalId, "history"] as const,
+  /** freee からの取込（002）。プレビューは帳簿を変えないが、ファイルと指定ごとに作り直す */
+  imports: (entityId: string) => ["entities", entityId, "imports"] as const,
+  importBatch: (entityId: string, batchId: string) =>
+    ["entities", entityId, "imports", batchId] as const,
+  importPreview: (entityId: string, fileKey: number, options: object) =>
+    ["entities", entityId, "import-preview", fileKey, options] as const,
+  importMappings: (entityId: string) => ["entities", entityId, "import-mappings"] as const,
   /** 帳票（US4）。仕訳を変更したら前方一致で無効化する */
   reports: (entityId: string) => ["entities", entityId, "reports"] as const,
 };
