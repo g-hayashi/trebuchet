@@ -1,4 +1,5 @@
 import type { ImportPreview } from "@trebuchet/schema";
+import { type FreeeOpeningProposal, proposeOpeningBalances } from "../import/freee/opening.ts";
 import {
   type ImportPlan,
   type PlanItem,
@@ -9,6 +10,7 @@ import {
   type FreeeFile,
   groupFreeeJournals,
   normalizeName,
+  parseFreeeLedger,
   readFreeeFile,
 } from "../import/freee/read.ts";
 import type { AccountMapping, ImportBatch, ImportRef, TaxMapping } from "../import/types.ts";
@@ -19,7 +21,9 @@ import type {
   ImportUnitOfWork,
   LedgerRepository,
   MasterRepository,
+  ReportRepository,
 } from "../ports.ts";
+import { computeBalances } from "../reports/balances.ts";
 import { FREEE_UNMAPPABLE_ACCOUNTS } from "../seed/freee-aliases.ts";
 import {
   type DomainError,
@@ -394,5 +398,82 @@ export function saveImportMappings(
     if (accounts.value.length > 0) tx.imports.upsertAccountMappings(accounts.value, now);
     if (taxes.value.length > 0) tx.imports.upsertTaxMappings(taxes.value, now);
     return ok({ accounts: tx.imports.listAccountMappings(), taxes: tx.imports.listTaxMappings() });
+  });
+}
+
+// 期首残高の移行（US2, contracts/domain-module.md のユースケース）
+
+export type FreeeOpeningInput = { bytes: Uint8Array; fiscalYear: number };
+
+/**
+ * freee の総勘定元帳から、年度の期首残高の案を作る（FR-018〜020a）。帳簿は変えない（読むだけ）。
+ * 登録済みの期首残高と、前年度の仕訳があれば前年度の期末からの繰越（carryForward）を比べる。
+ * 保存は 001 の期首残高の保存（replaceOpeningBalances）で行う
+ */
+export function proposeFreeeOpening(
+  deps: { uow: ImportUnitOfWork; reports: ReportRepository },
+  input: FreeeOpeningInput,
+): Result<FreeeOpeningProposal> {
+  const read = readFreeeFile(input.bytes);
+  if (!read.ok) {
+    return err(
+      domainError("IMPORT_UNKNOWN_FORMAT", "freee の総勘定元帳として読めないファイルです", {
+        expected: "ledger",
+        missingColumns: read.error.missingColumns,
+      }),
+    );
+  }
+  if (read.value.kind !== "ledger") {
+    return err(
+      domainError("IMPORT_WRONG_KIND", "仕訳帳です。総勘定元帳のファイルを選んでください", {
+        expected: "ledger",
+        actual: read.value.kind,
+      }),
+    );
+  }
+  const ledger = parseFreeeLedger(read.value);
+  if (!ledger.ok) {
+    const { row, column, code } = ledger.error;
+    return err(
+      domainError("VALIDATION", `総勘定元帳の ${row} 行目の「${column}」を読めません`, {
+        row,
+        column,
+        code,
+      }),
+    );
+  }
+
+  return deps.uow.transaction((tx) => {
+    const periods = tx.masters.listFiscalPeriods();
+    const period = periods.find((p) => p.fiscalYear === input.fiscalYear);
+    if (period === undefined) {
+      return err(
+        domainError("OUT_OF_PERIOD", "会計期間が登録されていない年度です", {
+          fiscalYear: input.fiscalYear,
+        }),
+      );
+    }
+    const prior = periods.find((p) => p.fiscalYear === input.fiscalYear - 1);
+    const priorLines =
+      prior === undefined ? [] : deps.reports.linesInRange(prior.startDate, prior.endDate);
+    const priorBalances =
+      prior === undefined || priorLines.length === 0
+        ? undefined
+        : computeBalances({
+            opening: deps.reports.openingBalances(prior.fiscalYear),
+            lines: priorLines,
+            periodStart: prior.startDate,
+            to: prior.endDate,
+          });
+    return proposeOpeningBalances({
+      fiscalYear: input.fiscalYear,
+      ledger: ledger.value,
+      savedMappings: tx.imports.listAccountMappings(),
+      accounts: tx.masters.listAccounts(),
+      subAccounts: tx.masters.listSubAccounts(),
+      periods,
+      registered: tx.masters.listOpeningBalances(period.id),
+      priorBalances,
+    });
   });
 }

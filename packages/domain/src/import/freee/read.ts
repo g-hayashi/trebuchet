@@ -1,7 +1,12 @@
 import { isValidDate } from "../../dates.ts";
 import type { Result, Side } from "../../types.ts";
 import { decodeText, parseCsv, type TextEncodingName } from "../csv.ts";
-import { JOURNAL_COLUMN_NAMES, JOURNAL_COLUMNS, LEDGER_COLUMN_NAMES } from "./columns.ts";
+import {
+  JOURNAL_COLUMN_NAMES,
+  JOURNAL_COLUMNS,
+  LEDGER_COLUMN_NAMES,
+  LEDGER_COLUMNS,
+} from "./columns.ts";
 
 export type FreeeFileKind = "journal" | "ledger";
 
@@ -271,5 +276,133 @@ function groupOne(id: string, rows: Record<string, string>[]): FreeeJournal | Re
     entryMethod: (first[C.entryMethod] ?? "").trim(),
     memo: remarks.length === 0 ? undefined : remarks.join("\n"),
     lines,
+  };
+}
+
+// ---- 総勘定元帳（research R6, R7） ----
+
+/** 元帳の開始行の相手勘定科目（初年は「開始残高」） */
+export const LEDGER_OPENING_COUNTERPARTS: readonly string[] = ["前期繰越", "開始残高"];
+
+/** 元帳の取引の行（開始行を除く） */
+export type FreeeLedgerRow = {
+  /** YYYY-MM-DD */
+  date: string;
+  /** 決算整理仕訳 = 1 */
+  adjustment: boolean;
+  /** 相手勘定科目（normalizeName 済み。相手が複数なら「諸口」） */
+  counterpart: string;
+  journalNo: string | null;
+  /** 空欄は 0 */
+  debit: number;
+  credit: number;
+  /** 科目の通常の側を正とする符号つきの残高（freee の表記のまま） */
+  balance: number;
+};
+
+/** 元帳の科目ごとのブロック（data-model §3） */
+export type FreeeLedgerAccount = {
+  /** normalizeName 済みの勘定科目名 */
+  accountName: string;
+  /** 開始行（前期繰越・開始残高）の残高（符号つき）。年初付の決算振替の前の値。開始行がなければ 0 */
+  opening: number;
+  /** 開始行の取引日。開始行がなければ null */
+  openingDate: string | null;
+  /** 残高の動きから推定した、freee の科目の通常の側。動きのある行がなければ undefined */
+  normalSide?: Side | undefined;
+  /** 開始行を除く行（ファイルの順） */
+  rows: FreeeLedgerRow[];
+};
+
+export type FreeeLedgerError = {
+  code: "INVALID_AMOUNT" | "MISSING_FIELD";
+  /** データの行番号（ヘッダの次の行を 1 とする） */
+  row: number;
+  column: string;
+};
+
+const L = LEDGER_COLUMNS;
+const SIGNED_INTEGER_PATTERN = /^-?\d+$/;
+
+/** 符号つきの整数（3桁区切りのカンマは許す）。それ以外は undefined */
+function parseSignedInt(value: string): number | undefined {
+  const v = value.trim().replaceAll(",", "");
+  if (!SIGNED_INTEGER_PATTERN.test(v)) return undefined;
+  const n = Number(v);
+  return Number.isSafeInteger(n) ? n + 0 : undefined;
+}
+
+/** 前の残高からの増減と借方・貸方から、通常の側を推定する（決まらなければ undefined） */
+function inferNormalSide(opening: number, rows: readonly FreeeLedgerRow[]): Side | undefined {
+  let previous = opening;
+  for (const r of rows) {
+    const movement = r.debit - r.credit;
+    const delta = r.balance - previous;
+    previous = r.balance;
+    if (movement === 0) continue;
+    if (delta === movement) return "debit";
+    if (delta === -movement) return "credit";
+  }
+  return undefined;
+}
+
+/**
+ * 元帳の行を勘定科目ごとにまとめる（research R6, R7）。科目は初出の順、行はファイルの順。
+ * 相手勘定科目が「前期繰越」「開始残高」の行を開始行とし、その残高を opening にする（同じ科目に2つあれば先の行）。
+ * 金額・残高が整数でなければ INVALID_AMOUNT、勘定科目・日付が読めなければ MISSING_FIELD
+ */
+export function parseFreeeLedger(file: FreeeFile): Result<FreeeLedgerAccount[], FreeeLedgerError> {
+  const accounts = new Map<string, FreeeLedgerAccount>();
+  for (const [index, row] of file.rows.entries()) {
+    const fail = (code: FreeeLedgerError["code"], column: string) => ({
+      ok: false as const,
+      error: { code, row: index + 1, column },
+    });
+    const accountName = normalizeName(row[L.account] ?? "");
+    if (accountName === "") return fail("MISSING_FIELD", L.account);
+    const date = parseFreeeDate(row[L.date] ?? "");
+    if (date === undefined) return fail("MISSING_FIELD", L.date);
+    const balance = parseSignedInt(row[L.balance] ?? "");
+    if (balance === undefined) return fail("INVALID_AMOUNT", L.balance);
+
+    let account = accounts.get(accountName);
+    if (account === undefined) {
+      account = { accountName, opening: 0, openingDate: null, rows: [] };
+      accounts.set(accountName, account);
+    }
+    const counterpart = normalizeName(row[L.counterpart] ?? "");
+    if (LEDGER_OPENING_COUNTERPARTS.includes(counterpart)) {
+      if (account.openingDate === null) {
+        account.opening = balance;
+        account.openingDate = date;
+      }
+      continue;
+    }
+
+    const amounts: Record<Side, number> = { debit: 0, credit: 0 };
+    for (const side of ["debit", "credit"] as const) {
+      const text = (row[L[side]] ?? "").trim();
+      if (text === "") continue;
+      const amount = parseSignedInt(text);
+      if (amount === undefined || amount < 0) return fail("INVALID_AMOUNT", L[side]);
+      amounts[side] = amount;
+    }
+    const journalNo = (row[L.journalNo] ?? "").trim();
+    account.rows.push({
+      date,
+      adjustment: (row[L.adjustment] ?? "").trim() === "1",
+      counterpart,
+      journalNo: journalNo === "" ? null : journalNo,
+      debit: amounts.debit,
+      credit: amounts.credit,
+      balance,
+    });
+  }
+  return {
+    ok: true,
+    value: [...accounts.values()].map((a) => {
+      const normalSide = inferNormalSide(a.opening, a.rows);
+      return normalSide === undefined ? a : { ...a, normalSide };
+    }),
   };
 }

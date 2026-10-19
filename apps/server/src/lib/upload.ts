@@ -53,3 +53,50 @@ export async function readUpload(c: Context): Promise<Upload> {
 export function sha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
+
+type Issue = { path: readonly PropertyKey[]; message: string };
+
+/** Zod のスキーマの safeParse（server は zod に直接依存しないため、形で受け取る） */
+type SafeParser<T> = {
+  safeParse(
+    input: unknown,
+  ): { success: true; data: T } | { success: false; error: { issues: readonly Issue[] } };
+};
+
+function invalidField(name: string, issues: readonly Issue[]): DomainException {
+  return new DomainException({
+    code: "VALIDATION",
+    message: "入力が正しくありません",
+    details: {
+      issues: issues.map((i) => ({ path: [name, ...i.path.map(String)], message: i.message })),
+    },
+  });
+}
+
+/**
+ * multipart/form-data の JSON 文字列のフィールド（`options`・`expected`）を読み、スキーマで検証する。
+ * フィールドがなければ fallback（JSON 文字列）を使う。fallback もなければ、JSON でない・スキーマに合わない
+ * ときと同じく 400 VALIDATION（DomainException を投げる）。details.issues の path は [name, ...]
+ */
+export async function readJsonField<T>(
+  c: Context,
+  name: string,
+  schema: SafeParser<T>,
+  fallback?: string,
+): Promise<T> {
+  // parseBody の結果は要求ごとにキャッシュされる（readUpload と同じ本文を読む）
+  const body = await c.req.parseBody();
+  const raw = body[name] ?? fallback;
+  if (typeof raw !== "string") {
+    throw invalidField(name, [{ path: [], message: `${name} を JSON の文字列で指定してください` }]);
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw invalidField(name, [{ path: [], message: `${name} が JSON として読めません` }]);
+  }
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) throw invalidField(name, parsed.error.issues);
+  return parsed.data;
+}

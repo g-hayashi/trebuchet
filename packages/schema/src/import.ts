@@ -205,6 +205,8 @@ export const ImportPlanItem = z
     reason: ImportReasonCode.optional(),
     draft: ImportDraft.optional(),
     warnings: z.array(ImportWarningCode),
+    /** 判定の案内（OUT_OF_PERIOD のとき、会計期間の作成を促す文。research R19） */
+    message: z.string().optional(),
   })
   .refine(
     (v) =>

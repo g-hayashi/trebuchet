@@ -92,21 +92,23 @@ describe("POST /imports/freee/preview のアップロード（T016）", () => {
     expect(error.details).toMatchObject({ expected: "journal", actual: "ledger" });
   });
 
-  it("freee の仕訳帳 → 200 で判別の結果とファイルの SHA-256 を返す（暫定の応答）", async () => {
+  it("freee の仕訳帳 → 200 でプレビューにファイルの判別の結果と SHA-256 を返す", async () => {
     const bytes = fixture("journal-2025.csv");
     const journal = new File([bytes], "journal-2025.csv", { type: "text/csv" });
     const res = await preview(formWith(journal));
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      file: { name: string; sha256: string; kind: string; encoding: string; rowCount: number };
+      preview: {
+        file: { name: string; sha256: string; kind: string; encoding: string; rowCount: number };
+      };
     };
-    expect(body.file).toMatchObject({
+    expect(body.preview.file).toMatchObject({
       name: "journal-2025.csv",
       sha256: createHash("sha256").update(bytes).digest("hex"),
       kind: "journal",
       encoding: "utf-8",
     });
-    expect(body.file.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(body.file.rowCount).toBeGreaterThan(0);
+    expect(body.preview.file.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.preview.file.rowCount).toBeGreaterThan(0);
   });
 });

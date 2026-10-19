@@ -208,6 +208,20 @@ describe("ImportPlanItem", () => {
     expect(ImportPlanItem.safeParse(item("rejected", "ALREADY_IMPORTED")).success).toBe(false);
     expect(ImportPlanItem.safeParse(item("already", "USER_EXCLUDED")).success).toBe(false);
   });
+  it("OUT_OF_PERIOD の案内の message を保つ", () => {
+    const item = {
+      freeeJournalId: "1",
+      freeeJournalNo: null,
+      date: "2024-12-31",
+      decision: "rejected",
+      reason: "OUT_OF_PERIOD",
+      warnings: [],
+      message: "2024年度の会計期間を作成してください",
+    };
+    const parsed = ImportPlanItem.safeParse(item);
+    expect(parsed.success && parsed.data.message).toBe(item.message);
+    expect(ImportPlanItem.safeParse({ ...item, message: 1 }).success).toBe(false);
+  });
 });
 
 describe("ImportPreview", () => {

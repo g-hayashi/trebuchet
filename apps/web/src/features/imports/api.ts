@@ -7,6 +7,7 @@ import type {
   ImportMappingsPut,
   ImportOptions,
   ImportPreview,
+  OpeningProposal,
 } from "@trebuchet/schema";
 import { unwrap } from "@/lib/api";
 import { queryKeys } from "@/lib/queries";
@@ -84,4 +85,17 @@ export async function saveImportMappings(
   return unwrap(
     await untypedEndpoint<PutEndpoint>(`${entityPath(entityId)}/import-mappings`).$put({ json }),
   );
+}
+
+/** 期首残高の案（POST だが帳簿は変えない）。保存は 001 の PUT .../opening-balances に案の行を渡す */
+export async function proposeFreeeOpening(
+  entityId: string,
+  year: string,
+  file: File,
+): Promise<OpeningProposal> {
+  const body: { proposal: OpeningProposal } = await uploadForm(
+    `${entityPath(entityId)}/fiscal-periods/${encodeURIComponent(year)}/opening-balances/freee-proposal`,
+    { file },
+  );
+  return body.proposal;
 }

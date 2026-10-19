@@ -1,8 +1,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { OpeningBalanceInput, type OpeningBalancesPut, Side, Yen } from "@trebuchet/schema";
-import { useMemo } from "react";
+import {
+  OpeningBalanceInput,
+  type OpeningBalancesPut,
+  type OpeningProposal,
+  Side,
+  Yen,
+} from "@trebuchet/schema";
+import { useEffect, useMemo, useState } from "react";
 import {
   type Control,
   type UseFormReturn,
@@ -24,6 +30,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { proposeFreeeOpening } from "@/features/imports/api";
+import { FilePicker } from "@/features/imports/FilePicker";
+import { OpeningProposalPanel } from "@/features/imports/OpeningProposalPanel";
 import { groupAccountsBySection } from "@/lib/accounts";
 import { api, unwrap } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
@@ -60,6 +69,14 @@ const toFormRows = (data: OpeningBalancesData): FormInput["rows"] =>
     subAccountId: b.subAccountId ?? undefined,
     side: b.side,
     amount: b.amount,
+  }));
+
+const proposalToFormRows = (proposal: OpeningProposal): FormInput["rows"] =>
+  proposal.rows.map((r) => ({
+    accountId: r.accountId,
+    subAccountId: r.subAccountId ?? undefined,
+    side: r.side,
+    amount: r.amount,
   }));
 
 function OpeningBalancesPage() {
@@ -114,7 +131,23 @@ function OpeningBalancesForm({
     resolver: zodResolver(FormSchema),
     defaultValues: { rows: toFormRows(data) },
   });
-  const { fields, append, remove } = useFieldArray({ control: form.control, name: "rows" });
+  const { fields, append, remove, replace } = useFieldArray({
+    control: form.control,
+    name: "rows",
+  });
+  // ファイルを選び直すたびに FilePicker を作り直し、選んだファイル名の表示を消す
+  const [pickerKey, setPickerKey] = useState(0);
+  const propose = useMutation({
+    mutationFn: (file: File) => proposeFreeeOpening(entityId, year, file),
+  });
+  // 最後に読み込めた案。読み込み直しが失敗しても、入力欄に入れた案の未定の科目で保存を止め続ける
+  const [proposal, setProposal] = useState<OpeningProposal>();
+  const applyProposal = (p: OpeningProposal) => replace(proposalToFormRows(p));
+  const closeProposal = () => {
+    setProposal(undefined);
+    propose.reset();
+    setPickerKey((k) => k + 1);
+  };
 
   const save = useMutation({
     mutationFn: async (json: OpeningBalancesPut) =>
@@ -127,78 +160,135 @@ function OpeningBalancesForm({
     onSuccess: async (saved) => {
       queryClient.setQueryData(queryKeys.openingBalances(entityId, year), saved);
       form.reset({ rows: toFormRows(saved) });
+      closeProposal();
       await queryClient.invalidateQueries({ queryKey: queryKeys.openingBalances(entityId, year) });
     },
   });
 
+  const saveHints = [
+    ...(proposal && proposal.unmapped.length > 0
+      ? ["対応が決まっていない freee の科目があるため、保存できません。"]
+      : []),
+    ...(proposal && data.openingBalances.length > 0
+      ? ["保存すると、登録済みの期首残高を置き換えます。"]
+      : []),
+  ];
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          {data.fiscalPeriod.startDate} 時点の残高
-          {closed && <span className="ml-2 text-sm text-muted-foreground">（締め済み）</span>}
-        </CardTitle>
-        <CardDescription>
-          科目・補助科目ごとに金額を入力します。借方合計と貸方合計が一致すると保存できます。
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          noValidate
-          aria-label="期首残高"
-          onSubmit={form.handleSubmit((values) => save.mutate(values.rows))}
-        >
-          <fieldset disabled={closed || save.isPending} className="grid gap-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>勘定科目</TableHead>
-                  <TableHead>補助科目</TableHead>
-                  <TableHead className="w-28">貸借</TableHead>
-                  <TableHead className="w-44 text-right">金額（円）</TableHead>
-                  <TableHead className="w-0">
-                    <span className="sr-only">操作</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {fields.length === 0 && (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={5} className="text-muted-foreground">
-                      行がありません。「行を追加」から入力してください。
-                    </TableCell>
+    <div className="grid gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>freee の元帳から読み込む</CardTitle>
+          <CardDescription>
+            freee から書き出した{year}
+            年の総勘定元帳を選ぶと、各科目の期首の残高（前期繰越・開始残高）から案を作り、下の入力欄に入れます。保存するまで帳簿は変わりません。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <FilePicker
+            key={pickerKey}
+            label="総勘定元帳のファイル"
+            disabled={closed || propose.isPending || save.isPending}
+            onChange={(file) => {
+              // 選択を取り消したときは、案と入力欄をそのままにする
+              if (!file) return;
+              propose.mutate(file, {
+                onSuccess: (p) => {
+                  setProposal(p);
+                  applyProposal(p);
+                },
+              });
+            }}
+          />
+          {propose.isPending && <p className="text-sm text-muted-foreground">元帳を読み込み中…</p>}
+          <ApiErrorMessage error={propose.error} />
+          {proposal && (
+            <OpeningProposalPanel
+              entityId={entityId}
+              proposal={proposal}
+              accounts={accounts}
+              onApply={() => applyProposal(proposal)}
+              onDiscard={() => {
+                closeProposal();
+                form.reset({ rows: toFormRows(data) });
+              }}
+            />
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {data.fiscalPeriod.startDate} 時点の残高
+            {closed && <span className="ml-2 text-sm text-muted-foreground">（締め済み）</span>}
+          </CardTitle>
+          <CardDescription>
+            科目・補助科目ごとに金額を入力します。借方合計と貸方合計が一致すると保存できます。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            noValidate
+            aria-label="期首残高"
+            onSubmit={form.handleSubmit((values) => save.mutate(values.rows))}
+          >
+            <fieldset disabled={closed || save.isPending} className="grid gap-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>勘定科目</TableHead>
+                    <TableHead>補助科目</TableHead>
+                    <TableHead className="w-28">貸借</TableHead>
+                    <TableHead className="w-44 text-right">金額（円）</TableHead>
+                    <TableHead className="w-0">
+                      <span className="sr-only">操作</span>
+                    </TableHead>
                   </TableRow>
-                )}
-                {fields.map((field, index) => (
-                  <BalanceRow
-                    key={field.id}
-                    index={index}
-                    form={form}
-                    entityId={entityId}
-                    accounts={accounts}
-                    onRemove={() => remove(index)}
-                  />
-                ))}
-              </TableBody>
-              <Totals control={form.control} />
-            </Table>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => append({ accountId: "", side: "debit", amount: undefined })}
-              >
-                行を追加
-              </Button>
-              <SaveButton control={form.control} pending={save.isPending} />
-              <span role="status" className="text-sm">
-                {save.isSuccess && !form.formState.isDirty ? "保存しました。" : ""}
-              </span>
-            </div>
-            <ApiErrorMessage error={save.error} />
-          </fieldset>
-        </form>
-      </CardContent>
-    </Card>
+                </TableHeader>
+                <TableBody>
+                  {fields.length === 0 && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={5} className="text-muted-foreground">
+                        行がありません。「行を追加」から入力してください。
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {fields.map((field, index) => (
+                    <BalanceRow
+                      key={field.id}
+                      index={index}
+                      form={form}
+                      entityId={entityId}
+                      accounts={accounts}
+                      onRemove={() => remove(index)}
+                    />
+                  ))}
+                </TableBody>
+                <Totals control={form.control} />
+              </Table>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => append({ accountId: "", side: "debit", amount: undefined })}
+                >
+                  行を追加
+                </Button>
+                <SaveButton
+                  control={form.control}
+                  pending={save.isPending}
+                  blocked={proposal !== undefined && proposal.unmapped.length > 0}
+                  hints={saveHints}
+                />
+                <span role="status" className="text-sm">
+                  {save.isSuccess && !form.formState.isDirty ? "保存しました。" : ""}
+                </span>
+              </div>
+              <ApiErrorMessage error={save.error} />
+            </fieldset>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -220,6 +310,11 @@ function BalanceRow({
     ...subAccountsQuery(entityId, accountId),
     enabled: accountId !== "",
   });
+  // 補助科目の選択肢が後から届くため、届いたら選択中の値を選択欄に入れ直す（案・登録済みの値）
+  useEffect(() => {
+    if (!subAccounts.data) return;
+    form.setValue(`rows.${index}.subAccountId`, form.getValues(`rows.${index}.subAccountId`));
+  }, [subAccounts.data, form, index]);
   const groups = useMemo(
     () => groupAccountsBySection(accounts.filter((a) => a.isActive || a.id === accountId)),
     [accounts, accountId],
@@ -376,18 +471,30 @@ function Totals({ control }: { control: Control<FormInput, unknown, FormOutput> 
 function SaveButton({
   control,
   pending,
+  blocked,
+  hints,
 }: {
   control: Control<FormInput, unknown, FormOutput>;
   pending: boolean;
+  /** 貸借が一致していても保存できない（freee の案に対応が未定の科目がある） */
+  blocked: boolean;
+  hints: readonly string[];
 }) {
   const totals = useTotals(control);
   return (
     <>
-      <Button type="submit" disabled={!totals.balanced || pending} aria-describedby="ob-save-hint">
+      <Button
+        type="submit"
+        disabled={!totals.balanced || blocked || pending}
+        aria-describedby="ob-save-hint"
+      >
         {pending ? "保存中…" : "保存する"}
       </Button>
-      <span id="ob-save-hint" className="text-sm text-muted-foreground">
-        {totals.balanced ? "" : "差額が 0 円になると保存できます。"}
+      <span id="ob-save-hint" className="grid text-sm text-muted-foreground">
+        <span>{totals.balanced ? "" : "差額が 0 円になると保存できます。"}</span>
+        {hints.map((hint) => (
+          <span key={hint}>{hint}</span>
+        ))}
       </span>
     </>
   );
