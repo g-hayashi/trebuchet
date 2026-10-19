@@ -176,7 +176,7 @@ export type ValidJournal = {
 };
 
 export type JournalStatus = "active" | "voided";
-export type JournalSource = "manual";
+export type JournalSource = "manual" | "import_freee";
 
 export type JournalLine = ValidLine & { id: string };
 

@@ -16,6 +16,7 @@ import { Route as EEntityIdAccountsRouteImport } from './routes/e/$entityId/acco
 import { Route as EEntityIdPartnersRouteImport } from './routes/e/$entityId/partners'
 import { Route as EEntityIdTagsRouteImport } from './routes/e/$entityId/tags'
 import { Route as EEntityIdTaxSettingsRouteImport } from './routes/e/$entityId/tax-settings'
+import { Route as EEntityIdImportsIndexRouteImport } from './routes/e/$entityId/imports/index'
 import { Route as EEntityIdJournalsIndexRouteImport } from './routes/e/$entityId/journals/index'
 import { Route as EEntityIdJournalsJournalIdRouteImport } from './routes/e/$entityId/journals/$journalId'
 import { Route as EEntityIdJournalsNewRouteImport } from './routes/e/$entityId/journals/new'
@@ -61,6 +62,11 @@ const EEntityIdTagsRoute = EEntityIdTagsRouteImport.update({
 const EEntityIdTaxSettingsRoute = EEntityIdTaxSettingsRouteImport.update({
   id: '/tax-settings',
   path: '/tax-settings',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdImportsIndexRoute = EEntityIdImportsIndexRouteImport.update({
+  id: '/imports/',
+  path: '/imports/',
   getParentRoute: () => EEntityIdRouteRoute,
 } as any)
 const EEntityIdJournalsIndexRoute = EEntityIdJournalsIndexRouteImport.update({
@@ -141,6 +147,7 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/reports/journal-book': typeof EEntityIdReportsJournalBookRoute
   '/e/$entityId/reports/profit-and-loss': typeof EEntityIdReportsProfitAndLossRoute
   '/e/$entityId/reports/trial-balance': typeof EEntityIdReportsTrialBalanceRoute
+  '/e/$entityId/imports/': typeof EEntityIdImportsIndexRoute
   '/e/$entityId/journals/': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
@@ -160,6 +167,7 @@ export interface FileRoutesByTo {
   '/e/$entityId/reports/journal-book': typeof EEntityIdReportsJournalBookRoute
   '/e/$entityId/reports/profit-and-loss': typeof EEntityIdReportsProfitAndLossRoute
   '/e/$entityId/reports/trial-balance': typeof EEntityIdReportsTrialBalanceRoute
+  '/e/$entityId/imports': typeof EEntityIdImportsIndexRoute
   '/e/$entityId/journals': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods': typeof EEntityIdPeriodsIndexRoute
   '/e/$entityId/reports': typeof EEntityIdReportsIndexRoute
@@ -181,6 +189,7 @@ export interface FileRoutesById {
   '/e/$entityId/reports/journal-book': typeof EEntityIdReportsJournalBookRoute
   '/e/$entityId/reports/profit-and-loss': typeof EEntityIdReportsProfitAndLossRoute
   '/e/$entityId/reports/trial-balance': typeof EEntityIdReportsTrialBalanceRoute
+  '/e/$entityId/imports/': typeof EEntityIdImportsIndexRoute
   '/e/$entityId/journals/': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/reports/journal-book'
     | '/e/$entityId/reports/profit-and-loss'
     | '/e/$entityId/reports/trial-balance'
+    | '/e/$entityId/imports/'
     | '/e/$entityId/journals/'
     | '/e/$entityId/periods/'
     | '/e/$entityId/reports/'
@@ -222,6 +232,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/reports/journal-book'
     | '/e/$entityId/reports/profit-and-loss'
     | '/e/$entityId/reports/trial-balance'
+    | '/e/$entityId/imports'
     | '/e/$entityId/journals'
     | '/e/$entityId/periods'
     | '/e/$entityId/reports'
@@ -242,6 +253,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/reports/journal-book'
     | '/e/$entityId/reports/profit-and-loss'
     | '/e/$entityId/reports/trial-balance'
+    | '/e/$entityId/imports/'
     | '/e/$entityId/journals/'
     | '/e/$entityId/periods/'
     | '/e/$entityId/reports/'
@@ -302,6 +314,13 @@ declare module '@tanstack/react-router' {
       path: '/tax-settings'
       fullPath: '/e/$entityId/tax-settings'
       preLoaderRoute: typeof EEntityIdTaxSettingsRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/imports/': {
+      id: '/e/$entityId/imports/'
+      path: '/imports'
+      fullPath: '/e/$entityId/imports/'
+      preLoaderRoute: typeof EEntityIdImportsIndexRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
     '/e/$entityId/journals/': {
@@ -397,6 +416,7 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdReportsJournalBookRoute: typeof EEntityIdReportsJournalBookRoute
   EEntityIdReportsProfitAndLossRoute: typeof EEntityIdReportsProfitAndLossRoute
   EEntityIdReportsTrialBalanceRoute: typeof EEntityIdReportsTrialBalanceRoute
+  EEntityIdImportsIndexRoute: typeof EEntityIdImportsIndexRoute
   EEntityIdJournalsIndexRoute: typeof EEntityIdJournalsIndexRoute
   EEntityIdPeriodsIndexRoute: typeof EEntityIdPeriodsIndexRoute
   EEntityIdReportsIndexRoute: typeof EEntityIdReportsIndexRoute
@@ -416,6 +436,7 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdReportsJournalBookRoute: EEntityIdReportsJournalBookRoute,
   EEntityIdReportsProfitAndLossRoute: EEntityIdReportsProfitAndLossRoute,
   EEntityIdReportsTrialBalanceRoute: EEntityIdReportsTrialBalanceRoute,
+  EEntityIdImportsIndexRoute: EEntityIdImportsIndexRoute,
   EEntityIdJournalsIndexRoute: EEntityIdJournalsIndexRoute,
   EEntityIdPeriodsIndexRoute: EEntityIdPeriodsIndexRoute,
   EEntityIdReportsIndexRoute: EEntityIdReportsIndexRoute,

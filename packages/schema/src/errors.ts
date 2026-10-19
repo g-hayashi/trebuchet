@@ -15,6 +15,16 @@ export const ErrorCode = z.enum([
   "ENTITY_NOT_FOUND",
   "JOURNAL_NOT_FOUND",
   "JOURNAL_VOIDED",
+  // 002-freee-import（contracts/http-api.md）
+  "IMPORT_UNKNOWN_FORMAT",
+  "IMPORT_WRONG_KIND",
+  "IMPORT_FILE_CHANGED",
+  "IMPORT_PLAN_CHANGED",
+  "IMPORT_NOT_READY",
+  "IMPORT_BATCH_VOIDED",
+  "CORRECTED_JOURNALS",
+  "IMPORT_BATCH_NOT_FOUND",
+  "FILE_TOO_LARGE",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 

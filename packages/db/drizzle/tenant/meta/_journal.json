@@ -15,6 +15,13 @@
       "when": 1792329019862,
       "tag": "0001_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792374620985,
+      "tag": "0002_import",
+      "breakpoints": true
     }
   ]
 }

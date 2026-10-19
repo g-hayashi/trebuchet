@@ -15,6 +15,7 @@ import {
   JOURNAL_COLUMN_NAMES,
   JOURNAL_COLUMNS,
   LEDGER_COLUMN_NAMES,
+  LEDGER_COLUMNS,
 } from "../packages/domain/src/import/freee/columns.ts";
 
 const HEADER_SEARCH_ROWS = 5;
@@ -98,7 +99,48 @@ function verifyHeaders(path: string, kind: FileKind): boolean {
       `${column}: 値のある行 ${nonEmpty}、記号 ${kinds.length === 0 ? "なし" : kinds.join(", ")}`,
     );
   }
+  if (kind === KINDS.ledger) describeOpeningRows(rows.slice(found.index + 1), found.header);
   return missing.length === 0;
+}
+
+/** 元帳の開始行（相手勘定科目が前期繰越・開始残高）の形式だけを出す（値・金額は出さない） */
+function describeOpeningRows(rows: readonly string[][], header: readonly string[]): void {
+  const col = (name: string) => header.indexOf(name);
+  const [counter, date, adjusting, debit, credit, journalNo] = [
+    col(LEDGER_COLUMNS.counterpart),
+    col(LEDGER_COLUMNS.date),
+    col(LEDGER_COLUMNS.adjustment),
+    col(LEDGER_COLUMNS.debit),
+    col(LEDGER_COLUMNS.credit),
+    col(LEDGER_COLUMNS.journalNo),
+  ];
+  const opening = rows.filter((r) => ["前期繰越", "開始残高"].includes(r[counter] ?? ""));
+  const kinds = (at: number, f: (v: string) => string) =>
+    [...new Set(opening.map((r) => f(r[at] ?? "")))].join(" / ");
+  const shape = (v: string) =>
+    v === ""
+      ? "(空)"
+      : /^\d{4}-\d{2}-\d{2}$/.test(v)
+        ? "YYYY-MM-DD"
+        : /^\d{4}\/\d{2}\/\d{2}$/.test(v)
+          ? "YYYY/MM/DD"
+          : "(その他)";
+  const empty = (v: string) => (v === "" ? "(空)" : "(値あり)");
+  const counterKinds = [...new Set(opening.map((r) => r[counter]))].join(" / ");
+  const dates = [...new Set(opening.map((r) => r[date] ?? ""))];
+  console.log(`開始行: ${opening.length} 行（相手勘定科目: ${counterKinds}）`);
+  console.log(`開始行の取引日: 形式 ${kinds(date, shape)}、異なる値の数 ${dates.length}`);
+  const allDates = rows
+    .map((r) => r[date] ?? "")
+    .filter((v) => v !== "")
+    .sort();
+  console.log(
+    `開始行の取引日が全行の最小の取引日と同じ: ${dates.length === 1 && dates[0] === allDates[0]}`,
+  );
+  console.log(`開始行の決算整理仕訳: ${kinds(adjusting, (v) => (v === "" ? "(空)" : v))}`);
+  console.log(
+    `開始行の借方金額 ${kinds(debit, empty)}、貸方金額 ${kinds(credit, empty)}、仕訳番号 ${kinds(journalNo, empty)}`,
+  );
 }
 
 const { values } = parseArgs({

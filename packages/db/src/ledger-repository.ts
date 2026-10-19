@@ -74,7 +74,7 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
     const row: JournalRow = {
       ...header,
       status: "active",
-      source: "manual",
+      source: journal.source ?? "manual",
       version: 1,
       updatedAt: journal.createdAt,
     };
@@ -161,6 +161,17 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
   getJournal(id: string): Journal | undefined {
     const row = this.db.select().from(journals).where(eq(journals.id, id)).get();
     return row === undefined ? undefined : this.withLines([row])[0];
+  }
+
+  /** ids の仕訳（順は不定）。ない ID は無視する */
+  getJournals(ids: readonly string[]): Journal[] {
+    if (ids.length === 0) return [];
+    const rows = this.db
+      .select()
+      .from(journals)
+      .where(inArray(journals.id, [...ids]))
+      .all();
+    return this.withLines(rows);
   }
 
   recentJournals(limit: number): Journal[] {

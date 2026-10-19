@@ -8,6 +8,7 @@ import {
   sqliteTable,
   text,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 // data-model.md §2〜§5。金額は INTEGER（円）、日付は TEXT（YYYY-MM-DD）、真偽値は INTEGER（0/1）
@@ -205,7 +206,7 @@ export const journals = sqliteTable(
     memo: text("memo"),
     status: text("status", { enum: ["active", "voided"] }).notNull(),
     correctsJournalId: text("corrects_journal_id").references((): AnySQLiteColumn => journals.id),
-    source: text("source", { enum: ["manual"] })
+    source: text("source", { enum: ["manual", "import_freee"] })
       .notNull()
       .default("manual"),
     version: integer("version").notNull().default(1),
@@ -293,3 +294,97 @@ export const auditLog = sqliteTable(
     ),
   ],
 );
+
+// ---- 002-freee-import（specs/002-freee-import/data-model.md §2） ----
+
+export const importBatches = sqliteTable(
+  "import_batches",
+  {
+    id: text("id").primaryKey(),
+    source: text("source", { enum: ["freee_journal"] }).notNull(),
+    fileName: text("file_name").notNull(),
+    fileSha256: text("file_sha256").notNull(),
+    importedAt: text("imported_at").notNull(),
+    periodFrom: text("period_from").notNull(),
+    periodTo: text("period_to").notNull(),
+    fiscalYearsJson: text("fiscal_years_json").notNull(),
+    countNew: integer("count_new").notNull(),
+    countAlready: integer("count_already").notNull(),
+    countExcluded: integer("count_excluded").notNull(),
+    countRejected: integer("count_rejected").notNull(),
+    countWarnings: integer("count_warnings").notNull(),
+    status: text("status", { enum: ["active", "voided"] }).notNull(),
+    voidedAt: text("voided_at"),
+    voidReason: text("void_reason"),
+  },
+  (t) => [
+    check("import_batches_source", sql`${t.source} IN ('freee_journal')`),
+    check(
+      "import_batches_sha256",
+      sql`length(${t.fileSha256}) = 64 AND ${t.fileSha256} NOT GLOB '*[^0-9a-f]*'`,
+    ),
+    check("import_batches_period", sql`${t.periodFrom} <= ${t.periodTo}`),
+    check("import_batches_count_new", sql`${t.countNew} >= 1`),
+    check(
+      "import_batches_counts",
+      sql`${t.countAlready} >= 0 AND ${t.countExcluded} >= 0 AND ${t.countRejected} >= 0 AND ${t.countWarnings} >= 0`,
+    ),
+    check("import_batches_status", sql`${t.status} IN ('active', 'voided')`),
+    check(
+      "import_batches_void",
+      sql`${t.status} = 'active' OR (${t.voidedAt} IS NOT NULL AND ${t.voidReason} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const importJournalRefs = sqliteTable(
+  "import_journal_refs",
+  {
+    journalId: text("journal_id")
+      .primaryKey()
+      .references(() => journals.id),
+    batchId: text("batch_id")
+      .notNull()
+      .references(() => importBatches.id),
+    freeeJournalId: text("freee_journal_id").notNull(),
+    freeeJournalNo: text("freee_journal_no"),
+    freeeDate: text("freee_date").notNull(),
+    snapshotJson: text("snapshot_json").notNull(),
+    revokedAt: text("revoked_at"),
+  },
+  (t) => [
+    // INV-12: 取り消されていない参照の中で、freee の仕訳ID は一意
+    uniqueIndex("import_journal_refs_active_freee_id")
+      .on(t.freeeJournalId)
+      .where(sql`revoked_at IS NULL`),
+    index("import_journal_refs_batch").on(t.batchId),
+    index("import_journal_refs_freee_date").on(t.freeeDate),
+  ],
+);
+
+export const importAccountMappings = sqliteTable(
+  "import_account_mappings",
+  {
+    sourceName: text("source_name").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    subAccountId: text("sub_account_id").references(() => subAccounts.id),
+    subAccountName: text("sub_account_name"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    check(
+      "import_account_mappings_sub_account",
+      sql`${t.subAccountId} IS NULL OR ${t.subAccountName} IS NULL`,
+    ),
+  ],
+);
+
+export const importTaxMappings = sqliteTable("import_tax_mappings", {
+  sourceName: text("source_name").primaryKey(),
+  taxCategory: text("tax_category")
+    .notNull()
+    .references(() => taxCategories.code),
+  updatedAt: text("updated_at").notNull(),
+});
