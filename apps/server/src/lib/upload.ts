@@ -19,10 +19,15 @@ const FILE_TOO_LARGE = {
  * 要求のボディの大きさを制限する（413 FILE_TOO_LARGE）。
  * ボディには multipart の境界などが含まれるため少し余裕を持たせ、ファイルそのものの大きさは readUpload で確かめる
  */
-export const uploadLimit: MiddlewareHandler = bodyLimit({
-  maxSize: MAX_UPLOAD_BYTES + MULTIPART_ALLOWANCE_BYTES,
-  onError: (c: Context) => fail(c, FILE_TOO_LARGE),
-});
+export const uploadLimit: MiddlewareHandler = uploadLimitFor(1);
+
+/** ファイルを最大 files 個まで送れる要求のボディの上限（各ファイルの大きさは readUpload / readOptionalUpload で確かめる） */
+export function uploadLimitFor(files: number): MiddlewareHandler {
+  return bodyLimit({
+    maxSize: MAX_UPLOAD_BYTES * files + MULTIPART_ALLOWANCE_BYTES,
+    onError: (c: Context) => fail(c, FILE_TOO_LARGE),
+  });
+}
 
 export type Upload = {
   /** 送られたファイル名 */
@@ -35,14 +40,32 @@ export type Upload = {
  * `file` がない・ファイルでない → 400 VALIDATION、5 MB を超える → 413 FILE_TOO_LARGE（DomainException を投げ、onError が応答にする）
  */
 export async function readUpload(c: Context): Promise<Upload> {
-  const body = await c.req.parseBody();
-  const file = body.file;
-  if (!(file instanceof File)) {
+  const upload = await readOptionalUpload(c, "file");
+  if (upload === undefined) {
     const message = "ファイルを選んでください";
     throw new DomainException({
       code: "VALIDATION",
       message,
       details: { issues: [{ path: ["file"], message }] },
+    });
+  }
+  return upload;
+}
+
+/**
+ * multipart/form-data の任意のファイルのフィールドを読む。フィールドがなければ undefined。
+ * 文字列などファイルでない値 → 400 VALIDATION、5 MB を超える → 413 FILE_TOO_LARGE
+ */
+export async function readOptionalUpload(c: Context, name: string): Promise<Upload | undefined> {
+  const body = await c.req.parseBody();
+  const file = body[name];
+  if (file === undefined) return undefined;
+  if (!(file instanceof File)) {
+    const message = "ファイルを選んでください";
+    throw new DomainException({
+      code: "VALIDATION",
+      message,
+      details: { issues: [{ path: [name], message }] },
     });
   }
   if (file.size > MAX_UPLOAD_BYTES) throw new DomainException(FILE_TOO_LARGE);

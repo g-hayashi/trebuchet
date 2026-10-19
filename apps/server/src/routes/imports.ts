@@ -15,7 +15,14 @@ import {
 import { type Context, Hono } from "hono";
 import { importDeps, reportDeps } from "../deps.ts";
 import { errorBody, fail } from "../errors.ts";
-import { readJsonField, readUpload, sha256Hex, uploadLimit } from "../lib/upload.ts";
+import {
+  readJsonField,
+  readOptionalUpload,
+  readUpload,
+  sha256Hex,
+  uploadLimit,
+  uploadLimitFor,
+} from "../lib/upload.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 import { parseYear } from "./periods.ts";
@@ -31,7 +38,7 @@ async function readImportForm(c: Context) {
 export const importRoutes = new Hono<TenantEnv>()
   .use("/imports/freee/*", uploadLimit)
   .use("/fiscal-periods/:year/opening-balances/freee-proposal", uploadLimit)
-  .use("/fiscal-periods/:year/reconcile/freee", uploadLimit)
+  .use("/fiscal-periods/:year/reconcile/freee", uploadLimitFor(2))
   .post("/imports/freee/preview", async (c) => {
     const form = await readImportForm(c);
     const result = previewFreeeImport(importDeps(c.var.db), form);
@@ -60,9 +67,14 @@ export const importRoutes = new Hono<TenantEnv>()
     const year = parseYear(c.req.param("year"));
     if (!year.ok) return fail(c, year.error);
     const upload = await readUpload(c);
+    const journal = await readOptionalUpload(c, "journal");
     const result = reconcileFreee(
       { uow: importDeps(c.var.db).uow, reports: reportDeps(c.var.db).reports },
-      { bytes: upload.bytes, fiscalYear: year.value },
+      {
+        bytes: upload.bytes,
+        fiscalYear: year.value,
+        ...(journal === undefined ? {} : { journal: { bytes: journal.bytes } }),
+      },
     );
     if (!result.ok) {
       // 元帳の取引日が会計期間の外（details.ledgerDate）は 422。ファイルの中身の誤り（行・列つき）は 400 VALIDATION のまま

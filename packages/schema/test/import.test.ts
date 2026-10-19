@@ -53,7 +53,7 @@ describe("ImportOptions・ImportExpected", () => {
       expect(ImportOptions.safeParse(input).success).toBe(false);
     },
   );
-  it("ImportExpected のハッシュは小文字16進64文字、countNew は正の整数", () => {
+  it("ImportExpected のハッシュは小文字16進64文字、countNew は0以上の整数", () => {
     expect(ImportExpected.safeParse({ fileSha256: SHA, countNew: 1 }).success).toBe(true);
     expect(ImportExpected.safeParse({ fileSha256: "A".repeat(64), countNew: 1 }).success).toBe(
       false,
@@ -61,7 +61,9 @@ describe("ImportOptions・ImportExpected", () => {
     expect(ImportExpected.safeParse({ fileSha256: "a".repeat(63), countNew: 1 }).success).toBe(
       false,
     );
-    expect(ImportExpected.safeParse({ fileSha256: SHA, countNew: 0 }).success).toBe(false);
+    expect(ImportExpected.safeParse({ fileSha256: SHA, countNew: 0 }).success).toBe(true);
+    expect(ImportExpected.safeParse({ fileSha256: SHA, countNew: -1 }).success).toBe(false);
+    expect(ImportExpected.safeParse({ fileSha256: SHA, countNew: 1.5 }).success).toBe(false);
   });
 });
 

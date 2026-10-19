@@ -91,7 +91,7 @@ export type ImportOptions = z.infer<typeof ImportOptions>;
 /** 確定の form の `expected`。画面が見たプレビューのハッシュと件数（FR-012） */
 export const ImportExpected = z.object({
   fileSha256: Sha256,
-  countNew: z.number().int().positive(),
+  countNew: z.number().int().nonnegative(),
 });
 export type ImportExpected = z.infer<typeof ImportExpected>;
 

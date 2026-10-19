@@ -184,6 +184,20 @@ export function commitFreeeImport(
   return deps.uow.transaction((tx): Result<FreeeImportResult> => {
     const plan = buildPlan(tx, file.value, input.options);
     const preview = withFile(plan, file.value, input);
+    if (!preview.ready) {
+      const unmapped = [...preview.mappings.accounts, ...preview.mappings.taxes]
+        .filter((r) => r.status === "unmapped")
+        .map((r) => r.sourceName);
+      return err(
+        domainError(
+          "IMPORT_NOT_READY",
+          unmapped.length > 0
+            ? "対応が決まっていない名前があります"
+            : "新しく取り込む仕訳がありません",
+          { unmapped },
+        ),
+      );
+    }
     if (preview.counts.new !== input.expected.countNew) {
       return err(
         domainError(
@@ -191,14 +205,6 @@ export function commitFreeeImport(
           "プレビューの後に帳簿が変わりました。新しいプレビューを確認してください",
           { preview },
         ),
-      );
-    }
-    if (!preview.ready) {
-      const unmapped = [...preview.mappings.accounts, ...preview.mappings.taxes]
-        .filter((r) => r.status === "unmapped")
-        .map((r) => r.sourceName);
-      return err(
-        domainError("IMPORT_NOT_READY", "対応が決まっていない名前があります", { unmapped }),
       );
     }
 

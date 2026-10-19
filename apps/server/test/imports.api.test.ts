@@ -211,15 +211,14 @@ describe("POST /imports/freee/commit", () => {
     expect(journals.every((j) => j.source === "import_freee")).toBe(true);
   });
 
-  it("2回目は 409 IMPORT_PLAN_CHANGED（new = 0 のプレビューつき）で、何も登録しない", async () => {
+  it("2回目（expected.countNew = 0）は 422 IMPORT_NOT_READY で、何も登録しない", async () => {
     await json(await commit(), 201);
     const before = await books();
-    const res = await commit();
-    expect(res.status).toBe(409);
-    const error = await errorOf(res);
-    expect(error.code).toBe("IMPORT_PLAN_CHANGED");
-    expect(error.details).toMatchObject({
-      preview: { counts: { new: 0, already: COUNT_NEW }, ready: false },
+    const res = await commit({ expected: expectedOf(0) });
+    expect(res.status).toBe(422);
+    expect(await errorOf(res)).toMatchObject({
+      code: "IMPORT_NOT_READY",
+      details: { unmapped: [] },
     });
     expect(await books()).toEqual(before);
   });
@@ -259,7 +258,7 @@ describe("POST /imports/freee/commit", () => {
   it.each([
     ["expected がない", undefined],
     ["expected が JSON でない", "x"],
-    ["countNew が 0", expectedOf(0)],
+    ["countNew が負", expectedOf(-1)],
     ["ハッシュの形式が違う", expectedOf(COUNT_NEW, "XYZ")],
   ])("%s → 400 VALIDATION", async (_, expected) => {
     const data = form({ options: "{}", expected });

@@ -13,7 +13,7 @@
 | 422 | `IMPORT_WRONG_KIND` | 仕訳帳を求める場面で元帳が送られた（またはその逆） | FR-001 |
 | 409 | `IMPORT_FILE_CHANGED` | 確定のときのファイルのハッシュが、プレビューのハッシュと違う | FR-012 |
 | 409 | `IMPORT_PLAN_CHANGED` | 確定のときに作り直したプレビューの件数が、画面が見た件数と違う（その間に帳簿が変わった）。`details.preview` に新しいプレビュー | FR-012 |
-| 422 | `IMPORT_NOT_READY` | 対応が未定の名前が残っている、または新しく登録する仕訳が0件。`details.unmapped` | FR-009 |
+| 422 | `IMPORT_NOT_READY` | 対応が未定の名前が残っている、または作り直したプレビューで新しく登録する仕訳が0件（`expected.countNew` は0以上。件数の不一致 `IMPORT_PLAN_CHANGED` より先に判定する）。`details.unmapped` | FR-009 |
 | 409 | `IMPORT_BATCH_VOIDED` | 取消済みの取込をもう一度取り消そうとした | FR-024 |
 | 409 | `CORRECTED_JOURNALS` | 取込の後に訂正された仕訳があり、`confirmCorrected` が true でない。`details.count`、`details.journalIds` | FR-026 |
 | 404 | `IMPORT_BATCH_NOT_FOUND` | 取込の回がない | — |
@@ -83,6 +83,6 @@ TaxMapping     = { sourceName: string; taxCategory: TaxCategoryCode }
 
 | メソッド | パス | 入力 | 出力 | 要件 |
 |---|---|---|---|---|
-| POST | `/entities/:id/fiscal-periods/:year/reconcile/freee` | form: `file`（その年度の元帳） | 200 `{ rows: ReconciliationRow[], allMatched: boolean, unmapped: string[] }` | FR-021〜023 |
+| POST | `/entities/:id/fiscal-periods/:year/reconcile/freee` | form: `file`（その年度の元帳）、`journal`（任意。同じ年度の仕訳帳。渡すと、取込対象外・取込不可の仕訳を原因の候補 `EXCLUDED` / `REJECTED` として示す。各 5 MB まで） | 200 `{ rows: ReconciliationRow[], allMatched: boolean, unmapped: string[] }` | FR-021〜023 |
 
 元帳の年度と `:year` が違う（元帳の取引日が会計期間の外）ときは 422 `VALIDATION`。

@@ -307,3 +307,8 @@ Task: "T041 carry-forward.ts"
 - テストが失敗することを確かめてから実装する
 - タスクまたは論理的なまとまりごとにコミットする
 - 実データの数値を、どのファイルにも書かない
+
+## Phase 9: Convergence
+
+- [X] T075 照合の API（`POST /fiscal-periods/:year/reconcile/freee`）と画面（`reconcile.tsx`）で任意の仕訳帳ファイルを受け取り、`reconcileFreee` の `journal` に渡して、不一致の科目の差の原因の候補に「取込対象外」「取込不可」の仕訳を示す。server と web のテストを足す per FR-023 (partial)
+- [X] T076 新しく登録する仕訳が0件の確定を契約どおり 422 `IMPORT_NOT_READY` にする: `commitFreeeImport` で0件の判定を件数の不一致（`IMPORT_PLAN_CHANGED`）より先に置き、`ImportExpected.countNew` を0以上にして、domain と server のテストを足す per FR-009 / contracts/http-api.md (contradicts)

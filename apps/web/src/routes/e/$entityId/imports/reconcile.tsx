@@ -20,9 +20,10 @@ function ReconcilePage() {
   const yearId = useId();
   const [year, setYear] = useState<string>();
   const [file, setFile] = useState<File>();
+  const [journal, setJournal] = useState<File>();
   const [fileKey, setFileKey] = useState(0);
   const periods = useQuery(fiscalPeriodsQuery(entityId));
-  const result = useQuery(reconcileFreeeQuery(entityId, year, file, fileKey));
+  const result = useQuery(reconcileFreeeQuery(entityId, year, file, fileKey, journal));
 
   const data = result.isError ? undefined : result.data;
   const mismatched = data?.rows.filter((r) => !r.matched).length ?? 0;
@@ -68,6 +69,14 @@ function ReconcilePage() {
             label="総勘定元帳のファイル"
             onChange={(next) => {
               setFile(next);
+              setFileKey((k) => k + 1);
+            }}
+          />
+          <FilePicker
+            label="仕訳帳のファイル（任意）"
+            description="同じ年度の仕訳帳も選ぶと、不一致の原因の候補に、取込の対象外にした仕訳・取り込めない仕訳が加わります。"
+            onChange={(next) => {
+              setJournal(next);
               setFileKey((k) => k + 1);
             }}
           />

@@ -180,6 +180,79 @@ describe("元帳との照合（T049）", () => {
     expect(screen.queryByRole("table", { name: "消耗品費の差の原因の候補" })).toBeNull();
   });
 
+  it("仕訳帳のファイル（任意）を選ぶと、元帳と一緒に送って照合し直し、取込対象外・取込不可の原因を出す", async () => {
+    const excludedRow: ReconciliationRow = {
+      ...suppliesRow(false),
+      candidates: [
+        {
+          date: "2025-09-01",
+          freeeJournalNo: "5090101",
+          debit: 50000,
+          credit: 0,
+          cause: "EXCLUDED",
+          reason: "USER_EXCLUDED",
+        },
+        {
+          date: "2025-04-15",
+          freeeJournalNo: "5041501",
+          debit: 4400,
+          credit: 0,
+          cause: "REJECTED",
+          reason: "UNMAPPED",
+        },
+      ],
+    };
+    const calls = mockReconcile((call) =>
+      ok(
+        result(
+          formFields(call.form)?.journal === undefined
+            ? [cashRow, suppliesRow(false)]
+            : [cashRow, excludedRow],
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReconcile();
+    await chooseYearAndFile(user);
+    await reconcileTable();
+
+    const picker = screen.getByLabelText("仕訳帳のファイル（任意）");
+    const journal = new File(['"No"\n'], "仕訳帳_2025.csv", { type: "text/csv" });
+    await user.upload(picker, journal);
+
+    await waitFor(() => expect(calls.filter((c) => c.method === "POST")).toHaveLength(2));
+    const second = calls.filter((c) => c.method === "POST")[1];
+    expect(second?.path).toBe(reconcilePath(2025));
+    expect(formFields(second?.form)).toEqual({
+      file: { name: "総勘定元帳_2025.csv", type: "text/csv", size: ledger().size },
+      journal: { name: "仕訳帳_2025.csv", type: "text/csv", size: journal.size },
+    });
+
+    await user.click(
+      await screen.findByRole("button", { name: "消耗品費の詳細を開く" }, { timeout: 2000 }),
+    );
+    const candidates = screen.getByRole("table", { name: "消耗品費の差の原因の候補" });
+    const [first, second2] = within(candidates).getAllByRole("row").slice(1);
+    expect(first).toHaveTextContent("5090101");
+    expect(first).toHaveTextContent("取込対象外");
+    expect(first).toHaveTextContent("個別に外した");
+    expect(second2).toHaveTextContent("取込不可");
+  });
+
+  it("仕訳帳だけでは照合せず、元帳がなければ仕訳帳を送らない", async () => {
+    const calls = mockReconcile(() => ok(result([cashRow])));
+    const user = userEvent.setup();
+    renderReconcile();
+    const select = await screen.findByRole("combobox", { name: "年度" });
+    await waitFor(() => expect(within(select).getAllByRole("option")).toHaveLength(3));
+    await user.selectOptions(select, "2025");
+    await user.upload(
+      screen.getByLabelText("仕訳帳のファイル（任意）"),
+      new File(["x"], "仕訳帳.csv", { type: "text/csv" }),
+    );
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+  });
+
   it("対応が未定の freee の科目を表示し、年度を変えると照合し直す", async () => {
     const calls = mockReconcile(() => ok(result([cashRow], ["交際費"])));
     const user = userEvent.setup();

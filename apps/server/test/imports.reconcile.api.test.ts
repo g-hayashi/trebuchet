@@ -36,10 +36,17 @@ afterEach(() => tmp.cleanup());
 
 const url = (path: string) => `/api/entities/${entityId}${path}`;
 
-/** file が null なら、file のフィールドを送らない */
-const reconcile = (file: Uint8Array<ArrayBuffer> | null = LEDGER, year = "2025") => {
+/** file が null なら、file のフィールドを送らない。journal があれば仕訳帳のフィールドも送る */
+const reconcile = (
+  file: Uint8Array<ArrayBuffer> | null = LEDGER,
+  year = "2025",
+  journal?: Uint8Array<ArrayBuffer>,
+) => {
   const form = new FormData();
   if (file !== null) form.append("file", new File([file], "ledger.csv", { type: "text/csv" }));
+  if (journal !== undefined) {
+    form.append("journal", new File([journal], "journal.csv", { type: "text/csv" }));
+  }
   return app.request(url(`/fiscal-periods/${year}/reconcile/freee`), {
     method: "POST",
     body: form,
@@ -95,6 +102,43 @@ describe("POST /fiscal-periods/:year/reconcile/freee", () => {
       );
     }
     expect(await books()).toEqual(before);
+  });
+
+  it("仕訳帳（journal）も送ると、取込不可の仕訳が原因の候補 REJECTED（理由つき）になる。送らなければ NOT_IMPORTED", async () => {
+    // 通信費を、対応のない名前にした仕訳帳（5041501 が UNMAPPED で取込不可になる）
+    const unmapped = new TextEncoder().encode(
+      new TextDecoder().decode(JOURNAL).replaceAll("通信費", "未登録の科目"),
+    );
+    const before = await books();
+
+    const withJournal = await json<ReconciliationResult>(
+      await reconcile(LEDGER, "2025", unmapped),
+      200,
+    );
+    const causesOf = (r: ReconciliationResult) =>
+      r.rows.flatMap((row) => row.candidates.filter((c) => c.freeeJournalNo === "5041501"));
+    expect(causesOf(withJournal).length).toBeGreaterThan(0);
+    for (const c of causesOf(withJournal)) {
+      expect(c).toMatchObject({ cause: "REJECTED", reason: "UNMAPPED" });
+    }
+
+    const withoutJournal = await json<ReconciliationResult>(await reconcile(), 200);
+    expect(causesOf(withoutJournal).length).toBeGreaterThan(0);
+    for (const c of causesOf(withoutJournal)) expect(c.cause).toBe("NOT_IMPORTED");
+    expect(await books()).toEqual(before);
+  });
+
+  it("journal に元帳を送る → 422 IMPORT_WRONG_KIND、5 MB を超える → 413 FILE_TOO_LARGE", async () => {
+    const wrong = await reconcile(LEDGER, "2025", LEDGER);
+    expect(wrong.status).toBe(422);
+    expect(await errorOf(wrong)).toMatchObject({
+      code: "IMPORT_WRONG_KIND",
+      details: { expected: "journal", actual: "ledger" },
+    });
+
+    const big = await reconcile(LEDGER, "2025", new Uint8Array(5 * 1024 * 1024 + 1));
+    expect(big.status).toBe(413);
+    expect((await errorOf(big)).code).toBe("FILE_TOO_LARGE");
   });
 
   it("UTF-8 の元帳も読める", async () => {

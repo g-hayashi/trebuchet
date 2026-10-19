@@ -116,12 +116,13 @@ export async function voidImportBatch(
   );
 }
 
-/** 元帳との照合（POST だが帳簿は変えない）。fileKey はファイルを選び直すたびに変える番号 */
+/** 元帳との照合（POST だが帳簿は変えない）。journal は任意の仕訳帳。fileKey はファイルを選び直すたびに変える番号 */
 export const reconcileFreeeQuery = (
   entityId: string,
   year: string | undefined,
   file: File | undefined,
   fileKey: number,
+  journal?: File | undefined,
 ) =>
   queryOptions({
     queryKey: [...queryKeys.entity(entityId), "reconcile-freee", year, fileKey] as const,
@@ -129,7 +130,7 @@ export const reconcileFreeeQuery = (
       if (!file || !year) throw new Error("年度とファイルが選ばれていません");
       return uploadForm(
         `${entityPath(entityId)}/fiscal-periods/${encodeURIComponent(year)}/reconcile/freee`,
-        { file },
+        journal ? { file, journal } : { file },
       );
     },
     enabled: file !== undefined && year !== undefined,

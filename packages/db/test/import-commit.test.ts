@@ -170,7 +170,7 @@ describe("commitFreeeImport（DrizzleImportUnitOfWork）", () => {
     expect(preview.value.ready).toBe(false);
 
     const second = commitFreeeImport(commitDeps(), input());
-    expect(second.ok ? undefined : second.error.code).toBe("IMPORT_PLAN_CHANGED");
+    expect(second.ok ? undefined : second.error.code).toBe("IMPORT_NOT_READY");
     expect(tableCounts()).toEqual(counts);
     expect(trialBalance()).toEqual(balance);
   });

@@ -309,19 +309,24 @@ describe("commitFreeeImport", () => {
     expect(order).toEqual(expected);
   });
 
-  it("同じファイルの2回目は new = 0 で、件数の不一致として何も登録しない", () => {
+  it("同じファイルの2回目は new = 0 で、expected.countNew = 0 でも IMPORT_NOT_READY（何も登録しない）", () => {
     const s = setup();
     const first = commitFreeeImport(s, input());
     expect(first.ok).toBe(true);
     const before = stateOf(s);
+    const second = commitFreeeImport(s, input({ expected: { fileSha256: SHA, countNew: 0 } }));
+    if (second.ok) throw new Error("成功してはいけない");
+    expect(second.error.code).toBe("IMPORT_NOT_READY");
+    expect(second.error.details?.unmapped).toEqual([]);
+    expect(stateOf(s)).toEqual(before);
+  });
+
+  it("作り直した結果が new = 0 なら、expected が古くても IMPORT_NOT_READY が先", () => {
+    const s = setup();
+    expect(commitFreeeImport(s, input()).ok).toBe(true);
     const second = commitFreeeImport(s, input());
     if (second.ok) throw new Error("成功してはいけない");
-    expect(second.error.code).toBe("IMPORT_PLAN_CHANGED");
-    expect(second.error.details?.preview).toMatchObject({
-      counts: { new: 0, already: 14 },
-      ready: false,
-    });
-    expect(stateOf(s)).toEqual(before);
+    expect(second.error.code).toBe("IMPORT_NOT_READY");
   });
 
   it("書き込みの途中で例外が起きると、何も残さない", () => {
