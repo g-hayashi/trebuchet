@@ -204,8 +204,8 @@ description: "Task list for 002-freee-import"
 - [X] T068 [P] E2E `apps/web/e2e/freee-import.spec.ts`: 開始年度 2025 の事業体を作る → フィクスチャの仕訳帳を選ぶ → 未定の対応を決める → 取り込む → 期首残高を元帳から読み込んで保存 → 照合ですべて一致 → 同じファイルで新規0件。001 の `ledger-flow.spec.ts` と同じく使い捨てのデータディレクトリを使う
 - [X] T069 [P] `scripts/bench-import.ts`: T011 の考え方で500仕訳の仕訳帳を作り（テストのコードには依存しない、スクリプト内で生成）、`.tmp/` の事業体でプレビュー（5秒以内）と確定（10秒以内）の時間を計って出す（SC-002）。`pnpm bench:import` で実行できること
 - [X] T070 `scripts/verify-freee-import.ts` に通常のモードを加える: `--journal`・`--ledger`・`--year` を受け、`.tmp/verify-freee/` に使い捨ての事業体（開始年度 = `--year`）を作り、対応表の初期案のまま未定が残れば一覧を出して止まる（`--mapping <json>` で対応を渡せる。JSON は `.tmp/` に置く）。取込 → 元帳の期首残高の保存 → 照合 → PL・BS の科目別の金額を標準出力に出す（research R18）
-- [ ] T071 T070 を `work/` の 2025年分で実行し、照合がすべて一致すること（SC-003）と、PL・BS の各科目が 2025年分の青色申告決算書（R7）と一致すること（SC-004、001 の SC-008）を確かめる。決算書の値はセッションの分析メモ（`analysis-tax-return.md`）を使い、**結果の数値はリポジトリに書かない**。一致しなければ原因を調べて直す。続けて 2026年分（途中経過）でも取り込み、FR-020a の警告が出ないことを確かめる
-- [ ] T072 [P] 文書を更新する: `AGENTS.md`（取込のモジュールの置き場所、実データを扱うのは verify スクリプトだけ、フィクスチャの作り方）、`README.md`（freee からの移行の手順）、`docs/adr/0004-freee-closing-entries.md`（年初付の決算振替を期首に繰り込む判断。research R5）、`specs/001-ledger-core/quickstart.md` §3（SC-008 は 002 の T071 で確認した旨と日付）
+- [X] T071 T070 を `work/` の 2025年分で実行し、照合がすべて一致すること（SC-003）と、PL・BS の各科目が 2025年分の青色申告決算書（R7）と一致すること（SC-004、001 の SC-008）を確かめる。決算書の値はセッションの分析メモ（`analysis-tax-return.md`）を使い、**結果の数値はリポジトリに書かない**。一致しなければ原因を調べて直す。続けて 2026年分（途中経過）でも取り込み、FR-020a の警告が出ないことを確かめる
+- [X] T072 [P] 文書を更新する: `AGENTS.md`（取込のモジュールの置き場所、実データを扱うのは verify スクリプトだけ、フィクスチャの作り方）、`README.md`（freee からの移行の手順）、`docs/adr/0004-freee-closing-entries.md`（年初付の決算振替を期首に繰り込む判断。research R5）、`specs/001-ledger-core/quickstart.md` §3（SC-008 は 002 の T071 で確認した旨と日付）
 - [ ] T073 quickstart.md §2 の手順1〜8を手で確かめ、画面の文言と違うところを直す
 - [ ] T074 `pnpm lint && pnpm --filter @trebuchet/web build && pnpm typecheck && pnpm test && pnpm --filter @trebuchet/web e2e` がすべて成功することを確かめる
 

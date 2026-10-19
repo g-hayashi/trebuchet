@@ -35,10 +35,12 @@ apps/server ──→ packages/schema
 | Lint（Biome） | `pnpm lint` |
 | 整形（Biome で書き換え） | `pnpm format` |
 | 性能計測（SC-004 の仕訳 2,000 件） | `pnpm bench:reports` |
+| 性能計測（freee 取込の 500 仕訳、002 の SC-002） | `pnpm bench:import` |
+| freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。使い方は `scripts/verify-freee-import.ts` の先頭のコメント） |
 | E2E（Playwright、Chromium） | `pnpm --filter @trebuchet/web e2e` |
 | web のビルド（`routeTree.gen.ts` を再生成する） | `pnpm --filter @trebuchet/web build` |
 
-- CI（`.github/workflows/ci.yml`）は `pnpm typecheck`、`pnpm lint`、`pnpm test` を実行する。E2E と bench は CI に含まれない。
+- CI（`.github/workflows/ci.yml`）は `pnpm typecheck`、`pnpm lint`、`pnpm test` を実行する。E2E、bench、`verify:freee` は CI に含まれない。
 - 変更を終える前に、少なくとも `pnpm typecheck`、`pnpm lint`、`pnpm test` を通す。
 
 ## 開発の進め方
@@ -52,6 +54,23 @@ apps/server ──→ packages/schema
   - 型だけの import は `import type` と書く（`verbatimModuleSyntax`）
 - **マイグレーションの再生成**: `drizzle-kit generate` は `STRICT` を出力しない。生成後、`0000_init.sql` の `);` を `) STRICT;` に置き換える（research R2 / T024）。再生成のたびに同じ置き換えが必要。`tenant-store` のテストが `STRICT` を確認する。
 - **トリガー・ビュー**は `drizzle-kit generate --custom` で手書きの SQL として追加する（research R2）。
+
+## freee の取込（002）
+
+取込の実装は次に置く。
+
+| 層 | 場所 |
+|---|---|
+| CSV の解析、freee 形式の読み取り、対応表、決算振替の判定、期首残高の案、照合、取込の計画 | `packages/domain/src/import/`（`csv.ts`、`freee/` の `columns.ts`、`read.ts`、`mapping.ts`、`closing.ts`、`opening.ts`、`reconcile.ts`、`plan.ts`） |
+| ユースケース | `packages/domain/src/usecases/import-freee.ts` |
+| 永続化（取込のトランザクション、取消） | `packages/db/src/import-repository.ts` |
+| HTTP | `apps/server/src/routes/imports.ts` |
+| 画面 | `apps/web/src/features/imports/`、`apps/web/src/routes/e/$entityId/imports/` |
+
+- 実データ（`work/`）を読むのは `scripts/verify-freee-import.ts`（`pnpm verify:freee`）だけ。出力（件数、科目別の金額など）はコミットしない。ドキュメントや `tasks.md` にも実データの数値を書かない。
+- テストのフィクスチャは `packages/domain/test/fixtures/freee/` の **合成の** CSV。作り方と匿名化の方針は同じ場所の `README.md` に書いてある。CSV の生成スクリプトはリポジトリに置かない（使い捨て）。手で直す場合は、全項目をクォートし、LF で終える。元帳は UTF-8 の元（`ledger-2025.utf8.csv`）から CP932 の `ledger-2025.csv` を `iconv` で作る。フィクスチャを変えたら README の「検算」をして `expected.ts` を直す。
+- 取込のプロパティテスト（INV-14, 16, 17）は `packages/domain/test/freee-arbitraries.ts` のジェネレーターで、貸借一致の仕訳から freee 形式の仕訳帳と元帳を作って検証する。
+- 年初付の決算振替は仕訳として取り込まず、期首残高に繰り込む（[ADR 0004](docs/adr/0004-freee-closing-entries.md)）。
 
 ## データと一時ファイル
 
