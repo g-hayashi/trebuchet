@@ -276,7 +276,7 @@ description: "Task list for 001-ledger-core"
 - [X] T117 [P] `README.md` を作成する（概要、前提、セットアップ、`pnpm dev`、データの保存先と `TREBUCHET_DATA_DIR`）
 - [X] T118 [P] 設計判断を ADR として記録する（Constitution の Development Workflow）: `docs/adr/0002-tenant-per-db-file.md`（事業体ごとの DB ファイル分離と `entity_id` 列を持たない理由、research.md R9・data-model §0）、`docs/adr/0003-correction-policy.md`（訂正方式 C 案、research.md R11、spec の Assumptions）。形式は「状況・決定・理由・検討した代替案・影響」。0001 は T001 で作成済みであることを確認する
 - [X] T119 `pnpm typecheck && pnpm lint && pnpm test` を実行し、Biome の `noRestrictedImports` で `packages/domain` の境界違反がないことを確認する
-- [ ] T120 `specs/001-ledger-core/quickstart.md` の手順（自動テスト・手動確認の1〜9）を実施し、SC-001（10分以内）と SC-002（30秒・1分以内）を含めて結果を確認する。手順と実装に食い違いがあれば quickstart.md を更新する
+- [X] T120 `specs/001-ledger-core/quickstart.md` の手順（自動テスト・手動確認の1〜9）を実施し、SC-001（10分以内）と SC-002（30秒・1分以内）を含めて結果を確認する。手順と実装に食い違いがあれば quickstart.md を更新する
 
 ---
 

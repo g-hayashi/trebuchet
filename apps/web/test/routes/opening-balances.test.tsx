@@ -144,6 +144,10 @@ describe("期首残高の画面", () => {
       { accountId: cash.id, side: "debit", amount: 120_000 },
       { accountId: capital.id, side: "credit", amount: 120_000 },
     ]);
+    expect(await screen.findByRole("status")).toHaveTextContent("保存しました。");
+
+    await user.clear(screen.getByLabelText("1行目の金額"));
+    expect(screen.getByRole("status")).toHaveTextContent("");
   });
 
   it("締め済みの期間は表示だけで、変更できない", async () => {

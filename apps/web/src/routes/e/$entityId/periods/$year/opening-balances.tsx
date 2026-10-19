@@ -190,6 +190,9 @@ function OpeningBalancesForm({
                 行を追加
               </Button>
               <SaveButton control={form.control} pending={save.isPending} />
+              <span role="status" className="text-sm">
+                {save.isSuccess && !form.formState.isDirty ? "保存しました。" : ""}
+              </span>
             </div>
             <ApiErrorMessage error={save.error} />
           </fieldset>
