@@ -1,4 +1,5 @@
 import { randomUUIDv7 } from "node:crypto";
+import { openTenant, tenantSchema } from "@trebuchet/db";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { TAX_CATEGORIES } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -113,6 +114,67 @@ describe("勘定科目", () => {
     });
     expect(missing.status).toBe(422);
     expect((await errorOf(missing)).code).toBe("ACCOUNT_NOT_FOUND");
+  });
+
+  describe("PATCH accounts の reportLine（003 R12a）", () => {
+    const patch = (accountId: string, json: Record<string, unknown>) =>
+      e.accounts[":accountId"].$patch({ param: { ...param(), accountId }, json });
+    const auditRows = () => openTenant(entityId).select().from(tenantSchema.closingAuditLog).all();
+
+    it("費用の科目の欄を変更でき、closing_audit_log に残る", async () => {
+      const target = await accountByName("消耗品費");
+      const res = await patch(target.id, { reportLine: 31 });
+      expect(res.status).toBe(200);
+      if (res.status !== 200) return;
+      expect((await res.json()).account).toEqual({ ...target, reportLine: 31 });
+      expect((await accountByName("消耗品費")).reportLine).toBe(31);
+      const rows = auditRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        targetType: "account_report_line",
+        targetId: target.id,
+        action: "update",
+        beforeJson: JSON.stringify({ reportLine: target.reportLine }),
+        afterJson: JSON.stringify({ reportLine: 31 }),
+      });
+    });
+
+    it("null で欄を解除できる", async () => {
+      const target = await accountByName("消耗品費");
+      const res = await patch(target.id, { reportLine: null });
+      expect(res.status).toBe(200);
+      expect((await accountByName("消耗品費")).reportLine).toBeNull();
+    });
+
+    it("費用以外の科目と欄 32 は 422 REPORT_LINE_INVALID", async () => {
+      const revenue = await accountByName("売上高");
+      const nonExpense = await patch(revenue.id, { reportLine: 17 });
+      expect(nonExpense.status).toBe(422);
+      expect((await errorOf(nonExpense)).code).toBe("REPORT_LINE_INVALID");
+      const expense = await accountByName("消耗品費");
+      const outOfRange = await patch(expense.id, { reportLine: 32 });
+      expect(outOfRange.status).toBe(422);
+      expect((await errorOf(outOfRange)).code).toBe("REPORT_LINE_INVALID");
+      expect(await accountByName("消耗品費")).toEqual(expense);
+      expect(auditRows()).toHaveLength(0);
+    });
+
+    it("name・isActive・reportLine を同時に指定でき、reportLine が失敗したら全部取り消す", async () => {
+      const target = await accountByName("消耗品費");
+      const ok = await patch(target.id, { name: "備品消耗品", isActive: false, reportLine: 25 });
+      expect(ok.status).toBe(200);
+      if (ok.status !== 200) return;
+      expect((await ok.json()).account).toMatchObject({
+        name: "備品消耗品",
+        isActive: false,
+        reportLine: 25,
+      });
+
+      const before = await accountByName("備品消耗品");
+      const failed = await patch(before.id, { name: "元の名前", reportLine: 99 });
+      expect(failed.status).toBe(422);
+      expect(await accountByName("備品消耗品")).toEqual(before);
+    });
   });
 
   it("未使用の科目は DELETE で 204 になり、一覧から消える", async () => {

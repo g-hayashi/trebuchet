@@ -33,6 +33,7 @@ export * from "./seed/tax-rates.ts";
 export * from "./tax-rates.ts";
 export * from "./tax-settings.ts";
 export * from "./types.ts";
+export * from "./usecases/blue-return.ts";
 export * from "./usecases/close-period.ts";
 export * from "./usecases/correct-journal.ts";
 export * from "./usecases/create-entity.ts";

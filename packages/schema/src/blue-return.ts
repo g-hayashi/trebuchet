@@ -22,6 +22,15 @@ const AbsolutePath = z
 
 // ---- 入力 ----
 
+/** 決算書の CSV のクエリ（GET /blue-return/:year/csv）。`blankUnused=true` で使わない欄を空にする（R14） */
+export const BlueReturnCsvQuery = z.object({
+  blankUnused: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+});
+export type BlueReturnCsvQuery = z.infer<typeof BlueReturnCsvQuery>;
+
 /** 家事按分の登録（PUT /blue-return/:year/home-use） */
 export const HomeUseAllocationInput = z.object({
   accountId: Id,
