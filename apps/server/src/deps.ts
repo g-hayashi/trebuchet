@@ -1,5 +1,6 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
+  DrizzleAuthStore,
   DrizzleClosingStore,
   DrizzleClosingUnitOfWork,
   DrizzleImportStore,
@@ -11,6 +12,7 @@ import {
   type TenantDb,
 } from "@trebuchet/db";
 import type {
+  AuthStore,
   Clock,
   ClosingSettingsDeps,
   ClosingStore,
@@ -30,6 +32,9 @@ export const ids: IdGenerator = { next: () => randomUUIDv7() };
 export const clock: Clock = { now: () => new Date().toISOString() };
 
 export const registryRepository = () => new DrizzleRegistryRepository(openRegistry());
+
+/** 認証の情報（registry の DB）。要求のたびに今のデータの置き場所の registry を開く */
+export const authStore = (): AuthStore => new DrizzleAuthStore(openRegistry());
 
 /** リクエストの事業体の DB（c.var.db）に対するマスタのユースケースの依存 */
 export function masterDeps(db: TenantDb): MasterDeps {

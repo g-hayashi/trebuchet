@@ -6,8 +6,7 @@ import {
   EXPECTED_BOOK_ACCOUNTS,
   EXPECTED_OPENING_PROPOSAL,
 } from "../../../packages/domain/test/fixtures/freee/expected.ts";
-import { app } from "../src/app.ts";
-import type { ErrorBody } from "./helpers.ts";
+import { app, type ErrorBody } from "./helpers.ts";
 
 // T038: 期首残高の案の API（contracts/http-api.md の「期首残高（総勘定元帳）」）
 

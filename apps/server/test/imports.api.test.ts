@@ -3,8 +3,7 @@ import { readFileSync } from "node:fs";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import type { ImportBatch, ImportBatchJournal, ImportPreview } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { app } from "../src/app.ts";
-import type { ErrorBody } from "./helpers.ts";
+import { app, type ErrorBody } from "./helpers.ts";
 
 // T025: 取込の API（contracts/http-api.md の 002）
 
