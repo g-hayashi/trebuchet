@@ -1,6 +1,7 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
   DrizzleClosingStore,
+  DrizzleClosingUnitOfWork,
   DrizzleImportStore,
   DrizzleImportUnitOfWork,
   DrizzleLedgerRepository,
@@ -11,7 +12,9 @@ import {
 } from "@trebuchet/db";
 import type {
   Clock,
+  ClosingSettingsDeps,
   ClosingStore,
+  CommitAdjustmentDeps,
   IdGenerator,
   ImportStore,
   ImportUnitOfWork,
@@ -60,6 +63,24 @@ export function deductionAnswersDeps(db: TenantConn): {
   clock: Clock;
 } {
   return { masters: new DrizzleMasterRepository(db), closing: closingStore(db), ids, clock };
+}
+
+/** 家事按分・地代家賃の内訳（list・save 系）の依存。トランザクションを渡せる */
+export function closingSettingsDeps(db: TenantConn): ClosingSettingsDeps {
+  return { masters: new DrizzleMasterRepository(db), closing: closingStore(db), ids, clock };
+}
+
+/**
+ * 決算整理の仕訳の案の確定（commitAdjustment）の依存。案の作り直しに使う帳簿の読み取りは、
+ * トランザクションと同じ接続（c.var.db）から読む（取込の期首残高の案と同じ形）
+ */
+export function commitAdjustmentDeps(db: TenantDb): CommitAdjustmentDeps {
+  return {
+    uow: new DrizzleClosingUnitOfWork(db),
+    reports: new DrizzleLedgerRepository(db),
+    ids,
+    clock,
+  };
 }
 
 /** リクエストの事業体の DB に対する仕訳のユースケース（登録・訂正・取消・参照）の依存 */

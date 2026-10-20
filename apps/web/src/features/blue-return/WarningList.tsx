@@ -17,15 +17,30 @@ function omittedOf(details: BlueReturnWarning["details"]): Omitted[] {
   });
 }
 
+/** 家事按分・地代家賃の内訳の画面へのリンク（警告から直す先） */
+function HomeUseLink({ entityId, year, label }: { entityId: string; year: string; label: string }) {
+  return (
+    <Link
+      to="/e/$entityId/blue-return/$year/home-use"
+      params={{ entityId, year }}
+      className="mt-1 block underline"
+    >
+      {label}
+    </Link>
+  );
+}
+
 /**
  * 決算書の警告の一覧。決算書は表示したまま知らせる。
  * 任意科目が欄に載らないとき（OPTIONAL_LINES_OVERFLOW）は、載らなかった科目名と金額、科目の画面へのリンクを出す
  */
 export function WarningList({
   entityId,
+  year,
   warnings,
 }: {
   entityId: string;
+  year: string;
   warnings: readonly BlueReturnWarning[];
 }) {
   if (warnings.length === 0) return null;
@@ -57,6 +72,12 @@ export function WarningList({
                     科目の画面で決算書の欄を変更する
                   </Link>
                 </>
+              )}
+              {w.code === "HOME_USE_ADJUSTMENT_STALE" && (
+                <HomeUseLink entityId={entityId} year={year} label="仕訳の案を見る" />
+              )}
+              {w.code === "RENT_DETAILS_MISMATCH" && (
+                <HomeUseLink entityId={entityId} year={year} label="地代家賃の内訳を直す" />
               )}
             </li>
           );

@@ -36,7 +36,8 @@ export const HomeUseAllocationInput = z.object({
   accountId: Id,
   subAccountId: Id.nullish(),
   businessRatio: Ratio,
-  basis: z.string().trim().min(1, "根拠を入力してください").max(1000),
+  /** 空は形としては受け付け、domain が 422 HOME_USE_BASIS_REQUIRED を返す（FR-012） */
+  basis: z.string().max(1000),
   changeReason: z.string().max(1000).nullish(),
 });
 export type HomeUseAllocationInput = z.infer<typeof HomeUseAllocationInput>;
@@ -54,6 +55,10 @@ export const RentDetailInput = z
     path: ["deductibleAmount"],
   });
 export type RentDetailInput = z.infer<typeof RentDetailInput>;
+
+/** 地代家賃の内訳の置き換え（PUT /blue-return/:year/rent-details）。全件を送る */
+export const RentDetailsPut = z.object({ rows: z.array(RentDetailInput).max(100) });
+export type RentDetailsPut = z.infer<typeof RentDetailsPut>;
 
 export const DepreciationMethod = z.enum(["small_asset_28_2"]);
 export type DepreciationMethod = z.infer<typeof DepreciationMethod>;
@@ -184,6 +189,14 @@ export const AdjustmentProposal = z.object({
   breakdown: z.union([HomeUseBreakdown, DepreciationBreakdown]),
 });
 export type AdjustmentProposal = z.infer<typeof AdjustmentProposal>;
+
+/** 決算整理の仕訳の案の確定（POST /blue-return/:year/adjustments）。expected.amount は画面が見た案の借方合計 */
+export const AdjustmentCommitInput = z.object({
+  kind: AdjustmentKind,
+  sourceId: Id,
+  expected: z.object({ amount: z.number().int().positive() }),
+});
+export type AdjustmentCommitInput = z.infer<typeof AdjustmentCommitInput>;
 
 /** 1ページの欄の種類（様式の定義）。unused は使わない欄で、空欄の表示と CSV の対象 */
 export const FormLineKind = z.enum(["account", "optional", "computed", "unused"]);

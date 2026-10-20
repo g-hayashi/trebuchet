@@ -98,7 +98,16 @@ function BlueReturnPage() {
               </Link>
             )}
           </section>
-          <WarningList entityId={entityId} warnings={data.warnings} />
+          <p className="no-print text-sm">
+            <Link
+              to="/e/$entityId/blue-return/$year/home-use"
+              params={{ entityId, year }}
+              className="underline"
+            >
+              家事按分・地代家賃の内訳
+            </Link>
+          </p>
+          <WarningList entityId={entityId} year={year} warnings={data.warnings} />
           <label className="no-print flex items-center gap-2 text-sm">
             <input
               type="checkbox"

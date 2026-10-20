@@ -15,8 +15,8 @@
 |---|---|---|---|
 | `resolveTaxParameter(key, date, params)` | | `TaxParameter \| undefined` | R3 |
 | `computeHomeUse(bookAmount, ratio)` | 帳簿の金額、万分率 | `{ business, home }` | INV-20, R5 |
-| `proposeHomeUseAdjustment(input)` | 按分の登録、科目、年度の仕訳の行、登録済みの振替（refs） | `Result<AdjustmentProposal \| null>`（帳簿の金額 ≤ 0 なら null と理由） | FR-014, FR-016, INV-23 |
-| `validateHomeUseAllocation(draft, previous)` | 登録の案、前の年度の同じ科目の登録 | `Result<HomeUseAllocation>`（区分が費用の科目に限る `HOME_USE_ACCOUNT_INVALID`、根拠の必須、割合の範囲、割合を変えたときの理由の必須） | FR-012, FR-013 |
+| `proposeHomeUseAdjustment(input)` | `{ allocation, allocations（同じ年度の登録の全部）, accounts, period（endDate）, lines（年度の仕訳の行）, refs（決算整理の出所） }` | `Result<HomeUseAssessment>` = `{ allocationId, bookAmount, ratio, business, home, registered, difference, proposal: AdjustmentProposal \| null, reason }`。`difference = home − registered`。0 なら `proposal` は null で `reason` は `BOOK_AMOUNT_NOT_POSITIVE` / `FULL_BUSINESS` / `UP_TO_DATE`。案の仕訳の両方の行の税区分は `OUT_OF_SCOPE`（内部の振替で、課税期間でも仕入にしない）。対象が費用の科目でなければ `HOME_USE_ACCOUNT_INVALID`、事業主貸がなければ `ACCOUNT_NOT_FOUND` | FR-014, FR-016, INV-23 |
+| `validateHomeUseAllocation(draft, { accounts, subAccounts, previous })` | `draft`: `HomeUseAllocationDraft`（`fiscalYear, accountId, subAccountId, businessRatio, basis, changeReason`）、`previous`: 前の年度の同じ科目（補助科目）の登録（なければ undefined） | `Result<HomeUseAllocationDraft>`（根拠・理由は trim、空の理由は null。区分が費用の科目に限る `HOME_USE_ACCOUNT_INVALID`、補助科目の不一致と割合の範囲は `VALIDATION`、根拠の必須 `HOME_USE_BASIS_REQUIRED`、割合を変えたときの理由の必須 `HOME_USE_CHANGE_REASON_REQUIRED`）。ID と日時は `saveHomeUseAllocation` が付ける | FR-012, FR-013 |
 | `validateFixedAsset(draft, sameYearAssets, params)` | 資産の案、同じ年の特例の資産、税制の値 | `Result<FixedAsset>`（`ASSET_ACCOUNT_INVALID`、`SMALL_ASSET_OVER_THRESHOLD`、`SMALL_ASSET_ANNUAL_LIMIT_EXCEEDED`、`SMALL_ASSET_NOT_APPLICABLE`（適用期間外）、`DEPRECIATION_METHOD_UNSUPPORTED`） | FR-019〜020, INV-21 |
 | `depreciate(asset, fiscalYear)` | 方法は `small_asset_28_2` だけ。方法の表は作らない（R7） | `{ cost, base, ordinary, total, businessRatio, deductible, closingBookValue }`（3ページのイ〜ヌ） | FR-021, INV-21 |
 | `proposeDepreciationAdjustment(asset, fiscalYear, accounts)` | | `AdjustmentProposal \| null`（`linkedJournalId` があれば null） | FR-021〜022, INV-23 |
@@ -49,7 +49,9 @@
 | `getBlueReturn(deps, { fiscalYear })` | `ReportDeps`、`ClosingStore` | 個人の事業体でなければ `ENTITY_KIND_UNSUPPORTED`。年度の仕訳・期首残高・前の年度の期末を読み、`buildBlueReturn` |
 | `saveHomeUseAllocation(deps, draft)` | `ClosingStore`、`IdGenerator`、`Clock` | `validateHomeUseAllocation` → 保存 → `closing_audit_log` |
 | `getAdjustmentProposals(deps, { fiscalYear })` | `ReportDeps`、`ClosingStore` | 按分と資産の案の一覧（差があるものだけ） |
-| `commitAdjustment(deps, { fiscalYear, kind, sourceId, expected })` | `ClosingUnitOfWork`、`IdGenerator`、`Clock` | 1トランザクションで案を作り直し、`expected`（借方合計）と比べてから 001 の `createJournal` → `adjustment_journal_refs`。締め済みは 001 の `PERIOD_CLOSED` |
+| `commitAdjustment(deps, { fiscalYear, kind, sourceId, expected: { amount } })` | `{ uow: ClosingUnitOfWork, reports: ReportRepository（トランザクションと同じ接続）, ids, clock }` | 1トランザクションで案を作り直し、`expected.amount`（借方合計）と比べてから 001 の `createJournal` → `adjustment_journal_refs`。`Result<{ journal, ref, warnings }>`。締め済みは 001 の `PERIOD_CLOSED`、案がなければ `ADJUSTMENT_NOT_NEEDED`、金額が違えば `ADJUSTMENT_CHANGED`（`details.proposal`）。減価償却（`depreciation`）は US3 まで VALIDATION |
+| `listHomeUseAllocations(deps, { fiscalYear })` | `MasterRepository`、`ClosingStore` | `Result<{ allocations, previousYear }>`。年度の登録と、前の年度の登録（`GET .../home-use`） |
+| `getRentDetails(deps, { fiscalYear })` | `MasterRepository`、`ClosingStore` | `Result<RentDetail[]>`。並び順は保存したとおり（`GET .../rent-details`） |
 | `saveFixedAsset(deps, draft)` / `disposeFixedAsset(deps, { id, disposedOn, reason })` | `ClosingStore`、`IdGenerator`、`Clock` | `validateFixedAsset` → 保存 → 履歴 |
 | `saveRentDetails`、`saveDeductionAnswers`、`saveClosingNote`、`saveTaxReturnMemo`、`saveFiledDocument`（と削除） | `ClosingStore`、`Clock` | 検証 → 保存 → 履歴（履歴は按分・資産・内訳・回答・メモだけ） |
 

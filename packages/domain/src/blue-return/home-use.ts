@@ -233,16 +233,20 @@ export function proposeHomeUseAdjustment(input: HomeUseInput): Result<HomeUseAss
   }
 
   const amount = Math.abs(difference);
+  // 家事按分の振替は内部の振替で仕入ではない。課税期間でも既定（費用は仕入 10%）にしない
+  const taxCategory = "OUT_OF_SCOPE" as const;
   const target: LineDraft = {
     side: difference > 0 ? "credit" : "debit",
     accountId: allocation.accountId,
     ...(allocation.subAccountId === null ? {} : { subAccountId: allocation.subAccountId }),
     amount,
+    taxCategory,
   };
   const owner: LineDraft = {
     side: difference > 0 ? "debit" : "credit",
     accountId: drawings.id,
     amount,
+    taxCategory,
   };
   const percent = `${ratio / 100}%`;
   return ok({

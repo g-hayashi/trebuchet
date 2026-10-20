@@ -30,10 +30,14 @@ describe("HomeUseAllocationInput", () => {
     { ...ok, businessRatio: -1 },
     { ...ok, businessRatio: 10001 },
     { ...ok, businessRatio: 0.5 },
-    { ...ok, basis: "" },
-    { ...ok, basis: "   " },
+    { accountId: ID, businessRatio: 6000 },
+    { ...ok, basis: "x".repeat(1001) },
   ])("不正な入力を拒否する %#", (input) => {
     expect(HomeUseAllocationInput.safeParse(input).success).toBe(false);
+  });
+  it("空の根拠は形としては受け付ける（業務ルールの HOME_USE_BASIS_REQUIRED は domain が返す。FR-012）", () => {
+    expect(HomeUseAllocationInput.safeParse({ ...ok, basis: "" }).success).toBe(true);
+    expect(HomeUseAllocationInput.safeParse({ ...ok, basis: "   " }).success).toBe(true);
   });
 });
 

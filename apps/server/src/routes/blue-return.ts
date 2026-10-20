@@ -1,12 +1,29 @@
 import {
   blueReturnToCsv,
+  commitAdjustment,
+  getAdjustmentProposals,
   getBlueReturn,
   getDeductionAnswers,
+  getRentDetails,
+  listHomeUseAllocations,
   saveDeductionAnswers,
+  saveHomeUseAllocation,
+  saveRentDetails,
 } from "@trebuchet/domain";
-import { BlueReturnCsvQuery, DeductionAnswersInput } from "@trebuchet/schema";
+import {
+  AdjustmentCommitInput,
+  BlueReturnCsvQuery,
+  DeductionAnswersInput,
+  HomeUseAllocationInput,
+  RentDetailsPut,
+} from "@trebuchet/schema";
 import { Hono } from "hono";
-import { blueReturnDeps, deductionAnswersDeps } from "../deps.ts";
+import {
+  blueReturnDeps,
+  closingSettingsDeps,
+  commitAdjustmentDeps,
+  deductionAnswersDeps,
+} from "../deps.ts";
 import { fail, orThrow } from "../errors.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
@@ -49,4 +66,60 @@ export const blueReturnRoutes = new Hono<TenantEnv>()
       orThrow(saveDeductionAnswers(deductionAnswersDeps(tx), { fiscalYear: year.value, answers })),
     );
     return c.json(view, 200);
+  })
+  // ---- 家事按分・地代家賃の内訳・決算整理の仕訳の案（US2） ----
+  .get("/blue-return/:year/home-use", (c) => {
+    const year = parseYear(c.req.param("year"));
+    if (!year.ok) return fail(c, year.error);
+    const result = listHomeUseAllocations(closingSettingsDeps(c.var.db), {
+      fiscalYear: year.value,
+    });
+    if (!result.ok) return fail(c, result.error);
+    return c.json(result.value, 200);
+  })
+  .put("/blue-return/:year/home-use", validate("json", HomeUseAllocationInput), (c) => {
+    const year = parseYear(c.req.param("year"));
+    if (!year.ok) return fail(c, year.error);
+    const input = c.req.valid("json");
+    // 登録の保存と履歴を1つのトランザクションにする
+    const allocation = c.var.db.transaction((tx) =>
+      orThrow(saveHomeUseAllocation(closingSettingsDeps(tx), { fiscalYear: year.value, ...input })),
+    );
+    return c.json({ allocation }, 200);
+  })
+  .get("/blue-return/:year/rent-details", (c) => {
+    const year = parseYear(c.req.param("year"));
+    if (!year.ok) return fail(c, year.error);
+    const result = getRentDetails(closingSettingsDeps(c.var.db), { fiscalYear: year.value });
+    if (!result.ok) return fail(c, result.error);
+    return c.json({ rows: result.value }, 200);
+  })
+  .put("/blue-return/:year/rent-details", validate("json", RentDetailsPut), (c) => {
+    const year = parseYear(c.req.param("year"));
+    if (!year.ok) return fail(c, year.error);
+    const { rows } = c.req.valid("json");
+    const saved = c.var.db.transaction((tx) =>
+      orThrow(saveRentDetails(closingSettingsDeps(tx), { fiscalYear: year.value, rows })),
+    );
+    return c.json({ rows: saved }, 200);
+  })
+  .get("/blue-return/:year/adjustments", (c) => {
+    const year = parseYear(c.req.param("year"));
+    if (!year.ok) return fail(c, year.error);
+    const result = getAdjustmentProposals(blueReturnDeps(c.var.db), { fiscalYear: year.value });
+    if (!result.ok) return fail(c, result.error);
+    return c.json({ proposals: result.value }, 200);
+  })
+  .post("/blue-return/:year/adjustments", validate("json", AdjustmentCommitInput), (c) => {
+    const year = parseYear(c.req.param("year"));
+    if (!year.ok) return fail(c, year.error);
+    const { kind, sourceId, expected } = c.req.valid("json");
+    const result = commitAdjustment(commitAdjustmentDeps(c.var.db), {
+      fiscalYear: year.value,
+      kind,
+      sourceId,
+      expected,
+    });
+    if (!result.ok) return fail(c, result.error);
+    return c.json({ journal: result.value.journal, ref: result.value.ref }, 201);
   });

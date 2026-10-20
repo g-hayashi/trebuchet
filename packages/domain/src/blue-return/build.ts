@@ -2,19 +2,29 @@ import type { BlueReturn, BlueReturnWarning, StatementRow } from "@trebuchet/sch
 import { buildProfitAndLoss } from "../reports/profit-and-loss.ts";
 import type {
   Account,
+  AdjustmentRef,
   DeductionAnswers,
   FiscalPeriod,
+  HomeUseAllocation,
   PostedLine,
+  RentDetail,
   TaxParameter,
 } from "../types.ts";
 import { blueDeduction, blueDeductionCap } from "./deduction.ts";
 import { type BlueReturnForm, formForYear } from "./form.ts";
+import { proposeHomeUseAdjustment } from "./home-use.ts";
+
+/** 地代家賃の欄（様式の欄23）。内訳の必要経費算入額の合計と比べる */
+const RENT_LINE_NO = 23;
 
 /**
- * 決算書の入力。1ページと控除の部分だけを持つ（2〜4ページの入力は後のタスクで足す）。
+ * 決算書の入力。1ページ・控除・家事按分・地代家賃の内訳を持つ（3・4ページの入力は後のタスクで足す）。
  * - period: 年度（fiscalYear・期間・状態）
  * - lines: 年度の仕訳の行（001 の PostedLine。取消済みと期間外は buildProfitAndLoss が除く）
  * - deductionAnswers: 控除の要件の回答。なければ null
+ * - allocations: 年度の家事按分の登録。なければ空
+ * - adjustmentRefs: 年度の決算整理の仕訳の出所。なければ空
+ * - rentDetails: 年度の地代家賃の内訳（sortOrder の順に2ページへ載せる）。なければ空
  */
 export type BuildBlueReturnInput = {
   period: FiscalPeriod;
@@ -22,6 +32,9 @@ export type BuildBlueReturnInput = {
   lines: readonly PostedLine[];
   deductionAnswers: DeductionAnswers | null;
   taxParameters: readonly TaxParameter[];
+  allocations?: readonly HomeUseAllocation[];
+  adjustmentRefs?: readonly AdjustmentRef[];
+  rentDetails?: readonly RentDetail[];
 };
 
 type Page1Line = BlueReturn["page1"]["lines"][number];
@@ -33,6 +46,71 @@ const sumAmounts = (rows: readonly { amount: number }[]) => rows.reduce((s, r) =
 /** 一般の欄（kind = account）の番号の集合 */
 const accountLineNos = (form: BlueReturnForm) =>
   new Set(form.pl.filter((l) => l.kind === "account").map((l) => l.no));
+
+/**
+ * 按分の振替が帳簿と合っていない登録ごとの警告（FR-016）。判定は proposeHomeUseAdjustment の差額が
+ * 0 でないこと（差額の計算はそこだけに持つ）。対象の科目が費用でなくなった登録は、案を作れないので
+ * エラーコードつきで警告する
+ */
+function homeUseWarnings(input: BuildBlueReturnInput, period: FiscalPeriod): BlueReturnWarning[] {
+  const allocations = input.allocations ?? [];
+  const out: BlueReturnWarning[] = [];
+  for (const allocation of allocations) {
+    const name = input.accounts.find((a) => a.id === allocation.accountId)?.name ?? "";
+    const assessed = proposeHomeUseAdjustment({
+      allocation,
+      allocations,
+      accounts: input.accounts,
+      period,
+      lines: input.lines,
+      refs: input.adjustmentRefs ?? [],
+    });
+    if (!assessed.ok) {
+      out.push({
+        code: "HOME_USE_ADJUSTMENT_STALE",
+        message: `家事按分の対象（${name}）の振替の案を作れません: ${assessed.error.message}`,
+        details: {
+          allocationId: allocation.id,
+          accountId: allocation.accountId,
+          subAccountId: allocation.subAccountId,
+          errorCode: assessed.error.code,
+        },
+      });
+    } else if (assessed.value.difference !== 0) {
+      const { bookAmount, home, registered, difference } = assessed.value;
+      out.push({
+        code: "HOME_USE_ADJUSTMENT_STALE",
+        message: `家事按分の振替（${name}）が帳簿と合っていません。家事分 ${home} 円に対して振替済みは ${registered} 円です（差額 ${difference} 円）`,
+        details: {
+          allocationId: allocation.id,
+          accountId: allocation.accountId,
+          subAccountId: allocation.subAccountId,
+          bookAmount,
+          home,
+          registered,
+          difference,
+        },
+      });
+    }
+  }
+  return out;
+}
+
+/** 地代家賃の内訳の必要経費算入額の合計が欄23と違うときの警告（FR-017）。内訳が空でも欄23 が 0 でなければ警告する */
+function rentDetailsWarnings(
+  rows: readonly Pick<RentDetail, "deductibleAmount">[],
+  line23: number,
+): BlueReturnWarning[] {
+  const total = rows.reduce((s, r) => s + r.deductibleAmount, 0);
+  if (total === line23) return [];
+  return [
+    {
+      code: "RENT_DETAILS_MISMATCH",
+      message: `地代家賃の内訳の必要経費算入額の合計（${total} 円）が欄23（${line23} 円）と一致しません`,
+      details: { rentDetailsTotal: total, line23, difference: total - line23 },
+    },
+  ];
+}
 
 /**
  * 青色申告決算書（一般用）を帳簿から導出する（research R1）。この関数は1ページと控除・transfer・
@@ -120,6 +198,7 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
     };
   });
 
+  const rentDetails = [...(input.rentDetails ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const warnings: BlueReturnWarning[] = [];
   if (overflow.length > 0) {
     const omitted = overflow.map((r) => ({
@@ -146,6 +225,10 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
       },
     });
   }
+  warnings.push(
+    ...homeUseWarnings(input, period),
+    ...rentDetailsWarnings(rentDetails, amounts.get(RENT_LINE_NO) ?? 0),
+  );
   if (cap === undefined) {
     warnings.push({
       code: "DEDUCTION_ANSWERS_MISSING",
@@ -161,7 +244,12 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
     page1: { lines },
     page2: {
       monthly: { months: [], total: { sales: 0, otherIncome: 0, total: 0 } },
-      rentDetails: [],
+      rentDetails: rentDetails.map(({ payee, property, annualRent, deductibleAmount }) => ({
+        payee,
+        property,
+        annualRent,
+        deductibleAmount,
+      })),
       deduction:
         cap === undefined || deduction === null
           ? null

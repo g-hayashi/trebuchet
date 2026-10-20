@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
+import { TAX_RATES } from "../../src/seed/tax-rates.ts";
 import {
   commitAdjustment,
   getAdjustmentProposals,
   getBlueReturn,
+  getRentDetails,
+  listHomeUseAllocations,
   saveHomeUseAllocation,
   saveRentDetails,
 } from "../../src/usecases/blue-return.ts";
@@ -127,6 +130,44 @@ describe("saveHomeUseAllocation（FR-012〜013）", () => {
   });
 });
 
+describe("listHomeUseAllocations（GET home-use）", () => {
+  it("年度の登録と、前の年度の登録（previousYear）を返す。登録がなければどちらも空", () => {
+    expect(unwrap(listHomeUseAllocations(settingsDeps(), { fiscalYear: 2026 }))).toEqual({
+      allocations: [],
+      previousYear: [],
+    });
+    const prev = saveRent(3000, 2025);
+    const current = saveRent(3500, 2026, "在宅の日が増えた");
+    expect(unwrap(listHomeUseAllocations(settingsDeps(), { fiscalYear: 2026 }))).toEqual({
+      allocations: [current],
+      previousYear: [prev],
+    });
+  });
+
+  it("会計期間のない年度は VALIDATION", () => {
+    const r = listHomeUseAllocations(settingsDeps(), { fiscalYear: 1999 });
+    expect(!r.ok && r.error.code).toBe("VALIDATION");
+  });
+});
+
+describe("getRentDetails（GET rent-details）", () => {
+  it("年度の内訳を並び順どおりに返す。法人・会計期間のない年度は失敗", () => {
+    expect(unwrap(getRentDetails(settingsDeps(), { fiscalYear: 2025 }))).toEqual([]);
+    const saved = unwrap(
+      saveRentDetails(settingsDeps(), {
+        fiscalYear: 2025,
+        rows: [
+          { payee: "大家A", property: "事務所", annualRent: 100, deductibleAmount: 50 },
+          { payee: "大家B", property: "駐車場", annualRent: 200, deductibleAmount: 200 },
+        ],
+      }),
+    );
+    expect(unwrap(getRentDetails(settingsDeps(), { fiscalYear: 2025 }))).toEqual(saved);
+    const r = getRentDetails(settingsDeps(), { fiscalYear: 1999 });
+    expect(!r.ok && r.error.code).toBe("VALIDATION");
+  });
+});
+
 describe("saveRentDetails（FR-017）", () => {
   const row = (payee: string, annualRent: number, deductibleAmount: number) => ({
     payee,
@@ -183,6 +224,13 @@ describe("getAdjustmentProposals・commitAdjustment（FR-014〜016、R4）", () 
       business: 360_000,
       home: 840_000,
     });
+    // 振替の前は決算書が警告する（差額は案と同じ）
+    const before = unwrap(getBlueReturn(readDeps(), { fiscalYear: 2025 }));
+    expect(
+      before.warnings
+        .filter((w) => w.code === "HOME_USE_ADJUSTMENT_STALE")
+        .map((w) => w.details?.difference),
+    ).toEqual([840_000]);
 
     const committed = unwrap(
       commitAdjustment(commitDeps(), {
@@ -209,6 +257,65 @@ describe("getAdjustmentProposals・commitAdjustment（FR-014〜016、R4）", () 
 
     const blue = unwrap(getBlueReturn(readDeps(), { fiscalYear: 2025 }));
     expect(blue.page1.lines.find((l) => l.no === 23)?.amount).toBe(360_000);
+    expect(blue.warnings.filter((w) => w.code === "HOME_USE_ADJUSTMENT_STALE")).toEqual([]);
+  });
+
+  it("地代家賃の内訳を保存すると決算書の2ページに載り、欄23と合えば警告しない", () => {
+    payRent(1_200_000);
+    const allocation = saveRent(3000);
+    unwrap(
+      saveRentDetails(settingsDeps(), {
+        fiscalYear: 2025,
+        rows: [
+          { payee: "大家A", property: "事務所", annualRent: 1_200_000, deductibleAmount: 360_000 },
+        ],
+      }),
+    );
+    const mismatched = unwrap(getBlueReturn(readDeps(), { fiscalYear: 2025 }));
+    expect(mismatched.page2.rentDetails).toHaveLength(1);
+    // 欄23 は振替の前で 1,200,000
+    expect(mismatched.warnings.map((w) => w.code)).toContain("RENT_DETAILS_MISMATCH");
+    unwrap(
+      commitAdjustment(commitDeps(), {
+        fiscalYear: 2025,
+        kind: "home_use",
+        sourceId: allocation.id,
+        expected: { amount: 840_000 },
+      }),
+    );
+    const matched = unwrap(getBlueReturn(readDeps(), { fiscalYear: 2025 }));
+    expect(matched.warnings.map((w) => w.code)).not.toContain("RENT_DETAILS_MISMATCH");
+  });
+
+  it("課税期間の帳簿でも、振替の仕訳の両方の行の税区分は対象外（仕入にしない）", () => {
+    fx.masters.state.taxRates = [...TAX_RATES];
+    fx.masters.replaceTaxSettings([
+      {
+        id: "ts-1",
+        effectiveFrom: "2025-01-01",
+        taxpayerStatus: "general",
+        accountingMethod: "tax_included",
+      },
+    ]);
+    const rent = payRent(1_200_000);
+    // 課税期間の費用の行は既定で仕入 10%（振替の対象外とは区別される）
+    expect(rent.lines.find((l) => l.accountId === fx.accountId("地代家賃"))?.taxCategory).toBe(
+      "PURCHASE_10",
+    );
+    const allocation = saveRent(3000);
+    const committed = unwrap(
+      commitAdjustment(commitDeps(), {
+        fiscalYear: 2025,
+        kind: "home_use",
+        sourceId: allocation.id,
+        expected: { amount: 840_000 },
+      }),
+    );
+    expect(committed.journal.lines.map((l) => l.taxCategory)).toEqual([
+      "OUT_OF_SCOPE",
+      "OUT_OF_SCOPE",
+    ]);
+    expect(committed.journal.lines.map((l) => l.taxAmount)).toEqual([0, 0]);
   });
 
   it("費用の仕訳を取り消した後は逆向きの案を確定でき、差額 0 に戻る", () => {
@@ -226,8 +333,18 @@ describe("getAdjustmentProposals・commitAdjustment（FR-014〜016、R4）", () 
     unwrap(voidJournal(fx.deps, extra.id, { reason: "二重計上", version: extra.version }));
     const [back] = proposals();
     expect(back?.journal.lines).toEqual([
-      { side: "debit", accountId: fx.accountId("地代家賃"), amount: 70_000 },
-      { side: "credit", accountId: fx.accountId("事業主貸"), amount: 70_000 },
+      {
+        side: "debit",
+        accountId: fx.accountId("地代家賃"),
+        amount: 70_000,
+        taxCategory: "OUT_OF_SCOPE",
+      },
+      {
+        side: "credit",
+        accountId: fx.accountId("事業主貸"),
+        amount: 70_000,
+        taxCategory: "OUT_OF_SCOPE",
+      },
     ]);
     unwrap(
       commitAdjustment(commitDeps(), {

@@ -213,8 +213,8 @@ describe("proposeHomeUseAdjustment（FR-014・FR-016、R6）", () => {
     });
     expect(a.proposal?.journal.date).toBe("2025-12-31");
     expect(a.proposal?.journal.lines).toEqual([
-      { side: "debit", accountId: DRAWINGS, amount: 840_000 },
-      { side: "credit", accountId: RENT, amount: 840_000 },
+      { side: "debit", accountId: DRAWINGS, amount: 840_000, taxCategory: "OUT_OF_SCOPE" },
+      { side: "credit", accountId: RENT, amount: 840_000, taxCategory: "OUT_OF_SCOPE" },
     ]);
   });
 
@@ -243,8 +243,8 @@ describe("proposeHomeUseAdjustment（FR-014・FR-016、R6）", () => {
     // 1,300,000 × 30% = 390,000 → 家事分 910,000、差額 70,000
     expect(a).toMatchObject({ bookAmount: 1_300_000, home: 910_000, difference: 70_000 });
     expect(a.proposal?.journal.lines).toEqual([
-      { side: "debit", accountId: DRAWINGS, amount: 70_000 },
-      { side: "credit", accountId: RENT, amount: 70_000 },
+      { side: "debit", accountId: DRAWINGS, amount: 70_000, taxCategory: "OUT_OF_SCOPE" },
+      { side: "credit", accountId: RENT, amount: 70_000, taxCategory: "OUT_OF_SCOPE" },
     ]);
   });
 
@@ -256,8 +256,8 @@ describe("proposeHomeUseAdjustment（FR-014・FR-016、R6）", () => {
     );
     expect(a).toMatchObject({ home: 840_000, registered: 910_000, difference: -70_000 });
     expect(a.proposal?.journal.lines).toEqual([
-      { side: "debit", accountId: RENT, amount: 70_000 },
-      { side: "credit", accountId: DRAWINGS, amount: 70_000 },
+      { side: "debit", accountId: RENT, amount: 70_000, taxCategory: "OUT_OF_SCOPE" },
+      { side: "credit", accountId: DRAWINGS, amount: 70_000, taxCategory: "OUT_OF_SCOPE" },
     ]);
   });
 
@@ -312,8 +312,8 @@ describe("proposeHomeUseAdjustment（FR-014・FR-016、R6）", () => {
     const a = propose(input({ lines, refs: [ref("t-1")] }));
     expect(a).toMatchObject({ bookAmount: 0, home: 0, difference: -840_000 });
     expect(a.proposal?.journal.lines).toEqual([
-      { side: "debit", accountId: RENT, amount: 840_000 },
-      { side: "credit", accountId: DRAWINGS, amount: 840_000 },
+      { side: "debit", accountId: RENT, amount: 840_000, taxCategory: "OUT_OF_SCOPE" },
+      { side: "credit", accountId: DRAWINGS, amount: 840_000, taxCategory: "OUT_OF_SCOPE" },
     ]);
   });
 
@@ -347,8 +347,14 @@ describe("proposeHomeUseAdjustment（FR-014・FR-016、R6）", () => {
     const e = propose(input({ allocation: elec, allocations: both, lines }));
     expect(e).toMatchObject({ bookAmount: 10_000, home: 5_000 });
     expect(e.proposal?.journal.lines).toEqual([
-      { side: "debit", accountId: DRAWINGS, amount: 5_000 },
-      { side: "credit", accountId: UTILITIES, subAccountId: "sub-elec", amount: 5_000 },
+      { side: "debit", accountId: DRAWINGS, amount: 5_000, taxCategory: "OUT_OF_SCOPE" },
+      {
+        side: "credit",
+        accountId: UTILITIES,
+        subAccountId: "sub-elec",
+        amount: 5_000,
+        taxCategory: "OUT_OF_SCOPE",
+      },
     ]);
     const r = propose(input({ allocation: rest, allocations: both, lines }));
     expect(r).toMatchObject({ bookAmount: 5_000, business: 1_000, home: 4_000 });

@@ -97,6 +97,9 @@ export function getBlueReturn(
       lines: deps.reports.linesInRange(period.value.startDate, period.value.endDate),
       deductionAnswers: deps.closing.getDeductionAnswers(params.fiscalYear) ?? null,
       taxParameters: deps.closing.listTaxParameters(),
+      allocations: deps.closing.listHomeUseAllocations(params.fiscalYear),
+      adjustmentRefs: deps.closing.listAdjustmentRefs(params.fiscalYear),
+      rentDetails: deps.closing.listRentDetails(params.fiscalYear),
     }),
   );
 }
@@ -228,6 +231,32 @@ export function saveHomeUseAllocation(
     afterJson: JSON.stringify(saved),
   });
   return ok(saved);
+}
+
+/**
+ * 年度の家事按分の登録と、前の年度の登録（GET .../home-use）。画面が前の年度の割合を見せて、
+ * 割合を変えたときの理由の入力を促すのに使う
+ */
+export function listHomeUseAllocations(
+  deps: Pick<ClosingSettingsDeps, "masters" | "closing">,
+  params: { fiscalYear: number },
+): Result<{ allocations: HomeUseAllocation[]; previousYear: HomeUseAllocation[] }> {
+  const period = resolveYear(deps.masters, params.fiscalYear);
+  if (!period.ok) return period;
+  return ok({
+    allocations: deps.closing.listHomeUseAllocations(params.fiscalYear),
+    previousYear: deps.closing.listHomeUseAllocations(params.fiscalYear - 1),
+  });
+}
+
+/** 年度の地代家賃の内訳（GET .../rent-details）。並び順は保存したとおり */
+export function getRentDetails(
+  deps: Pick<ClosingSettingsDeps, "masters" | "closing">,
+  params: { fiscalYear: number },
+): Result<RentDetail[]> {
+  const period = resolveYear(deps.masters, params.fiscalYear);
+  if (!period.ok) return period;
+  return ok(deps.closing.listRentDetails(params.fiscalYear));
 }
 
 const YEN_LIMIT = 1_000_000_000_000;
