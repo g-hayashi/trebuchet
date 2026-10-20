@@ -26,6 +26,7 @@
 - **Decision**: `apps/server` に、`TREBUCHET_WEB_DIST`（既定は `apps/web/dist`）が存在すれば `@hono/node-server/serve-static` で配信し、`/api` 以外の未知のパスは `index.html` を返す（SPA）処理を足す。静的ファイル（`index.html`・JS・CSS）は帳簿のデータを含まないので、認証なしで配信してよい（FR-003）。`pnpm start`（web をビルドして server を起動）を足す。リモートは `tailscale serve --bg --https=443 http://127.0.0.1:8787`
 - **Rationale**: リモートの origin を1つ（8787）にまとめ、Host と Origin の検査を server だけで行える。vite の dev サーバーを外に見せない
 - **ゲート（Setup）**: `tailscale serve` の転送で server に届く `Host` と `X-Forwarded-Host` を、利用者の Mac で確かめる（公式に記載がない）。結果で R6 の名前の取り方を決める
+- **ゲートの結果（2026-10-20）**: 未確認（利用者の Mac に Tailscale が未導入）。US4（T016〜T018）の着手の前に確かめる
 - 出典: https://tailscale.com/kb/1312/serve （tailnet の中だけ。Funnel は使わない）、https://hono.dev/docs/getting-started/nodejs
 
 ## R4. 認証の情報は registry の DB に置く
@@ -100,6 +101,7 @@
 
 - **Decision**: `node:child_process` で `/usr/bin/security` を呼ぶ。保存は `add-generic-password -U -a trebuchet -s trebuchet-backup -w`、読み出しは `find-generic-password -a trebuchet -s trebuchet-backup -w`。パスフレーズは引数に載せない（ps で見えるため）
 - **ゲート（Setup）**: `-w` を最後に置いたときに標準入力から読めるかを、利用者の Mac で確かめる（公式の man で「最後に置くと入力を求める」とあるが、標準入力からの読み込みは未確認。出典: `man security`）。読めない場合は、`security -i`（対話モード）に標準入力でコマンドを流す方法を試す
+- **ゲートの結果（2026-10-20）**: `-w` を最後に置いて標準入力から渡す方法は**不可**（利用者の Mac で確認）。`security -i` の方法を確認中
 - **キーチェーンが使えない場合の代替**（ゲートがどちらも失敗したとき）: パスフレーズは、server の起動ごとに一度、設定の画面で入力させ、**メモリにだけ保持する**（`SecretStore` のメモリの実装を、キーチェーンの実装の代わりに `main.ts` で渡す。保存しない）。未入力の間は自動のバックアップを止め、`PASSPHRASE_NEEDED` で警告する（FR-015）。入力は `PUT /backup/passphrase`（`current` を省略できる。キーチェーン／メモリが空のときだけ）で行う
 - **キーチェーンが空のとき**（別の Mac に移ったなど）: `PUT /backup/passphrase` の `current` を省略できる（`SecretStore` が空のときだけ。値があるのに `current` が違えば 422 `PASSPHRASE_WRONG`）。設定の画面で再入力を求める
 - **抽象化**: `SecretStore`（get/set/delete）のポートにし、テストはメモリの偽物を使う。サンドボックスのテストでキーチェーンに触れない
