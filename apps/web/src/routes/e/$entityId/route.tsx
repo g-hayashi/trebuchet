@@ -17,6 +17,7 @@ type NavTo =
   | "/e/$entityId/reports"
   | "/e/$entityId/blue-return"
   | "/e/$entityId/fixed-assets"
+  | "/e/$entityId/tax-return/$year"
   | "/e/$entityId/imports";
 
 /** 事業体ごとの画面の共通レイアウト。ナビの項目は各画面を追加するときに足す（US1〜US5） */
@@ -31,6 +32,7 @@ const NAV: { label: string; to: NavTo }[] = [
   { label: "帳票", to: "/e/$entityId/reports" },
   { label: "決算書", to: "/e/$entityId/blue-return" },
   { label: "固定資産台帳", to: "/e/$entityId/fixed-assets" },
+  { label: "申告の控え", to: "/e/$entityId/tax-return/$year" },
   { label: "取込", to: "/e/$entityId/imports" },
 ];
 
@@ -51,7 +53,8 @@ function EntityLayout() {
           <Link
             key={item.label}
             to={item.to}
-            params={{ entityId }}
+            // 申告の控えは年分が要る。個人の年分は暦年なので、開くときは今年にする（画面で変えられる）
+            params={{ entityId, year: String(new Date().getFullYear()) }}
             activeOptions={{ exact: item.to === "/e/$entityId" }}
             activeProps={{ className: "font-semibold underline", "aria-current": "page" }}
           >

@@ -136,8 +136,8 @@ description: "Task list for 003-tax-return"
 
 **Independent Test**: 登録・編集・削除・一覧、ファイルの有無の表示、決算書の値が変わらないこと
 
-- [ ] T031 [US6] テスト先行で `usecases/blue-return.ts` に `saveTaxReturnMemo`・`deleteTaxReturnMemo`・`saveFiledDocument`・`deleteFiledDocument` と一覧を足し（FR-033〜035）、`apps/server/src/routes/tax-return.ts`（H: 控え・書類の8つ。`fileExists` は `node:fs` の `existsSync`、R13）を作って `app.ts` に登録する。テスト `packages/domain/test/blue-return/usecase-tax-return.test.ts`（控えを足しても `getBlueReturn` の値が変わらない: FR-034）と `apps/server/test/tax-return.api.test.ts`（`useTempDataDir` の下に作ったファイルの絶対パスで `fileExists: true`、ないパスで `false`、相対パスで 400）
-- [ ] T032 [US6] テスト先行で `apps/web/src/routes/e/$entityId/tax-return/$year.tsx`（控えの表: 種類・金額・ファイルの場所・メモ・有無、書類の表: 種類・場所・提出日・メモ・有無）を作り、ナビに「申告の控え」を足す。テスト `apps/web/test/routes/tax-return.test.tsx`
+- [X] T031 [US6] テスト先行で `usecases/blue-return.ts` に `saveTaxReturnMemo`・`deleteTaxReturnMemo`・`saveFiledDocument`・`deleteFiledDocument` と一覧を足し（FR-033〜035）、`apps/server/src/routes/tax-return.ts`（H: 控え・書類の8つ。`fileExists` は `node:fs` の `existsSync`、R13）を作って `app.ts` に登録する。テスト `packages/domain/test/blue-return/usecase-tax-return.test.ts`（控えを足しても `getBlueReturn` の値が変わらない: FR-034）と `apps/server/test/tax-return.api.test.ts`（`useTempDataDir` の下に作ったファイルの絶対パスで `fileExists: true`、ないパスで `false`、相対パスで 400）
+- [X] T032 [US6] テスト先行で `apps/web/src/routes/e/$entityId/tax-return/$year.tsx`（控えの表: 種類・金額・ファイルの場所・メモ・有無、書類の表: 種類・場所・提出日・メモ・有無）を作り、ナビに「申告の控え」を足す。テスト `apps/web/test/routes/tax-return.test.tsx`
 
 ---
 
