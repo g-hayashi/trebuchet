@@ -31,8 +31,21 @@ export const DEFAULT_AUTH_STATUS = {
   recoveryAcknowledged: true,
 };
 
+/** バックアップの状態（004）の既定の応答。設定済みで、知らせなし */
+export const DEFAULT_BACKUP_STATUS = {
+  configured: true,
+  folder: "/Users/me/backup",
+  lastSuccess: null,
+  lastCheck: null,
+  lastRun: null,
+  alert: null,
+  running: false,
+};
+
 const DEFAULT_ROUTES: Record<string, Handler> = {
   "GET /api/auth/status": () => ok(DEFAULT_AUTH_STATUS),
+  // 全画面の上部の知らせ（004）が読む。設定済みで、知らせなし
+  "GET /api/backup/status": () => ok(DEFAULT_BACKUP_STATUS),
 };
 
 /**

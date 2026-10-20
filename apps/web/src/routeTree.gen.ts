@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EEntityIdRouteRouteImport } from './routes/e/$entityId/route'
+import { Route as SettingsBackupRouteImport } from './routes/settings/backup'
 import { Route as SettingsSecurityRouteImport } from './routes/settings/security'
 import { Route as EEntityIdIndexRouteImport } from './routes/e/$entityId/index'
 import { Route as EEntityIdAccountsRouteImport } from './routes/e/$entityId/accounts'
@@ -47,6 +48,11 @@ const IndexRoute = IndexRouteImport.update({
 const EEntityIdRouteRoute = EEntityIdRouteRouteImport.update({
   id: '/e/$entityId',
   path: '/e/$entityId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsBackupRoute = SettingsBackupRouteImport.update({
+  id: '/settings/backup',
+  path: '/settings/backup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsSecurityRoute = SettingsSecurityRouteImport.update({
@@ -201,6 +207,7 @@ const EEntityIdPeriodsYearOpeningBalancesRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
+  '/settings/backup': typeof SettingsBackupRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
@@ -231,6 +238,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/settings/backup': typeof SettingsBackupRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
@@ -263,6 +271,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
+  '/settings/backup': typeof SettingsBackupRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
@@ -296,6 +305,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/e/$entityId'
+    | '/settings/backup'
     | '/settings/security'
     | '/e/$entityId/accounts'
     | '/e/$entityId/partners'
@@ -326,6 +336,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/settings/backup'
     | '/settings/security'
     | '/e/$entityId/accounts'
     | '/e/$entityId/partners'
@@ -357,6 +368,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/e/$entityId'
+    | '/settings/backup'
     | '/settings/security'
     | '/e/$entityId/accounts'
     | '/e/$entityId/partners'
@@ -389,6 +401,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EEntityIdRouteRoute: typeof EEntityIdRouteRouteWithChildren
+  SettingsBackupRoute: typeof SettingsBackupRoute
   SettingsSecurityRoute: typeof SettingsSecurityRoute
 }
 
@@ -406,6 +419,13 @@ declare module '@tanstack/react-router' {
       path: '/e/$entityId'
       fullPath: '/e/$entityId'
       preLoaderRoute: typeof EEntityIdRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/backup': {
+      id: '/settings/backup'
+      path: '/settings/backup'
+      fullPath: '/settings/backup'
+      preLoaderRoute: typeof SettingsBackupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/security': {
@@ -666,6 +686,7 @@ const EEntityIdRouteRouteWithChildren = EEntityIdRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EEntityIdRouteRoute: EEntityIdRouteRouteWithChildren,
+  SettingsBackupRoute: SettingsBackupRoute,
   SettingsSecurityRoute: SettingsSecurityRoute,
 }
 export const routeTree = rootRouteImport

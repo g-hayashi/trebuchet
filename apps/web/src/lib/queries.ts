@@ -43,6 +43,9 @@ export const queryKeys = {
   authPasskeys: ["auth", "passkeys"] as const,
   authSessions: ["auth", "sessions"] as const,
   authEvents: ["auth", "events"] as const,
+  /** バックアップ（004）。状態は全画面の上部の知らせも読む */
+  backupStatus: ["backup", "status"] as const,
+  backupRuns: ["backup", "runs"] as const,
   /** 帳票（US4）。仕訳を変更したら前方一致で無効化する */
   reports: (entityId: string) => ["entities", entityId, "reports"] as const,
 };
