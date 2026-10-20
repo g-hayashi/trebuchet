@@ -21,9 +21,14 @@ export const AccountCreate = z.object({
 export type AccountCreate = z.infer<typeof AccountCreate>;
 
 export const AccountPatch = z
-  .object({ name: Name.optional(), isActive: z.boolean().optional() })
+  .object({
+    name: Name.optional(),
+    isActive: z.boolean().optional(),
+    /** 決算書の欄番号（null で解除、003 R12a） */
+    reportLine: z.number().int().positive().nullable().optional(),
+  })
   .refine(
-    (v) => v.name !== undefined || v.isActive !== undefined,
+    (v) => v.name !== undefined || v.isActive !== undefined || v.reportLine !== undefined,
     "変更する項目を指定してください",
   );
 export type AccountPatch = z.infer<typeof AccountPatch>;

@@ -7,10 +7,17 @@ import type {
 } from "./import/types.ts";
 import type {
   Account,
+  AdjustmentRef,
   AuditEntry,
+  ClosingAuditEntry,
+  ClosingNote,
+  DeductionAnswers,
   EntityProfile,
   EntitySummary,
+  FiledDocument,
   FiscalPeriod,
+  FixedAsset,
+  HomeUseAllocation,
   Journal,
   JournalLine,
   JournalQuery,
@@ -19,10 +26,13 @@ import type {
   Page,
   Partner,
   PostedLine,
+  RentDetail,
   SubAccount,
   Tag,
   TaxCategory,
+  TaxParameter,
   TaxRate,
+  TaxReturnMemo,
   TaxSetting,
   ValidJournal,
 } from "./types.ts";
@@ -181,6 +191,42 @@ export interface ImportUnitOfWork {
   /** fn が例外を投げると、fn の中の書き込みをすべて元に戻す */
   transaction<T>(
     fn: (tx: { ledger: LedgerRepository; masters: MasterRepository; imports: ImportStore }) => T,
+  ): T;
+}
+
+/** 決算処理と確定申告の設定（003-tax-return。packages/db が実装）。メソッドはすべて同期 */
+export interface ClosingStore {
+  listTaxParameters(): TaxParameter[];
+  listHomeUseAllocations(fiscalYear: number): HomeUseAllocation[];
+  upsertHomeUseAllocation(row: HomeUseAllocation): void;
+  listRentDetails(fiscalYear: number): RentDetail[];
+  replaceRentDetails(fiscalYear: number, rows: RentDetail[]): void;
+  listFixedAssets(): FixedAsset[];
+  upsertFixedAsset(row: FixedAsset): void;
+  listAdjustmentRefs(fiscalYear: number): AdjustmentRef[];
+  insertAdjustmentRef(ref: AdjustmentRef): void;
+  getDeductionAnswers(fiscalYear: number): DeductionAnswers | undefined;
+  upsertDeductionAnswers(row: DeductionAnswers): void;
+  listClosingNotes(fiscalYear: number): ClosingNote[];
+  upsertClosingNote(row: ClosingNote): void;
+  listTaxReturnMemos(fiscalYear: number): TaxReturnMemo[];
+  upsertTaxReturnMemo(row: TaxReturnMemo): void;
+  deleteTaxReturnMemo(id: string): void;
+  listFiledDocuments(fiscalYear: number): FiledDocument[];
+  upsertFiledDocument(row: FiledDocument): void;
+  deleteFiledDocument(id: string): void;
+  appendClosingAudit(entry: ClosingAuditEntry): void;
+}
+
+/** 決算整理の仕訳の登録で、仕訳・マスタ・決算の記録を1つのトランザクションで扱う（research R4） */
+export interface ClosingUnitOfWork {
+  /** fn が例外を投げると、fn の中の書き込みをすべて元に戻す */
+  transaction<T>(
+    fn: (tx: {
+      journals: JournalRepository;
+      masters: MasterRepository;
+      closing: ClosingStore;
+    }) => T,
   ): T;
 }
 

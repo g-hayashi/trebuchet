@@ -1,3 +1,4 @@
+export * from "./blue-return/tax-parameters.ts";
 export * from "./carry-forward.ts";
 export * from "./dates.ts";
 export * from "./import/csv.ts";
@@ -24,6 +25,7 @@ export * from "./reports/warnings.ts";
 export * from "./seed/accounts.individual.ts";
 export * from "./seed/freee-aliases.ts";
 export * from "./seed/tax-categories.ts";
+export * from "./seed/tax-parameters.ts";
 export * from "./seed/tax-rates.ts";
 export * from "./tax-rates.ts";
 export * from "./tax-settings.ts";

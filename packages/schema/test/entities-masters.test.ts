@@ -35,6 +35,12 @@ describe("マスタの入力", () => {
     expect(AccountPatch.safeParse({}).success).toBe(false);
     expect(AccountPatch.safeParse({ isActive: false }).success).toBe(true);
   });
+  it("AccountPatch は reportLine だけの変更を受け付ける（null で解除、R12a）", () => {
+    expect(AccountPatch.safeParse({ reportLine: 31 }).success).toBe(true);
+    expect(AccountPatch.safeParse({ reportLine: null }).success).toBe(true);
+    expect(AccountPatch.safeParse({ reportLine: 0 }).success).toBe(false);
+    expect(AccountPatch.safeParse({ reportLine: 1.5 }).success).toBe(false);
+  });
   it("PartnerInput の敬称は 様・御中・null のみ", () => {
     expect(PartnerInput.safeParse({ name: "A社", honorific: "御中" }).success).toBe(true);
     expect(PartnerInput.safeParse({ name: "A社", honorific: null }).success).toBe(true);
