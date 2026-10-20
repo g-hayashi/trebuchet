@@ -49,7 +49,7 @@ export const EXPECTED_JOURNAL = {
   receiptWithWithholdingId: "900000033",
   /** 片側が空の行を含む複合仕訳（借方だけの行: 900000033・900000143、貸方だけの行: 900000154） */
   oneSidedRowIds: ["900000033", "900000143", "900000154"],
-  /** 費用（通信費）に「課税売上10%」が付いた仕訳（TAX_CATEGORY_SUSPICIOUS） */
+  /** 費用（通信費）に「課税売上10%」が付いた仕訳（課税の期間なら TAX_CATEGORY_SUSPICIOUS、免税の期間なら TAX_CATEGORY_SUSPICIOUS_EXEMPT にまとまる） */
   suspiciousTaxId: "900000077",
   /** ファイルに出てくる勘定科目名（NFKC 後、出てくる順） */
   accountNames: [

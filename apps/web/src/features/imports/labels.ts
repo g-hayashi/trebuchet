@@ -34,6 +34,7 @@ export const REASON_LABELS: Record<ImportReasonCode, string> = {
 export const WARNING_LABELS: Record<ImportWarningCode, string> = {
   TAX_AMOUNT_MISMATCH: "税額が計算と違う",
   TAX_CATEGORY_SUSPICIOUS: "税区分が科目と合わない可能性",
+  TAX_CATEGORY_SUSPICIOUS_EXEMPT: "免税の期間のため税区分の警告をまとめた",
   POSSIBLE_DUPLICATE: "二重登録の可能性",
   FREEE_CHANGED: "freee 側で変更あり",
   FREEE_DELETED: "freee 側で削除",

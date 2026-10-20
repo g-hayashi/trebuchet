@@ -1,4 +1,4 @@
-import type { ImportPreview } from "@trebuchet/schema";
+import type { ImportPreview, ImportWarning } from "@trebuchet/schema";
 import { formatYen } from "@/lib/format";
 import type { Account } from "@/lib/queries";
 import { WARNING_LABELS } from "./labels";
@@ -7,6 +7,28 @@ const ENCODING_LABELS: Record<ImportPreview["file"]["encoding"], string> = {
   "utf-8": "UTF-8",
   shift_jis: "Shift_JIS",
 };
+
+/** 免税の期間の税区分の警告のまとめ（003 US7）。開くと freee の仕訳 ID の一覧を出す */
+function ExemptWarning({ warning }: { warning: ImportWarning }) {
+  const ids = Array.isArray(warning.details?.freeeJournalIds)
+    ? warning.details.freeeJournalIds.map(String)
+    : [];
+  const count = typeof warning.details?.count === "number" ? warning.details.count : ids.length;
+  return (
+    <li className="rounded-md border border-amber-500/50 px-3 py-1.5">
+      <details>
+        <summary className="cursor-pointer">
+          免税の期間のため税区分の警告を {count} 件まとめました
+        </summary>
+        <ul aria-label="まとめた警告の freee の仕訳 ID" className="mt-1 list-disc pl-5">
+          {ids.map((id) => (
+            <li key={id}>{id}</li>
+          ))}
+        </ul>
+      </details>
+    </li>
+  );
+}
 
 /** プレビューの要約（FR-003）: 期間・件数・合計、新しく作るもの、警告の一覧 */
 export function PreviewSummary({
@@ -72,22 +94,30 @@ export function PreviewSummary({
         <div className="grid gap-1 text-sm">
           <h3 className="font-medium">警告（取込は妨げません）</h3>
           <ul aria-label="警告の一覧" className="grid gap-1">
-            {warnings.map((w, index) => (
-              <li
-                // 同じ仕訳に同じコードの警告が重なることがあるため、順番も使う
-                // biome-ignore lint/suspicious/noArrayIndexKey: 警告は並べ替えない
-                key={`${w.code}-${w.freeeJournalId ?? ""}-${index}`}
-                className="rounded-md border border-amber-500/50 px-3 py-1.5"
-              >
-                <span className="font-medium">{WARNING_LABELS[w.code]}</span>
-                {w.freeeJournalId && (
-                  <span className="ml-2 text-muted-foreground">
-                    仕訳 {journalNo(w.freeeJournalId)}
-                  </span>
-                )}
-                <span className="ml-2">{w.message}</span>
-              </li>
-            ))}
+            {warnings.map((w, index) =>
+              w.code === "TAX_CATEGORY_SUSPICIOUS_EXEMPT" ? (
+                <ExemptWarning
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 警告は並べ替えない
+                  key={`${w.code}-${index}`}
+                  warning={w}
+                />
+              ) : (
+                <li
+                  // 同じ仕訳に同じコードの警告が重なることがあるため、順番も使う
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 警告は並べ替えない
+                  key={`${w.code}-${w.freeeJournalId ?? ""}-${index}`}
+                  className="rounded-md border border-amber-500/50 px-3 py-1.5"
+                >
+                  <span className="font-medium">{WARNING_LABELS[w.code]}</span>
+                  {w.freeeJournalId && (
+                    <span className="ml-2 text-muted-foreground">
+                      仕訳 {journalNo(w.freeeJournalId)}
+                    </span>
+                  )}
+                  <span className="ml-2">{w.message}</span>
+                </li>
+              ),
+            )}
           </ul>
         </div>
       )}
