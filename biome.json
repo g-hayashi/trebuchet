@@ -32,7 +32,8 @@
                   "drizzle-orm": "domain は DB に依存しない。ports.ts のインターフェースを使う",
                   "better-sqlite3": "domain は DB に依存しない。ports.ts のインターフェースを使う",
                   "node:fs": "domain は I/O をしない",
-                  "node:sqlite": "domain は DB に依存しない"
+                  "node:sqlite": "domain は DB に依存しない",
+                  "node:crypto": "domain は乱数・ハッシュを使わない（004 の plan）"
                 },
                 "patterns": [
                   {
