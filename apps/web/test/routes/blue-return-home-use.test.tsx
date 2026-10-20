@@ -110,7 +110,7 @@ function mockScreen(opts: Opts = {}) {
       state.proposals = [];
       return ok(
         {
-          journal: { id: "j-new" },
+          journal: { id: "j-new", journalNo: 7 },
           ref: {
             journalId: "j-new",
             kind: "home_use",
@@ -209,6 +209,7 @@ describe("家事按分・地代家賃の内訳の画面（US2）", () => {
     const list = await screen.findByRole("table", { name: "按分の登録" });
     expect(within(list).getByText("地代家賃")).toBeInTheDocument();
     expect(within(list).getByText("28.55%")).toBeInTheDocument();
+    expect(await screen.findByText("保存しました。")).toBeInTheDocument();
   });
 
   it("割合が不正なら保存しない（小数第3位、100 超）", async () => {
@@ -336,6 +337,7 @@ describe("家事按分・地代家賃の内訳の画面（US2）", () => {
         { payee: "大家B", property: "駐車場", annualRent: 240_000, deductibleAmount: 240_000 },
       ],
     });
+    expect(await screen.findByText("保存しました。")).toBeInTheDocument();
   });
 
   it("保存済みの内訳を表示し、行を削除して保存できる", async () => {
@@ -390,6 +392,7 @@ describe("家事按分・地代家賃の内訳の画面（US2）", () => {
       expected: { amount: 840_000 },
     });
     expect(await within(panel).findByText("登録する仕訳の案はありません。")).toBeInTheDocument();
+    expect(screen.getByText("仕訳を登録しました（No.7）。")).toBeInTheDocument();
   });
 
   it("減価償却の案は資産名、取得価額・事業専用割合・必要経費算入額と仕訳を見せ、kind depreciation で確定する", async () => {

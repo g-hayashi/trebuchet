@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
+import { SaveNotice } from "@/components/ui/save-notice";
 import {
   Table,
   TableBody,
@@ -287,10 +288,11 @@ export function HomeUseForm({
               onChange={(e) => setValues((v) => ({ ...v, changeReason: e.target.value }))}
             />
           </div>
-          <div>
+          <div className="flex items-center gap-3">
             <Button type="submit" disabled={save.isPending}>
               保存
             </Button>
+            <SaveNotice message={save.isSuccess ? "保存しました。" : ""} />
           </div>
         </form>
         <ApiErrorMessage error={save.error} />

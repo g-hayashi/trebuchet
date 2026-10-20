@@ -1,6 +1,7 @@
 import type { BlueReturn, BlueReturnWarning, StatementRow } from "@trebuchet/schema";
 import type { OpeningInput } from "../reports/common.ts";
 import { buildProfitAndLoss } from "../reports/profit-and-loss.ts";
+import { formatSignedAmount } from "../reports/warnings.ts";
 import type {
   Account,
   AdjustmentRef,
@@ -94,7 +95,7 @@ function homeUseWarnings(input: BuildBlueReturnInput, period: FiscalPeriod): Blu
       const { bookAmount, home, registered, difference } = assessed.value;
       out.push({
         code: "HOME_USE_ADJUSTMENT_STALE",
-        message: `家事按分の振替（${name}）が帳簿と合っていません。家事分 ${home} 円に対して振替済みは ${registered} 円です（差額 ${difference} 円）`,
+        message: `家事按分の振替（${name}）が帳簿と合っていません。家事分 ${formatSignedAmount(home)} 円に対して振替済みは ${formatSignedAmount(registered)} 円です（差額 ${formatSignedAmount(difference)} 円）`,
         details: {
           allocationId: allocation.id,
           accountId: allocation.accountId,
@@ -120,7 +121,7 @@ function rentDetailsWarnings(
   return [
     {
       code: "RENT_DETAILS_MISMATCH",
-      message: `地代家賃の内訳の必要経費算入額の合計（${total} 円）が欄23（${line23} 円）と一致しません`,
+      message: `地代家賃の内訳の必要経費算入額の合計（${formatSignedAmount(total)} 円）が欄23（${formatSignedAmount(line23)} 円）と一致しません`,
       details: { rentDetailsTotal: total, line23, difference: total - line23 },
     },
   ];
@@ -164,7 +165,7 @@ function depreciationWarnings(
   return [
     {
       code: "DEPRECIATION_MISMATCH",
-      message: `3ページの必要経費算入額の合計（${total} 円）が欄18 の減価償却費（${line18} 円）と一致しません`,
+      message: `3ページの必要経費算入額の合計（${formatSignedAmount(total)} 円）が欄18 の減価償却費（${formatSignedAmount(line18)} 円）と一致しません`,
       details: { depreciationTotal: total, line18, difference: total - line18 },
     },
   ];

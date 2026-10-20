@@ -40,6 +40,8 @@ function FixedAssetsPage() {
   const [yearText, setYearText] = useState(String(year));
   const [editingId, setEditingId] = useState<string>();
   const [disposingId, setDisposingId] = useState<string>();
+  // 登録・更新の成功の知らせ。保存すると入力欄を作り直すので、ここで持つ
+  const [notice, setNotice] = useState("");
 
   const assets = useQuery(fixedAssetsQuery(entityId, year));
   const accounts = useQuery(accountsQuery(entityId));
@@ -122,7 +124,14 @@ function FixedAssetsPage() {
                     </TableCell>
                     <TableCell>{a.disposedOn ? `除却 ${a.disposedOn}` : "使用中"}</TableCell>
                     <TableCell className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setEditingId(a.id)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setNotice("");
+                          setEditingId(a.id);
+                        }}
+                      >
                         {`${a.name}を編集`}
                       </Button>
                       {a.disposedOn === null && (
@@ -147,6 +156,8 @@ function FixedAssetsPage() {
           accounts={accounts.data}
           editing={editing}
           onDone={() => setEditingId(undefined)}
+          notice={notice}
+          onSaved={setNotice}
         />
       )}
 

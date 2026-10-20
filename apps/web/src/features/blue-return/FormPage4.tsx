@@ -3,6 +3,7 @@ import type { BlueReturn } from "@trebuchet/schema";
 import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
+import { SaveNotice } from "@/components/ui/save-notice";
 import {
   Table,
   TableBody,
@@ -25,18 +26,25 @@ const CHECK_LABELS: Record<Page4["carryForwardCheck"], string> = {
   mismatched: "食い違い",
 };
 
-type Mismatch = { accountName: string; expected: number; actual: number; diff: number };
+type Mismatch = {
+  accountId: string;
+  accountName: string;
+  expected: number;
+  actual: number;
+  diff: number;
+};
 
 /** OPENING_MISMATCH の details を、金額の形が合うものだけ取り出す（details は型のない record） */
 function mismatchOf(w: BlueReturn["warnings"][number]): Mismatch | undefined {
   const d = w.details;
   if (w.code !== "OPENING_MISMATCH" || d == null) return undefined;
-  const { accountName, expected, actual, diff } = d as Record<string, unknown>;
-  return typeof accountName === "string" &&
+  const { accountId, accountName, expected, actual, diff } = d as Record<string, unknown>;
+  return typeof accountId === "string" &&
+    typeof accountName === "string" &&
     typeof expected === "number" &&
     typeof actual === "number" &&
     typeof diff === "number"
-    ? { accountName, expected, actual, diff }
+    ? { accountId, accountName, expected, actual, diff }
     : undefined;
 }
 
@@ -126,10 +134,11 @@ function DifferenceNoteForm({
         className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
       />
       <ApiErrorMessage error={save.error} />
-      <div>
+      <div className="flex items-center gap-3">
         <Button type="submit" variant="outline" disabled={save.isPending}>
           説明を保存
         </Button>
+        <SaveNotice message={save.isSuccess ? "保存しました。" : ""} />
       </div>
     </form>
   );
@@ -190,7 +199,7 @@ export function FormPage4({
             </TableHeader>
             <TableBody>
               {mismatches.map((m) => (
-                <TableRow key={m.accountName}>
+                <TableRow key={m.accountId}>
                   <TableCell>{m.accountName}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatSignedYen(m.expected)}
@@ -206,8 +215,10 @@ export function FormPage4({
             </TableBody>
           </Table>
         )}
-        {others.map((w) => (
-          <p key={w.message} className="text-destructive">
+        {others.map((w, i) => (
+          // 期首を求められない警告は金額の details がなく、文面が同じものは重ならない（並びは固定）
+          // biome-ignore lint/suspicious/noArrayIndexKey: 固定の並び
+          <p key={`${i}-${w.message}`} className="text-destructive">
             {w.message}
           </p>
         ))}

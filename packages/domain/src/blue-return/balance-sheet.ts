@@ -14,7 +14,7 @@ import {
   sortAccounts,
   toSide,
 } from "../reports/common.ts";
-import { detectWarnings } from "../reports/warnings.ts";
+import { detectWarnings, formatSignedAmount } from "../reports/warnings.ts";
 import type { Account, ClosingNote, FiscalPeriod, PostedLine } from "../types.ts";
 import type { BlueReturnForm, BsSide } from "./form.ts";
 import { checkOpeningCarryForward } from "./opening-check.ts";
@@ -251,10 +251,9 @@ export function buildPage4(input: Page4Input): { page4: Page4; warnings: BlueRet
         const accountName = nameOf(m.accountId);
         warnings.push({
           code: "OPENING_MISMATCH",
-          message: `「${accountName}」の期首残高（${m.actual} 円）が、前の年度の期末から求めた値（${m.expected} 円）と違います（差額 ${m.diff} 円）`,
+          message: `「${accountName}」の期首残高（${formatSignedAmount(m.actual)} 円）が、前の年度の期末から求めた値（${formatSignedAmount(m.expected)} 円）と違います（差額 ${formatSignedAmount(m.diff)} 円）`,
           details: {
             accountId: m.accountId,
-            subAccountId: m.subAccountId,
             accountName,
             expected: m.expected,
             actual: m.actual,
@@ -292,7 +291,7 @@ export function buildPage4(input: Page4Input): { page4: Page4; warnings: BlueRet
     if (b === undefined || b.closing === 0 || b.opening !== b.closing) continue;
     warnings.push({
       code: "DEFERRED_ASSET_NOT_AMORTIZED",
-      message: `${a.name}（繰延資産）の残高 ${toSide(b.closing, a.normalSide)} 円が期首から変わっていません。償却するかどうかを検討してください`,
+      message: `${a.name}（繰延資産）の残高 ${formatSignedAmount(toSide(b.closing, a.normalSide))} 円が期首から変わっていません。償却するかどうかを検討してください`,
       details: { accountId: a.id, accountName: a.name, amount: toSide(b.closing, a.normalSide) },
     });
   }

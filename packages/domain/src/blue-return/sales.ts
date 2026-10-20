@@ -1,4 +1,5 @@
 import type { BlueReturn, BlueReturnWarning } from "@trebuchet/schema";
+import { formatSignedAmount } from "../reports/warnings.ts";
 import type { Account, FiscalPeriod, PostedLine } from "../types.ts";
 
 /** 雑収入の科目コード（初期セットの雑収入）。売上高と同じ区分（PL_SALES）にあるので、コードで分ける */
@@ -149,7 +150,7 @@ export function salesWarnings(input: {
     if (total === line1) return;
     out.push({
       code: "SALES_TOTAL_MISMATCH",
-      message: `${label}の合計（${total} 円）が欄1（${line1} 円）と一致しません（差額 ${total - line1} 円）`,
+      message: `${label}の合計（${formatSignedAmount(total)} 円）が欄1（${formatSignedAmount(line1)} 円）と一致しません（差額 ${formatSignedAmount(total - line1)} 円）`,
       details: { target, line1, total, difference: total - line1 },
     });
   };
@@ -163,7 +164,7 @@ export function salesWarnings(input: {
     const { count, amount } = partners.withoutPartner;
     out.push({
       code: "SALES_WITHOUT_PARTNER",
-      message: `取引先が付いていない売上の行が ${count} 件（${amount} 円）あります。「上記以外の売上先の計」に含めています`,
+      message: `取引先が付いていない売上の行が ${count} 件（${formatSignedAmount(amount)} 円）あります。「上記以外の売上先の計」に含めています`,
       details: { count, amount },
     });
   }

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
+import { SaveNotice } from "@/components/ui/save-notice";
 import { blueReturnKeys } from "@/features/blue-return/api";
 import { formatRatioAsPercent, parsePercentToRatio } from "@/features/blue-return/ratio";
 import { parseYenInput } from "@/lib/format";
@@ -119,12 +120,17 @@ export function FixedAssetForm({
   accounts,
   editing,
   onDone,
+  notice,
+  onSaved,
 }: {
   entityId: string;
   accounts: readonly Account[];
   /** 編集する資産。なければ新規の登録 */
   editing: FixedAssetRow | undefined;
   onDone: () => void;
+  /** 成功の知らせ（「登録しました。」「更新しました。」）。保存すると入力欄を作り直すので、親が持つ */
+  notice: string;
+  onSaved: (message: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [values, setValues] = useState<Values>(editing ? valuesOf(editing) : EMPTY);
@@ -159,6 +165,7 @@ export function FixedAssetForm({
     onSuccess: async () => {
       setValues(EMPTY);
       onDone();
+      onSaved(editing ? "更新しました。" : "登録しました。");
       // 台帳と、決算書（3ページ・警告）・仕訳の案を読み直す
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: fixedAssetKeys.all(entityId) }),
@@ -315,6 +322,7 @@ export function FixedAssetForm({
                 キャンセル
               </Button>
             )}
+            <SaveNotice message={notice} />
           </div>
         </form>
         <ApiErrorMessage error={save.error} className="mt-3" />

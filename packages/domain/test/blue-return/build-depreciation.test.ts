@@ -136,6 +136,10 @@ describe("buildBlueReturn の3ページ 減価償却費の計算（FR-023）", (
       line18: 0,
       difference: 200_000,
     });
+    // 金額は 001 の formatSignedAmount と同じ書式（桁区切り）
+    expect(w?.message).toBe(
+      "3ページの必要経費算入額の合計（200,000 円）が欄18 の減価償却費（0 円）と一致しません",
+    );
   });
 
   it("資産がなくても、欄18 が 0 でなければ警告する", () => {

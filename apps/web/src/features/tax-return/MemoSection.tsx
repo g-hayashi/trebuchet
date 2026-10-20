@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
+import { SaveNotice } from "@/components/ui/save-notice";
 import {
   Table,
   TableBody,
@@ -46,11 +47,16 @@ function MemoForm({
   year,
   editing,
   onDone,
+  notice,
+  onSaved,
 }: {
   entityId: string;
   year: string;
   editing: MemoRow | undefined;
   onDone: () => void;
+  /** 成功の知らせ。保存すると入力欄を作り直すので、親が持つ */
+  notice: string;
+  onSaved: (message: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [values, setValues] = useState<Values>(editing ? valuesOf(editing) : EMPTY);
@@ -71,6 +77,7 @@ function MemoForm({
     onSuccess: async () => {
       setValues(EMPTY);
       onDone();
+      onSaved(editing ? "更新しました。" : "登録しました。");
       await queryClient.invalidateQueries({ queryKey: taxReturnKeys.memos(entityId, year) });
     },
   });
@@ -176,6 +183,7 @@ function MemoForm({
             キャンセル
           </Button>
         )}
+        <SaveNotice message={notice} />
       </div>
       <ApiErrorMessage error={save.error} />
     </form>
@@ -190,6 +198,8 @@ export function MemoSection({ entityId, year }: { entityId: string; year: string
   const queryClient = useQueryClient();
   const memos = useQuery(memosQuery(entityId, year));
   const [editingId, setEditingId] = useState<string>();
+  // 登録・更新の成功の知らせ。保存すると入力欄を作り直すので、ここで持つ
+  const [notice, setNotice] = useState("");
   const rows = memos.data ?? [];
   const editing = rows.find((m) => m.id === editingId);
 
@@ -240,7 +250,14 @@ export function MemoSection({ entityId, year }: { entityId: string; year: string
                     {m.filePath === null ? "" : m.fileExists ? "あり" : "見つかりません"}
                   </TableCell>
                   <TableCell className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setEditingId(m.id)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setNotice("");
+                        setEditingId(m.id);
+                      }}
+                    >
                       編集<span className="sr-only">（{memoKindText(m.kind, m.label)}）</span>
                     </Button>
                     <Button
@@ -272,6 +289,8 @@ export function MemoSection({ entityId, year }: { entityId: string; year: string
           year={year}
           editing={editing}
           onDone={() => setEditingId(undefined)}
+          notice={notice}
+          onSaved={setNotice}
         />
       </CardContent>
     </Card>

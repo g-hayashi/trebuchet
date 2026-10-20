@@ -189,6 +189,7 @@ describe("申告の控えの画面（US6、FR-033〜036）", () => {
       memo: null,
     });
     expect(await screen.findByRole("table", { name: "事業所得以外の控え" })).toBeInTheDocument();
+    expect(await screen.findByText("登録しました。")).toBeInTheDocument();
   });
 
   it("相対パス・不正な金額・項目名のない「その他」は送らない", async () => {
@@ -230,6 +231,7 @@ describe("申告の控えの画面（US6、FR-033〜036）", () => {
       kind: "salary",
       amount: 3_200_000,
     });
+    expect(await screen.findByText("更新しました。")).toBeInTheDocument();
 
     const updated = await screen.findByRole("row", { name: /3,200,000/ });
     await user.click(within(updated).getByRole("button", { name: /削除/ }));
@@ -271,6 +273,7 @@ describe("申告の控えの画面（US6、FR-033〜036）", () => {
       filedOn: "2026-03-15",
       memo: null,
     });
+    expect(await screen.findByText("登録しました。")).toBeInTheDocument();
   });
 
   it("書類の場所が空・相対パスなら送らない", async () => {
@@ -302,6 +305,7 @@ describe("申告の控えの画面（US6、FR-033〜036）", () => {
     await user.click(screen.getByRole("button", { name: "書類を更新" }));
     await waitFor(() => expect(callsOf(calls, "PUT", `${DOCUMENTS}/d-1`)).toHaveLength(1));
     expect(callsOf(calls, "PUT", `${DOCUMENTS}/d-1`)[0]?.body).toMatchObject({ memo: "紙で提出" });
+    expect(await screen.findByText("更新しました。")).toBeInTheDocument();
 
     const updated = await screen.findByRole("row", { name: /紙で提出/ });
     await user.click(within(updated).getByRole("button", { name: /削除/ }));

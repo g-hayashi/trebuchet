@@ -105,6 +105,7 @@ describe("buildBlueReturn の家事按分の警告（FR-016）", () => {
       registered: 0,
       difference: 840_000,
     });
+    expect(w?.message).toContain("家事分 840,000 円に対して振替済みは 0 円です（差額 840,000 円）");
     expect(line(r, 23)).toBe(1_200_000);
   });
 
@@ -176,6 +177,9 @@ describe("buildBlueReturn の地代家賃の内訳（FR-017）", () => {
       line23: 500_000,
       difference: -200_000,
     });
+    expect(w?.message).toBe(
+      "地代家賃の内訳の必要経費算入額の合計（300,000 円）が欄23（500,000 円）と一致しません",
+    );
   });
 
   it("内訳が空で欄23が 0 でなければ警告、欄23 も 0 なら警告しない", () => {

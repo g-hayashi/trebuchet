@@ -242,6 +242,7 @@ describe("特殊事情のメモ（FR-027）", () => {
     // 出力（印刷）にも含める。画面では入力欄に入っている
     const printed = await screen.findByLabelText("保存した特殊事情");
     expect(printed).toHaveTextContent("10月に事務所を移転した");
+    expect(await screen.findByText("保存しました。")).toBeInTheDocument();
   });
 
   it("保存済みのメモを入力欄に入れて開く。保存に失敗したらエラーを示す", async () => {

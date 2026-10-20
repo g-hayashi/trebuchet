@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
+import { SaveNotice } from "@/components/ui/save-notice";
 import {
   blueReturnKeys,
   deductionAnswersQuery,
@@ -36,6 +37,7 @@ const NONE: DeductionAnswersInput = {
 function DeductionPage() {
   const { entityId, year } = Route.useParams();
   const { data, isPending, error } = useQuery(deductionAnswersQuery(entityId, year));
+  const [saved, setSaved] = useState(false);
 
   return (
     <main className="grid gap-6">
@@ -56,6 +58,8 @@ function DeductionPage() {
           entityId={entityId}
           year={year}
           view={data}
+          saved={saved}
+          onSavedChange={setSaved}
         />
       )}
     </main>
@@ -65,14 +69,29 @@ function DeductionPage() {
 /** 回答と上限額（GET と PUT の応答は同じ形） */
 type View = Awaited<ReturnType<typeof putDeductionAnswers>>;
 
-function AnswersForm({ entityId, year, view }: { entityId: string; year: string; view: View }) {
+function AnswersForm({
+  entityId,
+  year,
+  view,
+  saved,
+  onSavedChange,
+}: {
+  entityId: string;
+  year: string;
+  view: View;
+  /** 保存の成功の知らせを出すか。保存すると入力欄を作り直すので、親が持つ */
+  saved: boolean;
+  onSavedChange: (saved: boolean) => void;
+}) {
   const queryClient = useQueryClient();
   const [values, setValues] = useState<DeductionAnswersInput>(view.answers ?? NONE);
   const save = useMutation({
     mutationFn: (json: DeductionAnswersInput) => putDeductionAnswers(entityId, year, json),
     // 決算書の欄44・45 も変わるため、年度の決算書と回答を読み直す
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: blueReturnKeys.year(entityId, year) }),
+    onSuccess: () => {
+      onSavedChange(true);
+      return queryClient.invalidateQueries({ queryKey: blueReturnKeys.year(entityId, year) });
+    },
   });
 
   const submit = (e: FormEvent) => {
@@ -99,15 +118,19 @@ function AnswersForm({ entityId, year, view }: { entityId: string; year: string;
                 type="checkbox"
                 className="size-4"
                 checked={values[q.key]}
-                onChange={(e) => setValues((prev) => ({ ...prev, [q.key]: e.target.checked }))}
+                onChange={(e) => {
+                  onSavedChange(false);
+                  setValues((prev) => ({ ...prev, [q.key]: e.target.checked }));
+                }}
               />
               {q.label}
             </label>
           ))}
-          <div>
+          <div className="flex items-center gap-3">
             <Button type="submit" disabled={save.isPending}>
               保存
             </Button>
+            <SaveNotice message={saved ? "保存しました。" : ""} />
           </div>
         </form>
         <ApiErrorMessage error={save.error} />

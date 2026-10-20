@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { AdjustmentPanel } from "@/features/blue-return/AdjustmentPanel";
 import { adjustmentsQuery, homeUseQuery, rentDetailsQuery } from "@/features/blue-return/api";
@@ -15,6 +16,8 @@ export const Route = createFileRoute("/e/$entityId/blue-return/$year/home-use")(
 /** 家事按分の登録、決算整理の仕訳の案、地代家賃の内訳（US2、FR-012〜017） */
 function HomeUsePage() {
   const { entityId, year } = Route.useParams();
+  // 内訳を保存すると入力欄を作り直すので、保存の知らせはここで持つ
+  const [rentNotice, setRentNotice] = useState("");
   const homeUse = useQuery(homeUseQuery(entityId, year));
   const rent = useQuery(rentDetailsQuery(entityId, year));
   const adjustments = useQuery(adjustmentsQuery(entityId, year));
@@ -61,6 +64,8 @@ function HomeUsePage() {
           entityId={entityId}
           year={year}
           rows={rent.data}
+          notice={rentNotice}
+          onSaved={() => setRentNotice("保存しました。")}
         />
       )}
     </main>

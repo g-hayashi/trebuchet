@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
+import { SaveNotice } from "@/components/ui/save-notice";
 import {
   Table,
   TableBody,
@@ -40,11 +41,16 @@ function DocumentForm({
   year,
   editing,
   onDone,
+  notice,
+  onSaved,
 }: {
   entityId: string;
   year: string;
   editing: DocumentRow | undefined;
   onDone: () => void;
+  /** 成功の知らせ。保存すると入力欄を作り直すので、親が持つ */
+  notice: string;
+  onSaved: (message: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [values, setValues] = useState<Values>(editing ? valuesOf(editing) : EMPTY);
@@ -66,6 +72,7 @@ function DocumentForm({
     onSuccess: async () => {
       setValues(EMPTY);
       onDone();
+      onSaved(editing ? "更新しました。" : "登録しました。");
       await queryClient.invalidateQueries({ queryKey: taxReturnKeys.documents(entityId, year) });
     },
   });
@@ -148,6 +155,7 @@ function DocumentForm({
             キャンセル
           </Button>
         )}
+        <SaveNotice message={notice} />
       </div>
       <ApiErrorMessage error={save.error} />
     </form>
@@ -162,6 +170,8 @@ export function DocumentSection({ entityId, year }: { entityId: string; year: st
   const queryClient = useQueryClient();
   const documents = useQuery(documentsQuery(entityId, year));
   const [editingId, setEditingId] = useState<string>();
+  // 登録・更新の成功の知らせ。保存すると入力欄を作り直すので、ここで持つ
+  const [notice, setNotice] = useState("");
   const rows = documents.data ?? [];
   const editing = rows.find((d) => d.id === editingId);
 
@@ -208,7 +218,14 @@ export function DocumentSection({ entityId, year }: { entityId: string; year: st
                   <TableCell>{d.memo ?? ""}</TableCell>
                   <TableCell>{d.fileExists ? "あり" : "見つかりません"}</TableCell>
                   <TableCell className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setEditingId(d.id)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setNotice("");
+                        setEditingId(d.id);
+                      }}
+                    >
                       編集<span className="sr-only">（{DOCUMENT_KIND_LABELS[d.kind]}）</span>
                     </Button>
                     <Button
@@ -239,6 +256,8 @@ export function DocumentSection({ entityId, year }: { entityId: string; year: st
           year={year}
           editing={editing}
           onDone={() => setEditingId(undefined)}
+          notice={notice}
+          onSaved={setNotice}
         />
       </CardContent>
     </Card>

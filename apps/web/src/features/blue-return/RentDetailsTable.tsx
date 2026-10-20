@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
+import { SaveNotice } from "@/components/ui/save-notice";
 import {
   Table,
   TableBody,
@@ -39,10 +40,15 @@ export function RentDetailsTable({
   entityId,
   year,
   rows,
+  notice,
+  onSaved,
 }: {
   entityId: string;
   year: string;
   rows: readonly RentDetailRow[];
+  /** 保存の成功の知らせ。保存すると入力欄を作り直すので、親が持つ */
+  notice: string;
+  onSaved: () => void;
 }) {
   const queryClient = useQueryClient();
   const nextKey = useRef(rows.length);
@@ -60,8 +66,10 @@ export function RentDetailsTable({
   const save = useMutation({
     mutationFn: (json: Parameters<typeof putRentDetails>[2]) =>
       putRentDetails(entityId, year, json),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: blueReturnKeys.year(entityId, year) }),
+    onSuccess: () => {
+      onSaved();
+      return queryClient.invalidateQueries({ queryKey: blueReturnKeys.year(entityId, year) });
+    },
   });
 
   const update = (key: number, patch: Partial<Row>) =>
@@ -169,6 +177,7 @@ export function RentDetailsTable({
             <Button type="submit" disabled={save.isPending}>
               内訳を保存
             </Button>
+            <SaveNotice message={notice} />
           </div>
           {formError && (
             <p role="alert" className="text-sm text-destructive">

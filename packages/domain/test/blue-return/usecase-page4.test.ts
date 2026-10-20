@@ -96,7 +96,6 @@ describe("getBlueReturn の4ページ（T027, US4）", () => {
     expect(mismatches.map((w) => w.details)).toEqual([
       {
         accountId: fx.accountId("現金"),
-        subAccountId: null,
         accountName: "現金",
         expected: 380_000,
         actual: 400_000,
@@ -105,7 +104,6 @@ describe("getBlueReturn の4ページ（T027, US4）", () => {
       },
       {
         accountId: fx.accountId("元入金"),
-        subAccountId: null,
         accountName: "元入金",
         expected: 380_000,
         actual: 400_000,

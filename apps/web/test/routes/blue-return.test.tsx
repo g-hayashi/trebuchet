@@ -336,6 +336,8 @@ describe("控除の要件の回答の画面", () => {
     await user.click(screen.getByRole("button", { name: "保存" }));
 
     expect(await screen.findByText("上限額: 550,000 円")).toBeInTheDocument();
+    // 保存後に入力欄を作り直しても、成功のメッセージは残る
+    expect(await screen.findByText("保存しました。")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
       doubleEntry: true,
       statementsAttached: true,

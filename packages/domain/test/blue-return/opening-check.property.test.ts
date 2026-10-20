@@ -70,7 +70,7 @@ describe("checkOpeningCarryForward（T026, FR-029, R8）", () => {
     );
   });
 
-  it("1 科目をずらして元入金で貸借を合わせると、その科目と元入金だけに差が出る（期待値・実際・差額）", () => {
+  it("1 科目をずらして元入金で貸借を合わせると、その科目と元入金だけに1科目1件で差が出る（期待値・実際・差額）", () => {
     fc.assert(
       fc.property(balancedClosingArb(ACCOUNTS), shiftedKeyArb, deltaArb, (balances, key, delta) => {
         const expectedRows = carried(balances);
@@ -85,22 +85,68 @@ describe("checkOpeningCarryForward（T026, FR-029, R8）", () => {
         const opening = toRows(net);
 
         const result = check(balances, opening);
-        const expectedNet = netOf(expectedRows);
-        const expectedOf = (k: Key) => signed(k.accountId, expectedNet.get(keyOf(k))?.amount ?? 0);
-        const capitalKey = { accountId: CAPITAL, subAccountId: null };
+        // 勘定科目ごとの合計（補助科目は問わない）
+        const expectedOf = (id: string) =>
+          signed(
+            id,
+            expectedRows.filter((r) => r.accountId === id).reduce((s, r) => s + debitNet(r), 0),
+          );
 
-        expect(result.map((m) => keyOf(m)).sort()).toEqual([keyOf(key), keyOf(capitalKey)].sort());
+        // 元入金に補助科目を付けてずらした場合は、元入金の合計が変わらないので差なし
+        if (key.accountId === CAPITAL) {
+          expect(result).toEqual([]);
+          return;
+        }
+        expect(result.map((m) => m.accountId).sort()).toEqual([key.accountId, CAPITAL].sort());
         for (const m of result) {
           expect(m.actual - m.expected).toBe(m.diff);
           expect(m.diff).not.toBe(0);
-          expect(m.expected).toBe(expectedOf(m));
+          expect(m.expected).toBe(expectedOf(m.accountId));
         }
-        const shifted = result.find((m) => keyOf(m) === keyOf(key));
-        const capital = result.find((m) => keyOf(m) === keyOf(capitalKey));
+        const shifted = result.find((m) => m.accountId === key.accountId);
+        const capital = result.find((m) => m.accountId === CAPITAL);
         expect(shifted?.diff).toBe(signed(key.accountId, delta));
         expect(capital?.diff).toBe(signed(CAPITAL, -delta));
       }),
     );
+  });
+
+  it("補助科目の付け方だけが違う場合（前年度は補助科目なし、期首は補助科目あり）は差 0 件", () => {
+    const balances: CarryForwardBalance[] = [
+      { accountId: accountId("1010"), subAccountId: null, closing: 15_000 },
+      { accountId: accountId("2020"), subAccountId: null, closing: -15_000 },
+    ];
+    const r = checkOpeningCarryForward(
+      balances,
+      [
+        { accountId: accountId("1010"), subAccountId: null, side: "debit", amount: 15_000 },
+        { accountId: accountId("2020"), subAccountId: "sub-1", side: "credit", amount: 15_000 },
+      ],
+      ACCOUNTS,
+    );
+    expect(r).toEqual({ ok: true, value: [] });
+  });
+
+  it("補助科目に分けて登録しても、勘定科目の合計が違えば、その科目1件だけに差が出る", () => {
+    const r = checkOpeningCarryForward(
+      [
+        { accountId: accountId("1010"), subAccountId: null, closing: 15_000 },
+        { accountId: CAPITAL, subAccountId: null, closing: -15_000 },
+      ],
+      [
+        { accountId: accountId("1010"), subAccountId: "sub-1", side: "debit", amount: 10_000 },
+        { accountId: accountId("1010"), subAccountId: "sub-2", side: "debit", amount: 7_000 },
+        { accountId: CAPITAL, side: "credit", amount: 17_000 },
+      ],
+      ACCOUNTS,
+    );
+    expect(r).toEqual({
+      ok: true,
+      value: [
+        { accountId: accountId("1010"), expected: 15_000, actual: 17_000, diff: 2_000 },
+        { accountId: CAPITAL, expected: 15_000, actual: 17_000, diff: 2_000 },
+      ],
+    });
   });
 
   it("期首の同じ科目・補助科目の行は合算して比べ、補助科目なし（undefined）は null と同じ", () => {
@@ -144,14 +190,8 @@ describe("checkOpeningCarryForward（T026, FR-029, R8）", () => {
     expect(r).toEqual({
       ok: true,
       value: [
-        {
-          accountId: accountId("1030"),
-          subAccountId: null,
-          expected: 500,
-          actual: 800,
-          diff: 300,
-        },
-        { accountId: CAPITAL, subAccountId: null, expected: 2_000, actual: 2_300, diff: 300 },
+        { accountId: accountId("1030"), expected: 500, actual: 800, diff: 300 },
+        { accountId: CAPITAL, expected: 2_000, actual: 2_300, diff: 300 },
       ],
     });
   });

@@ -3,6 +3,7 @@ import type { BlueReturn } from "@trebuchet/schema";
 import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
+import { SaveNotice } from "@/components/ui/save-notice";
 import {
   Table,
   TableBody,
@@ -105,10 +106,11 @@ function SpecialCircumstancesForm({
           className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
         />
         <ApiErrorMessage error={save.error} />
-        <div>
+        <div className="flex items-center gap-3">
           <Button type="submit" variant="outline" disabled={save.isPending}>
             特殊事情を保存
           </Button>
+          <SaveNotice message={save.isSuccess ? "保存しました。" : ""} />
         </div>
       </form>
       {/* 出力（印刷）にも含める。画面では入力欄に入っている */}

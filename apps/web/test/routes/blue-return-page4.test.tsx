@@ -167,6 +167,27 @@ describe("決算書の4ページ（US4）", () => {
     expect(within(warnings).getByText(MISMATCH.message)).toBeInTheDocument();
   });
 
+  it("科目名と文面が同じでも、科目の ID が違えば別の行（React の key を重複させない）", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mockApi({
+      [`GET ${YEAR_API}`]: () =>
+        ok({
+          blueReturn: blueReturn({ carryForwardCheck: "mismatched" }, [
+            MISMATCH,
+            { ...MISMATCH, details: { ...MISMATCH.details, accountId: "a-ar-2" } },
+          ]),
+        }),
+    });
+    renderYear();
+
+    const table = await screen.findByRole("table", { name: "繰越の食い違い" });
+    expect(within(table).getAllByRole("row")).toHaveLength(3);
+    const keyErrors = consoleError.mock.calls.filter((args) =>
+      args.some((a) => typeof a === "string" && a.includes("same key")),
+    );
+    expect(keyErrors).toEqual([]);
+  });
+
   it("負の差額は ▲ を付けて示す", async () => {
     mockApi({
       [`GET ${YEAR_API}`]: () =>
@@ -255,6 +276,7 @@ describe("決算書の4ページ（US4）", () => {
     // 差額は計算し直さない（API の値のまま）
     const table = screen.getByRole("table", { name: "繰越の食い違い" });
     expect(rowOf(table, "売掛金")).toEqual(["売掛金", "250,000", "300,000", "50,000"]);
+    expect(await screen.findByText("保存しました。")).toBeInTheDocument();
   });
 
   it("保存済みの説明を入力欄に入れて開く。保存に失敗したらエラーを示す", async () => {

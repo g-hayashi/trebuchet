@@ -192,7 +192,6 @@ describe("buildBlueReturn の4ページ（T027, US4, FR-028〜032, R8）", () =>
     expect(warningsOf(r, "OPENING_MISMATCH").map((w) => w.details)).toEqual([
       {
         accountId: id("1030"),
-        subAccountId: null,
         accountName: "売掛金",
         expected: 200_000,
         actual: 250_000,
@@ -201,7 +200,6 @@ describe("buildBlueReturn の4ページ（T027, US4, FR-028〜032, R8）", () =>
       },
       {
         accountId: id("3020"),
-        subAccountId: null,
         accountName: "元入金",
         expected: 450_000,
         actual: 500_000,
@@ -209,6 +207,10 @@ describe("buildBlueReturn の4ページ（T027, US4, FR-028〜032, R8）", () =>
         note: null,
       },
     ]);
+    // 金額は 001 の formatSignedAmount と同じ書式（桁区切り）
+    expect(warningsOf(r, "OPENING_MISMATCH")[0]?.message).toBe(
+      "「売掛金」の期首残高（250,000 円）が、前の年度の期末から求めた値（200,000 円）と違います（差額 50,000 円）",
+    );
     // 期首の貸借は登録どおりで一致する
     expect(r.page4.opening.assets.total).toBe(550_000);
     expect(r.page4.opening.liabilityEquity.total).toBe(550_000);

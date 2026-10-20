@@ -129,7 +129,7 @@ function mockScreen(opts: Opts = {}) {
       state.proposals = [];
       return ok(
         {
-          journal: { id: "j-new" },
+          journal: { id: "j-new", journalNo: 7 },
           ref: {
             journalId: "j-new",
             kind: "depreciation",
@@ -241,6 +241,7 @@ describe("固定資産台帳の画面（US3）", () => {
     });
     // 登録後は一覧を読み直す
     expect(await screen.findByRole("table", { name: "固定資産台帳" })).toBeInTheDocument();
+    expect(await screen.findByText("登録しました。")).toBeInTheDocument();
   });
 
   it("取得価額・割合の形が不正なら送らない", async () => {
@@ -311,6 +312,8 @@ describe("固定資産台帳の画面（US3）", () => {
       assetAccountId: "a-tools",
       reason: "使い方の見直し",
     });
+    // 保存後は編集を終えて入力欄を作り直すが、メッセージは残る
+    expect(await screen.findByText("更新しました。")).toBeInTheDocument();
   });
 
   it("除却は日付と理由を入れて確定する（POST dispose）。取り消すと送らない", async () => {
@@ -358,5 +361,6 @@ describe("固定資産台帳の画面（US3）", () => {
       expected: { amount: 300_000 },
     });
     expect(await screen.findByText("登録する仕訳の案はありません。")).toBeInTheDocument();
+    expect(screen.getByText("仕訳を登録しました（No.7）。")).toBeInTheDocument();
   });
 });

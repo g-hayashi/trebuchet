@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { BlueReturnWarning } from "@trebuchet/schema";
-import { formatYen } from "@/lib/format";
+import { formatSignedYen } from "@/lib/format";
 
 type Omitted = { accountId: string; name: string; amount: number };
 
@@ -15,6 +15,14 @@ function omittedOf(details: BlueReturnWarning["details"]): Omitted[] {
       ? [{ accountId, name, amount }]
       : [];
   });
+}
+
+/** 一覧の key。同じ文面でも科目（details.accountId）が違えば別の警告にする */
+function warningKey(w: BlueReturnWarning): string {
+  const accountId = w.details?.accountId;
+  return typeof accountId === "string"
+    ? `${w.code}-${accountId}-${w.message}`
+    : `${w.code}-${w.message}`;
 }
 
 /** 家事按分・地代家賃の内訳の画面へのリンク（警告から直す先） */
@@ -55,14 +63,14 @@ export function WarningList({
         {warnings.map((w) => {
           const omitted = w.code === "OPTIONAL_LINES_OVERFLOW" ? omittedOf(w.details) : [];
           return (
-            <li key={`${w.code}-${w.message}`} className="list-disc">
+            <li key={warningKey(w)} className="list-disc">
               {w.message}
               {omitted.length > 0 && (
                 <>
                   <ul aria-label="欄に載らなかった科目" className="mt-1 list-none pl-3">
                     {omitted.map((o) => (
                       <li key={o.accountId}>
-                        {o.name} {formatYen(o.amount)} 円
+                        {o.name} {formatSignedYen(o.amount)} 円
                       </li>
                     ))}
                   </ul>

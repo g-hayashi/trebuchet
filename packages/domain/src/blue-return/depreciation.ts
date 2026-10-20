@@ -1,5 +1,6 @@
 import type { AdjustmentProposal } from "@trebuchet/schema";
 import { DRAWINGS_ACCOUNT_CODE } from "../carry-forward.ts";
+import { formatSignedAmount } from "../reports/warnings.ts";
 import {
   type Account,
   domainError,
@@ -109,7 +110,7 @@ export function validateFixedAsset(
     return err(
       domainError(
         "SMALL_ASSET_OVER_THRESHOLD",
-        `取得価額が基準額（${threshold.value} 円）以上のため、少額減価償却資産の特例は使えません`,
+        `取得価額が基準額（${formatSignedAmount(threshold.value)} 円）以上のため、少額減価償却資産の特例は使えません`,
         {
           field: "acquisitionCost",
           threshold: threshold.value,
@@ -129,7 +130,7 @@ export function validateFixedAsset(
     return err(
       domainError(
         "SMALL_ASSET_ANNUAL_LIMIT_EXCEEDED",
-        `${year}年に特例を使う資産の取得価額の合計（${total} 円）が年間の上限（${limit.value} 円）を超えます`,
+        `${year}年に特例を使う資産の取得価額の合計（${formatSignedAmount(total)} 円）が年間の上限（${formatSignedAmount(limit.value)} 円）を超えます`,
         { field: "acquisitionCost", limit: limit.value, total },
       ),
     );

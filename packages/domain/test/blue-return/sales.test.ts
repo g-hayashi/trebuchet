@@ -221,6 +221,8 @@ describe("salesWarnings（FR-026）", () => {
       total: 700,
       difference: -300,
     });
+    // 負の差額は 001 の formatSignedAmount と同じ書式（▲）
+    expect(w[0]?.message).toContain("（900 円）が欄1（1,000 円）と一致しません（差額 ▲100 円）");
   });
 
   it("取引先なしの売上は件数と金額を SALES_WITHOUT_PARTNER で示す", () => {

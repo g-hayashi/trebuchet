@@ -3,6 +3,7 @@ import type { AdjustmentProposal } from "@trebuchet/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
+import { SaveNotice } from "@/components/ui/save-notice";
 import {
   Table,
   TableBody,
@@ -165,6 +166,11 @@ export function AdjustmentPanel({
             );
           })}
         </section>
+        <SaveNotice
+          message={
+            commit.isSuccess ? `仕訳を登録しました（No.${commit.data.journal.journalNo}）。` : ""
+          }
+        />
         <ApiErrorMessage error={commit.error} />
       </CardContent>
     </Card>
