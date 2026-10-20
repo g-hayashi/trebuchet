@@ -185,11 +185,16 @@ export const AdjustmentProposal = z.object({
 });
 export type AdjustmentProposal = z.infer<typeof AdjustmentProposal>;
 
+/** 1ページの欄の種類（様式の定義）。unused は使わない欄で、空欄の表示と CSV の対象 */
+export const FormLineKind = z.enum(["account", "optional", "computed", "unused"]);
+export type FormLineKind = z.infer<typeof FormLineKind>;
+
 const FormLineAmount = z.object({
   no: z.number().int().positive(),
   label: z.string(),
   /** 空欄（回答待ちなど）は null */
   amount: Amount.nullable(),
+  kind: FormLineKind,
 });
 
 const MonthlyRow = z.object({

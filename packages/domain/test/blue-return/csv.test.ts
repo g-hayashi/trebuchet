@@ -101,6 +101,31 @@ describe("blueReturnToCsv（R14）", () => {
     expect(optional?.[3]).toBe("0");
   });
 
+  it("blankUnused は各欄の kind で判定する（kind が unused の欄だけ空になる）", () => {
+    const base = buildBlueReturn({
+      period: yearPeriod(),
+      accounts: [],
+      lines: [],
+      deductionAnswers: answers,
+      taxParameters: TAX_PARAMETERS,
+    });
+    const r = {
+      ...base,
+      page1: {
+        lines: base.page1.lines.map((l) =>
+          l.no === 8
+            ? { ...l, kind: "unused" as const }
+            : l.no === 2
+              ? { ...l, kind: "account" as const }
+              : l,
+        ),
+      },
+    };
+    const rows = read(blueReturnToCsv(r, { blankUnused: true }));
+    expect(rows.find((row) => row[1] === "8")?.[3]).toBe("");
+    expect(rows.find((row) => row[1] === "2")?.[3]).toBe("0");
+  });
+
   it("欄名のカンマ・引用符は引用される", () => {
     const base = buildBlueReturn({
       period: yearPeriod(),

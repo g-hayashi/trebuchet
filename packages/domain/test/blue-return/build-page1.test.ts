@@ -119,6 +119,18 @@ describe("buildBlueReturn 1ページ（R1）", () => {
     expect(labelOf(r, 32)).toBe("計");
   });
 
+  it("各欄に様式の kind（account / optional / computed / unused）を入れる", () => {
+    const r = build(smallBook);
+    const form = formForYear(2025);
+    expect(r.page1.lines.map((l) => [l.no, l.kind])).toEqual(form.pl.map((f) => [f.no, f.kind]));
+    const kindOf = (no: number) => r.page1.lines.find((l) => l.no === no)?.kind;
+    expect(kindOf(1)).toBe("account");
+    expect(kindOf(2)).toBe("unused");
+    expect(kindOf(25)).toBe("optional");
+    expect(kindOf(33)).toBe("computed");
+    expect(kindOf(42)).toBe("unused");
+  });
+
   it("科目の欄と計算の欄（売上と雑収入は欄1、経費計、差引金額、欄43〜45）", () => {
     const r = build(smallBook);
     expect(amountOf(r, 1)).toBe(1_020_000);

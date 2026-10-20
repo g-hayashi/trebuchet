@@ -212,7 +212,7 @@ describe("BlueReturn / AdjustmentProposal", () => {
     fiscalYear: 2025,
     formYear: 2025,
     status: "open",
-    page1: { lines: [{ no: 1, label: "売上", amount: 1000 }] },
+    page1: { lines: [{ no: 1, label: "売上", amount: 1000, kind: "account" }] },
     page2: {
       monthly: {
         months: [{ month: 1, sales: 1000, otherIncome: 0, total: 1000 }],
@@ -234,6 +234,18 @@ describe("BlueReturn / AdjustmentProposal", () => {
   };
   it("決算書を受け付ける", () => {
     expect(BlueReturn.safeParse(blueReturn).success).toBe(true);
+  });
+  it("1ページの欄の kind は account / optional / computed / unused だけ。省略は拒否する", () => {
+    const withLine = (line: object) => ({ ...blueReturn, page1: { lines: [line] } });
+    for (const kind of ["account", "optional", "computed", "unused"]) {
+      expect(BlueReturn.safeParse(withLine({ no: 2, label: "x", amount: 0, kind })).success).toBe(
+        true,
+      );
+    }
+    expect(
+      BlueReturn.safeParse(withLine({ no: 2, label: "x", amount: 0, kind: "other" })).success,
+    ).toBe(false);
+    expect(BlueReturn.safeParse(withLine({ no: 2, label: "x", amount: 0 })).success).toBe(false);
   });
   it("status が open / closed 以外を拒否する", () => {
     expect(BlueReturn.safeParse({ ...blueReturn, status: "draft" }).success).toBe(false);

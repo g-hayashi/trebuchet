@@ -15,6 +15,7 @@ type NavTo =
   | "/e/$entityId/tax-settings"
   | "/e/$entityId/periods"
   | "/e/$entityId/reports"
+  | "/e/$entityId/blue-return"
   | "/e/$entityId/imports";
 
 /** 事業体ごとの画面の共通レイアウト。ナビの項目は各画面を追加するときに足す（US1〜US5） */
@@ -27,6 +28,7 @@ const NAV: { label: string; to: NavTo }[] = [
   { label: "消費税", to: "/e/$entityId/tax-settings" },
   { label: "会計期間", to: "/e/$entityId/periods" },
   { label: "帳票", to: "/e/$entityId/reports" },
+  { label: "決算書", to: "/e/$entityId/blue-return" },
   { label: "取込", to: "/e/$entityId/imports" },
 ];
 

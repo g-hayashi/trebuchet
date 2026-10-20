@@ -112,7 +112,12 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
           : f.kind === "unused"
             ? 0
             : (amounts.get(f.no) ?? 0);
-    return { no: f.no, label: f.kind === "optional" ? (labels.get(f.no) ?? "") : f.label, amount };
+    return {
+      no: f.no,
+      label: f.kind === "optional" ? (labels.get(f.no) ?? "") : f.label,
+      amount,
+      kind: f.kind,
+    };
   });
 
   const warnings: BlueReturnWarning[] = [];
