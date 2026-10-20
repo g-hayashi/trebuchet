@@ -1,3 +1,4 @@
+import { BlueReturn } from "@trebuchet/schema";
 import { describe, expect, it } from "vitest";
 import { buildBlueReturn } from "../../src/blue-return/build.ts";
 import { formForYear } from "../../src/blue-return/form.ts";
@@ -81,6 +82,9 @@ const amountOf = (r: ReturnType<typeof build>, no: number) =>
   r.page1.lines.find((l) => l.no === no)?.amount;
 const labelOf = (r: ReturnType<typeof build>, no: number) =>
   r.page1.lines.find((l) => l.no === no)?.label;
+/** 期首残高なしで経費を現金で払うと現金が負になる（4ページの NEGATIVE_BALANCE）。1ページの警告だけを見る */
+const withoutNegativeBalance = (r: ReturnType<typeof build>) =>
+  r.warnings.filter((w) => w.code !== "NEGATIVE_BALANCE");
 
 // 売上 1,000,000、雑収入 20,000、経費 59,000（任意科目 2 つを含む）
 const smallBook = bookLines([
@@ -176,7 +180,7 @@ describe("buildBlueReturn 1ページ（R1）", () => {
     expect(labelOf(r, 25)).toBe("車両費");
     expect(amountOf(r, 25)).toBe(7_000);
     expect(amountOf(r, 32)).toBe(7_000);
-    expect(r.warnings).toEqual([]);
+    expect(withoutNegativeBalance(r)).toEqual([]);
   });
 
   it("使わない欄（原価の欄2〜7、引当金等の欄34〜42）は常に 0（空欄にしない）", () => {
@@ -247,7 +251,7 @@ describe("buildBlueReturn 1ページ（R1）", () => {
       ["5290", 5_000],
     ]);
     const r = build(lines);
-    expect(r.warnings.map((w) => w.code)).toEqual([]);
+    expect(withoutNegativeBalance(r).map((w) => w.code)).toEqual([]);
   });
 
   it("金額が 0 の任意科目は欄を取らない", () => {
@@ -292,13 +296,13 @@ describe("buildBlueReturn 1ページ（R1）", () => {
     expect(amountOf(r, 45)).toBe(861_000);
   });
 
-  it("2〜4ページは空の初期値で schema の BlueReturn に合う", () => {
+  it("2・3ページは空の初期値で schema の BlueReturn に合う", () => {
     const r = build(smallBook);
     expect(r.page2.monthly.months).toEqual([]);
     expect(r.page2.rentDetails).toEqual([]);
     expect(r.page3.depreciation).toEqual([]);
     expect(r.page3.salesPartners.rows).toEqual([]);
     expect(r.page3.salesPartners.withoutPartner).toBeNull();
-    expect(r.page4.closing.assets.rows).toEqual([]);
+    expect(BlueReturn.safeParse(r).success).toBe(true);
   });
 });

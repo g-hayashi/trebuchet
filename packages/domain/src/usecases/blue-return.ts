@@ -5,6 +5,7 @@ import type {
   HomeUseAllocationInput,
   RentDetailInput,
 } from "@trebuchet/schema";
+import type { PriorPeriod } from "../blue-return/balance-sheet.ts";
 import { buildBlueReturn } from "../blue-return/build.ts";
 import {
   type BlueDeductionCap,
@@ -31,9 +32,12 @@ import type {
   MasterRepository,
   ReportRepository,
 } from "../ports.ts";
+import { computeBalances } from "../reports/balances.ts";
 import {
   type AdjustmentKind,
   type AdjustmentRef,
+  type ClosingNote,
+  type ClosingNoteKind,
   type DeductionAnswers,
   type DomainWarning,
   domainError,
@@ -96,8 +100,31 @@ function resolveYear(masters: MasterRepository, fiscalYear: number): Result<Fisc
 }
 
 /**
- * 青色申告決算書を帳簿から導出する（US1）。仕訳は年度の期間の有効なもの（取消済みを除く。
- * 001 の帳票と同じ読み方）、控除の回答と税制の値は ClosingStore から読む
+ * 前の年度の期末の残高（4ページの繰越の検査、R8）。前の年度の会計期間がない、または期首残高も
+ * 有効な仕訳もない（帳簿がない）ときは null
+ */
+function readPriorPeriod(deps: ReportDeps, fiscalYear: number): PriorPeriod | null {
+  const prior = deps.masters.getFiscalPeriodByYear(fiscalYear - 1);
+  if (prior === undefined) return null;
+  const opening = deps.reports.openingBalances(prior.fiscalYear);
+  const lines = deps.reports.linesInRange(prior.startDate, prior.endDate);
+  if (opening.length === 0 && lines.length === 0) return null;
+  return {
+    fiscalYear: prior.fiscalYear,
+    status: prior.status,
+    closing: computeBalances({
+      opening,
+      lines,
+      periodStart: prior.startDate,
+      to: prior.endDate,
+    }),
+  };
+}
+
+/**
+ * 青色申告決算書を帳簿から導出する（US1・US4）。仕訳は年度の期間の有効なもの（取消済みを除く。
+ * 001 の帳票と同じ読み方）、期首残高は 001、前の年度の期末は readPriorPeriod、控除の回答・税制の値・
+ * メモは ClosingStore から読む
  */
 export function getBlueReturn(
   deps: BlueReturnDeps,
@@ -116,8 +143,57 @@ export function getBlueReturn(
       adjustmentRefs: deps.closing.listAdjustmentRefs(params.fiscalYear),
       rentDetails: deps.closing.listRentDetails(params.fiscalYear),
       fixedAssets: deps.closing.listFixedAssets(),
+      opening: deps.reports.openingBalances(params.fiscalYear),
+      priorPeriod: readPriorPeriod(deps, params.fiscalYear),
+      closingNotes: deps.closing.listClosingNotes(params.fiscalYear),
     }),
   );
+}
+
+/** 決算のメモの長さの上限（schema の ClosingNoteInput と同じ） */
+const CLOSING_NOTE_MAX = 5000;
+
+/**
+ * 決算のメモ（特殊事情・期首と前期末の差の説明）を年度・種類ごとに保存する（FR-027、FR-030）。
+ * 本文は前後の空白を除く。closing_audit_log に closing_note（対象は `年度:種類`。初回は create、
+ * 以降は update。変更前・後）を残す。締め済みの年度でも保存できる（メモは帳簿ではない。差額も変わらない）
+ */
+export function saveClosingNote(
+  deps: ClosingSettingsDeps,
+  params: { fiscalYear: number; kind: ClosingNoteKind; body: string },
+): Result<ClosingNote> {
+  const period = resolveYear(deps.masters, params.fiscalYear);
+  if (!period.ok) return period;
+  const body = params.body.trim();
+  if (body.length > CLOSING_NOTE_MAX) {
+    return err(
+      domainError("VALIDATION", `メモは${CLOSING_NOTE_MAX}文字以内で入力してください`, {
+        field: "body",
+      }),
+    );
+  }
+  const before = deps.closing
+    .listClosingNotes(params.fiscalYear)
+    .find((n) => n.kind === params.kind);
+  const now = deps.clock.now();
+  const saved: ClosingNote = {
+    fiscalYear: params.fiscalYear,
+    kind: params.kind,
+    body,
+    updatedAt: now,
+  };
+  deps.closing.upsertClosingNote(saved);
+  deps.closing.appendClosingAudit({
+    id: deps.ids.next(),
+    occurredAt: now,
+    targetType: "closing_note",
+    targetId: `${params.fiscalYear}:${params.kind}`,
+    action: before === undefined ? "create" : "update",
+    reason: null,
+    beforeJson: before === undefined ? null : JSON.stringify(before),
+    afterJson: JSON.stringify(saved),
+  });
+  return ok(saved);
 }
 
 function viewOf(

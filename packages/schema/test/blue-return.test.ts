@@ -269,6 +269,8 @@ describe("BlueReturn / AdjustmentProposal", () => {
     page4: {
       opening: { assets: bsSide, liabilityEquity: bsSide },
       closing: { assets: bsSide, liabilityEquity: bsSide },
+      carryForwardCheck: "no_prior_year",
+      openingDifferenceNote: null,
     },
     transfer: { businessIncome: null, blueDeduction: null },
     warnings: [],

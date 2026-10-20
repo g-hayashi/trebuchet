@@ -1,5 +1,6 @@
 import type { TaxCategoryCode } from "@trebuchet/schema";
 import fc from "fast-check";
+import type { CarryForwardBalance } from "../src/carry-forward.ts";
 import type {
   Account,
   AccountCategory,
@@ -129,6 +130,32 @@ export function balancedOpeningArb(accounts: readonly Account[]): fc.Arbitrary<O
         })),
       ]);
   });
+}
+
+/**
+ * 科目・補助科目が重複せず、Σ期末（借方を正）= 0 の前年度の期末残高（computeBalances の形）。
+ * 科目は accounts から選び、補助科目は sub-1 / sub-2 / なし（002 の carryForward、003 の繰越の検査で使う）
+ */
+export function balancedClosingArb(
+  accounts: readonly Account[],
+): fc.Arbitrary<CarryForwardBalance[]> {
+  return fc
+    .uniqueArray(
+      fc.record({
+        accountId: fc.constantFrom(...accounts.map((a) => a.id)),
+        subAccountId: fc.option(fc.constantFrom("sub-1", "sub-2"), { nil: null }),
+        closing: fc.integer({ min: -1_000_000_000, max: 1_000_000_000 }),
+      }),
+      {
+        minLength: 1,
+        maxLength: 30,
+        selector: (b) => `${b.accountId}\u0000${b.subAccountId ?? ""}`,
+      },
+    )
+    .map((rows) => {
+      const sum = rows.reduce((s, r) => s + r.closing, 0);
+      return rows.map((r, i) => (i === 0 ? { ...r, closing: r.closing - sum } : r));
+    });
 }
 
 export function makeFiscalPeriod(

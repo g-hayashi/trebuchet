@@ -2,6 +2,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type CarryForwardBalance, carryForward } from "../src/carry-forward.ts";
 import type { Account } from "../src/types.ts";
+import { balancedClosingArb as balancedClosingArbOf } from "./arbitraries.ts";
 import { ACCOUNTS, accountId } from "./import/import-setup.ts";
 
 const CAPITAL = accountId("3020");
@@ -21,19 +22,7 @@ const debitNet = (r: { side: "debit" | "credit"; amount: number }) =>
   r.side === "debit" ? r.amount : -r.amount;
 
 /** 科目・補助科目が重複せず、Σ期末（借方を正）= 0 の前年度の期末残高（computeBalances の形） */
-const balancedClosingArb: fc.Arbitrary<CarryForwardBalance[]> = fc
-  .uniqueArray(
-    fc.record({
-      accountId: fc.constantFrom(...ACCOUNTS.map((a) => a.id)),
-      subAccountId: fc.option(fc.constantFrom("sub-1", "sub-2"), { nil: null }),
-      closing: fc.integer({ min: -1_000_000_000, max: 1_000_000_000 }),
-    }),
-    { minLength: 1, maxLength: 30, selector: keyOf },
-  )
-  .map((rows) => {
-    const sum = rows.reduce((s, r) => s + r.closing, 0);
-    return rows.map((r, i) => (i === 0 ? { ...r, closing: r.closing - sum } : r));
-  });
+const balancedClosingArb = balancedClosingArbOf(ACCOUNTS);
 
 const netByKey = (
   rows: readonly {

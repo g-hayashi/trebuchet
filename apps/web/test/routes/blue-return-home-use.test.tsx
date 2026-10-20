@@ -466,6 +466,8 @@ describe("決算書の画面からのリンク", () => {
     page4: {
       opening: { assets: { rows: [], total: 0 }, liabilityEquity: { rows: [], total: 0 } },
       closing: { assets: { rows: [], total: 0 }, liabilityEquity: { rows: [], total: 0 } },
+      carryForwardCheck: "no_prior_year",
+      openingDifferenceNote: null,
     },
     transfer: { businessIncome: 0, blueDeduction: 0 },
     warnings,

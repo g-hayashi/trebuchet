@@ -60,6 +60,8 @@ function blueReturn(
     page4: {
       opening: { assets: { rows: [], total: 0 }, liabilityEquity: { rows: [], total: 0 } },
       closing: { assets: { rows: [], total: 0 }, liabilityEquity: { rows: [], total: 0 } },
+      carryForwardCheck: "no_prior_year",
+      openingDifferenceNote: null,
     },
     transfer,
     warnings: [],

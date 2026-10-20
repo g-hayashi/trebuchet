@@ -2,10 +2,29 @@ import { BlueReturn } from "@trebuchet/schema";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { buildBlueReturn } from "../../src/blue-return/build.ts";
+import { carryForward } from "../../src/carry-forward.ts";
+import { buildBalanceSheet } from "../../src/reports/balance-sheet.ts";
+import { computeBalances } from "../../src/reports/balances.ts";
+import type { OpeningInput } from "../../src/reports/common.ts";
 import { buildProfitAndLoss } from "../../src/reports/profit-and-loss.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
-import type { DeductionAnswers } from "../../src/types.ts";
-import { yearLedgerArb } from "../blue-return-arbitraries.ts";
+import type {
+  Account,
+  AccountCategory,
+  DeductionAnswers,
+  FiscalPeriod,
+  LineDraft,
+  PostedLine,
+} from "../../src/types.ts";
+import {
+  balancedLinesArb,
+  balancedOpeningArb,
+  dateInPeriodArb,
+  makeAccount,
+  makeFiscalPeriod,
+  type OpeningRow,
+} from "../arbitraries.ts";
+import { accountIdOf, type YearLedger, yearLedgerArb } from "../blue-return-arbitraries.ts";
 
 const answersArb: fc.Arbitrary<DeductionAnswers | null> = fc.option(
   fc.record({
@@ -113,4 +132,237 @@ describe("buildBlueReturn の性質（INV-18・INV-22）", () => {
       { numRuns: 5 },
     );
   });
+});
+
+// ---- INV-19（4ページの貸借の一致） ----
+
+const INCOME = "青色申告特別控除前の所得金額";
+
+type Page4Input = {
+  period: FiscalPeriod;
+  accounts: readonly Account[];
+  opening: readonly OpeningInput[];
+  lines: readonly PostedLine[];
+};
+
+const build4 = (
+  input: Page4Input,
+  priorPeriod: Parameters<typeof buildBlueReturn>[0]["priorPeriod"] = null,
+) =>
+  buildBlueReturn({
+    ...input,
+    deductionAnswers: null,
+    taxParameters: TAX_PARAMETERS,
+    priorPeriod,
+  });
+
+const sumShown = (rows: readonly { amount: number | null }[]) =>
+  rows.reduce((s, x) => s + (x.amount ?? 0), 0);
+
+const shownAt = (rows: readonly { label: string; amount: number | null }[], label: string) =>
+  rows.find((x) => x.label === label)?.amount;
+
+/**
+ * INV-19: 期首・期末とも、表示した金額の資産合計 = 負債・資本合計（期末は控除前の所得を含む）。
+ * 合計は表示した金額の和で、001 の貸借対照表（期首は期首残高だけ、期末は年度末日）の合計と等しい（金額を落とさない）
+ */
+function expectInv19(input: Page4Input, r: ReturnType<typeof buildBlueReturn>) {
+  expect(BlueReturn.safeParse(r).success).toBe(true);
+  for (const when of ["opening", "closing"] as const) {
+    const { assets, liabilityEquity } = r.page4[when];
+    expect(assets.total).toBe(sumShown(assets.rows));
+    expect(liabilityEquity.total).toBe(sumShown(liabilityEquity.rows));
+    expect(assets.total).toBe(liabilityEquity.total);
+    for (const row of [...assets.rows, ...liabilityEquity.rows]) {
+      if (row.amount !== null) expect(Number.isInteger(row.amount)).toBe(true);
+    }
+  }
+  const { period, accounts, opening, lines } = input;
+  const closing = buildBalanceSheet({
+    accounts,
+    opening,
+    lines,
+    periodStart: period.startDate,
+    asOf: period.endDate,
+  });
+  expect(r.page4.closing.assets.total).toBe(closing.totalAssets.amount);
+  expect(r.page4.closing.liabilityEquity.total).toBe(closing.totalLiabilitiesAndEquity.amount);
+  expect(shownAt(r.page4.closing.liabilityEquity.rows, INCOME)).toBe(closing.netIncome.amount);
+  const atOpening = buildBalanceSheet({
+    accounts,
+    opening,
+    lines: [],
+    periodStart: period.startDate,
+    asOf: period.startDate,
+  });
+  expect(r.page4.opening.assets.total).toBe(atOpening.totalAssets.amount);
+  expect(r.page4.opening.liabilityEquity.total).toBe(atOpening.totalLiabilitiesAndEquity.amount);
+}
+
+const ACCOUNT_NAME = (accounts: readonly Account[], id: string) =>
+  accounts.find((a) => a.id === id)?.name ?? "";
+
+function postedLines(
+  accounts: readonly Account[],
+  journals: readonly { date: string; lines: LineDraft[] }[],
+  offset: number,
+): PostedLine[] {
+  return journals.flatMap((j, index) =>
+    j.lines.map(
+      (l, i): PostedLine => ({
+        journalId: `extra-${offset + index + 1}`,
+        journalNo: offset + index + 1,
+        date: j.date,
+        memo: null,
+        status: "active",
+        lineNo: i + 1,
+        side: l.side,
+        accountId: l.accountId,
+        accountName: ACCOUNT_NAME(accounts, l.accountId),
+        subAccountId: null,
+        subAccountName: null,
+        amount: l.amount,
+        taxCategory: "OUT_OF_SCOPE",
+        taxAmount: 0,
+        partnerId: null,
+        partnerName: null,
+        description: null,
+      }),
+    ),
+  );
+}
+
+const SECTION_BASE: Record<"asset" | "liability" | "equity", number> = {
+  asset: 1_500,
+  liability: 2_500,
+  equity: 3_500,
+};
+
+/**
+ * yearLedgerArb に、様式に行のない科目（仮払金・一括償却資産・開業費・未払費用）、利用者が足した科目
+ * （空欄の行からあふれることがある）、期首の事業主貸・事業主借・損益の残高、それらを使う仕訳を足した帳簿
+ */
+const widenedLedgerArb = (usesBusinessAccount: boolean): fc.Arbitrary<Page4Input & YearLedger> =>
+  yearLedgerArb
+    .filter((l) => l.usesBusinessAccount === usesBusinessAccount)
+    .chain((ledger) =>
+      fc
+        .array(fc.constantFrom<AccountCategory>("asset", "asset", "liability", "equity"), {
+          maxLength: 4,
+        })
+        .map((categories) =>
+          categories.map((category, i) =>
+            makeAccount(category, {
+              code: `9${i}`,
+              name: `追加${i}`,
+              sortOrder: SECTION_BASE[category as "asset"] + i,
+            }),
+          ),
+        )
+        .chain((added) => {
+          const accounts = [...ledger.accounts, ...added];
+          const pool = [
+            ...["1010", "1030", "1050", "1070", "1080", "2030", "3010", "3020", "3090"],
+            ...["4010", "5120"],
+          ]
+            .map((code) => accounts.find((a) => a.id === accountIdOf(code)))
+            .filter((a): a is Account => a !== undefined)
+            .concat(added);
+          return fc.record({
+            accounts: fc.constant(accounts),
+            extraOpening: fc.option(balancedOpeningArb(pool), { nil: [] as OpeningRow[] }),
+            extraJournals: fc.array(
+              fc.record({ date: dateInPeriodArb(ledger.period), lines: balancedLinesArb(pool) }),
+              { maxLength: 8 },
+            ),
+          });
+        })
+        .map(({ accounts, extraOpening, extraJournals }) => ({
+          ...ledger,
+          accounts,
+          opening: [
+            ...ledger.opening,
+            ...extraOpening.map((o, i) => ({
+              id: `extra-opening-${i}`,
+              fiscalPeriodId: ledger.period.id,
+              subAccountId: null,
+              ...o,
+            })),
+          ],
+          lines: [...ledger.lines, ...postedLines(accounts, extraJournals, ledger.lines.length)],
+        })),
+    );
+
+describe("buildBlueReturn の4ページの性質（INV-19, FR-028・FR-032）", () => {
+  for (const usesBusinessAccount of [true, false]) {
+    const shape = usesBusinessAccount ? "事業用の口座あり" : "事業用の口座なし（事業主貸・借）";
+
+    it(`${shape}: 期首・期末とも表示した金額で資産合計 = 負債・資本合計、期末の所得は欄43、期首の所得・事業主貸・事業主借は空欄`, () => {
+      fc.assert(
+        fc.property(
+          yearLedgerArb.filter((l) => l.usesBusinessAccount === usesBusinessAccount),
+          (ledger) => {
+            const r = build4(ledger);
+            expectInv19(ledger, r);
+            const line43 = r.page1.lines.find((l) => l.no === 43)?.amount;
+            expect(shownAt(r.page4.closing.liabilityEquity.rows, INCOME)).toBe(line43);
+            expect(shownAt(r.page4.opening.liabilityEquity.rows, INCOME)).toBeNull();
+            expect(shownAt(r.page4.opening.assets.rows, "事業主貸")).toBeNull();
+            expect(shownAt(r.page4.opening.liabilityEquity.rows, "事業主借")).toBeNull();
+            const codes = r.warnings.map((w) => w.code);
+            expect(codes).not.toContain("OPENING_OWNER_ACCOUNTS");
+            expect(codes).not.toContain("OPTIONAL_LINES_OVERFLOW");
+            expect(r.page4.carryForwardCheck).toBe("no_prior_year");
+          },
+        ),
+      );
+    });
+
+    it(`${shape}: 空欄の行の科目・あふれ・期首の事業主貸・借・損益があっても、表示した金額で一致する`, () => {
+      fc.assert(
+        fc.property(widenedLedgerArb(usesBusinessAccount), (ledger) => {
+          expectInv19(ledger, build4(ledger));
+        }),
+      );
+    });
+
+    it(`${shape}: 前の年度の期末から carryForward した期首なら、繰越の検査は一致し、期首の事業主貸・借・所得は空欄`, () => {
+      fc.assert(
+        fc.property(widenedLedgerArb(usesBusinessAccount), (prior) => {
+          const balances = computeBalances({
+            opening: prior.opening,
+            lines: prior.lines,
+            periodStart: prior.period.startDate,
+            to: prior.period.endDate,
+          });
+          const carried = carryForward(balances, prior.accounts);
+          if (!carried.ok) throw new Error(JSON.stringify(carried.error));
+          const next: Page4Input = {
+            period: makeFiscalPeriod(prior.period.fiscalYear + 1),
+            accounts: prior.accounts,
+            opening: carried.value,
+            lines: [],
+          };
+          const r = build4(next, {
+            fiscalYear: prior.period.fiscalYear,
+            status: "closed",
+            closing: balances,
+          });
+          expectInv19(next, r);
+          expect(r.page4.carryForwardCheck).toBe("matched");
+          const codes = r.warnings.map((w) => w.code);
+          expect(codes).not.toContain("OPENING_MISMATCH");
+          expect(codes).not.toContain("OPENING_OWNER_ACCOUNTS");
+          expect(shownAt(r.page4.opening.liabilityEquity.rows, INCOME)).toBeNull();
+          expect(shownAt(r.page4.opening.assets.rows, "事業主貸")).toBeNull();
+          expect(shownAt(r.page4.opening.liabilityEquity.rows, "事業主借")).toBeNull();
+          // 前の年度の期末の資産合計がそのまま期首の資産合計になる（事業主貸を除く）
+          const priorBs = build4(prior).page4.closing;
+          const drawings = shownAt(priorBs.assets.rows, "事業主貸") ?? 0;
+          expect(r.page4.opening.assets.total).toBe(priorBs.assets.total - drawings);
+        }),
+        { numRuns: 50 },
+      );
+    });
+  }
 });

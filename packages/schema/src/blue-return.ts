@@ -281,6 +281,9 @@ const BsRowOutput = z.object({ label: z.string(), amount: Amount.nullable() });
 const BsSideOutput = z.object({ rows: z.array(BsRowOutput), total: Amount });
 const BsOutput = z.object({ assets: BsSideOutput, liabilityEquity: BsSideOutput });
 
+export const CarryForwardCheck = z.enum(["no_prior_year", "matched", "mismatched"]);
+export type CarryForwardCheck = z.infer<typeof CarryForwardCheck>;
+
 /** 青色申告決算書（一般用）。使わない欄は常に 0、空欄の表示は画面が行う（R14） */
 export const BlueReturn = z.object({
   fiscalYear: FiscalYear,
@@ -305,7 +308,14 @@ export const BlueReturn = z.object({
     }),
     depreciation: z.array(DepreciationRow),
   }),
-  page4: z.object({ opening: BsOutput, closing: BsOutput }),
+  page4: z.object({
+    opening: BsOutput,
+    closing: BsOutput,
+    /** 元入金の繰越の検査（FR-029）。前の年度の帳簿がなければ no_prior_year（spec US4 シナリオ2・7） */
+    carryForwardCheck: CarryForwardCheck,
+    /** 期首と前期末の差の説明（closing_notes の opening_difference、FR-030）。なければ null */
+    openingDifferenceNote: z.string().nullable(),
+  }),
   /** 欄45（所得金額）と欄44（控除額）。回答がなければ null */
   transfer: z.object({ businessIncome: Amount.nullable(), blueDeduction: Amount.nullable() }),
   warnings: z.array(BlueReturnWarning),
