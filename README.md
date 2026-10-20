@@ -4,7 +4,7 @@
 仕訳の入力、総勘定元帳・試算表などの帳票、期間の締めを扱う。
 
 - 対象: 1 人の個人事業主が使う（認証なし）
-- 機能: 001（ledger-core）、002（freee-import: freee からの取込）
+- 機能: 001（ledger-core）、002（freee-import: freee からの取込）、003（tax-return: 青色申告決算書）
 
 ## 必要なもの
 
@@ -45,7 +45,7 @@ pnpm dev
 - 帳簿は事業体ごとに別の SQLite ファイルに保存する（[ADR 0002](docs/adr/0002-tenant-per-db-file.md)）
 - SQLite は WAL モードで開く
 - `data/` は実データを含む。Git にコミットしない（`.gitignore` で除外済み）
-- バックアップ機能は 001 の範囲外（003 で扱う）。`data/` を手でコピーする場合は、サーバーを止めてから行い、`-wal` と `-shm` のファイルも一緒にコピーする
+- バックアップ機能は 001 の範囲外（後の機能で扱う）。`data/` を手でコピーする場合は、サーバーを止めてから行い、`-wal` と `-shm` のファイルも一緒にコピーする
 
 ## テスト・検証
 
@@ -57,9 +57,10 @@ pnpm dev
 | Lint | `pnpm lint` |
 | 整形 | `pnpm format` |
 | E2E（Playwright、Chromium） | `pnpm --filter @trebuchet/web e2e` |
-| 性能計測（仕訳 2,000 件、SC-004） | `pnpm bench:reports` |
+| 性能計測（仕訳 2,000 件、SC-004。約 500 仕訳の決算書、003 の SC-006） | `pnpm bench:reports` |
 | 性能計測（freee 取込の 500 仕訳、002 の SC-002） | `pnpm bench:import` |
 | freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee` |
+| 青色申告決算書の照合（実データ、ローカル専用） | `pnpm verify:tax-return` |
 
 - E2E は API サーバーと Vite を自分で起動する。一時データは `.tmp/` に作る。
 - web のビルド（`pnpm --filter @trebuchet/web build`）は `routeTree.gen.ts` を再生成する。
@@ -83,9 +84,27 @@ freee の書き出しを取り込んで、帳簿を移す手順。取込のあ�
 - 実データでの確認は `pnpm verify:freee`（使い方は `scripts/verify-freee-import.ts` の先頭のコメント）。出力はコミットしない
 - 手順の詳細と動作確認は [specs/002-freee-import/quickstart.md](specs/002-freee-import/quickstart.md)
 
+## 青色申告決算書（決算の手順）
+
+個人の事業体の、一般用の青色申告決算書（1〜4 ページ）を、帳簿の仕訳から作る。決算書の金額は帳簿の損益計算書・貸借対照表から導出する。年度ごとに行う。
+
+1. **決算書を開く**: 事業体の「決算書」で年分を選ぶ。1〜4 ページの各欄が表示される。締める前は「締め前（暫定）」と出る
+2. **控除の要件に答える**: 青色申告特別控除の要件（e-Tax、優良な電子帳簿など）に答えて保存する。控除額の上限は回答から決まる。答える前は「要件の回答が必要」と出る
+3. **家事按分を登録する**: 地代家賃などの費用の科目に、事業専用割合と根拠のメモを登録する。根拠は空にできない。地代家賃の内訳は同じ画面で入れる
+4. **固定資産を登録する**: 「固定資産台帳」に、少額減価償却資産（取得価額が基準額未満）を登録する。すでに費用として仕訳してある取得は、その仕訳を結びつける
+5. **振替・償却の仕訳を登録する**: 決算書の「決算整理の仕訳の案」を確かめ、「仕訳を登録」を押す。按分の振替と償却の仕訳が年度末日付で帳簿に入る（[ADR 0005](docs/adr/0005-closing-adjustments-as-journals.md)）。登録後に仕訳や割合を変えると、古いことの警告と差額の案が出る
+6. **4 ページを確認する**: 貸借対照表（4 ページ）で、期首と前年度の期末の差、負の残高などの警告を確かめる。説明が要る差は、決算のメモに書く
+7. **印刷・CSV**: ブラウザの印刷で A4 の 4 ページに分かれる。CSV はダウンロードできる。第一表に転記する値（青色申告特別控除後の所得金額）が目立つ位置にある
+8. **申告の控えを残す**: 「申告の控え」に、社会保険料などのメモと、保管したファイルのパスを登録する（ファイルが実在するかを確かめる）
+
+- 税制の値（基準額、控除額）は適用の期間と出典つきで持つ。足し方は [AGENTS.md](AGENTS.md) の「決算書（003）」
+- 実データでの照合は `pnpm verify:tax-return`（使い方は `scripts/verify-tax-return.ts` の先頭のコメント）。出力はコミットしない
+- 手順の詳細と動作確認は [specs/003-tax-return/quickstart.md](specs/003-tax-return/quickstart.md)
+
 ## ドキュメント
 
 - [AGENTS.md](AGENTS.md): 構成、依存の向き、開発の規約
 - [specs/001-ledger-core/](specs/001-ledger-core/): 仕様（`spec.md`）、設計（`plan.md`、`data-model.md`、`research.md`）、手順（`quickstart.md`）、タスク（`tasks.md`）
 - [specs/002-freee-import/](specs/002-freee-import/): freee 取込の仕様、設計、手順
+- [specs/003-tax-return/](specs/003-tax-return/): 青色申告決算書の仕様、設計、手順
 - [docs/adr/](docs/adr/): 設計判断の記録
