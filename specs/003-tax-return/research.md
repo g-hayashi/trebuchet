@@ -1,0 +1,131 @@
+# Research: 決算処理と確定申告の支援
+
+**Feature**: [spec.md](./spec.md) | **Date**: 2026-10-19
+
+既存のコードの参照は 001・002 の実装（`packages/domain/src/reports/`、`carry-forward.ts`、`import/freee/plan.ts`、`packages/db/src/schema/tenant.ts`）による。税制と様式の出典は各節に書く。
+
+## R1. 決算書は保存せず、帳簿から都度導出する
+
+- **Decision**: 決算書（1〜4ページ）はドメイン層の純関数 `buildBlueReturn` で、仕訳・期首残高・科目・決算の登録（按分、資産、控除の回答、メモ）から都度作る。損益計算書と貸借対照表の集計は 001 の `buildProfitAndLoss`・`buildBalanceSheet` を使い、決算書の欄への並べ替えと計算（経費計、差引金額、控除、所得金額）だけを足す
+- **Rationale**: Constitution I（帳票は仕訳から導出し、集計値を保存しない）。001 の FR-031 と同じ
+- **Alternatives**: 決算書の値を年度ごとに保存する（申告した値の控え）→ 提出した書類のファイルの場所を記録すれば足りる（FR-035）。保存すると帳簿との食い違いが起きる
+
+## R2. 決算書の様式はコードの定数（適用年分つき）
+
+- **Decision**: 欄番号・欄名・ページ・任意欄の範囲・売上先の明細の行数・貸借対照表の行と科目コードの対応を、`packages/domain/src/blue-return/form.ts` に年分つきの定数 `BLUE_RETURN_FORMS` として持つ。令和7年分（令和五年分以降用の様式）を基準にし、年度から様式を選ぶ
+- **Rationale**: 様式は税制の値ではなく帳票の形で、利用者が変えるものではない。DB に置くとマイグレーションが増える（VII）
+- **様式の要点**（出典: 国税庁 令和7年分 青色申告決算書（一般用） https://www.nta.go.jp/taxes/shiraberu/shinkoku/yoshiki/01/shinkokusho/pdf/r07/10.pdf ）:
+  - 1ページ: 1 売上（収入）金額（雑収入を含む）、2〜7 原価、8 租税公課 〜 24 貸倒金、**25〜30 科目名を書く空欄（任意欄）**、31 雑費、32 計、33 差引金額、34〜42 引当金・準備金・専従者給与など、43 青色申告特別控除前の所得金額、44 青色申告特別控除額、45 所得金額
+  - 2ページ: 月別売上（1〜12月、家事消費等、雑収入、計）、地代家賃の内訳（支払先の住所・氏名、賃借物件、本年中の賃借料・権利金等、左のうち必要経費算入額）、青色申告特別控除額の計算
+  - 3ページ: 売上（収入）金額の明細（売上先名・所在地・登録番号・金額、上記以外の売上先の計）、減価償却費の計算（イ 取得価額 〜 ヌ 未償却残高）
+  - 4ページ: 貸借対照表（資産: 現金、当座預金、定期預金、その他の預金、受取手形、売掛金 … 工具器具備品、土地、事業主貸。負債・資本: 支払手形 … 未払金 … 事業主借、元入金、青色申告特別控除前の所得金額）
+- **初期セットとの差**: 001 の初期セットは任意科目を 5 科目（欄 25〜29）にしている。様式の任意欄は 25〜30 の 6 欄。欄 30 は空けたまま扱い、任意科目が 7 つ以上のときは FR-006 で警告する
+- **貸借対照表の行と初期セットの科目**: `1010` 現金 → 現金、`1020` 普通預金 → その他の預金、`1030` 売掛金 → 売掛金、`1040` 前払金 → 前払金、`1060` 工具器具備品 → 工具器具備品、`3090` 事業主貸 → 事業主貸、`2010` 借入金 → 借入金、`2020` 未払金 → 未払金、`2040` 前受金 → 前受金、`2050` 預り金 → 預り金、`3010` 事業主借 → 事業主借、`3020` 元入金 → 元入金。様式に行のない `1050` 仮払金、`1070` 一括償却資産、`1080` 開業費、`2030` 未払費用は、様式の空欄の行に科目名つきで出す。利用者が足した科目は、区分（資産・負債）の空欄の行に出す
+- **様式のない年度**: `formForYear(year)` は、その年度以前で最も新しい様式を返し、なければ最も古い様式を返す。`BlueReturn.formYear` に使った様式の年分を入れて画面に示す
+- **未確認（ゲート）**: 売上先の明細の個別の行数、控除の計算欄（2ページ）の欄番号ごとの意味、4ページの空欄の行の数、特殊事情の欄のページ。PDF の文字座標からの読み取りのため、Setup のタスクで利用者が様式の原本と照らして `form.ts` の値を確かめる（実データの数値は書かない）
+- **Alternatives**: DB の表にする → 利用者が編集する必要がない。001 の科目の `reportLine` だけで済ませる → 貸借対照表の科目は `reportLine` が空で、様式の行（当座預金・その他の預金など）への対応が別に要る
+
+## R3. 税制の値は適用開始日・出典つきの表 `tax_parameters`
+
+- **Decision**: 少額減価償却資産の基準額・年間の上限・適用期間と、青色申告特別控除の上限額を、`tax_parameters`（キー、適用開始日、適用終了日、整数の値、出典 URL）に持つ。001 の `tax_rates` と同じく、事業体の DB にマイグレーションで投入し、ドメインには同じ値の seed（テスト用）を置く。値の解決は `resolveTaxParameter(key, date, params)`（適用開始日が日付以前の最新の行を選ぶところは `resolveTaxRate` と同じ。`resolveTaxRate` にない「適用終了日が日付以後（または NULL）」の条件を足し、外れたら undefined）
+- **Rationale**: Constitution VI（税制の値は適用開始日つきのデータ、出典を記録）
+- **投入する値**:
+
+| キー | 適用開始日 | 適用終了日 | 値 | 出典 |
+|---|---|---|---|---|
+| `SMALL_ASSET_THRESHOLD`（未満） | 2006-04-01 | 2026-03-31 | 300,000 | https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/2100.htm |
+| `SMALL_ASSET_THRESHOLD` | 2026-04-01 | 2029-03-31 | 400,000 | 同上、https://www.mof.go.jp/tax_policy/tax_reform/outline/fy2026/08taikou_03.htm |
+| `SMALL_ASSET_ANNUAL_LIMIT` | 2006-04-01 | 2029-03-31 | 3,000,000 | 2100 |
+| `BLUE_DEDUCTION_MAX`（65万の要件） | 2020-01-01 | — | 650,000 | https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/2072.htm |
+| `BLUE_DEDUCTION_STANDARD`（55万の要件） | 2020-01-01 | — | 550,000 | 2072 |
+| `BLUE_DEDUCTION_BASIC`（10万） | 2020-01-01 | — | 100,000 | 2072 |
+
+- **注意**: 基準額 40万円の個人への適用開始日は、2100 の注の括弧書きと大綱からの読み取り（研究の確度 medium）。令和9年分以後の控除の改正（55万→65万、65万→75万。大綱）は、法令の確定後に行を足す（適用終了日 2026-12-31 を入れる）。この機能では入れない
+- **Alternatives**: 定数をコードに直書き → VI に反する
+
+## R4. 家事按分と減価償却は「決算整理の仕訳」として登録する
+
+- **Decision**: 按分の振替（事業主貸 / 費用の科目）と少額減価償却（減価償却費 / 工具器具備品、家事分は 事業主貸 / 減価償却費）は、ドメインが仕訳の案（`JournalDraft`）を作り、利用者が確かめてから 001 の `createJournal` で登録する。日付は年度末日。`journals.source` は `manual` のまま変えず、作った元を新しい表 `adjustment_journal_refs`（仕訳 ID、種別 `home_use` | `depreciation`、按分の登録 ID または資産 ID）で持つ
+- **Rationale**: Constitution I（帳票は仕訳から導出）と docs/requirements.md FR-04。`journals.source` は CHECK つきの列挙で、値を足すと表の作り直しが要る。参照の表で足りる（VII）
+- **按分の対象の金額**: 対象の科目（補助科目）の年間の借方−貸方から、按分の振替の仕訳（`adjustment_journal_refs` の `home_use`）の行を除いた額
+- **Alternatives**: 決算書の出力だけで按分後の金額にする → 帳簿の PL・BS と決算書が食い違い、事業主貸の残高も合わない
+
+## R5. 按分の割合は万分率の整数、事業分は切り捨て
+
+- **Decision**: 事業専用割合は 0〜10000 の整数（万分率、28.5% = 2850）で持つ。事業分 = ⌊帳簿の金額 × 割合 / 10000⌋、家事分 = 帳簿の金額 − 事業分。帳簿の金額が 0 以下なら案を作らない
+- **Rationale**: Constitution I（浮動小数点を使わない）。小数第1位までの按分率（実データにある）を表せる。事業分の切り捨ては必要経費を多く計上しない側
+- **Alternatives**: 百分率の整数 → 小数の按分率を表せない。分数（分子・分母）→ 根拠のメモで足り、入力が煩雑
+
+## R6. 登録済みの振替との差（FR-016）
+
+- **Decision**: `buildBlueReturn` が、按分の登録ごとに「期待される家事分」と「`adjustment_journal_refs` で結びついた有効な振替の仕訳の金額の合計」を比べ、差があれば警告 `HOME_USE_ADJUSTMENT_STALE`（差額、直す案）を出す。直す案は差額の仕訳で、差額が正（振替が足りない）なら「事業主貸 / 費用の科目」、負（振替が多すぎる）なら逆向きの「費用の科目 / 事業主貸」とする。どちらも行の金額は差額の絶対値（> 0）。警告は `proposeHomeUseAdjustment` の案の差額が 0 でないことで判定し、計算を二重に持たない
+- **Rationale**: 振替の後に仕訳が追加・訂正される場合と、割合を変えた場合の両方を、同じ比較で検知できる
+
+## R7. 少額減価償却資産
+
+- **Decision**: 資産の登録時に、取得の日に適用される `SMALL_ASSET_THRESHOLD` 未満であること、同じ年（1〜12月）に特例を使う資産の取得価額の合計が `SMALL_ASSET_ANNUAL_LIMIT` 以下であることを確かめる（INV-21）。取得年の償却費 = 取得価額、必要経費算入額 = ⌊取得価額 × 事業専用割合 / 10000⌋、未償却残高 = 0。仕訳の案は「減価償却費 / 工具器具備品（取得価額）」と、家事分があれば「事業主貸 / 減価償却費（家事分）」。資産の勘定は登録時に選ぶ（既定は 1060 工具器具備品）
+- **既存の仕訳との結びつけ**: 取り込んだ帳簿で取得がすでに費用（減価償却費・消耗品費など）として仕訳されている場合、利用者がその仕訳を指定する（FR-022）。結びつけた資産は仕訳の案を作らず、3ページの表にだけ載せる。結びつけた仕訳の科目が減価償却費でない場合は、欄18との不一致の警告（FR-023）で知らせる
+- **償却の方法**: `DepreciationMethod = "small_asset_28_2"` の1つだけ。計算は `depreciate(asset, fiscalYear)` の1関数とし、方法の表や差し替えの仕組みは作らない（Constitution VII、YAGNI）。定額法などを足すときは、`method` の列挙（DB の CHECK と Zod）に値を足し、`depreciate` を方法で分ける
+- **区分の検査**: 資産の勘定は区分が資産の科目に限る（`ASSET_ACCOUNT_INVALID`）。按分の対象は区分が費用の科目に限る（`HOME_USE_ACCOUNT_INVALID`）
+- **出典**: R3 の表
+
+## R8. 貸借対照表（4ページ）と元入金の繰越の検査
+
+- **Decision**: 期首は 001 の期首残高、期末は `buildBalanceSheet`（年度末日）。様式の行へは R2 の科目コードの対応でまとめる（普通預金などは「その他の預金」）。控除前の所得は期首を空欄にする。事業主貸・事業主借は、期首残高が 0 なら空欄（様式どおり。前の年度から `carryForward` で繰り越していれば 0 になる）、0 でなければ金額を表示して `OPENING_OWNER_ACCOUNTS` で元入金への繰り込みを促す。期首・期末とも、表示した金額で資産合計 = 負債・資本合計になる（INV-19）。元入金の繰越の検査は、前の年度の期末の残高に 002 で作った `carryForward` を適用した値と、今の年度の期首残高を科目ごとに比べる（002 の `OPENING_DIFFERS_FROM_CARRY_FORWARD` と同じ求め方。警告のコードは決算書用に `OPENING_MISMATCH` とする）
+- **繰延資産**: 区分が資産で、科目コードが繰延資産（初期セットの 1080 開業費）の残高が期首と期末で同じで 0 でないとき、`DEFERRED_ASSET_NOT_AMORTIZED` で知らせる
+- **負の残高**: 001 の `detectWarnings` の `NEGATIVE_BALANCE` をそのまま使う
+
+## R9. 青色申告特別控除
+
+- **Decision**: 年度ごとの要件の回答（正規の簿記、BS・PL の添付、期限内の申告、e-Tax での送信、優良な電子帳簿の保存と届出）から上限額を決める: 正規の簿記・添付・期限内をすべて満たし、かつ e-Tax か優良な電子帳簿のどちらかを満たす → `BLUE_DEDUCTION_MAX`、前の3つだけ → `BLUE_DEDUCTION_STANDARD`、それ以外 → `BLUE_DEDUCTION_BASIC`。控除額 = min(上限額, max(0, 欄43))（INV-22）。不動産所得はない前提（範囲外）
+- **出典**: 国税庁 No.2072
+- **回答が未登録の年度**: 上限額を決めず、控除額の欄に「要件の回答が必要」と示す（0 として計算しない）
+
+## R10. 月別売上と売上先
+
+- **Decision**: 月別は、`reportLine = 1` の科目のうち売上の科目と雑収入の科目を分け、月ごとに貸方−借方で集計する。売上先は売上の科目（雑収入を除く）の行の `partnerId` で集計し、金額の降順（同額は取引先名の順）に様式の行数まで個別、残りと取引先なしを「上記以外の売上先の計」にまとめる。雑収入は「上記以外」に含める（様式の注記「雑収入を含む」）。売上先の合計 = 欄1（INV-24）。同名の別の取引先は `DUPLICATE_PARTNER_NAME` で知らせる
+- **Alternatives**: 取引先の付いていない行を別の行に出す → 様式にない
+
+## R11. 免税の期間の税区分の警告をまとめる（002 からの持ち越し）
+
+- **Decision**: `planImport` の `warningsOf` に消費税の設定（`resolveTaxSetting`）を渡し、仕訳の日付の設定が `exempt` のときは `TAX_CATEGORY_SUSPICIOUS` を1件ずつ出さず、新しいコード `TAX_CATEGORY_SUSPICIOUS_EXEMPT`（件数と、対象の freee の仕訳 ID の一覧を `details` に持つ）を1件にまとめる
+- **契約の変更**: `ImportWarningCode` の列挙に値を足す。tasks で「`TAX_CATEGORY_SUSPICIOUS` を参照するテストを grep して、domain・server・web のすべてで直す」と書く
+- **Alternatives**: 事業体の設定に「警告を出さない」を足す → 001 の消費税の設定で判断できるので新しい設定は要らない（spec の Assumptions）
+
+## R12. 決算の設定の変更履歴は専用の追記のみの表
+
+- **Decision**: 按分の登録・資産・控除の回答・メモの変更は、新しい表 `closing_audit_log`（対象の種類、対象 ID、操作、理由、変更前後の JSON、日時）に残し、更新・削除をトリガーで禁止する
+- **Rationale**: 001 の `audit_log` は対象の種類と操作が CHECK つきの列挙で、値を足すには表の作り直し（コピーとトリガーの再作成）が要る。別の表なら既存の表に触れない（VII）。Constitution II（追記のみの履歴）
+- **Alternatives**: `audit_log` を作り直す → 既存のトリガーと 001・002 のテストへの影響が大きい
+
+## R12a. 科目の決算書の欄の変更（FR-006）
+
+- **Decision**: 001 の `AccountPatch`（`packages/schema/src/masters.ts`）に `reportLine?: number | null` を足し、科目の変更の API（001 の `PATCH /entities/:id/accounts/:accountId`）で費用の科目の欄番号を変えられるようにする。許す値は、様式の `kind = account` の費用の欄（8〜24）、任意欄（25〜30）、雑費（31）。費用以外の科目は `REPORT_LINE_INVALID`。変更は `closing_audit_log` に `target_type = account_report_line`、`action = update` で残す（`audit_log` の列挙を変えないため。R12）
+- **Rationale**: 任意欄が足りないとき、どの科目を雑費にまとめるかは利用者の判断。科目の欄番号は帳簿の集計（001 の PL）にも使われるので、決算書だけの割り当て表を別に持つと食い違う
+- **Alternatives**: 決算書だけの割り当て表 → PL と決算書の欄が食い違う
+
+## R12b. 実データの照合スクリプトの共通部分
+
+- **Decision**: `scripts/verify-freee-import.ts` は import すると引数の解析（`parseArgs` の strict）と `process.exit` が動くため、取込・期首残高・`--keep`・`--continue`・対応表の処理を `scripts/lib/freee-import-runner.ts` に切り出し、`verify-freee-import.ts` と `verify-tax-return.ts` の両方がそれを呼ぶ。`verify-freee-import.ts` の挙動（引数と出力）は変えない
+- **AGENTS.md**: 「実データを読むのは `verify-freee-import.ts` だけ」を、スクリプトを作る前（Setup）に「`verify-freee-import.ts` と `verify-tax-return.ts` だけ」に直す
+
+## R13. 書類と証明書のファイルの場所
+
+- **Decision**: 絶対パスの文字列として保存する（入力の Zod で `/` 始まりを必須にする。相対パスはサーバーの作業ディレクトリに依存するため拒否する）。存在の確認はサーバー（`node:fs` の `existsSync`）で一覧を返すときに行い、ドメインには結果（`exists: boolean`）だけを渡す。ファイルの中身は読まない
+- **Rationale**: ドメインは `node:fs` を import しない（AGENTS.md）。Constitution III（データはローカル）
+- **Alternatives**: ファイルをコピーしてハッシュで識別 → 証憑の保存の機能（別の機能）で扱う
+
+## R14. 出力（印刷と CSV）
+
+- **使わない欄の 0 と空欄（FR-008）**: 選択は保存せず、表示と出力のときの切り替えにする。`buildBlueReturn` は常に数値（使わない欄は 0）を返し、画面の表示と `blueReturnToCsv(blueReturn, { blankUnused })` が `kind = unused` の欄を空にする。API は `?blankUnused=true` を CSV にだけ渡す
+- **Decision**: 印刷はブラウザの印刷（印刷用の CSS、A4 縦、ページごとに改ページ）。CSV は `ページ,欄番号,欄名,金額` の行（001 の帳票の CSV と同じ書き方）。e-Tax の形式は範囲外
+- **Rationale**: 依存を足さない（VII）。PDF は印刷のダイアログから保存できる
+
+## R15. 実データでの照合（ローカル専用）
+
+- **Decision**: `scripts/verify-tax-return.ts`（`pnpm verify:tax-return`）を、`verify-freee-import.ts` と同じ方式で作る。`work/` の freee の書き出しを一時のデータ場所（`.tmp/`）に取り込み、按分・資産・控除の回答を `work/` に置く利用者の手書きの JSON（例: `work/tax-return-2025.json`。R7 の決算書の欄の値と、按分率・資産の登録）から登録し、決算書の各欄と照合して「一致・不一致」だけを出す。2024年分は `--continue` で続けて取り込み、負の残高と期首の食い違いの警告が出ることだけを確かめる（SC-002）
+- **Rationale**: Constitution III・V。決算書の値はリポジトリに書かない。JSON の形はスクリプトの先頭のコメントに書く（値は書かない）
+
+## R16. 不変条件（INV-18〜INV-24）とテスト
+
+- **Decision**: data-model.md §4 に INV-18〜24 を追加し、fast-check のプロパティテストで検証する（`fc.assert(fc.property(...))` を直接呼ぶ。001 research R6）。ジェネレーターは 001 の仕訳の arbitraries を使う

@@ -286,7 +286,13 @@ describe("既存の DB への 0002 の適用", () => {
 
     const reopened = openTenant(entityId);
     const c = reopened.$client;
-    expect(c.prepare("SELECT count(*) AS n FROM __drizzle_migrations").get()).toEqual({ n: 3 });
+    // 以降のマイグレーション（003 など）が増えても、journal の全件が適用される
+    const all = JSON.parse(readFileSync(join(MIGRATIONS, "meta", "_journal.json"), "utf8")) as {
+      entries: unknown[];
+    };
+    expect(c.prepare("SELECT count(*) AS n FROM __drizzle_migrations").get()).toEqual({
+      n: all.entries.length,
+    });
     expect(
       c
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'import_%'")

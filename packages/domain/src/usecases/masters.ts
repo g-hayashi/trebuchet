@@ -1,6 +1,6 @@
 import { addDays, oneYearEnd } from "../dates.ts";
 import { type OpeningBalanceDraft, validateOpeningBalances } from "../opening.ts";
-import type { Clock, IdGenerator, MasterRepository } from "../ports.ts";
+import type { Clock, ClosingStore, IdGenerator, MasterRepository } from "../ports.ts";
 import { NORMAL_SIDE, SECTION_SORT_BASE } from "../seed/accounts.individual.ts";
 import { type TaxSettingDraft, validateTaxSettings } from "../tax-settings.ts";
 import {
@@ -235,6 +235,63 @@ export function setAccountActive(
         after: { isActive: false },
       });
     }
+    return ok(updated);
+  });
+}
+
+/** 決算書（一般用）の費用の欄の範囲。8〜24 は名前のある欄、25〜30 は任意欄、31 は雑費（欄32 は計） */
+const EXPENSE_LINE_MIN = 8;
+const EXPENSE_LINE_MAX = 31;
+
+/**
+ * 科目の決算書の欄番号を変更する（003 R12a、FR-006）。
+ * 費用の科目で、欄が 8〜31 か null（解除）のときだけ許し、それ以外は REPORT_LINE_INVALID。
+ * 変更は ClosingStore の closing_audit_log に account_report_line・update（変更前・後の欄番号）で残す。
+ * 同じ値なら何もしない。ClosingStore は repo と同じトランザクションの中のものを渡すこと。
+ */
+export function setAccountReportLine(
+  deps: MasterDeps & { closing: ClosingStore },
+  accountId: string,
+  reportLine: number | null,
+): Result<Account> {
+  if (
+    reportLine !== null &&
+    (!Number.isInteger(reportLine) ||
+      reportLine < EXPENSE_LINE_MIN ||
+      reportLine > EXPENSE_LINE_MAX)
+  ) {
+    return err(
+      domainError(
+        "REPORT_LINE_INVALID",
+        `決算書の欄番号は ${EXPENSE_LINE_MIN}〜${EXPENSE_LINE_MAX} の費用の欄で指定してください`,
+        { accountId, reportLine },
+      ),
+    );
+  }
+  return deps.repo.transaction((tx) => {
+    const account = tx.getAccount(accountId);
+    if (account === undefined) return accountNotFound(accountId);
+    if (account.category !== "expense") {
+      return err(
+        domainError("REPORT_LINE_INVALID", "決算書の欄を変えられるのは費用の科目だけです", {
+          accountId,
+          category: account.category,
+        }),
+      );
+    }
+    if (account.reportLine === reportLine) return ok(account);
+    const updated = { ...account, reportLine };
+    tx.updateAccount(updated);
+    deps.closing.appendClosingAudit({
+      id: deps.ids.next(),
+      occurredAt: deps.clock.now(),
+      targetType: "account_report_line",
+      targetId: accountId,
+      action: "update",
+      reason: null,
+      beforeJson: JSON.stringify({ reportLine: account.reportLine }),
+      afterJson: JSON.stringify({ reportLine }),
+    });
     return ok(updated);
   });
 }

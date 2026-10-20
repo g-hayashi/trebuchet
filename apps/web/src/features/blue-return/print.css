@@ -1,0 +1,28 @@
+/* 青色申告決算書の印刷（003 research R14）。画面では何も変えない。A4 縦、ページごとに改ページ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  /* 決算書の画面が開いているときだけ、ナビと操作を隠す */
+  body:has(.blue-return-print) nav,
+  .blue-return-print .no-print {
+    display: none;
+  }
+
+  .blue-return-print {
+    color: #000;
+    background: #fff;
+  }
+
+  /* 1ページ分のまとまり。最後のページの後は改ページしない */
+  .blue-return-print .print-page {
+    break-after: page;
+    break-inside: avoid-page;
+  }
+
+  .blue-return-print .print-page:last-of-type {
+    break-after: auto;
+  }
+}

@@ -262,6 +262,59 @@ describe("勘定科目の画面", () => {
     expect(screen.getByText("現金")).toBeInTheDocument();
   });
 
+  it("費用の科目の決算書の欄を選んで変更する（8〜31 と「なし」）。費用以外には選択を出さない", async () => {
+    let accounts = initialAccounts();
+    const calls = mockApi({
+      [`GET ${BASE}`]: () => ok({ accounts }),
+      [`PATCH ${BASE}/supplies`]: (call) => {
+        const { reportLine } = call.body as { reportLine: number | null };
+        accounts = accounts.map((a) => (a.id === "supplies" ? { ...a, reportLine } : a));
+        return ok({ account: accounts.find((a) => a.id === "supplies") });
+      },
+    });
+    const user = userEvent.setup();
+    renderAccounts();
+    await screen.findByText("消耗品費");
+
+    expect(screen.queryByLabelText("決算書の欄（現金）")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("決算書の欄（売上高）")).not.toBeInTheDocument();
+    expect(within(rowOf("売上高")).getAllByRole("cell")[3]).toHaveTextContent("1");
+
+    const select = screen.getByLabelText("決算書の欄（消耗品費）");
+    const options = within(select)
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    expect(options).toEqual(["なし", ...Array.from({ length: 24 }, (_, i) => String(i + 8))]);
+    expect(select).toHaveValue("");
+
+    await user.selectOptions(select, "17");
+    await waitFor(() => expect(screen.getByLabelText("決算書の欄（消耗品費）")).toHaveValue("17"));
+    await user.selectOptions(screen.getByLabelText("決算書の欄（消耗品費）"), "なし");
+    await waitFor(() => expect(screen.getByLabelText("決算書の欄（消耗品費）")).toHaveValue(""));
+
+    expect(calls.filter((c) => c.method === "PATCH").map((c) => c.body)).toEqual([
+      { reportLine: 17 },
+      { reportLine: null },
+    ]);
+  });
+
+  it("欄の変更が拒否されたら、理由を表示する", async () => {
+    mockApi({
+      [`GET ${BASE}`]: () => ok({ accounts: initialAccounts() }),
+      [`PATCH ${BASE}/supplies`]: () =>
+        apiError(422, "REPORT_LINE_INVALID", "reportLine must be 8-31"),
+    });
+    const user = userEvent.setup();
+    renderAccounts();
+    await screen.findByText("消耗品費");
+
+    await user.selectOptions(screen.getByLabelText("決算書の欄（消耗品費）"), "9");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "決算書の欄は、費用の科目の 8〜31 から選んでください。",
+    );
+  });
+
   it("補助科目を表示し、追加する", async () => {
     let subAccounts: SubAccount[] = [];
     const calls = mockApi({

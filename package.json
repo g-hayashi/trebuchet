@@ -15,7 +15,8 @@
     "format": "biome check --write .",
     "bench:reports": "node scripts/bench-reports.ts",
     "bench:import": "node scripts/bench-import.ts",
-    "verify:freee": "node scripts/verify-freee-import.ts"
+    "verify:freee": "node scripts/verify-freee-import.ts",
+    "verify:tax-return": "node scripts/verify-tax-return.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

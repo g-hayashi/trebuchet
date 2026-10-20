@@ -8,7 +8,7 @@ import type { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
-import { Input } from "@/components/ui/input";
+import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Table,
@@ -54,7 +54,7 @@ function AccountsPage() {
                   <TableHead className="w-20">コード</TableHead>
                   <TableHead>名称</TableHead>
                   <TableHead className="w-20">区分</TableHead>
-                  <TableHead className="w-16 text-right">欄</TableHead>
+                  <TableHead className="w-24 text-right">決算書の欄</TableHead>
                   <TableHead className="w-0">
                     <span className="sr-only">操作</span>
                   </TableHead>
@@ -140,7 +140,17 @@ function AccountRow({ entityId, account }: { entityId: string; account: Account 
           )}
         </TableCell>
         <TableCell>{CATEGORY_LABELS[account.category]}</TableCell>
-        <TableCell className="text-right tabular-nums">{account.reportLine ?? ""}</TableCell>
+        <TableCell className="text-right tabular-nums">
+          {account.category === "expense" ? (
+            <ReportLineSelect
+              account={account}
+              pending={patch.isPending}
+              onChange={(reportLine) => patch.mutate({ reportLine })}
+            />
+          ) : (
+            (account.reportLine ?? "")
+          )}
+        </TableCell>
         <TableCell>
           <div className="flex justify-end gap-1">
             <Button
@@ -197,6 +207,36 @@ function AccountRow({ entityId, account }: { entityId: string; account: Account 
         </TableRow>
       )}
     </Fragment>
+  );
+}
+
+/** 費用の科目の決算書の欄（青色申告決算書 1ページの欄 8〜31）。選ぶとすぐ保存する（FR-006） */
+const REPORT_LINE_CHOICES = Array.from({ length: 24 }, (_, i) => i + 8);
+
+function ReportLineSelect({
+  account,
+  pending,
+  onChange,
+}: {
+  account: Account;
+  pending: boolean;
+  onChange: (reportLine: number | null) => void;
+}) {
+  return (
+    <NativeSelect
+      aria-label={`決算書の欄（${account.name}）`}
+      className="h-8 w-20"
+      disabled={pending}
+      value={account.reportLine === null ? "" : String(account.reportLine)}
+      onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+    >
+      <option value="">なし</option>
+      {REPORT_LINE_CHOICES.map((n) => (
+        <option key={n} value={String(n)}>
+          {n}
+        </option>
+      ))}
+    </NativeSelect>
   );
 }
 

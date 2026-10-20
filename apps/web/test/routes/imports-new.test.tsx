@@ -122,7 +122,18 @@ function buildPreview(
   {
     entertainmentMapped = false,
     fileName = "仕訳帳_2025.csv",
-  }: { entertainmentMapped?: boolean; fileName?: string } = {},
+    warnings = [
+      {
+        code: "TAX_CATEGORY_SUSPICIOUS",
+        message: "費用の科目に売上の税区分が付いています",
+        freeeJournalId: "J3",
+      },
+    ],
+  }: {
+    entertainmentMapped?: boolean;
+    fileName?: string;
+    warnings?: ImportPreview["warnings"];
+  } = {},
 ): ImportPreview {
   const counts: Counts = {
     ...countItems(items),
@@ -151,13 +162,7 @@ function buildPreview(
       partners: ["取引先A"],
       tags: [],
     },
-    warnings: [
-      {
-        code: "TAX_CATEGORY_SUSPICIOUS",
-        message: "費用の科目に売上の税区分が付いています",
-        freeeJournalId: "J3",
-      },
-    ],
+    warnings,
     ready: !unmapped && counts.new > 0,
   };
 }
@@ -264,6 +269,39 @@ describe("新しい取込: プレビュー（T026）", () => {
     expect(planRow("No.4")).toHaveTextContent("対応表で対応が決まっていない名前がある");
     expect(planRow("No.2")).toHaveTextContent("11,000");
     expect(planRow("No.3")).toHaveTextContent("税区分が科目と合わない可能性");
+  });
+
+  it("免税の期間の税区分の警告は、件数を1行にまとめ、開くと freee の仕訳 ID の一覧が出る（US7）", async () => {
+    const items = baseItems();
+    mockImport({
+      [`POST ${PREVIEW}`]: () =>
+        ok({
+          preview: buildPreview(items, {
+            warnings: [
+              {
+                code: "TAX_CATEGORY_SUSPICIOUS_EXEMPT",
+                message: "免税の期間のため税区分の警告を 2 件まとめました",
+                details: { count: 2, freeeJournalIds: ["900000077", "900000088"] },
+              },
+            ],
+          }),
+        }),
+    });
+    const user = userEvent.setup();
+    renderNew();
+    await choose(user);
+
+    const warnings = screen.getByRole("list", { name: "警告の一覧" });
+    expect(warnings.children).toHaveLength(1);
+    expect(warnings).toHaveTextContent("免税の期間のため税区分の警告を 2 件まとめました");
+    // 開くと freee の仕訳 ID の一覧
+    await user.click(within(warnings).getByText("免税の期間のため税区分の警告を 2 件まとめました"));
+    const ids = within(warnings).getByRole("list", { name: "まとめた警告の freee の仕訳 ID" });
+    expect(
+      within(ids)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["900000077", "900000088"]);
   });
 
   it("判定で仕訳の一覧を絞り込める", async () => {

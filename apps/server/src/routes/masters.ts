@@ -7,6 +7,7 @@ import {
   renameAccount,
   replaceTaxSettings,
   setAccountActive,
+  setAccountReportLine,
   upsertPartner,
 } from "@trebuchet/domain";
 import {
@@ -18,7 +19,7 @@ import {
   TaxSettingsPut,
 } from "@trebuchet/schema";
 import { Hono } from "hono";
-import { masterDeps } from "../deps.ts";
+import { masterClosingDeps, masterDeps } from "../deps.ts";
 import { DomainException, fail, orThrow } from "../errors.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
@@ -38,15 +39,18 @@ export const masterRoutes = new Hono<TenantEnv>()
   .patch("/accounts/:accountId", validate("json", AccountPatch), (c) => {
     const accountId = c.req.param("accountId");
     const patch = c.req.valid("json");
-    const deps = masterDeps(c.var.db);
-    // 名称と使用停止の両方を指定されたら、どちらかが失敗したときに両方を取り消す
-    const account = deps.repo.transaction((tx) => {
-      const txDeps = { ...deps, repo: tx };
-      let current = tx.getAccount(accountId);
+    // 名称・使用停止・決算書の欄のうち複数を指定されたら、どれかが失敗したときに全部を取り消す。
+    // マスタと ClosingStore（欄の変更の履歴）は同じトランザクションの接続で扱う
+    const account = c.var.db.transaction((tx) => {
+      const txDeps = masterClosingDeps(tx);
+      let current = txDeps.repo.getAccount(accountId);
       if (current === undefined) throw new DomainException(accountNotFound(accountId));
       if (patch.name !== undefined) current = orThrow(renameAccount(txDeps, accountId, patch.name));
       if (patch.isActive !== undefined) {
         current = orThrow(setAccountActive(txDeps, accountId, patch.isActive));
+      }
+      if (patch.reportLine !== undefined) {
+        current = orThrow(setAccountReportLine(txDeps, accountId, patch.reportLine));
       }
       return current;
     });

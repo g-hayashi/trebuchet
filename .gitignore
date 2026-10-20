@@ -17,3 +17,6 @@ test-results/
 
 # Claude Code (machine-local settings)
 .claude/settings.local.json
+
+# playwright MCP の作業ファイル
+.playwright-mcp/

@@ -151,6 +151,7 @@ describe("判定と警告のコード（data-model §3）", () => {
     expect(ImportWarningCode.options).toEqual([
       "TAX_AMOUNT_MISMATCH",
       "TAX_CATEGORY_SUSPICIOUS",
+      "TAX_CATEGORY_SUSPICIOUS_EXEMPT",
       "POSSIBLE_DUPLICATE",
       "FREEE_CHANGED",
       "FREEE_DELETED",

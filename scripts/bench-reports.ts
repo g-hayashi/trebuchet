@@ -1,9 +1,11 @@
 /**
  * SC-004 のベンチマーク: 年間 2,000 件（平均 3 行）の仕訳があるとき、各帳票の API が 1 秒以内に応答するかを測る。
+ * あわせて SC-006（003）: 約 500 仕訳の帳簿で、決算書の画面が使う API が 2 秒以内に応答するかを測る。
  * `.tmp/bench-<uuid>/` に一時的なテナントを作り、終了時に削除する。
  *
  *   pnpm bench:reports
  *   BENCH_LIMIT_MS=50 BENCH_RUNS=10 pnpm bench:reports   # しきい値・回数の変更
+ *   BENCH_BLUE_LIMIT_MS=2000 pnpm bench:reports          # 決算書（SC-006）のしきい値
  *
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む
  * （その先の hono や @trebuchet/db は各パッケージの node_modules から解決される）。
@@ -119,8 +121,8 @@ try {
   }
 
   const yearStart = Date.UTC(FISCAL_YEAR, 0, 1);
-  const dateOf = (i: number): string =>
-    new Date(yearStart + Math.floor((i * 365) / JOURNALS) * 86_400_000).toISOString().slice(0, 10);
+  const dateOf = (i: number, total = JOURNALS): string =>
+    new Date(yearStart + Math.floor((i * 365) / total) * 86_400_000).toISOString().slice(0, 10);
 
   const setupStart = performance.now();
   let lineCount = 0;
@@ -179,14 +181,141 @@ try {
   console.table(rows);
 
   const failed = rows.filter((r) => r.result === "NG");
+  let sc004Ok = false;
   if (failed.length > 0) {
     console.error(
       `SC-004 を満たしません: ${failed.map((r) => `${r.report}(${r.format})`).join(", ")} が ${LIMIT_MS} ms を超えました`,
     );
   } else {
     console.log(`SC-004 OK: すべての帳票が ${LIMIT_MS} ms 以内（${RUNS} 回の最大値）`);
-    exitCode = 0;
+    sc004Ok = true;
   }
+
+  // SC-006（003）: 約 500 仕訳の帳簿で、決算書の画面を開いてから全ページの値が表示されるまで 2 秒以内。
+  // 画面が開くときに取る API（決算書・控除の回答・按分・地代家賃の内訳・決算整理の案）を順に呼んだ合計を測る。
+  const BLUE_JOURNALS = 500;
+  const BLUE_LIMIT_MS = positiveNumber("BENCH_BLUE_LIMIT_MS", 2_000);
+  const { entity: blueEntity } = await json<{ entity: { id: string } }>(
+    await call("POST", "/entities", {
+      name: "ベンチマーク（決算書）",
+      kind: "individual",
+      fiscalStartMonth: 1,
+      firstFiscalYear: FISCAL_YEAR,
+    }),
+    201,
+    "決算書用の事業体の作成",
+  );
+  const blueBase = `/entities/${blueEntity.id}`;
+  const blueAccounts = await json<{ accounts: { id: string; name: string }[] }>(
+    await call("GET", `${blueBase}/accounts`),
+    200,
+    "勘定科目の取得（決算書用）",
+  );
+  const blueIds = new Map(blueAccounts.accounts.map((a) => [a.name, a.id]));
+  const blueAcc = (name: string): string => {
+    const id = blueIds.get(name);
+    if (id === undefined) throw new Error(`科目がありません: ${name}`);
+    return id;
+  };
+  await json(
+    await call("PUT", `${blueBase}/fiscal-periods/${FISCAL_YEAR}/opening-balances`, [
+      { accountId: blueAcc("普通預金"), side: "debit", amount: 3_000_000 },
+      { accountId: blueAcc("元入金"), side: "credit", amount: 3_000_000 },
+    ]),
+    200,
+    "期首残高の登録（決算書用）",
+  );
+  // linesOf は acc() で科目を引くため、決算書用の事業体の科目 ID に置き換えて組み立てる
+  const blueLines = (i: number): Line[] =>
+    linesOf(i).map((l) => {
+      const name = [...ids].find(([, id]) => id === l.accountId)?.[0];
+      if (name === undefined) throw new Error("科目の名前を引けません");
+      return { ...l, accountId: blueAcc(name) };
+    });
+  for (let i = 0; i < BLUE_JOURNALS; i++) {
+    await json(
+      await call("POST", `${blueBase}/journals`, {
+        date: dateOf(i, BLUE_JOURNALS),
+        lines: blueLines(i),
+      }),
+      201,
+      `仕訳 ${i + 1} の登録（決算書用）`,
+    );
+  }
+  await json(
+    await call("PUT", `${blueBase}/blue-return/${FISCAL_YEAR}/home-use`, {
+      accountId: blueAcc("地代家賃"),
+      businessRatio: 5_000,
+      basis: "ベンチマーク",
+    }),
+    200,
+    "按分の登録",
+  );
+  await json(
+    await call("POST", `${blueBase}/fixed-assets`, {
+      name: "ベンチマーク用の資産",
+      acquiredOn: `${FISCAL_YEAR}-03-01`,
+      acquisitionCost: 150_000,
+      method: "small_asset_28_2",
+      businessRatio: 10_000,
+      assetAccountId: blueAcc("工具器具備品"),
+    }),
+    201,
+    "固定資産の登録",
+  );
+
+  const bluePaths = [
+    `${blueBase}/blue-return/${FISCAL_YEAR}`,
+    `${blueBase}/blue-return/${FISCAL_YEAR}/deduction-answers`,
+    `${blueBase}/blue-return/${FISCAL_YEAR}/home-use`,
+    `${blueBase}/blue-return/${FISCAL_YEAR}/rent-details`,
+    `${blueBase}/blue-return/${FISCAL_YEAR}/adjustments`,
+  ];
+  async function measureScreen(): Promise<number> {
+    const start = performance.now();
+    for (const path of bluePaths) {
+      const res = await call("GET", path);
+      const body = await res.text();
+      if (res.status !== 200) throw new Error(`GET ${path} が失敗しました: ${res.status} ${body}`);
+    }
+    return performance.now() - start;
+  }
+  const blueTargets: [name: string, run: () => Promise<number>][] = [
+    ["blue-return (JSON)", () => measure(bluePaths[0] ?? "")],
+    [
+      "blue-return (CSV)",
+      () => measure(`${blueBase}/blue-return/${FISCAL_YEAR}/csv?blankUnused=false`),
+    ],
+    ["blue-return screen (all APIs)", measureScreen],
+  ];
+  const blueRows = [];
+  for (const [name, run] of blueTargets) {
+    await run(); // ウォームアップ
+    const times: number[] = [];
+    for (let i = 0; i < RUNS; i++) times.push(await run());
+    times.sort((a, b) => a - b);
+    const median = times[Math.floor(times.length / 2)] ?? Number.NaN;
+    const max = times[times.length - 1] ?? Number.NaN;
+    blueRows.push({
+      target: name,
+      "median (ms)": Number(median.toFixed(1)),
+      "max (ms)": Number(max.toFixed(1)),
+      result: max <= BLUE_LIMIT_MS ? "OK" : "NG",
+    });
+  }
+  console.log(`決算書: 仕訳 ${BLUE_JOURNALS} 件の帳簿（${FISCAL_YEAR} 年度）`);
+  console.table(blueRows);
+  const blueFailed = blueRows.filter((r) => r.result === "NG");
+  let sc006Ok = false;
+  if (blueFailed.length > 0) {
+    console.error(
+      `SC-006 を満たしません: ${blueFailed.map((r) => r.target).join(", ")} が ${BLUE_LIMIT_MS} ms を超えました`,
+    );
+  } else {
+    console.log(`SC-006 OK: 決算書が ${BLUE_LIMIT_MS} ms 以内（${RUNS} 回の最大値）`);
+    sc006Ok = true;
+  }
+  if (sc004Ok && sc006Ok) exitCode = 0;
 } catch (error) {
   console.error(error);
 } finally {

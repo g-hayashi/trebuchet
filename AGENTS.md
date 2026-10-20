@@ -34,13 +34,14 @@ apps/server ──→ packages/schema
 | 型チェック（全パッケージ + scripts） | `pnpm typecheck` |
 | Lint（Biome） | `pnpm lint` |
 | 整形（Biome で書き換え） | `pnpm format` |
-| 性能計測（SC-004 の仕訳 2,000 件） | `pnpm bench:reports` |
+| 性能計測（SC-004 の仕訳 2,000 件、003 の SC-006 の決算書） | `pnpm bench:reports` |
 | 性能計測（freee 取込の 500 仕訳、002 の SC-002） | `pnpm bench:import` |
 | freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。使い方は `scripts/verify-freee-import.ts` の先頭のコメント） |
+| 青色申告決算書の照合（実データ、ローカル専用） | `pnpm verify:tax-return`（`work/` を読む。使い方は `scripts/verify-tax-return.ts` の先頭のコメント） |
 | E2E（Playwright、Chromium） | `pnpm --filter @trebuchet/web e2e` |
 | web のビルド（`routeTree.gen.ts` を再生成する） | `pnpm --filter @trebuchet/web build` |
 
-- CI（`.github/workflows/ci.yml`）は `pnpm typecheck`、`pnpm lint`、`pnpm test` を実行する。E2E、bench、`verify:freee` は CI に含まれない。
+- CI（`.github/workflows/ci.yml`）は `pnpm typecheck`、`pnpm lint`、`pnpm test` を実行する。E2E、bench、`verify:freee`、`verify:tax-return` は CI に含まれない。
 - 変更を終える前に、少なくとも `pnpm typecheck`、`pnpm lint`、`pnpm test` を通す。
 
 ## 開発の進め方
@@ -67,10 +68,31 @@ apps/server ──→ packages/schema
 | HTTP | `apps/server/src/routes/imports.ts` |
 | 画面 | `apps/web/src/features/imports/`、`apps/web/src/routes/e/$entityId/imports/` |
 
-- 実データ（`work/`）を読むのは `scripts/verify-freee-import.ts`（`pnpm verify:freee`）だけ。出力（件数、科目別の金額など）はコミットしない。ドキュメントや `tasks.md` にも実データの数値を書かない。
+- 実データ（`work/`）を読むのは `scripts/verify-freee-import.ts`（`pnpm verify:freee`）と `scripts/verify-tax-return.ts`（`pnpm verify:tax-return`）だけ。取込の共通部分は `scripts/lib/freee-import-runner.ts`。出力（件数、科目別の金額など）はコミットしない。ドキュメントや `tasks.md` にも実データの数値を書かない。
 - テストのフィクスチャは `packages/domain/test/fixtures/freee/` の **合成の** CSV。作り方と匿名化の方針は同じ場所の `README.md` に書いてある。CSV の生成スクリプトはリポジトリに置かない（使い捨て）。手で直す場合は、全項目をクォートし、LF で終える。元帳は UTF-8 の元（`ledger-2025.utf8.csv`）から CP932 の `ledger-2025.csv` を `iconv` で作る。フィクスチャを変えたら README の「検算」をして `expected.ts` を直す。
 - 取込のプロパティテスト（INV-14, 16, 17）は `packages/domain/test/freee-arbitraries.ts` のジェネレーターで、貸借一致の仕訳から freee 形式の仕訳帳と元帳を作って検証する。
 - 年初付の決算振替は仕訳として取り込まず、期首残高に繰り込む（[ADR 0004](docs/adr/0004-freee-closing-entries.md)）。
+
+## 決算書（003）
+
+青色申告決算書（一般用、個人の事業体だけ）の実装は次に置く。
+
+| 層 | 場所 |
+|---|---|
+| 決算書の組み立て（様式、按分、減価償却、控除の判定、月別売上と売上先、期首の貸借対照表の検査、CSV） | `packages/domain/src/blue-return/`（`form.ts`、`build.ts`、`home-use.ts`、`depreciation.ts`、`deduction.ts`、`sales.ts`、`balance-sheet.ts`、`opening-check.ts`、`tax-parameters.ts`、`csv.ts`） |
+| ユースケース | `packages/domain/src/usecases/blue-return.ts` |
+| 永続化（按分・資産・控除の回答・メモ・控えの保存、決算整理の仕訳との結びつけ） | `packages/db/src/closing-repository.ts` |
+| HTTP | `apps/server/src/routes/blue-return.ts`、`fixed-assets.ts`、`tax-return.ts` |
+| 画面 | `apps/web/src/features/blue-return/`、`fixed-assets/`、`tax-return/`、`apps/web/src/routes/e/$entityId/` の `blue-return/`・`fixed-assets/`・`tax-return/` |
+
+- 按分と少額減価償却は、決算整理の「仕訳」として登録する。ドメインが案を作り、利用者が確かめて 001 の `createJournal` で登録する（[ADR 0005](docs/adr/0005-closing-adjustments-as-journals.md)）。決算書は帳簿の損益計算書・貸借対照表と一致する。
+- **税制の値の足し方**（基準額、控除額など。Constitution VI）: 次の**両方**に、適用の期間つきの行を足す。出典の URL は必須（国税庁・財務省などの一次資料）。
+  1. `packages/domain/src/seed/tax-parameters.ts`（正本）
+  2. マイグレーション。`pnpm --filter @trebuchet/db exec drizzle-kit generate --custom --config drizzle.tenant.config.ts` で空の SQL を作り、`INSERT` を手で書く（既存の行は書き換えず、適用の終了日を足すか新しい行を足す）。`packages/db/test/closing-repository.test.ts`（`listTaxParameters`）が、seed とマイグレーションで投入された値の一致を確かめる
+  - 新しい `key` を足すときは、`tax_parameters` の CHECK 制約（`key IN (...)`）と型 `TaxParameter` の `key` も直す。
+- 様式の値（欄番号、行の定義）は `packages/domain/src/blue-return/form.ts` に置き、国税庁の様式の原本と照らして確かめる（research R2）。
+- 性能は `pnpm bench:reports` が SC-006（約 500 仕訳で決算書の画面が使う API が 2 秒以内）も確かめる。
+- 実データでの照合は `pnpm verify:tax-return`（`--closing` の JSON の形はスクリプトの先頭のコメント）。出力は欄の識別子と一致・不一致の件数だけで、金額・取引先名・按分率は出さない。
 
 ## データと一時ファイル
 
@@ -80,7 +102,7 @@ apps/server ──→ packages/schema
 
 ## 仕様と文書
 
-- Spec Kit の成果物は `specs/<feature>/`（現在は `specs/001-ledger-core/`）に置く: `spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`tasks.md`。
+- Spec Kit の成果物は `specs/<feature>/`（`specs/001-ledger-core/`、`specs/002-freee-import/`、`specs/003-tax-return/`）に置く: `spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`tasks.md`。
 - Spec Kit のテンプレート、スクリプト、憲法（`.specify/memory/constitution.md`）は `.specify/` に置く。
 - Spec Kit のスキルは、Claude Code 用が `.claude/skills/speckit-*`、GitHub Copilot CLI 用が `.github/skills/speckit-*` にある。両方の統合を入れてあり、既定は claude。どちらも `uvx --from git+https://github.com/github/spec-kit.git@v1.2.1 specify integration upgrade <claude|copilot>` で更新する（手で片方だけを直さない）。
 - Claude Code は、CLAUDE.md がないときにこの AGENTS.md を読む。リポジトリに CLAUDE.md を作らない（作る場合は `@AGENTS.md` を取り込む）。`work/` と `data/` の読み取りは `.claude/settings.json` で拒否している。

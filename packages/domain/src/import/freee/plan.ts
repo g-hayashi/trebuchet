@@ -12,7 +12,7 @@ import type {
 import { checkPeriod, type JournalContext, validateJournal } from "../../journal.ts";
 import { computeInclusiveTax, sumYen } from "../../money.ts";
 import { resolveTaxRate } from "../../tax-rates.ts";
-import type { TaxSettingDraft } from "../../tax-settings.ts";
+import { resolveTaxSetting, type TaxSettingDraft } from "../../tax-settings.ts";
 import type {
   Account,
   DomainError,
@@ -306,7 +306,8 @@ export function planImport(input: PlanImportInput): ImportPlan {
 
   const items: PlanItem[] = [];
   const planned: PlannedJournal[] = [];
-  const warnings: ImportWarning[] = [];
+  const otherWarnings: ImportWarning[] = [];
+  const exemptWarnings: ImportWarning[] = [];
   for (const e of ordered) {
     const outcome = e.outcome ?? { decision: "rejected", reason: "MISSING_FIELD" };
     const base = {
@@ -322,7 +323,9 @@ export function planImport(input: PlanImportInput): ImportPlan {
         warnings: outcome.warnings.map((w) => w.code),
       });
       planned.push(outcome.planned);
-      warnings.push(...outcome.warnings);
+      for (const w of outcome.warnings) {
+        (w.code === "TAX_CATEGORY_SUSPICIOUS_EXEMPT" ? exemptWarnings : otherWarnings).push(w);
+      }
     } else {
       items.push({
         ...base,
@@ -334,6 +337,7 @@ export function planImport(input: PlanImportInput): ImportPlan {
     }
   }
 
+  const warnings = [...otherWarnings, ...groupExemptWarnings(exemptWarnings)];
   warnings.push(...changesFromRefs(input, ordered, items));
 
   const counts = { new: 0, already: 0, excluded: 0, rejected: 0 };
@@ -384,6 +388,22 @@ export function planImport(input: PlanImportInput): ImportPlan {
     planned,
     creations,
   };
+}
+
+/** 免税の期間の仕訳ごとの警告を、件数と freee の仕訳 ID の一覧を持つ1件にまとめる。0 件なら出さない */
+function groupExemptWarnings(exempt: readonly ImportWarning[]): ImportWarning[] {
+  if (exempt.length === 0) return [];
+  const freeeJournalIds = exempt.flatMap((w) =>
+    w.freeeJournalId === undefined ? [] : [w.freeeJournalId],
+  );
+  const count = freeeJournalIds.length;
+  return [
+    {
+      code: "TAX_CATEGORY_SUSPICIOUS_EXEMPT",
+      message: `免税の期間のため税区分の警告を ${count} 件まとめました`,
+      details: { count, freeeJournalIds },
+    },
+  ];
 }
 
 /**
@@ -665,10 +685,13 @@ function warningsOf(
     );
   });
   if (suspicious !== undefined) {
-    add("TAX_CATEGORY_SUSPICIOUS", "科目の区分と税区分の組み合わせを確認してください", {
-      account: suspicious.line.accountName,
-      tax: suspicious.line.taxName,
-    });
+    // 免税の期間は税区分が帳簿の金額に影響しないので、planImport が1件にまとめる（003 R11, FR-037）
+    const exempt = resolveTaxSetting(journal.date, input.taxSettings)?.taxpayerStatus === "exempt";
+    add(
+      exempt ? "TAX_CATEGORY_SUSPICIOUS_EXEMPT" : "TAX_CATEGORY_SUSPICIOUS",
+      "科目の区分と税区分の組み合わせを確認してください",
+      { account: suspicious.line.accountName, tax: suspicious.line.taxName },
+    );
   }
 
   const keys = lineKeys(valid.lines);

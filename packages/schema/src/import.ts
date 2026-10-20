@@ -58,6 +58,8 @@ export const IMPORT_REASONS_BY_DECISION = {
 export const ImportWarningCode = z.enum([
   "TAX_AMOUNT_MISMATCH",
   "TAX_CATEGORY_SUSPICIOUS",
+  /** 免税の期間の TAX_CATEGORY_SUSPICIOUS を1件にまとめたもの。details は { count, freeeJournalIds }（003 R11） */
+  "TAX_CATEGORY_SUSPICIOUS_EXEMPT",
   "POSSIBLE_DUPLICATE",
   "FREEE_CHANGED",
   "FREEE_DELETED",

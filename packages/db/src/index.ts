@@ -1,3 +1,4 @@
+export * from "./closing-repository.ts";
 export * from "./import-repository.ts";
 export * from "./ledger-repository.ts";
 export * from "./master-repository.ts";

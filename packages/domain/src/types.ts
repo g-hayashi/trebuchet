@@ -1,13 +1,18 @@
 import type {
   AccountCategory,
   AccountingMethod,
+  AdjustmentKind,
+  ClosingNoteKind,
+  DepreciationMethod,
   EntityKind,
   ErrorCode,
   ErrorDetails,
+  FiledDocumentKind,
   ReportSection,
   Side,
   TaxCategoryCode,
   TaxpayerStatus,
+  TaxReturnMemoKind,
   WarningCode,
 } from "@trebuchet/schema";
 
@@ -288,4 +293,143 @@ export type JournalQuery = {
 export type Page<T> = {
   items: T[];
   nextCursor: string | null;
+};
+
+// ---- 決算処理・確定申告（003-tax-return。data-model §1 の各表に対応する） ----
+
+export type {
+  AdjustmentKind,
+  ClosingNoteKind,
+  DepreciationMethod,
+  FiledDocumentKind,
+  TaxReturnMemoKind,
+};
+
+export type TaxParameterKey =
+  | "SMALL_ASSET_THRESHOLD"
+  | "SMALL_ASSET_ANNUAL_LIMIT"
+  | "BLUE_DEDUCTION_MAX"
+  | "BLUE_DEDUCTION_STANDARD"
+  | "BLUE_DEDUCTION_BASIC";
+
+/** 税制の値（R3、§1.1）。effectiveTo が null なら期限なし */
+export type TaxParameter = {
+  key: TaxParameterKey;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  value: number;
+  sourceUrl: string;
+};
+
+/** 家事按分の登録（§1.2）。businessRatio は万分率 */
+export type HomeUseAllocation = {
+  id: string;
+  fiscalYear: number;
+  accountId: string;
+  subAccountId: string | null;
+  businessRatio: number;
+  basis: string;
+  changeReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** 地代家賃の内訳の1行（§1.3） */
+export type RentDetail = {
+  id: string;
+  fiscalYear: number;
+  payee: string;
+  property: string;
+  annualRent: number;
+  deductibleAmount: number;
+  sortOrder: number;
+};
+
+/** 固定資産台帳の1行（§1.4） */
+export type FixedAsset = {
+  id: string;
+  name: string;
+  quantity: string | null;
+  acquiredOn: string;
+  acquisitionCost: number;
+  method: DepreciationMethod;
+  usefulLifeYears: number | null;
+  businessRatio: number;
+  assetAccountId: string;
+  linkedJournalId: string | null;
+  note: string | null;
+  disposedOn: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** 決算整理の仕訳の出所（§1.5）。kind = home_use なら allocationId、depreciation なら assetId が入る */
+export type AdjustmentRef = {
+  journalId: string;
+  kind: AdjustmentKind;
+  allocationId: string | null;
+  assetId: string | null;
+  fiscalYear: number;
+};
+
+/** 控除の要件の回答（§1.6） */
+export type DeductionAnswers = {
+  fiscalYear: number;
+  doubleEntry: boolean;
+  statementsAttached: boolean;
+  filedOnTime: boolean;
+  eTax: boolean;
+  electronicBooks: boolean;
+  updatedAt: string;
+};
+
+/** 決算のメモ（§1.7） */
+export type ClosingNote = {
+  fiscalYear: number;
+  kind: ClosingNoteKind;
+  body: string;
+  updatedAt: string;
+};
+
+/** 事業所得以外の控え（§1.8） */
+export type TaxReturnMemo = {
+  id: string;
+  fiscalYear: number;
+  kind: TaxReturnMemoKind;
+  label: string | null;
+  amount: number | null;
+  filePath: string | null;
+  memo: string | null;
+};
+
+/** 提出書類の記録（§1.9） */
+export type FiledDocument = {
+  id: string;
+  fiscalYear: number;
+  kind: FiledDocumentKind;
+  filePath: string;
+  filedOn: string | null;
+  memo: string | null;
+};
+
+export type ClosingAuditTargetType =
+  | "home_use_allocation"
+  | "rent_detail"
+  | "fixed_asset"
+  | "blue_deduction_answer"
+  | "closing_note"
+  | "account_report_line";
+
+export type ClosingAuditAction = "create" | "update" | "dispose" | "delete";
+
+/** 決算の設定の変更履歴（§1.10） */
+export type ClosingAuditEntry = {
+  id: string;
+  occurredAt: string;
+  targetType: ClosingAuditTargetType;
+  targetId: string;
+  action: ClosingAuditAction;
+  reason: string | null;
+  beforeJson: string | null;
+  afterJson: string | null;
 };

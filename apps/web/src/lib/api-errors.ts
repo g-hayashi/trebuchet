@@ -110,6 +110,10 @@ export function describeError(error: unknown): ErrorDescription {
     }
     case "FILE_TOO_LARGE":
       return { message: "ファイルが大きすぎます（5 MB まで）。", details: [] };
+    case "REPORT_LINE_INVALID":
+      return { message: "決算書の欄は、費用の科目の 8〜31 から選んでください。", details: [] };
+    case "ENTITY_KIND_UNSUPPORTED":
+      return { message: "青色申告決算書は、個人の事業体でだけ作れます。", details: [] };
     case "INTERNAL":
       return {
         message: "サーバーでエラーが発生しました。時間をおいて再度お試しください。",
