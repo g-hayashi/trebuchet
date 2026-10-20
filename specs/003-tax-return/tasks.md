@@ -157,8 +157,8 @@ description: "Task list for 003-tax-return"
 - [X] T035 文書を更新する: `AGENTS.md`（決算書の置き場所 `packages/domain/src/blue-return/`、`verify:tax-return` のコマンド、税制の値の足し方: `seed/tax-parameters.ts` とマイグレーションの両方）、`README.md`（決算の手順）、`docs/adr/0005-closing-adjustments-as-journals.md`（按分・償却を決算整理の仕訳にする判断、R4。書式は `docs/adr/0001-sqlite-driver.md`）、`specs/001-ledger-core/spec.md` と `specs/002-freee-import/spec.md` の Assumptions の「認証とバックアップは 003」を「後の機能」に直す
 - [X] T036 `scripts/verify-tax-return.ts` に照合を足す（R15、T003 の続き）: 取込の後、JSON の按分・資産（`linkedJournalNo` があれば結びつけ）・控除の回答を登録し、`getAdjustmentProposals` の案を登録し、`getBlueReturn` の各欄を `expected` と照合して「欄ごとの一致・不一致と件数」だけを出す。`--continue` で複数年度を取り込んだときは、**前の年度（2024年）の `getBlueReturn` も呼び**、各年度の警告のコード（`NEGATIVE_BALANCE`、`OPENING_MISMATCH`）と科目名だけを出す（金額は出さない）
 - [X] T037 **（メイン）** quickstart.md の §2 を `TREBUCHET_DATA_DIR=.tmp/quickstart-003` で手動確認し（implementer にブラウザの MCP の snapshot で行わせる）、画面の文言と件数・金額を quickstart.md に合わせる。手順2〜5（決算書を開く → 控除の回答 → 按分 → 資産 → 転記の値）にかかった時間を計り、30分以内であることを確かめる（SC-005）
-- [ ] T038 **（メイン）** 実データで `pnpm verify:tax-return` を実行し、SC-001（2025年分の1〜4ページが R7 と一致）と SC-002（2024年 → 2025年の負の売掛金と期首の食い違いの検知）を確かめる。結果の数値はリポジトリに書かない。一致しなければ原因を調べて直す
-- [ ] T039 **（メイン）** 全体の検証: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`、`pnpm --filter @trebuchet/web e2e`（既存の2本が壊れていないこと）
+- [ ] T038 **（メイン）** 実データで `pnpm verify:tax-return` を実行し、SC-001（2025年分の1〜4ページが R7 と一致）と SC-002（2024年 → 2025年の負の売掛金と期首の食い違いの検知）を確かめる。結果の数値はリポジトリに書かない。一致しなければ原因を調べて直す（2026-10-20: 実データが揃っていないためスキップ。揃ったら実行する）
+- [X] T039 **（メイン）** 全体の検証: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`、`pnpm --filter @trebuchet/web e2e`（既存の2本が壊れていないこと）
 
 ---
 
