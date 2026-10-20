@@ -11,6 +11,7 @@ import {
   writeSync,
 } from "node:fs";
 import { join } from "node:path";
+import type { BackupFileInfo } from "@trebuchet/domain";
 
 export type BackupFileErrorCode = "FOLDER_NOT_FOUND" | "WRITE_FAILED" | "VERIFY_FAILED";
 
@@ -38,7 +39,8 @@ export function backupFileName(macId: string, at: Date): string {
   return `trebuchet-${prefix}-${stamp}.tbk`;
 }
 
-export type BackupFileInfo = { name: string; macId: string; createdAt: string };
+/** domain の `selectBackupsToPrune` にそのまま渡せるよう、domain の型を使う */
+export type { BackupFileInfo };
 
 function parseName(name: string): BackupFileInfo | undefined {
   const m = NAME_PATTERN.exec(name);
