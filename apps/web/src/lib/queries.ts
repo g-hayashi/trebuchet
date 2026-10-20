@@ -38,6 +38,11 @@ export const queryKeys = {
   importPreview: (entityId: string, fileKey: number, options: object) =>
     ["entities", entityId, "import-preview", fileKey, options] as const,
   importMappings: (entityId: string) => ["entities", entityId, "import-mappings"] as const,
+  /** 認証（004）。AuthGate が認証の状態を持ち、設定の画面が残りを読む */
+  authStatus: ["auth", "status"] as const,
+  authPasskeys: ["auth", "passkeys"] as const,
+  authSessions: ["auth", "sessions"] as const,
+  authEvents: ["auth", "events"] as const,
   /** 帳票（US4）。仕訳を変更したら前方一致で無効化する */
   reports: (entityId: string) => ["entities", entityId, "reports"] as const,
 };

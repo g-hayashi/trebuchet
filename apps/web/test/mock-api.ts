@@ -22,11 +22,26 @@ export const apiError = (
   details?: Record<string, unknown>,
 ): ApiReply => ({ status, body: { error: { code, message, ...(details && { details }) } } });
 
+/** 認証の状態（004）の既定の応答。登録済み・サインイン済み。個別のテストは同じキーで上書きできる */
+export const DEFAULT_AUTH_STATUS = {
+  registered: true,
+  signedIn: true,
+  rpId: "localhost",
+  remote: { enabled: false, host: null },
+  recoveryAcknowledged: true,
+};
+
+const DEFAULT_ROUTES: Record<string, Handler> = {
+  "GET /api/auth/status": () => ok(DEFAULT_AUTH_STATUS),
+};
+
 /**
  * fetch を差し替え、"GET /api/..." の形のキーで応答を返す。受けた呼び出しを順に記録して返す。
+ * `GET /api/auth/status` は、指定がなければ登録済み・サインイン済みの応答を返す。
  * 後片付けは vi.unstubAllGlobals() で行う
  */
-export function mockApi(routes: Record<string, Handler>): ApiCall[] {
+export function mockApi(given: Record<string, Handler>): ApiCall[] {
+  const routes = { ...DEFAULT_ROUTES, ...given };
   const calls: ApiCall[] = [];
   vi.stubGlobal(
     "fetch",
