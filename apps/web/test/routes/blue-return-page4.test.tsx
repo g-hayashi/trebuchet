@@ -79,7 +79,11 @@ function blueReturn(page4: Partial<Page4> = {}, warnings: Warning[] = []): BlueR
       rentDetails: [],
       deduction: null,
     },
-    page3: { salesPartners: { rows: [], others: 0, withoutPartner: null }, depreciation: [] },
+    page3: {
+      salesPartners: { rows: [], others: 0, total: 0, withoutPartner: null },
+      depreciation: [],
+      specialCircumstances: null,
+    },
     page4: { ...PAGE4, ...page4 },
     transfer: { businessIncome: null, blueDeduction: null },
     warnings,

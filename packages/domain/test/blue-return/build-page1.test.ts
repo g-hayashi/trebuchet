@@ -85,6 +85,9 @@ const labelOf = (r: ReturnType<typeof build>, no: number) =>
 /** 期首残高なしで経費を現金で払うと現金が負になる（4ページの NEGATIVE_BALANCE）。1ページの警告だけを見る */
 const withoutNegativeBalance = (r: ReturnType<typeof build>) =>
   r.warnings.filter((w) => w.code !== "NEGATIVE_BALANCE");
+/** このテストの帳簿は取引先を付けないので出る SALES_WITHOUT_PARTNER（US5）を除く */
+const withoutSalesWarnings = (r: ReturnType<typeof build>) =>
+  r.warnings.filter((w) => w.code !== "SALES_WITHOUT_PARTNER");
 
 // 売上 1,000,000、雑収入 20,000、経費 59,000（任意科目 2 つを含む）
 const smallBook = bookLines([
@@ -150,7 +153,7 @@ describe("buildBlueReturn 1ページ（R1）", () => {
     expect(amountOf(r, 45)).toBe(311_000);
     expect(r.transfer).toEqual({ businessIncome: 311_000, blueDeduction: 650_000 });
     expect(r.page2.deduction).toEqual({ cap: 650_000, tier: "max", unmet: [], amount: 650_000 });
-    expect(r.warnings).toEqual([]);
+    expect(withoutSalesWarnings(r)).toEqual([]);
   });
 
   it("任意科目は欄25から科目名つきで詰める。残りの任意欄は名前なしの 0", () => {
@@ -257,7 +260,7 @@ describe("buildBlueReturn 1ページ（R1）", () => {
   it("金額が 0 の任意科目は欄を取らない", () => {
     const r = build(bookLines([["4010", 10_000]]));
     expect(labelOf(r, 25)).toBe("");
-    expect(r.warnings).toEqual([]);
+    expect(withoutSalesWarnings(r)).toEqual([]);
   });
 
   it("取消済みの仕訳と期間外の日付は含めない", () => {
@@ -277,7 +280,7 @@ describe("buildBlueReturn 1ページ（R1）", () => {
     expect(amountOf(r, 45)).toBeNull();
     expect(r.transfer).toEqual({ businessIncome: null, blueDeduction: null });
     expect(r.page2.deduction).toBeNull();
-    expect(r.warnings.map((w) => w.code)).toEqual(["DEDUCTION_ANSWERS_MISSING"]);
+    expect(withoutSalesWarnings(r).map((w) => w.code)).toEqual(["DEDUCTION_ANSWERS_MISSING"]);
   });
 
   it("欄43 が負なら控除は 0、所得金額は欄43 のまま", () => {
@@ -296,13 +299,16 @@ describe("buildBlueReturn 1ページ（R1）", () => {
     expect(amountOf(r, 45)).toBe(861_000);
   });
 
-  it("2・3ページは空の初期値で schema の BlueReturn に合う", () => {
+  it("2・3ページは schema の BlueReturn に合う（取引先なしの売上は「上記以外」に入る。詳細は sales.test.ts）", () => {
     const r = build(smallBook);
-    expect(r.page2.monthly.months).toEqual([]);
+    expect(r.page2.monthly.months).toHaveLength(12);
+    expect(r.page2.monthly.total.total).toBe(1_020_000);
     expect(r.page2.rentDetails).toEqual([]);
     expect(r.page3.depreciation).toEqual([]);
     expect(r.page3.salesPartners.rows).toEqual([]);
-    expect(r.page3.salesPartners.withoutPartner).toBeNull();
+    expect(r.page3.salesPartners.others).toBe(1_020_000);
+    expect(r.page3.salesPartners.total).toBe(1_020_000);
+    expect(r.page3.salesPartners.withoutPartner).toEqual({ count: 1, amount: 1_000_000 });
     expect(BlueReturn.safeParse(r).success).toBe(true);
   });
 });

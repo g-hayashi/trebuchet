@@ -18,6 +18,7 @@ import { blueDeduction, blueDeductionCap } from "./deduction.ts";
 import { depreciate, isDepreciationRow } from "./depreciation.ts";
 import { type BlueReturnForm, formForYear } from "./form.ts";
 import { proposeHomeUseAdjustment } from "./home-use.ts";
+import { salesWarnings, summarizeMonthlySales, summarizeSalesPartners } from "./sales.ts";
 
 /** 地代家賃の欄（様式の欄23）。内訳の必要経費算入額の合計と比べる */
 const RENT_LINE_NO = 23;
@@ -171,9 +172,10 @@ function depreciationWarnings(
 
 /**
  * 青色申告決算書（一般用）を帳簿から導出する（research R1）。この関数は1ページと控除・transfer・
- * status・formYear・3ページの減価償却費の計算・警告（OPTIONAL_LINES_OVERFLOW、PL_MISMATCH、
- * DEDUCTION_ANSWERS_MISSING）と4ページ（buildPage4。貸借対照表と繰越の検査）を作る。
- * 2ページの月別売上と3ページの売上先は空の初期値。
+ * status・formYear・2ページの月別売上（summarizeMonthlySales）・3ページの売上先
+ * （summarizeSalesPartners）・減価償却費の計算・特殊事情のメモ・警告（OPTIONAL_LINES_OVERFLOW、
+ * PL_MISMATCH、SALES_*、DUPLICATE_PARTNER_NAME、DEDUCTION_ANSWERS_MISSING）と4ページ
+ * （buildPage4。貸借対照表と繰越の検査）を作る。
  *
  * - 欄1 = 売上・その他の損益の区分の科目の合計（雑収入を含む）
  * - 欄8〜24・31 = reportLine がその番号の費用（売上原価・経費）の科目
@@ -284,7 +286,15 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
     });
   }
   const depreciation = depreciationRows(input.fixedAssets ?? [], period.fiscalYear);
+  const monthly = summarizeMonthlySales(input.lines, input.accounts, period);
+  const partners = summarizeSalesPartners(
+    input.lines,
+    input.accounts,
+    period,
+    form.salesPartnerRows,
+  );
   warnings.push(
+    ...salesWarnings({ line1: amounts.get(1) ?? 0, monthly, partners }),
     ...homeUseWarnings(input, period),
     ...rentDetailsWarnings(rentDetails, amounts.get(RENT_LINE_NO) ?? 0),
     ...depreciationWarnings(depreciation, amounts.get(DEPRECIATION_LINE_NO) ?? 0),
@@ -313,7 +323,7 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
     status: period.status,
     page1: { lines },
     page2: {
-      monthly: { months: [], total: { sales: 0, otherIncome: 0, total: 0 } },
+      monthly,
       rentDetails: rentDetails.map(({ payee, property, annualRent, deductibleAmount }) => ({
         payee,
         property,
@@ -326,8 +336,15 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
           : { cap: cap.cap, tier: cap.tier, unmet: cap.unmet, amount: deduction },
     },
     page3: {
-      salesPartners: { rows: [], others: 0, withoutPartner: null },
+      salesPartners: {
+        rows: partners.rows,
+        others: partners.others,
+        total: partners.total,
+        withoutPartner: partners.withoutPartner,
+      },
       depreciation,
+      specialCircumstances:
+        (input.closingNotes ?? []).find((n) => n.kind === "special_circumstances")?.body || null,
     },
     page4,
     transfer: { businessIncome: line45, blueDeduction: deduction },

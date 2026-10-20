@@ -125,8 +125,8 @@ description: "Task list for 003-tax-return"
 
 **Independent Test**: 合成の年度で月別の金額、上位と「上記以外」の集約、合計の一致の検査
 
-- [ ] T029 [US5] テスト先行で `packages/domain/src/blue-return/sales.ts` の `summarizeMonthlySales`・`summarizeSalesPartners` を実装し、`buildBlueReturn` の2・3ページと `SALES_TOTAL_MISMATCH`・`SALES_WITHOUT_PARTNER`・`DUPLICATE_PARTNER_NAME` を足す（D:、R10、INV-24）。売上高 `4010` と雑収入 `4020` を分けて月ごとに貸方−借方、売上先は `4010` の行を取引先ごとに降順（同額は名前の順）で `salesPartnerRows` 行まで、残り・取引先なし・雑収入を「上記以外の売上先の計」。特殊事情のメモ（`special_circumstances`）を T002 で確定したページに含める。テスト `packages/domain/test/blue-return/sales.property.test.ts`（INV-24）と `sales.test.ts`（spec US5 のシナリオ1〜4、借方の売上の差し引き）
-- [ ] T030 [US5] テスト先行で `apps/web/src/features/blue-return/FormPage2.tsx`（月別売上、地代家賃の内訳、控除の計算）と `FormPage3.tsx` の売上先の部分、特殊事情のメモの入力（`PUT .../notes/special_circumstances`）を作る。テスト `apps/web/test/routes/blue-return-page2-3.test.tsx`
+- [X] T029 [US5] テスト先行で `packages/domain/src/blue-return/sales.ts` の `summarizeMonthlySales`・`summarizeSalesPartners` を実装し、`buildBlueReturn` の2・3ページと `SALES_TOTAL_MISMATCH`・`SALES_WITHOUT_PARTNER`・`DUPLICATE_PARTNER_NAME` を足す（D:、R10、INV-24）。売上高 `4010` と雑収入 `4020` を分けて月ごとに貸方−借方、売上先は `4010` の行を取引先ごとに降順（同額は名前の順）で `salesPartnerRows` 行まで、残り・取引先なし・雑収入を「上記以外の売上先の計」。特殊事情のメモ（`special_circumstances`）を T002 で確定したページに含める。テスト `packages/domain/test/blue-return/sales.property.test.ts`（INV-24）と `sales.test.ts`（spec US5 のシナリオ1〜4、借方の売上の差し引き）
+- [X] T030 [US5] テスト先行で `apps/web/src/features/blue-return/FormPage2.tsx`（月別売上、地代家賃の内訳、控除の計算）と `FormPage3.tsx` の売上先の部分、特殊事情のメモの入力（`PUT .../notes/special_circumstances`）を作る。テスト `apps/web/test/routes/blue-return-page2-3.test.tsx`
 
 ---
 

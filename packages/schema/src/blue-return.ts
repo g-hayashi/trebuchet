@@ -306,10 +306,15 @@ export const BlueReturn = z.object({
   page3: z.object({
     salesPartners: z.object({
       rows: z.array(SalesPartnerRow),
+      /** 「上記以外の売上先の計」（残りの取引先・取引先なし・雑収入） */
       others: Amount,
+      /** 売上先の合計（個別の行 + 上記以外の計）。欄1 と一致する（INV-24） */
+      total: Amount,
       withoutPartner: z.object({ count: NonNegativeYen, amount: Amount }).nullable(),
     }),
     depreciation: z.array(DepreciationRow),
+    /** 本年中における特殊事情のメモ（closing_notes の special_circumstances、FR-027）。なければ null */
+    specialCircumstances: z.string().nullable(),
   }),
   page4: z.object({
     opening: BsOutput,

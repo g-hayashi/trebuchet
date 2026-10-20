@@ -462,7 +462,11 @@ describe("決算書の画面からのリンク", () => {
       rentDetails: [],
       deduction: null,
     },
-    page3: { salesPartners: { rows: [], others: 0, withoutPartner: null }, depreciation: [] },
+    page3: {
+      salesPartners: { rows: [], others: 0, total: 0, withoutPartner: null },
+      depreciation: [],
+      specialCircumstances: null,
+    },
     page4: {
       opening: { assets: { rows: [], total: 0 }, liabilityEquity: { rows: [], total: 0 } },
       closing: { assets: { rows: [], total: 0 }, liabilityEquity: { rows: [], total: 0 } },

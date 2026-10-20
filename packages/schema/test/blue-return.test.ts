@@ -263,8 +263,14 @@ describe("BlueReturn / AdjustmentProposal", () => {
       deduction: null,
     },
     page3: {
-      salesPartners: { rows: [{ name: "A社", amount: 1000 }], others: 0, withoutPartner: null },
+      salesPartners: {
+        rows: [{ name: "A社", amount: 1000 }],
+        others: 0,
+        total: 1000,
+        withoutPartner: null,
+      },
       depreciation: [],
+      specialCircumstances: null,
     },
     page4: {
       opening: { assets: bsSide, liabilityEquity: bsSide },

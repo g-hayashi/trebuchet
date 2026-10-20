@@ -56,7 +56,11 @@ function blueReturn(
       rentDetails: [],
       deduction: null,
     },
-    page3: { salesPartners: { rows: [], others: 0, withoutPartner: null }, depreciation: [] },
+    page3: {
+      salesPartners: { rows: [], others: 0, total: 0, withoutPartner: null },
+      depreciation: [],
+      specialCircumstances: null,
+    },
     page4: {
       opening: { assets: { rows: [], total: 0 }, liabilityEquity: { rows: [], total: 0 } },
       closing: { assets: { rows: [], total: 0 }, liabilityEquity: { rows: [], total: 0 } },
@@ -397,8 +401,9 @@ describe("決算書の3ページ（減価償却費の計算）", () => {
         ok({
           blueReturn: blueReturn({
             page3: {
-              salesPartners: { rows: [], others: 0, withoutPartner: null },
+              salesPartners: { rows: [], others: 0, total: 0, withoutPartner: null },
               depreciation: [row()],
+              specialCircumstances: null,
             },
           }),
         }),
