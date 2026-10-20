@@ -11,6 +11,8 @@ export default defineConfig({
   },
   server: {
     host: "127.0.0.1",
+    // パスキー（WebAuthn）の RP ID は IP アドレスにできないため、localhost でも開けるようにする（004 R2）
+    allowedHosts: ["localhost"],
     port: 5173,
     strictPort: true,
     proxy: { "/api": "http://127.0.0.1:8787" },
