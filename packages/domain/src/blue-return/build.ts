@@ -5,26 +5,31 @@ import type {
   AdjustmentRef,
   DeductionAnswers,
   FiscalPeriod,
+  FixedAsset,
   HomeUseAllocation,
   PostedLine,
   RentDetail,
   TaxParameter,
 } from "../types.ts";
 import { blueDeduction, blueDeductionCap } from "./deduction.ts";
+import { depreciate, isDepreciationRow } from "./depreciation.ts";
 import { type BlueReturnForm, formForYear } from "./form.ts";
 import { proposeHomeUseAdjustment } from "./home-use.ts";
 
 /** 地代家賃の欄（様式の欄23）。内訳の必要経費算入額の合計と比べる */
 const RENT_LINE_NO = 23;
+/** 減価償却費の欄（様式の欄18）。3ページの必要経費算入額の合計と比べる */
+const DEPRECIATION_LINE_NO = 18;
 
 /**
- * 決算書の入力。1ページ・控除・家事按分・地代家賃の内訳を持つ（3・4ページの入力は後のタスクで足す）。
+ * 決算書の入力。1ページ・控除・家事按分・地代家賃の内訳・固定資産を持つ（4ページの入力は後のタスクで足す）。
  * - period: 年度（fiscalYear・期間・状態）
  * - lines: 年度の仕訳の行（001 の PostedLine。取消済みと期間外は buildProfitAndLoss が除く）
  * - deductionAnswers: 控除の要件の回答。なければ null
  * - allocations: 年度の家事按分の登録。なければ空
  * - adjustmentRefs: 年度の決算整理の仕訳の出所。なければ空
  * - rentDetails: 年度の地代家賃の内訳（sortOrder の順に2ページへ載せる）。なければ空
+ * - fixedAssets: 固定資産台帳の全件（年度の絞り込みは buildBlueReturn が行う）。なければ空
  */
 export type BuildBlueReturnInput = {
   period: FiscalPeriod;
@@ -35,6 +40,7 @@ export type BuildBlueReturnInput = {
   allocations?: readonly HomeUseAllocation[];
   adjustmentRefs?: readonly AdjustmentRef[];
   rentDetails?: readonly RentDetail[];
+  fixedAssets?: readonly FixedAsset[];
 };
 
 type Page1Line = BlueReturn["page1"]["lines"][number];
@@ -112,10 +118,54 @@ function rentDetailsWarnings(
   ];
 }
 
+type DepreciationRow = BlueReturn["page3"]["depreciation"][number];
+
+/** 3ページの減価償却費の計算の行（取得日、ID の順）。載せる資産は isDepreciationRow */
+function depreciationRows(assets: readonly FixedAsset[], fiscalYear: number): DepreciationRow[] {
+  return assets
+    .filter((a) => isDepreciationRow(a, fiscalYear))
+    .sort((a, b) => a.acquiredOn.localeCompare(b.acquiredOn) || a.id.localeCompare(b.id))
+    .map((a) => {
+      const d = depreciate(a, fiscalYear);
+      return {
+        assetId: a.id,
+        name: a.name,
+        quantity: a.quantity,
+        acquiredOn: a.acquiredOn,
+        cost: d.cost,
+        method: a.method,
+        usefulLifeYears: a.usefulLifeYears,
+        base: d.base,
+        ordinary: d.ordinary,
+        total: d.total,
+        businessRatio: d.businessRatio,
+        deductible: d.deductible,
+        closingBookValue: d.closingBookValue,
+        note: a.note,
+      };
+    });
+}
+
+/** 必要経費算入額の合計が欄18 と違うときの警告（FR-023）。資産がなくても欄18 が 0 でなければ警告する */
+function depreciationWarnings(
+  rows: readonly Pick<DepreciationRow, "deductible">[],
+  line18: number,
+): BlueReturnWarning[] {
+  const total = rows.reduce((s, r) => s + r.deductible, 0);
+  if (total === line18) return [];
+  return [
+    {
+      code: "DEPRECIATION_MISMATCH",
+      message: `3ページの必要経費算入額の合計（${total} 円）が欄18 の減価償却費（${line18} 円）と一致しません`,
+      details: { depreciationTotal: total, line18, difference: total - line18 },
+    },
+  ];
+}
+
 /**
  * 青色申告決算書（一般用）を帳簿から導出する（research R1）。この関数は1ページと控除・transfer・
- * status・formYear・警告（OPTIONAL_LINES_OVERFLOW、PL_MISMATCH、DEDUCTION_ANSWERS_MISSING）を作る。
- * 2〜4ページ（月別売上、売上先、減価償却、貸借対照表）は空の初期値。
+ * status・formYear・3ページの減価償却費の計算・警告（OPTIONAL_LINES_OVERFLOW、PL_MISMATCH、
+ * DEDUCTION_ANSWERS_MISSING）を作る。2・4ページ（月別売上、売上先、貸借対照表）は空の初期値。
  *
  * - 欄1 = 売上・その他の損益の区分の科目の合計（雑収入を含む）
  * - 欄8〜24・31 = reportLine がその番号の費用（売上原価・経費）の科目
@@ -225,9 +275,11 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
       },
     });
   }
+  const depreciation = depreciationRows(input.fixedAssets ?? [], period.fiscalYear);
   warnings.push(
     ...homeUseWarnings(input, period),
     ...rentDetailsWarnings(rentDetails, amounts.get(RENT_LINE_NO) ?? 0),
+    ...depreciationWarnings(depreciation, amounts.get(DEPRECIATION_LINE_NO) ?? 0),
   );
   if (cap === undefined) {
     warnings.push({
@@ -257,7 +309,7 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
     },
     page3: {
       salesPartners: { rows: [], others: 0, withoutPartner: null },
-      depreciation: [],
+      depreciation,
     },
     page4: {
       opening: { assets: emptyBsSide, liabilityEquity: emptyBsSide },

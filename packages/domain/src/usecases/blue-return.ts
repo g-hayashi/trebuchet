@@ -1,6 +1,7 @@
 import type {
   AdjustmentProposal,
   BlueReturn,
+  FixedAssetInput,
   HomeUseAllocationInput,
   RentDetailInput,
 } from "@trebuchet/schema";
@@ -10,6 +11,7 @@ import {
   blueDeductionCap,
   type DeductionRequirementAnswers,
 } from "../blue-return/deduction.ts";
+import { proposeDepreciationAdjustment, validateFixedAsset } from "../blue-return/depreciation.ts";
 import {
   type HomeUseAssessment,
   type HomeUseNoProposalReason,
@@ -32,6 +34,7 @@ import {
   domainError,
   err,
   type FiscalPeriod,
+  type FixedAsset,
   type HomeUseAllocation,
   type Journal,
   ok,
@@ -58,11 +61,8 @@ export type DeductionAnswersView = {
   cap: BlueDeductionCap | null;
 };
 
-/**
- * 個人の事業体でなければ ENTITY_KIND_UNSUPPORTED。年度がなければ 001 の締め・解除と同じ
- * VALIDATION（会計期間が見つかりません）。種別の判定が先
- */
-function resolveYear(masters: MasterRepository, fiscalYear: number): Result<FiscalPeriod> {
+/** 個人の事業体でなければ ENTITY_KIND_UNSUPPORTED（事業体がなければ ENTITY_NOT_FOUND） */
+function requireIndividual(masters: Pick<MasterRepository, "getProfile">): Result<null> {
   const profile = masters.getProfile();
   if (profile === undefined) {
     return err(domainError("ENTITY_NOT_FOUND", "事業体が見つかりません"));
@@ -74,6 +74,16 @@ function resolveYear(masters: MasterRepository, fiscalYear: number): Result<Fisc
       }),
     );
   }
+  return ok(null);
+}
+
+/**
+ * 個人の事業体でなければ ENTITY_KIND_UNSUPPORTED。年度がなければ 001 の締め・解除と同じ
+ * VALIDATION（会計期間が見つかりません）。種別の判定が先
+ */
+function resolveYear(masters: MasterRepository, fiscalYear: number): Result<FiscalPeriod> {
+  const individual = requireIndividual(masters);
+  if (!individual.ok) return individual;
   const period = masters.getFiscalPeriodByYear(fiscalYear);
   return period === undefined
     ? err(domainError("VALIDATION", "会計期間が見つかりません", { fiscalYear }))
@@ -100,6 +110,7 @@ export function getBlueReturn(
       allocations: deps.closing.listHomeUseAllocations(params.fiscalYear),
       adjustmentRefs: deps.closing.listAdjustmentRefs(params.fiscalYear),
       rentDetails: deps.closing.listRentDetails(params.fiscalYear),
+      fixedAssets: deps.closing.listFixedAssets(),
     }),
   );
 }
@@ -320,14 +331,161 @@ export function saveRentDetails(
   return ok(rows);
 }
 
+// ---- 固定資産台帳（US3） ----
+
+/**
+ * 固定資産を登録・更新する（FR-018〜020）。params.id があれば更新（作成日時と除却の日はそのまま。
+ * 年間の上限の合計から自分自身を除く）、なければ作る。closing_audit_log に fixed_asset（create / update、
+ * 理由、変更前・後）を残す。締め済みの年度の取得でも登録できる（仕訳の案の確定は commitAdjustment が拒否する）
+ */
+export function saveFixedAsset(
+  deps: ClosingSettingsDeps,
+  params: FixedAssetInput & { id?: string; reason?: string | null },
+): Result<FixedAsset> {
+  const individual = requireIndividual(deps.masters);
+  if (!individual.ok) return individual;
+  const all = deps.closing.listFixedAssets();
+  const before = params.id === undefined ? undefined : all.find((a) => a.id === params.id);
+  if (params.id !== undefined && before === undefined) {
+    return err(domainError("VALIDATION", "固定資産が見つかりません", { field: "id" }));
+  }
+  const validated = validateFixedAsset(
+    {
+      ...(params.id === undefined ? {} : { id: params.id }),
+      name: params.name,
+      quantity: params.quantity ?? null,
+      acquiredOn: params.acquiredOn,
+      acquisitionCost: params.acquisitionCost,
+      method: params.method,
+      usefulLifeYears: params.usefulLifeYears ?? null,
+      businessRatio: params.businessRatio,
+      assetAccountId: params.assetAccountId,
+      linkedJournalId: params.linkedJournalId ?? null,
+      note: params.note ?? null,
+    },
+    all,
+    { accounts: deps.masters.listAccounts(), taxParameters: deps.closing.listTaxParameters() },
+  );
+  if (!validated.ok) return validated;
+
+  const now = deps.clock.now();
+  const { id: _draftId, ...fields } = validated.value;
+  const saved: FixedAsset = {
+    ...fields,
+    id: before?.id ?? deps.ids.next(),
+    disposedOn: before?.disposedOn ?? null,
+    createdAt: before?.createdAt ?? now,
+    updatedAt: now,
+  };
+  deps.closing.upsertFixedAsset(saved);
+  deps.closing.appendClosingAudit({
+    id: deps.ids.next(),
+    occurredAt: now,
+    targetType: "fixed_asset",
+    targetId: saved.id,
+    action: before === undefined ? "create" : "update",
+    reason: params.reason?.trim() || null,
+    beforeJson: before === undefined ? null : JSON.stringify(before),
+    afterJson: JSON.stringify(saved),
+  });
+  return ok(saved);
+}
+
+/**
+ * 固定資産を除却する（disposed_on を記録。物理削除はしない）。closing_audit_log に
+ * fixed_asset（dispose、理由、変更前・後）を残す。資産がなければ、除却の日の形が違う・取得の日より前なら VALIDATION
+ */
+export function disposeFixedAsset(
+  deps: ClosingSettingsDeps,
+  params: { id: string; disposedOn: string; reason: string },
+): Result<FixedAsset> {
+  const individual = requireIndividual(deps.masters);
+  if (!individual.ok) return individual;
+  const before = deps.closing.listFixedAssets().find((a) => a.id === params.id);
+  if (before === undefined) {
+    return err(domainError("VALIDATION", "固定資産が見つかりません", { field: "id" }));
+  }
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(params.disposedOn) ||
+    Number.isNaN(Date.parse(params.disposedOn))
+  ) {
+    return err(
+      domainError("VALIDATION", "除却の日は YYYY-MM-DD で入力してください", {
+        field: "disposedOn",
+      }),
+    );
+  }
+  if (params.disposedOn < before.acquiredOn) {
+    return err(
+      domainError("VALIDATION", "除却の日は取得年月日以後にしてください", {
+        field: "disposedOn",
+        acquiredOn: before.acquiredOn,
+      }),
+    );
+  }
+  const now = deps.clock.now();
+  const saved: FixedAsset = { ...before, disposedOn: params.disposedOn, updatedAt: now };
+  deps.closing.upsertFixedAsset(saved);
+  deps.closing.appendClosingAudit({
+    id: deps.ids.next(),
+    occurredAt: now,
+    targetType: "fixed_asset",
+    targetId: saved.id,
+    action: "dispose",
+    reason: params.reason.trim() || null,
+    beforeJson: JSON.stringify(before),
+    afterJson: JSON.stringify(saved),
+  });
+  return ok(saved);
+}
+
 // ---- 決算整理の仕訳の案と確定（R4〜R6） ----
 
 /** 案の作り直しに使う読み取り（トランザクションの中でも外でも同じ形） */
 type ProposalSources = {
   masters: Pick<MasterRepository, "listAccounts">;
-  closing: Pick<ClosingStore, "listHomeUseAllocations" | "listAdjustmentRefs">;
+  closing: Pick<ClosingStore, "listHomeUseAllocations" | "listAdjustmentRefs" | "listFixedAssets">;
   reports: Pick<ReportRepository, "linesInRange">;
 };
+
+/**
+ * 減価償却の案。結びつけた仕訳のある資産・取得した年以外は proposeDepreciationAdjustment が null にする。
+ * すでに有効な（取り消されていない）償却の仕訳が出所で登録されている資産も、案を作らない
+ */
+function assessDepreciation(
+  src: ProposalSources,
+  period: FiscalPeriod,
+  asset: FixedAsset,
+): Result<RebuiltProposal> {
+  const proposed = proposeDepreciationAdjustment(
+    asset,
+    period.fiscalYear,
+    src.masters.listAccounts(),
+  );
+  if (!proposed.ok) return proposed;
+  if (proposed.value === null) {
+    return ok({
+      proposal: null,
+      reason: asset.linkedJournalId === null ? "NOT_APPLICABLE" : "LINKED_JOURNAL",
+    });
+  }
+  const journals = new Set(
+    src.closing
+      .listAdjustmentRefs(period.fiscalYear)
+      .filter((r) => r.kind === "depreciation" && r.assetId === asset.id)
+      .map((r) => r.journalId),
+  );
+  const registered =
+    journals.size > 0 &&
+    src.reports
+      .linesInRange(period.startDate, period.endDate)
+      .some((l) => l.status === "active" && journals.has(l.journalId));
+  return ok(
+    registered
+      ? { proposal: null, reason: "ALREADY_REGISTERED" }
+      : { proposal: proposed.value, reason: null },
+  );
+}
 
 function assessHomeUse(
   src: ProposalSources,
@@ -346,8 +504,8 @@ function assessHomeUse(
 }
 
 /**
- * 決算整理の仕訳の案の一覧（差があるものだけ。FR-014・FR-016）。按分の登録の順。
- * 減価償却の案は US3 で足す
+ * 決算整理の仕訳の案の一覧（差があるものだけ。FR-014・FR-016、FR-021）。按分の登録の順、
+ * そのあとにこの年度に取得した資産の償却の案（台帳の順）
  */
 export function getAdjustmentProposals(
   deps: BlueReturnDeps,
@@ -362,15 +520,29 @@ export function getAdjustmentProposals(
     if (!assessed.ok) return assessed;
     if (assessed.value.proposal !== null) proposals.push(assessed.value.proposal);
   }
+  for (const asset of deps.closing.listFixedAssets()) {
+    const assessed = assessDepreciation(deps, period.value, asset);
+    if (!assessed.ok) return assessed;
+    if (assessed.value.proposal !== null) proposals.push(assessed.value.proposal);
+  }
   return ok(proposals);
 }
 
+/** 償却の案を作らない理由 */
+type DepreciationNoProposalReason =
+  /** 既存の仕訳を結びつけてある（FR-022） */
+  | "LINKED_JOURNAL"
+  /** この年度に取得した資産でない、または年度末日までに除却した */
+  | "NOT_APPLICABLE"
+  /** 償却の仕訳がすでに登録されている */
+  | "ALREADY_REGISTERED";
+
 type RebuiltProposal = {
   proposal: AdjustmentProposal | null;
-  reason: HomeUseNoProposalReason | null;
+  reason: HomeUseNoProposalReason | DepreciationNoProposalReason | null;
 };
 
-/** 種別ごとに案を作り直す。depreciation は US3（T026 以降）で足す */
+/** 種別ごとに案を作り直す */
 function rebuildProposal(
   src: ProposalSources,
   period: FiscalPeriod,
@@ -393,13 +565,15 @@ function rebuildProposal(
       if (!assessed.ok) return assessed;
       return ok({ proposal: assessed.value.proposal, reason: assessed.value.reason });
     }
-    case "depreciation":
-      return err(
-        domainError("VALIDATION", "減価償却の仕訳の案はまだ登録できません", {
-          field: "kind",
-          kind,
-        }),
-      );
+    case "depreciation": {
+      const asset = src.closing.listFixedAssets().find((a) => a.id === sourceId);
+      if (asset === undefined) {
+        return err(
+          domainError("VALIDATION", "固定資産が見つかりません", { field: "sourceId", sourceId }),
+        );
+      }
+      return assessDepreciation(src, period, asset);
+    }
   }
 }
 
