@@ -369,3 +369,95 @@ describe("控除の要件の回答の画面", () => {
     expect(screen.queryByText("満たしていない要件")).not.toBeInTheDocument();
   });
 });
+
+describe("決算書の3ページ（減価償却費の計算）", () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    assetId: "as-1",
+    name: "ノートパソコン",
+    quantity: "1台",
+    acquiredOn: "2025-06-15",
+    cost: 200_000,
+    method: "small_asset_28_2" as const,
+    usefulLifeYears: null,
+    base: 200_000,
+    ordinary: 200_000,
+    total: 200_000,
+    businessRatio: 5000,
+    deductible: 100_000,
+    closingBookValue: 0,
+    note: "業務用",
+    ...over,
+  });
+
+  it("資産ごとに名称・数量・取得年月・取得価額・償却の基礎・償却費・割合・必要経費算入額・未償却残高・摘要を表示する", async () => {
+    mockApi({
+      [`GET ${YEAR_API}`]: () =>
+        ok({
+          blueReturn: blueReturn({
+            page3: {
+              salesPartners: { rows: [], others: 0, withoutPartner: null },
+              depreciation: [row()],
+            },
+          }),
+        }),
+    });
+    renderYear();
+
+    const table = await screen.findByRole("table", { name: "決算書 3ページ 減価償却費の計算" });
+    const dataRow = within(table).getByRole("row", { name: /ノートパソコン/ });
+    expect(
+      within(dataRow)
+        .getAllByRole("cell")
+        .map((c) => c.textContent),
+    ).toEqual([
+      "ノートパソコン",
+      "1台",
+      "2025-06",
+      "200,000",
+      "200,000",
+      "少額減価償却資産の特例（措置法28条の2）",
+      "",
+      "200,000",
+      "200,000",
+      "50%",
+      "100,000",
+      "0",
+      "業務用",
+    ]);
+  });
+
+  it("資産がなければ表を出さず、その旨を示す", async () => {
+    mockApi({ [`GET ${YEAR_API}`]: () => ok({ blueReturn: blueReturn() }) });
+    renderYear();
+    await screen.findByRole("table", { name: "決算書 1ページ" });
+    expect(screen.queryByRole("table", { name: "決算書 3ページ 減価償却費の計算" })).toBeNull();
+    expect(screen.getByText("減価償却資産はありません。")).toBeInTheDocument();
+  });
+
+  it("DEPRECIATION_MISMATCH の警告から固定資産台帳へのリンクを出す。台帳へのリンクもある", async () => {
+    mockApi({
+      [`GET ${YEAR_API}`]: () =>
+        ok({
+          blueReturn: blueReturn({
+            warnings: [
+              {
+                code: "DEPRECIATION_MISMATCH",
+                message: "減価償却費が3ページの合計と一致しません",
+              },
+            ],
+          }),
+        }),
+    });
+    renderYear();
+
+    const list = await screen.findByRole("region", { name: "警告" });
+    expect(within(list).getByRole("link", { name: "固定資産台帳を開く" })).toHaveAttribute(
+      "href",
+      "/e/e1/fixed-assets?year=2025",
+    );
+    expect(screen.getAllByRole("link", { name: "固定資産台帳" })[0]).toHaveAttribute(
+      "href",
+      "/e/e1/fixed-assets?year=2025",
+    );
+  });
+});

@@ -1,6 +1,7 @@
 export * from "./blue-return/build.ts";
 export * from "./blue-return/csv.ts";
 export * from "./blue-return/deduction.ts";
+export * from "./blue-return/depreciation.ts";
 export * from "./blue-return/home-use.ts";
 export * from "./blue-return/tax-parameters.ts";
 export * from "./carry-forward.ts";

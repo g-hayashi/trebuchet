@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { blueReturnCsvUrl, blueReturnQuery } from "@/features/blue-return/api";
 import { FormPage1 } from "@/features/blue-return/FormPage1";
+import { FormPage3 } from "@/features/blue-return/FormPage3";
 import { WarningList } from "@/features/blue-return/WarningList";
 import { formatSignedYen } from "@/lib/format";
 
@@ -106,6 +107,15 @@ function BlueReturnPage() {
             >
               家事按分・地代家賃の内訳
             </Link>
+            {" ／ "}
+            <Link
+              to="/e/$entityId/fixed-assets"
+              params={{ entityId }}
+              search={{ year: Number(year) }}
+              className="underline"
+            >
+              固定資産台帳
+            </Link>
           </p>
           <WarningList entityId={entityId} year={year} warnings={data.warnings} />
           <label className="no-print flex items-center gap-2 text-sm">
@@ -118,6 +128,7 @@ function BlueReturnPage() {
             使わない欄を空欄で表示
           </label>
           <FormPage1 lines={data.page1.lines} blankUnused={blankUnused} />
+          <FormPage3 depreciation={data.page3.depreciation} />
         </>
       )}
     </main>

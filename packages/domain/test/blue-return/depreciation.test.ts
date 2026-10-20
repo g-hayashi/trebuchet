@@ -154,13 +154,28 @@ describe("validateFixedAsset（FR-018〜020、R7）", () => {
       expect(validate(draft({ id: "me", acquisitionCost: 299_000 }), [...big, self]).ok).toBe(true);
     });
 
-    it("除却した資産・別の年の資産は足さない", () => {
-      const disposed = asset({ id: "d", acquisitionCost: 299_000, disposedOn: "2025-09-01" });
+    it("別の年の資産は足さない", () => {
       const lastYear = asset({ id: "l", acquisitionCost: 299_000, acquiredOn: "2024-12-31" });
       const nextYear = asset({ id: "n", acquisitionCost: 299_000, acquiredOn: "2026-01-01" });
-      expect(
-        validate(draft({ acquisitionCost: 299_000 }), [...big, disposed, lastYear, nextYear]).ok,
-      ).toBe(true);
+      expect(validate(draft({ acquisitionCost: 299_000 }), [...big, lastYear, nextYear]).ok).toBe(
+        true,
+      );
+    });
+
+    it("取得して同じ年に除却した資産も合計に含む（特例を使ったため）", () => {
+      const disposed = asset({
+        id: "d",
+        acquisitionCost: 11_000,
+        acquiredOn: "2025-03-01",
+        disposedOn: "2025-09-01",
+      });
+      // 2,691,000 + 11,000 + 299,000 = 3,001,000 > 3,000,000
+      const e = errorOf(validate(draft({ acquisitionCost: 299_000 }), [...big, disposed]));
+      expect(e.code).toBe("SMALL_ASSET_ANNUAL_LIMIT_EXCEEDED");
+      expect(e.details).toMatchObject({ total: 3_001_000 });
+      // 翌年に除却した資産も同じ
+      const later = asset({ ...disposed, disposedOn: "2026-02-01" });
+      expect(validate(draft({ acquisitionCost: 299_000 }), [...big, later]).ok).toBe(false);
     });
   });
 });

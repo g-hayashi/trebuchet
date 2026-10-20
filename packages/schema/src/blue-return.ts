@@ -78,6 +78,29 @@ export const FixedAssetInput = z.object({
 });
 export type FixedAssetInput = z.infer<typeof FixedAssetInput>;
 
+/** 固定資産の更新（PUT /fixed-assets/:assetId）。登録の入力に変更の理由を足す */
+export const FixedAssetUpdateInput = FixedAssetInput.extend({
+  reason: z.string().max(1000).nullish(),
+});
+export type FixedAssetUpdateInput = z.infer<typeof FixedAssetUpdateInput>;
+
+/** 固定資産の除却（POST /fixed-assets/:assetId/dispose）。物理削除はしない */
+export const FixedAssetDisposeInput = z.object({
+  disposedOn: DateString,
+  reason: z.string().max(1000),
+});
+export type FixedAssetDisposeInput = z.infer<typeof FixedAssetDisposeInput>;
+
+/** 固定資産の一覧のクエリ（GET /fixed-assets）。year を付けると各資産にその年の償却の計算を付ける */
+export const FixedAssetsQuery = z.object({
+  year: z
+    .string()
+    .regex(/^\d{4}$/, "年は4桁で指定してください")
+    .transform(Number)
+    .optional(),
+});
+export type FixedAssetsQuery = z.infer<typeof FixedAssetsQuery>;
+
 /** 青色申告特別控除の要件の回答（PUT /blue-return/:year/deduction-answers） */
 export const DeductionAnswersInput = z.object({
   doubleEntry: z.boolean(),

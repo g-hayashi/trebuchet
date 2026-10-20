@@ -30,13 +30,17 @@ export function AdjustmentPanel({
   year,
   proposals,
   accounts,
-  allocations,
+  allocations = [],
+  assets = [],
 }: {
   entityId: string;
   year: string;
   proposals: readonly AdjustmentProposal[];
   accounts: readonly Account[];
-  allocations: readonly HomeUseAllocationRow[];
+  /** 家事按分の案の見出しに使う（省略可） */
+  allocations?: readonly HomeUseAllocationRow[];
+  /** 減価償却の案の見出しに使う資産の名前（省略可） */
+  assets?: readonly { id: string; name: string }[];
 }) {
   const queryClient = useQueryClient();
   const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? "";
@@ -63,7 +67,7 @@ export function AdjustmentPanel({
       <CardHeader>
         <CardTitle>決算整理の仕訳の案</CardTitle>
         <CardDescription>
-          按分の登録と帳簿から求めた、家事分を事業主貸へ振り替える仕訳の案です。「仕訳を登録」で帳簿に登録されます（日付は年度末日）。
+          按分の登録と帳簿から求めた、家事分を事業主貸へ振り替える仕訳の案と、固定資産台帳から求めた減価償却費の仕訳の案です。「仕訳を登録」で帳簿に登録されます（日付は年度末日）。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
@@ -73,7 +77,12 @@ export function AdjustmentPanel({
           )}
           {proposals.map((p) => {
             const allocation = allocations.find((a) => a.id === p.sourceId);
-            const label = allocation ? nameOf(allocation.accountId) : "按分";
+            const label =
+              p.kind === "depreciation"
+                ? (assets.find((a) => a.id === p.sourceId)?.name ?? "固定資産")
+                : allocation
+                  ? nameOf(allocation.accountId)
+                  : "按分";
             const b = p.breakdown;
             return (
               <fieldset
@@ -99,6 +108,22 @@ export function AdjustmentPanel({
                     <div>
                       <dt className="text-muted-foreground">家事分</dt>
                       <dd className="tabular-nums">{formatYen(b.home)}</dd>
+                    </div>
+                  </dl>
+                )}
+                {"acquisitionCost" in b && (
+                  <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+                    <div>
+                      <dt className="text-muted-foreground">取得価額</dt>
+                      <dd className="tabular-nums">{formatYen(b.acquisitionCost)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">事業専用割合</dt>
+                      <dd className="tabular-nums">{formatRatioAsPercent(b.businessRatio)}%</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">必要経費算入額</dt>
+                      <dd className="tabular-nums">{formatYen(b.deductible)}</dd>
                     </div>
                   </dl>
                 )}

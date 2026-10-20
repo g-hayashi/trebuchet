@@ -11,7 +11,12 @@ import {
   blueDeductionCap,
   type DeductionRequirementAnswers,
 } from "../blue-return/deduction.ts";
-import { proposeDepreciationAdjustment, validateFixedAsset } from "../blue-return/depreciation.ts";
+import {
+  type Depreciation,
+  depreciate,
+  proposeDepreciationAdjustment,
+  validateFixedAsset,
+} from "../blue-return/depreciation.ts";
 import {
   type HomeUseAssessment,
   type HomeUseNoProposalReason,
@@ -332,6 +337,28 @@ export function saveRentDetails(
 }
 
 // ---- 固定資産台帳（US3） ----
+
+/** 台帳の1行。fiscalYear を指定したときだけその年の償却の計算（なければ null） */
+export type FixedAssetWithDepreciation = FixedAsset & { depreciation: Depreciation | null };
+
+/**
+ * 固定資産の台帳（GET /fixed-assets）。fiscalYear があれば各資産に depreciate の結果を付ける。
+ * 並び順は ClosingStore の順。会計期間があるかどうかは問わない
+ */
+export function listFixedAssets(
+  deps: Pick<ClosingSettingsDeps, "masters" | "closing">,
+  params: { fiscalYear?: number },
+): Result<FixedAssetWithDepreciation[]> {
+  const individual = requireIndividual(deps.masters);
+  if (!individual.ok) return individual;
+  const { fiscalYear } = params;
+  return ok(
+    deps.closing.listFixedAssets().map((asset) => ({
+      ...asset,
+      depreciation: fiscalYear === undefined ? null : depreciate(asset, fiscalYear),
+    })),
+  );
+}
 
 /**
  * 固定資産を登録・更新する（FR-018〜020）。params.id があれば更新（作成日時と除却の日はそのまま。

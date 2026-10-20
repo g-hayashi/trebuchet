@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { onError } from "./errors.ts";
 import { blueReturnRoutes } from "./routes/blue-return.ts";
 import { entitiesRoutes, entityRoutes } from "./routes/entities.ts";
+import { fixedAssetRoutes } from "./routes/fixed-assets.ts";
 import { importRoutes } from "./routes/imports.ts";
 import { journalRoutes } from "./routes/journals.ts";
 import { masterRoutes } from "./routes/masters.ts";
@@ -17,7 +18,8 @@ const tenantRoutes = new Hono<TenantEnv>()
   .route("/", journalRoutes)
   .route("/", reportRoutes)
   .route("/", importRoutes)
-  .route("/", blueReturnRoutes);
+  .route("/", blueReturnRoutes)
+  .route("/", fixedAssetRoutes);
 
 export const app = new Hono()
   .basePath("/api")

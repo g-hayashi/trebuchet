@@ -67,6 +67,7 @@ type Opts = {
   previousYear?: unknown[];
   rows?: unknown[];
   proposals?: AdjustmentProposal[];
+  assets?: unknown[];
 };
 
 /** 画面の API の応答。保存・登録で状態が変わる（読み直しに反映する） */
@@ -103,6 +104,7 @@ function mockScreen(opts: Opts = {}) {
       state.rows = rows;
       return ok({ rows });
     },
+    [`GET ${ENTITY}/fixed-assets`]: () => ok({ assets: opts.assets ?? [] }),
     [`GET ${ADJUSTMENTS}`]: () => ok({ proposals: state.proposals }),
     [`POST ${ADJUSTMENTS}`]: () => {
       state.proposals = [];
@@ -388,6 +390,45 @@ describe("家事按分・地代家賃の内訳の画面（US2）", () => {
       expected: { amount: 840_000 },
     });
     expect(await within(panel).findByText("登録する仕訳の案はありません。")).toBeInTheDocument();
+  });
+
+  it("減価償却の案は資産名、取得価額・事業専用割合・必要経費算入額と仕訳を見せ、kind depreciation で確定する", async () => {
+    const depreciationProposal: AdjustmentProposal = {
+      kind: "depreciation",
+      sourceId: "as-1",
+      journal: {
+        date: "2025-12-31",
+        memo: "減価償却費の計上（ノートパソコン）",
+        lines: [
+          { side: "debit", accountId: "a-bank", amount: 200_000, taxCategory: "OUT_OF_SCOPE" },
+          { side: "credit", accountId: "a-rent", amount: 200_000, taxCategory: "OUT_OF_SCOPE" },
+          { side: "debit", accountId: "a-owner", amount: 100_000, taxCategory: "OUT_OF_SCOPE" },
+          { side: "credit", accountId: "a-bank", amount: 100_000, taxCategory: "OUT_OF_SCOPE" },
+        ],
+      },
+      breakdown: { acquisitionCost: 200_000, businessRatio: 5000, deductible: 100_000 },
+    };
+    const { calls } = mockScreen({
+      proposals: [depreciationProposal],
+      assets: [{ id: "as-1", name: "ノートパソコン" }],
+    });
+    const user = userEvent.setup();
+    renderHomeUse();
+
+    const card = await screen.findByRole("group", { name: "ノートパソコンの振替の案" });
+    const facts = within(card)
+      .getAllByRole("definition")
+      .map((d) => d.textContent);
+    expect(facts).toEqual(["200,000", "50%", "100,000"]);
+    expect(within(card).getByText("取得価額")).toBeInTheDocument();
+    expect(within(card).getByText("必要経費算入額")).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "仕訳を登録" }));
+    await waitFor(() => expect(callsOf(calls, "POST", ADJUSTMENTS)).toHaveLength(1));
+    expect(callsOf(calls, "POST", ADJUSTMENTS)[0]?.body).toEqual({
+      kind: "depreciation",
+      sourceId: "as-1",
+      expected: { amount: 300_000 },
+    });
   });
 
   it("確定が 409（案の金額が変わった）なら理由を画面に出す", async () => {

@@ -7,7 +7,10 @@ import {
   DeductionAnswersInput,
   ErrorCode,
   FiledDocumentInput,
+  FixedAssetDisposeInput,
   FixedAssetInput,
+  FixedAssetsQuery,
+  FixedAssetUpdateInput,
   HomeUseAllocationInput,
   RentDetailInput,
   TaxReturnMemoInput,
@@ -89,6 +92,40 @@ describe("FixedAssetInput", () => {
     { ...ok, acquiredOn: "2026-02-30" },
   ])("不正な入力を拒否する %#", (input) => {
     expect(FixedAssetInput.safeParse(input).success).toBe(false);
+  });
+});
+
+describe("FixedAssetUpdateInput / FixedAssetDisposeInput / FixedAssetsQuery", () => {
+  const asset = {
+    name: "ノート PC",
+    acquiredOn: "2026-05-10",
+    acquisitionCost: 250000,
+    method: "small_asset_28_2",
+    businessRatio: 10000,
+    assetAccountId: ID,
+  };
+  it("更新は登録の入力に reason（省略・null 可）を足した形", () => {
+    expect(FixedAssetUpdateInput.safeParse(asset).success).toBe(true);
+    expect(FixedAssetUpdateInput.safeParse({ ...asset, reason: "割合の見直し" }).success).toBe(
+      true,
+    );
+    expect(FixedAssetUpdateInput.safeParse({ ...asset, reason: null }).success).toBe(true);
+    expect(FixedAssetUpdateInput.safeParse({ ...asset, acquisitionCost: 0 }).success).toBe(false);
+  });
+  it("除却は disposedOn（日付）と reason（文字列）", () => {
+    expect(
+      FixedAssetDisposeInput.safeParse({ disposedOn: "2026-12-01", reason: "廃棄" }).success,
+    ).toBe(true);
+    expect(FixedAssetDisposeInput.safeParse({ disposedOn: "2026-02-30", reason: "" }).success).toBe(
+      false,
+    );
+    expect(FixedAssetDisposeInput.safeParse({ disposedOn: "2026-12-01" }).success).toBe(false);
+  });
+  it("一覧のクエリは year（4桁の年、省略可）を数に変える", () => {
+    expect(FixedAssetsQuery.parse({ year: "2026" })).toEqual({ year: 2026 });
+    expect(FixedAssetsQuery.parse({})).toEqual({});
+    expect(FixedAssetsQuery.safeParse({ year: "26" }).success).toBe(false);
+    expect(FixedAssetsQuery.safeParse({ year: "abcd" }).success).toBe(false);
   });
 });
 

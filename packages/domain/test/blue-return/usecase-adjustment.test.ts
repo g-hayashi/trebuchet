@@ -421,7 +421,7 @@ describe("getAdjustmentProposals・commitAdjustment（FR-014〜016、R4）", () 
     expect(snapshot()).toEqual(before);
   });
 
-  it("按分の登録が見つからなければ VALIDATION、depreciation はまだ扱わない", () => {
+  it("按分の登録・固定資産が見つからなければ（sourceId が無ければ）VALIDATION", () => {
     const missing = commitAdjustment(commitDeps(), {
       fiscalYear: 2025,
       kind: "home_use",

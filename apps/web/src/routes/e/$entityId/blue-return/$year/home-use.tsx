@@ -5,6 +5,7 @@ import { AdjustmentPanel } from "@/features/blue-return/AdjustmentPanel";
 import { adjustmentsQuery, homeUseQuery, rentDetailsQuery } from "@/features/blue-return/api";
 import { HomeUseForm } from "@/features/blue-return/HomeUseForm";
 import { RentDetailsTable } from "@/features/blue-return/RentDetailsTable";
+import { fixedAssetsQuery } from "@/features/fixed-assets/api";
 import { accountsQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/blue-return/$year/home-use")({
@@ -18,6 +19,8 @@ function HomeUsePage() {
   const rent = useQuery(rentDetailsQuery(entityId, year));
   const adjustments = useQuery(adjustmentsQuery(entityId, year));
   const { data: accounts } = useQuery(accountsQuery(entityId));
+  // 減価償却の案の見出し（資産名）に使うだけ。読めなくても画面は止めない
+  const { data: assets } = useQuery(fixedAssetsQuery(entityId));
   const error = homeUse.error ?? rent.error ?? adjustments.error;
   const loading = homeUse.isPending || rent.isPending || adjustments.isPending;
 
@@ -48,6 +51,7 @@ function HomeUsePage() {
           proposals={adjustments.data}
           accounts={accounts}
           allocations={homeUse.data.allocations}
+          assets={assets ?? []}
         />
       )}
       {rent.data && (

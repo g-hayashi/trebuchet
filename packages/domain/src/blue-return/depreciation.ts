@@ -35,8 +35,9 @@ const yearOf = (date: string) => date.slice(0, 4);
  * 資産の登録を検証する（FR-018〜020、R7、INV-21）。方法は少額の特例だけ（DEPRECIATION_METHOD_UNSUPPORTED）、
  * 資産の勘定は区分が資産の科目（ASSET_ACCOUNT_INVALID）。取得の日に基準額・年間の上限が適用されなければ
  * SMALL_ASSET_NOT_APPLICABLE、取得価額が基準額以上なら SMALL_ASSET_OVER_THRESHOLD
- * （details.threshold・effectiveFrom）、同じ年（1〜12月）の特例の資産の取得価額の合計（除却していない
- * 資産。draft.id と同じ資産は除く）に今回を足して上限を超えれば SMALL_ASSET_ANNUAL_LIMIT_EXCEEDED
+ * （details.threshold・effectiveFrom）、同じ年（1〜12月）に取得した特例の資産の取得価額の合計（除却したか
+ * どうかに関わらない。特例を使ったため。draft.id と同じ資産は除く）に今回を足して上限を超えれば
+ * SMALL_ASSET_ANNUAL_LIMIT_EXCEEDED
  * （details.limit・total）。名前・備考の空白を除き、空の数量・備考は null にした入力を返す
  */
 export function validateFixedAsset(
@@ -120,11 +121,7 @@ export function validateFixedAsset(
   const year = yearOf(draft.acquiredOn);
   const others = sameYearAssets
     .filter(
-      (a) =>
-        a.id !== draft.id &&
-        a.disposedOn === null &&
-        a.method === "small_asset_28_2" &&
-        yearOf(a.acquiredOn) === year,
+      (a) => a.id !== draft.id && a.method === "small_asset_28_2" && yearOf(a.acquiredOn) === year,
     )
     .reduce((s, a) => s + a.acquisitionCost, 0);
   const total = others + draft.acquisitionCost;

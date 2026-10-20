@@ -5,6 +5,7 @@ import {
   disposeFixedAsset,
   getAdjustmentProposals,
   getBlueReturn,
+  listFixedAssets,
   saveFixedAsset,
 } from "../../src/usecases/blue-return.ts";
 import { voidJournal } from "../../src/usecases/void-journal.ts";
@@ -158,6 +159,39 @@ describe("saveFixedAsset（FR-018〜020）", () => {
   });
 });
 
+describe("listFixedAssets（FR-018、FR-023）", () => {
+  it("year を付けると各資産にその年の depreciation を付け、付けなければ null", () => {
+    const asset = unwrap(save({ businessRatio: 5000 }));
+    const withYear = unwrap(listFixedAssets(settingsDeps(), { fiscalYear: 2025 }));
+    expect(withYear).toEqual([
+      {
+        ...asset,
+        depreciation: {
+          cost: 200_000,
+          base: 200_000,
+          ordinary: 200_000,
+          total: 200_000,
+          businessRatio: 5000,
+          deductible: 100_000,
+          closingBookValue: 0,
+        },
+      },
+    ]);
+    const other = unwrap(listFixedAssets(settingsDeps(), { fiscalYear: 2026 }));
+    expect(other[0]?.depreciation).toMatchObject({ total: 0, deductible: 0 });
+    const none = unwrap(listFixedAssets(settingsDeps(), {}));
+    expect(none).toEqual([{ ...asset, depreciation: null }]);
+  });
+
+  it("法人の事業体は ENTITY_KIND_UNSUPPORTED", () => {
+    const profile = fx.masters.getProfile();
+    if (profile === undefined) throw new Error("no profile");
+    fx.masters.saveProfile({ ...profile, kind: "corporation" });
+    const r = listFixedAssets(settingsDeps(), {});
+    expect(!r.ok && r.error.code).toBe("ENTITY_KIND_UNSUPPORTED");
+  });
+});
+
 describe("disposeFixedAsset", () => {
   it("除却の日を記録し、closing_audit_log に fixed_asset（dispose）を残す。物理削除はしない", () => {
     const asset = unwrap(save());
@@ -199,7 +233,7 @@ describe("disposeFixedAsset", () => {
     expect(snapshot()).toEqual(before);
   });
 
-  it("除却した資産は同じ年の上限の合計に数えない（それ以後の登録）", () => {
+  it("取得して同じ年に除却した資産も同じ年の上限の合計に数える（特例を使ったため）", () => {
     for (let i = 0; i < 10; i++) unwrap(save({ acquisitionCost: 299_000, name: `備品${i}` }));
     expect(save({ acquisitionCost: 299_000 }).ok).toBe(false);
     const [first] = uow.closing.listFixedAssets();
@@ -210,7 +244,8 @@ describe("disposeFixedAsset", () => {
         reason: "廃棄",
       }),
     );
-    expect(save({ acquisitionCost: 299_000 }).ok).toBe(true);
+    const r = save({ acquisitionCost: 299_000 });
+    expect(!r.ok && r.error.code).toBe("SMALL_ASSET_ANNUAL_LIMIT_EXCEEDED");
   });
 });
 

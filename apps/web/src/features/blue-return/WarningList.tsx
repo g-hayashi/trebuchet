@@ -76,6 +76,16 @@ export function WarningList({
               {w.code === "HOME_USE_ADJUSTMENT_STALE" && (
                 <HomeUseLink entityId={entityId} year={year} label="仕訳の案を見る" />
               )}
+              {w.code === "DEPRECIATION_MISMATCH" && (
+                <Link
+                  to="/e/$entityId/fixed-assets"
+                  params={{ entityId }}
+                  search={{ year: Number(year) }}
+                  className="mt-1 block underline"
+                >
+                  固定資産台帳を開く
+                </Link>
+              )}
               {w.code === "RENT_DETAILS_MISMATCH" && (
                 <HomeUseLink entityId={entityId} year={year} label="地代家賃の内訳を直す" />
               )}
