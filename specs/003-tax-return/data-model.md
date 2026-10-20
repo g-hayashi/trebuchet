@@ -148,7 +148,14 @@
 ## 2. ドメインの型（保存しない）
 
 - **`BlueReturnForm`**（R2）: 年分、`pl: FormLine[]`（欄番号、欄名、`kind: account | optional | computed | unused`）、`optionalLines: [25..30]`、`salesPartnerRows: number`、`bsRows: { label, side, accountCodes[] }[]`
-- **`BlueReturn`**: `fiscalYear`、`formYear`（使った様式の年分、R2）、`status: open | closed`、`page1: { lines: { no, label, amount | null }[] }`、`page2: { monthly, rentDetails, deduction }`、`page3: { salesPartners, depreciation }`、`page4: { opening, closing }`、`transfer: { businessIncome /* 欄45 */, blueDeduction /* 欄44 */ }`、`warnings: BlueReturnWarning[]`
+- **`BlueReturn`**: `fiscalYear`、`formYear`（使った様式の年分、R2）、`status: open | closed`、`page1: { lines: { no, label, amount | null }[] }`、`page2: { monthly, rentDetails, deduction }`、`page3: { salesPartners, depreciation }`、`page4: { opening, closing, carryForwardCheck, openingDifferenceNote }`、`transfer: { businessIncome /* 欄45 */, blueDeduction /* 欄44 */ }`、`warnings: BlueReturnWarning[]`
+- **`page4`**: `opening` / `closing` は `{ assets, liabilityEquity }`、各側は `{ rows: { label, amount | null }[], total }`（期首と期末で行の並びは同じ。資産は借方、負債・資本は貸方を正とする。期末の資本の部に「青色申告特別控除前の所得金額」の行を含む）。`carryForwardCheck: no_prior_year | matched | mismatched`（元入金の繰越の検査、FR-029。前の年度の帳簿がなければ `no_prior_year` で警告なし）。`openingDifferenceNote: string | null`（`closing_notes` の `opening_difference`。空白だけなら null。FR-030）
+- **`BlueReturnWarning`**: `{ code, message, details? }`。4ページに関する警告の `details` の形:
+  - `OPENING_MISMATCH`: 科目ごとに1件。`{ accountId, subAccountId, accountName, expected /* 前の年度の期末から求めた値 */, actual /* 登録された期首 */, diff /* actual − expected */, note /* 差の説明 or null */ }`。前の年度の期末から期首を求められないとき（元入金の科目がない）は1件で `{ errorCode, note }`（`carryForwardCheck` は `mismatched`）
+  - `OPTIONAL_LINES_OVERFLOW`: 1ページの任意欄のあふれは `{ count, capacity, omitted }`。**4ページの空欄の行のあふれにも使う**: `{ page: 4, side: "asset" | "liability_equity", count, capacity, omitted }`（`omitted` は `{ accountId, name, amount }[]`。載らなかった科目は最後の空欄の行に「その他」として合算し、金額は合計に含める）
+  - `PRIOR_PERIOD_OPEN`: `{ fiscalYear }`（前の年度が締め前。繰越の検査は締め前の帳簿で行う）
+  - `OPENING_OWNER_ACCOUNTS`: `{ accounts: { accountId, accountName, amount }[] }`
+  - `DEFERRED_ASSET_NOT_AMORTIZED`: `{ accountId, accountName, amount }`
 - **`BlueReturnWarning`** のコード: `OPTIONAL_LINES_OVERFLOW`、`PL_MISMATCH`、`HOME_USE_ADJUSTMENT_STALE`、`RENT_DETAILS_MISMATCH`、`DEPRECIATION_MISMATCH`、`SALES_TOTAL_MISMATCH`、`SALES_WITHOUT_PARTNER`、`DUPLICATE_PARTNER_NAME`、`OPENING_MISMATCH`、`DEFERRED_ASSET_NOT_AMORTIZED`、`OPENING_OWNER_ACCOUNTS`（期首に事業主貸・借の残高がある、R8）、`NEGATIVE_BALANCE`（001）、`DEDUCTION_ANSWERS_MISSING`、`PRIOR_PERIOD_OPEN`
 - **`AdjustmentProposal`**: `kind`、元の ID、`journal: JournalDraft`（年度末日付）、`breakdown`（帳簿の金額、割合、事業分、家事分 または 取得価額、算入額）
 

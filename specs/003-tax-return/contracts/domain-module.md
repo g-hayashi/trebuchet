@@ -24,8 +24,8 @@
 | `blueDeduction(cap, incomeBefore)` | | 控除額 | FR-009, INV-22 |
 | `summarizeMonthlySales(lines, accounts, fiscalYear)` | | 月別の売上・雑収入・計 | FR-024, INV-24 |
 | `summarizeSalesPartners(lines, accounts, partners, rows)` | | 個別の行・上記以外の計・取引先なしの件数と金額 | FR-025〜026, INV-24 |
-| `checkOpeningCarryForward(priorClosing, opening, accounts)` | 前の年度の期末の残高、今の年度の期首残高 | `{ accountId, expected, actual, diff }[]`（002 の `carryForward` を使う） | FR-029, R8 |
-| `buildBlueReturn(input)` | 様式、科目、取引先、期首残高、年度の仕訳の行、前の年度の期末の残高（任意）、按分の登録、決算整理の refs、資産、地代家賃の内訳、控除の回答、税制の値、メモ、年度の状態 | `BlueReturn`（data-model §2） | FR-001〜032 の表示、INV-18〜24 |
+| `checkOpeningCarryForward(priorClosing: CarryForwardBalance[], opening: OpeningInput[], accounts: Account[])` | 前の年度の期末の残高（借方を正）、今の年度の期首残高、科目 | `Result<OpeningMismatch[]>`。`OpeningMismatch = { accountId, subAccountId \| null, expected, actual, diff }`（金額は科目の通常の側を正とする符号つき。`diff = actual − expected`、0 の行は返さない。並びは科目の順 → 補助科目なしが先）。002 の `carryForward` を使い、失敗（元入金の科目がない）はそのエラーを返す | FR-029, R8 |
+| `buildBlueReturn(input: BuildBlueReturnInput)` | `{ period, accounts, lines, deductionAnswers \| null, taxParameters, allocations?, adjustmentRefs?, rentDetails?, fixedAssets?, opening?, priorPeriod?: PriorPeriod \| null, closingNotes? }`。`PriorPeriod = { fiscalYear, status, closing: CarryForwardBalance[] }`（前の年度の帳簿があるときだけ。なければ null で `no_prior_year`）。年度の状態は `period.status`。取引先は US5 | `BlueReturn`（data-model §2）。4ページは `buildPage4`（`page4` と警告 `OPENING_MISMATCH`、`PRIOR_PERIOD_OPEN`、`OPENING_OWNER_ACCOUNTS`、`DEFERRED_ASSET_NOT_AMORTIZED`、`NEGATIVE_BALANCE`、4ページの `OPTIONAL_LINES_OVERFLOW`）が作る | FR-001〜032 の表示、INV-18〜24 |
 | `blueReturnToCsv(blueReturn, { blankUnused })` | `blankUnused` なら `kind = unused` の欄を空にする（R14） | CSV の文字列（`ページ,欄番号,欄名,金額`） | FR-003, R14 |
 
 `buildBlueReturn` は 001 の `buildProfitAndLoss`・`buildBalanceSheet`・`detectWarnings` を呼び、結果を様式に並べ替える。PL の費用合計・利益との一致（INV-18）を自分で確かめ、合わなければ `PL_MISMATCH` を出す。
@@ -53,7 +53,8 @@
 | `listHomeUseAllocations(deps, { fiscalYear })` | `MasterRepository`、`ClosingStore` | `Result<{ allocations, previousYear }>`。年度の登録と、前の年度の登録（`GET .../home-use`） |
 | `getRentDetails(deps, { fiscalYear })` | `MasterRepository`、`ClosingStore` | `Result<RentDetail[]>`。並び順は保存したとおり（`GET .../rent-details`） |
 | `saveFixedAsset(deps, draft)` / `disposeFixedAsset(deps, { id, disposedOn, reason })` | `ClosingStore`、`IdGenerator`、`Clock` | `validateFixedAsset` → 保存 → 履歴 |
-| `saveRentDetails`、`saveDeductionAnswers`、`saveClosingNote`、`saveTaxReturnMemo`、`saveFiledDocument`（と削除） | `ClosingStore`、`Clock` | 検証 → 保存 → 履歴（履歴は按分・資産・内訳・回答・メモだけ） |
+| `saveClosingNote(deps: ClosingSettingsDeps, { fiscalYear, kind: "special_circumstances" \| "opening_difference", body })` | `{ masters, closing: ClosingStore, ids, clock }` | `Result<ClosingNote>`（`{ fiscalYear, kind, body, updatedAt }`）。個人の事業体でなければ `ENTITY_KIND_UNSUPPORTED`、会計期間がなければ `VALIDATION`。`body` は前後の空白を除き、5000 文字を超えると `VALIDATION`（`details.field: "body"`）。空にもできる（`openingDifferenceNote` は null に戻る）。締め済みの年度でも保存できる。保存と履歴（`closing_note`、`create` / `update`）は呼び出し側の1トランザクション（`PUT .../notes/:kind`） |
+| `saveRentDetails`、`saveDeductionAnswers`、`saveTaxReturnMemo`、`saveFiledDocument`（と削除） | `ClosingStore`、`Clock` | 検証 → 保存 → 履歴（履歴は按分・資産・内訳・回答・メモだけ） |
 
 ## ポート（packages/db が実装）
 

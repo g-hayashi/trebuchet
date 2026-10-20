@@ -32,7 +32,9 @@ function HomeUseLink({ entityId, year, label }: { entityId: string; year: string
 
 /**
  * 決算書の警告の一覧。決算書は表示したまま知らせる。
- * 任意科目が欄に載らないとき（OPTIONAL_LINES_OVERFLOW）は、載らなかった科目名と金額、科目の画面へのリンクを出す
+ * 任意科目が欄に載らないとき（OPTIONAL_LINES_OVERFLOW。1ページ・4ページとも）は、載らなかった科目名と金額、
+ * 科目の画面へのリンクを出す。期首の食い違い（OPENING_MISMATCH）は、登録した差の説明を警告の横に出す
+ * （そのほかの警告は message のまま）
  */
 export function WarningList({
   entityId,
@@ -72,6 +74,9 @@ export function WarningList({
                     科目の画面で決算書の欄を変更する
                   </Link>
                 </>
+              )}
+              {w.code === "OPENING_MISMATCH" && typeof w.details?.note === "string" && (
+                <span className="mt-1 block whitespace-pre-wrap">説明: {w.details.note}</span>
               )}
               {w.code === "HOME_USE_ADJUSTMENT_STALE" && (
                 <HomeUseLink entityId={entityId} year={year} label="仕訳の案を見る" />

@@ -6,6 +6,7 @@ import { ApiErrorMessage } from "@/components/ui/form-error";
 import { blueReturnCsvUrl, blueReturnQuery } from "@/features/blue-return/api";
 import { FormPage1 } from "@/features/blue-return/FormPage1";
 import { FormPage3 } from "@/features/blue-return/FormPage3";
+import { FormPage4 } from "@/features/blue-return/FormPage4";
 import { WarningList } from "@/features/blue-return/WarningList";
 import { formatSignedYen } from "@/lib/format";
 
@@ -129,6 +130,7 @@ function BlueReturnPage() {
           </label>
           <FormPage1 lines={data.page1.lines} blankUnused={blankUnused} />
           <FormPage3 depreciation={data.page3.depreciation} />
+          <FormPage4 entityId={entityId} year={year} page4={data.page4} warnings={data.warnings} />
         </>
       )}
     </main>

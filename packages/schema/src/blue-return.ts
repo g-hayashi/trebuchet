@@ -114,6 +114,9 @@ export type DeductionAnswersInput = z.infer<typeof DeductionAnswersInput>;
 export const ClosingNoteKind = z.enum(["special_circumstances", "opening_difference"]);
 export type ClosingNoteKind = z.infer<typeof ClosingNoteKind>;
 
+/** PUT /blue-return/:year/notes/:kind のパス（year の形は route の parseYear で検査する） */
+export const ClosingNoteParam = z.object({ year: z.string(), kind: ClosingNoteKind });
+
 export const ClosingNoteInput = z.object({ body: z.string().max(5000) });
 export type ClosingNoteInput = z.infer<typeof ClosingNoteInput>;
 

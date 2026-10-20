@@ -81,6 +81,20 @@ export const postAdjustment = async (
   json: Parameters<(typeof blueReturnApi)["adjustments"]["$post"]>[0]["json"],
 ) => unwrap(await blueReturnApi.adjustments.$post({ param: { entityId, year }, json }));
 
+/** 決算のメモ（特別な事情・期首と前期末の差の説明）の保存（US4。FR-027, FR-030） */
+export const putClosingNote = async (
+  entityId: string,
+  year: string,
+  kind: "special_circumstances" | "opening_difference",
+  body: string,
+) =>
+  unwrap(
+    await blueReturnApi.notes[":kind"].$put({
+      param: { entityId, year, kind },
+      json: { body },
+    }),
+  );
+
 /** CSV のダウンロードの URL。blankUnused は表示の切り替えと同じ値を渡す（保存しない） */
 export const blueReturnCsvUrl = (entityId: string, year: string, blankUnused: boolean) =>
   `/api/entities/${encodeURIComponent(entityId)}/blue-return/${encodeURIComponent(year)}/csv?blankUnused=${blankUnused}`;

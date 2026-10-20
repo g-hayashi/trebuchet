@@ -6,6 +6,7 @@ import {
   getDeductionAnswers,
   getRentDetails,
   listHomeUseAllocations,
+  saveClosingNote,
   saveDeductionAnswers,
   saveHomeUseAllocation,
   saveRentDetails,
@@ -13,6 +14,8 @@ import {
 import {
   AdjustmentCommitInput,
   BlueReturnCsvQuery,
+  ClosingNoteInput,
+  ClosingNoteParam,
   DeductionAnswersInput,
   HomeUseAllocationInput,
   RentDetailsPut,
@@ -67,6 +70,23 @@ export const blueReturnRoutes = new Hono<TenantEnv>()
     );
     return c.json(view, 200);
   })
+  // 決算のメモ（特別な事情・期首と前期末の差の説明。FR-027, FR-030）。締め済みでも保存できる
+  .put(
+    "/blue-return/:year/notes/:kind",
+    validate("param", ClosingNoteParam),
+    validate("json", ClosingNoteInput),
+    (c) => {
+      const year = parseYear(c.req.param("year"));
+      if (!year.ok) return fail(c, year.error);
+      const { kind } = c.req.valid("param");
+      const { body } = c.req.valid("json");
+      // メモの保存と履歴を1つのトランザクションにする
+      const note = c.var.db.transaction((tx) =>
+        orThrow(saveClosingNote(closingSettingsDeps(tx), { fiscalYear: year.value, kind, body })),
+      );
+      return c.json({ note }, 200);
+    },
+  )
   // ---- 家事按分・地代家賃の内訳・決算整理の仕訳の案（US2） ----
   .get("/blue-return/:year/home-use", (c) => {
     const year = parseYear(c.req.param("year"));
