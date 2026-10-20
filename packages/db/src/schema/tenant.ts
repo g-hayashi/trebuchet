@@ -388,3 +388,253 @@ export const importTaxMappings = sqliteTable("import_tax_mappings", {
     .references(() => taxCategories.code),
   updatedAt: text("updated_at").notNull(),
 });
+
+// ---- 003-tax-return（specs/003-tax-return/data-model.md §1） ----
+
+export const taxParameters = sqliteTable(
+  "tax_parameters",
+  {
+    key: text("key", {
+      enum: [
+        "SMALL_ASSET_THRESHOLD",
+        "SMALL_ASSET_ANNUAL_LIMIT",
+        "BLUE_DEDUCTION_MAX",
+        "BLUE_DEDUCTION_STANDARD",
+        "BLUE_DEDUCTION_BASIC",
+      ],
+    }).notNull(),
+    effectiveFrom: text("effective_from").notNull(),
+    effectiveTo: text("effective_to"),
+    value: integer("value").notNull(),
+    sourceUrl: text("source_url").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.key, t.effectiveFrom] }),
+    check(
+      "tax_parameters_key",
+      sql`${t.key} IN ('SMALL_ASSET_THRESHOLD', 'SMALL_ASSET_ANNUAL_LIMIT', 'BLUE_DEDUCTION_MAX', 'BLUE_DEDUCTION_STANDARD', 'BLUE_DEDUCTION_BASIC')`,
+    ),
+    check("tax_parameters_value", sql`${t.value} > 0`),
+  ],
+);
+
+export const homeUseAllocations = sqliteTable(
+  "home_use_allocations",
+  {
+    id: text("id").primaryKey(),
+    fiscalYear: integer("fiscal_year")
+      .notNull()
+      .references(() => fiscalPeriods.fiscalYear),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    subAccountId: text("sub_account_id").references(() => subAccounts.id),
+    businessRatio: integer("business_ratio").notNull(),
+    basis: text("basis").notNull(),
+    changeReason: text("change_reason"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    unique("home_use_allocations_key").on(t.fiscalYear, t.accountId, t.subAccountId),
+    // sub_account_id が NULL の行は UNIQUE で重複を防げない（NULL は互いに異なる）ため、部分インデックスで防ぐ
+    uniqueIndex("home_use_allocations_no_sub")
+      .on(t.fiscalYear, t.accountId)
+      .where(sql`sub_account_id IS NULL`),
+    check("home_use_allocations_ratio", sql`${t.businessRatio} BETWEEN 0 AND 10000`),
+    check("home_use_allocations_basis", sql`length(${t.basis}) > 0`),
+  ],
+);
+
+export const rentDetails = sqliteTable(
+  "rent_details",
+  {
+    id: text("id").primaryKey(),
+    fiscalYear: integer("fiscal_year").notNull(),
+    payee: text("payee").notNull(),
+    property: text("property").notNull(),
+    annualRent: integer("annual_rent").notNull(),
+    deductibleAmount: integer("deductible_amount").notNull(),
+    sortOrder: integer("sort_order").notNull(),
+  },
+  (t) => [
+    index("rent_details_year").on(t.fiscalYear),
+    check("rent_details_payee", sql`length(${t.payee}) > 0`),
+    check("rent_details_property", sql`length(${t.property}) > 0`),
+    check("rent_details_annual_rent", sql`${t.annualRent} >= 0`),
+    check(
+      "rent_details_deductible",
+      sql`${t.deductibleAmount} >= 0 AND ${t.deductibleAmount} <= ${t.annualRent}`,
+    ),
+  ],
+);
+
+export const fixedAssets = sqliteTable(
+  "fixed_assets",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    quantity: text("quantity"),
+    acquiredOn: text("acquired_on").notNull(),
+    acquisitionCost: integer("acquisition_cost").notNull(),
+    method: text("method", { enum: ["small_asset_28_2"] }).notNull(),
+    usefulLifeYears: integer("useful_life_years"),
+    businessRatio: integer("business_ratio").notNull(),
+    assetAccountId: text("asset_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    linkedJournalId: text("linked_journal_id").references(() => journals.id),
+    note: text("note"),
+    disposedOn: text("disposed_on"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    check("fixed_assets_name", sql`length(${t.name}) > 0`),
+    check("fixed_assets_cost", sql`${t.acquisitionCost} > 0`),
+    check("fixed_assets_method", sql`${t.method} IN ('small_asset_28_2')`),
+    check("fixed_assets_ratio", sql`${t.businessRatio} BETWEEN 0 AND 10000`),
+  ],
+);
+
+export const adjustmentJournalRefs = sqliteTable(
+  "adjustment_journal_refs",
+  {
+    journalId: text("journal_id")
+      .primaryKey()
+      .references(() => journals.id),
+    kind: text("kind", { enum: ["home_use", "depreciation"] }).notNull(),
+    allocationId: text("allocation_id").references(() => homeUseAllocations.id),
+    assetId: text("asset_id").references(() => fixedAssets.id),
+    fiscalYear: integer("fiscal_year").notNull(),
+  },
+  (t) => [
+    index("adjustment_journal_refs_year").on(t.fiscalYear),
+    check("adjustment_journal_refs_kind", sql`${t.kind} IN ('home_use', 'depreciation')`),
+    check(
+      "adjustment_journal_refs_source",
+      sql`(${t.kind} <> 'home_use' OR ${t.allocationId} IS NOT NULL) AND (${t.kind} <> 'depreciation' OR ${t.assetId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const blueDeductionAnswers = sqliteTable(
+  "blue_deduction_answers",
+  {
+    fiscalYear: integer("fiscal_year").primaryKey(),
+    doubleEntry: bool("double_entry"),
+    statementsAttached: bool("statements_attached"),
+    filedOnTime: bool("filed_on_time"),
+    eTax: bool("e_tax"),
+    electronicBooks: bool("electronic_books"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    check(
+      "blue_deduction_answers_flags",
+      sql`${t.doubleEntry} IN (0, 1) AND ${t.statementsAttached} IN (0, 1) AND ${t.filedOnTime} IN (0, 1) AND ${t.eTax} IN (0, 1) AND ${t.electronicBooks} IN (0, 1)`,
+    ),
+  ],
+);
+
+export const closingNotes = sqliteTable(
+  "closing_notes",
+  {
+    fiscalYear: integer("fiscal_year").notNull(),
+    kind: text("kind", { enum: ["special_circumstances", "opening_difference"] }).notNull(),
+    body: text("body").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.fiscalYear, t.kind] }),
+    check("closing_notes_kind", sql`${t.kind} IN ('special_circumstances', 'opening_difference')`),
+  ],
+);
+
+export const taxReturnMemos = sqliteTable(
+  "tax_return_memos",
+  {
+    id: text("id").primaryKey(),
+    fiscalYear: integer("fiscal_year").notNull(),
+    kind: text("kind", {
+      enum: [
+        "salary",
+        "social_insurance",
+        "small_business_mutual_aid",
+        "life_insurance",
+        "earthquake_insurance",
+        "donation",
+        "medical",
+        "stocks",
+        "crypto",
+        "foreign_tax_credit",
+        "other",
+      ],
+    }).notNull(),
+    label: text("label"),
+    amount: integer("amount"),
+    filePath: text("file_path"),
+    memo: text("memo"),
+  },
+  (t) => [
+    index("tax_return_memos_year").on(t.fiscalYear),
+    check(
+      "tax_return_memos_kind",
+      sql`${t.kind} IN ('salary', 'social_insurance', 'small_business_mutual_aid', 'life_insurance', 'earthquake_insurance', 'donation', 'medical', 'stocks', 'crypto', 'foreign_tax_credit', 'other')`,
+    ),
+    check("tax_return_memos_amount", sql`${t.amount} IS NULL OR ${t.amount} >= 0`),
+  ],
+);
+
+export const filedDocuments = sqliteTable(
+  "filed_documents",
+  {
+    id: text("id").primaryKey(),
+    fiscalYear: integer("fiscal_year").notNull(),
+    kind: text("kind", { enum: ["blue_return", "tax_return", "attachment", "other"] }).notNull(),
+    filePath: text("file_path").notNull(),
+    filedOn: text("filed_on"),
+    memo: text("memo"),
+  },
+  (t) => [
+    index("filed_documents_year").on(t.fiscalYear),
+    check(
+      "filed_documents_kind",
+      sql`${t.kind} IN ('blue_return', 'tax_return', 'attachment', 'other')`,
+    ),
+  ],
+);
+
+export const closingAuditLog = sqliteTable(
+  "closing_audit_log",
+  {
+    id: text("id").primaryKey(),
+    occurredAt: text("occurred_at").notNull(),
+    targetType: text("target_type", {
+      enum: [
+        "home_use_allocation",
+        "rent_detail",
+        "fixed_asset",
+        "blue_deduction_answer",
+        "closing_note",
+        "account_report_line",
+      ],
+    }).notNull(),
+    targetId: text("target_id").notNull(),
+    action: text("action", { enum: ["create", "update", "dispose", "delete"] }).notNull(),
+    reason: text("reason"),
+    beforeJson: text("before_json"),
+    afterJson: text("after_json"),
+  },
+  (t) => [
+    index("closing_audit_log_target").on(t.targetType, t.targetId),
+    check(
+      "closing_audit_log_target_type",
+      sql`${t.targetType} IN ('home_use_allocation', 'rent_detail', 'fixed_asset', 'blue_deduction_answer', 'closing_note', 'account_report_line')`,
+    ),
+    check(
+      "closing_audit_log_action",
+      sql`${t.action} IN ('create', 'update', 'dispose', 'delete')`,
+    ),
+  ],
+);
