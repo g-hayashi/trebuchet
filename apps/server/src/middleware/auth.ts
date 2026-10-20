@@ -1,5 +1,13 @@
 import { hashToken } from "@trebuchet/db";
-import { type AuthStore, type Clock, isSessionActive, requiresAuth } from "@trebuchet/domain";
+import {
+  type AuthStore,
+  type Clock,
+  isSessionActive,
+  requiresAuth,
+  type Session,
+  type SessionKind,
+} from "@trebuchet/domain";
+import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import { DomainException } from "../errors.ts";
@@ -17,6 +25,29 @@ const RECOVERY_REGISTER_PATHS = new Set([
   "/api/auth/recovery/register/options",
   "/api/auth/recovery/register/verify",
 ]);
+
+/**
+ * cookie のセッションを探す。種類が違う・失効・期限切れ・RP ID が要求の Host と違うものは undefined。
+ * 要サインインの検査と、公開の `GET /auth/status` の `signedIn` が同じ判定を使う
+ */
+export async function findActiveSession(
+  c: Context<GuardEnv>,
+  store: AuthStore,
+  now: string,
+  kind: SessionKind,
+): Promise<Session | undefined> {
+  const token = getCookie(c, SESSION_COOKIE);
+  const session = token ? await store.findSessionByTokenHash(hashToken(token)) : undefined;
+  if (
+    session === undefined ||
+    session.kind !== kind ||
+    !isSessionActive(session, now) ||
+    session.rpId !== rpIdFor(c.var.host, c.var.remote)
+  ) {
+    return undefined;
+  }
+  return session;
+}
 
 const unauthenticated = () =>
   new DomainException({ code: "UNAUTHENTICATED", message: "サインインが必要です" });
@@ -54,18 +85,14 @@ export const authCheck = (getStore: () => AuthStore, clock: Clock) =>
       return next();
     }
 
-    const token = getCookie(c, SESSION_COOKIE);
-    const session = token ? await store.findSessionByTokenHash(hashToken(token)) : undefined;
     const now = clock.now();
-    const wanted = isRecoveryRegister ? "recovery" : "normal";
-    if (
-      session === undefined ||
-      session.kind !== wanted ||
-      !isSessionActive(session, now) ||
-      session.rpId !== rpIdFor(c.var.host, c.var.remote)
-    ) {
-      throw unauthenticated();
-    }
+    const session = await findActiveSession(
+      c,
+      store,
+      now,
+      isRecoveryRegister ? "recovery" : "normal",
+    );
+    if (session === undefined) throw unauthenticated();
     if (
       session.kind === "normal" &&
       Date.parse(now) - Date.parse(session.lastSeenAt) >= TOUCH_INTERVAL_MS

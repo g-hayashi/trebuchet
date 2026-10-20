@@ -46,6 +46,40 @@ describe("INV-29 全ルートの保護", () => {
     expect(protectedRoutes().length).toBeGreaterThanOrEqual(35);
   });
 
+  it("認証のルート（T008）を列挙が拾い、公開の名簿にないものは保護の対象になる", () => {
+    const keys = new Set(listRoutes().map((r) => `${r.method} ${r.path}`));
+    const protectedKeys = new Set(protectedRoutes().map((r) => `${r.method} ${r.path}`));
+    for (const key of [
+      "POST /api/auth/sign-out",
+      "GET /api/auth/passkeys",
+      "POST /api/auth/passkeys/options",
+      "POST /api/auth/passkeys/verify",
+      "PATCH /api/auth/passkeys/:id",
+      "DELETE /api/auth/passkeys/:id",
+      "POST /api/auth/recovery/regenerate",
+      "POST /api/auth/recovery/acknowledge",
+      "GET /api/auth/sessions",
+      "DELETE /api/auth/sessions/:id",
+      "GET /api/auth/events",
+    ]) {
+      expect(keys.has(key), `${key} が app.routes にある`).toBe(true);
+      expect(protectedKeys.has(key), `${key} が保護されている`).toBe(true);
+    }
+    for (const key of [
+      "GET /api/auth/status",
+      "POST /api/auth/register/options",
+      "POST /api/auth/register/verify",
+      "POST /api/auth/sign-in/options",
+      "POST /api/auth/sign-in/verify",
+      "POST /api/auth/recovery/verify",
+      "POST /api/auth/recovery/register/options",
+      "POST /api/auth/recovery/register/verify",
+    ]) {
+      expect(keys.has(key), `${key} が app.routes にある`).toBe(true);
+      expect(protectedKeys.has(key), `${key} は公開の名簿`).toBe(false);
+    }
+  });
+
   it("保護された全ルートが、未サインインで 401 UNAUTHENTICATED", async () => {
     const failures: string[] = [];
     for (const { method, path } of protectedRoutes()) {

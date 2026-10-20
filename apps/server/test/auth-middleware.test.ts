@@ -321,25 +321,20 @@ describe("認証（FR-003・004、INV-28）", () => {
 });
 
 describe("公開の手続きの前提（FR-001・006、INV-29）", () => {
-  /** 公開の完全一致の一覧の各パスにダミーのハンドラーを足したアプリ */
+  /**
+   * 公開の完全一致の一覧のうち、まだ本物のルートがないもの（pairing/register/*、T017 で足す）に
+   * ダミーのハンドラーを足したアプリ。ほかは T008 の本物のルート
+   */
   function publicApp(options: Parameters<typeof createApp>[0] = {}) {
     const a = createApp(options);
-    a.get("/auth/status", (c) => c.json({ ok: true }));
-    for (const p of [
-      "/auth/register/options",
-      "/auth/register/verify",
-      "/auth/sign-in/options",
-      "/auth/sign-in/verify",
-      "/auth/recovery/verify",
-      "/auth/recovery/register/options",
-      "/auth/recovery/register/verify",
-      "/auth/pairing/register/options",
-      "/auth/pairing/register/verify",
-    ]) {
+    for (const p of ["/auth/pairing/register/options", "/auth/pairing/register/verify"]) {
       a.post(p, (c) => c.json({ ok: true }));
     }
     return a;
   }
+
+  /** 前提の検査（401・409・421）を通ったか。本物のルートは、空の本文で 200 か 400 VALIDATION になる */
+  const passes = (res: Response) => ![401, 409, 421].includes(res.status);
   const post = (a: ReturnType<typeof publicApp>, path: string, headers: Record<string, string>) =>
     a.request(path, {
       method: "POST",
@@ -361,7 +356,7 @@ describe("公開の手続きの前提（FR-001・006、INV-29）", () => {
   it.each(["/api/auth/register/options", "/api/auth/register/verify"])(
     "%s はパスキー0件・ローカルの Host で通る",
     async (path) => {
-      expect((await post(publicApp(), path, {})).status).toBe(200);
+      expect(passes(await post(publicApp(), path, {}))).toBe(true);
     },
   );
 
@@ -400,7 +395,7 @@ describe("公開の手続きの前提（FR-001・006、INV-29）", () => {
       const normal = await createTestSession();
       expect((await post(publicApp(), path, { Cookie: normal.cookie })).status).toBe(401);
       const recovery = await createTestSession({ kind: "recovery" });
-      expect((await post(publicApp(), path, { Cookie: recovery.cookie })).status).toBe(200);
+      expect(passes(await post(publicApp(), path, { Cookie: recovery.cookie }))).toBe(true);
     },
   );
 
@@ -431,7 +426,7 @@ describe("公開の手続きの前提（FR-001・006、INV-29）", () => {
     "/api/auth/pairing/register/options",
     "/api/auth/pairing/register/verify",
   ])("%s は未サインインで通る", async (path) => {
-    expect((await post(publicApp(), path, {})).status).toBe(200);
+    expect(passes(await post(publicApp(), path, {}))).toBe(true);
   });
 
   it("status・health は未サインインで通る", async () => {
