@@ -117,7 +117,7 @@
 
 ## R14. Mac の ID
 
-- **Decision**: 最初の起動で UUID を作り `app_settings` の `mac_id` に保存する。バックアップのファイル名とヘッダーに使う。バックアップに `app_settings` を含めないので、復元では元の Mac の ID を持ち込まない。同じ Mac への復元では、復元の前の `app_settings` を引き継いで、Mac の ID を保つ（R13）。新しい Mac では起動時に新しく作る
+- **Decision**: 最初の起動で UUID（v4。ファイル名は先頭8文字で見分けるので、先頭が時刻の v7 は使わない）を作り `app_settings` の `mac_id` に保存する。バックアップのファイル名とヘッダーに使う。バックアップに `app_settings` を含めないので、復元では元の Mac の ID を持ち込まない。同じ Mac への復元では、復元の前の `app_settings` を引き継いで、Mac の ID を保つ（R13）。新しい Mac では起動時に新しく作る
 
 ## R15. E2E とテスト
 

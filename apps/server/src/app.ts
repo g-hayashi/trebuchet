@@ -1,7 +1,14 @@
-import type { AuthStore, Clock } from "@trebuchet/domain";
+import type { AuthStore, BackupStore, Clock, SecretStore } from "@trebuchet/domain";
 import { Hono } from "hono";
-import { authStore, clock as defaultClock } from "./deps.ts";
+import {
+  authStore,
+  backupRunner,
+  backupStore,
+  clock as defaultClock,
+  secretStore,
+} from "./deps.ts";
 import { onError } from "./errors.ts";
+import type { BackupRunner } from "./lib/backup-run.ts";
 import { ChallengeStore } from "./lib/challenges.ts";
 import { type GetRemoteSettings, getRemoteSettingsDisabled } from "./lib/origin.ts";
 import type { WebAuthnVerifier } from "./lib/webauthn.ts";
@@ -10,6 +17,7 @@ import { authCheck } from "./middleware/auth.ts";
 import { csrfCheck } from "./middleware/csrf.ts";
 import { type GuardEnv, hostCheck } from "./middleware/host.ts";
 import { authRoutes } from "./routes/auth.ts";
+import { backupRoutes } from "./routes/backup.ts";
 import { blueReturnRoutes } from "./routes/blue-return.ts";
 import { entitiesRoutes, entityRoutes } from "./routes/entities.ts";
 import { fixedAssetRoutes } from "./routes/fixed-assets.ts";
@@ -40,6 +48,12 @@ export type AppOptions = {
   clock?: Clock;
   /** WebAuthn の検証。既定は @simplewebauthn/server。ルートのテストは偽物を渡す */
   webauthn?: WebAuthnVerifier;
+  /** バックアップの依存（既定は deps.ts の実物）。テストは偽の SecretStore・実行を渡す */
+  backup?: {
+    runner?: BackupRunner;
+    secrets?: SecretStore;
+    store?: () => BackupStore;
+  };
 };
 
 /**
@@ -63,6 +77,16 @@ export function createApp(options: AppOptions = {}) {
         clock,
         webauthn: options.webauthn ?? simpleWebAuthnVerifier,
         challenges: new ChallengeStore(clock),
+      }),
+    )
+    .route(
+      "/backup",
+      backupRoutes({
+        auth: store,
+        backups: options.backup?.store ?? backupStore,
+        secrets: options.backup?.secrets ?? secretStore,
+        runner: options.backup?.runner ?? backupRunner,
+        clock,
       }),
     )
     .route("/entities", entitiesRoutes)
