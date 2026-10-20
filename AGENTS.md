@@ -37,6 +37,7 @@ apps/server ──→ packages/schema
 | 性能計測（SC-004 の仕訳 2,000 件） | `pnpm bench:reports` |
 | 性能計測（freee 取込の 500 仕訳、002 の SC-002） | `pnpm bench:import` |
 | freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。使い方は `scripts/verify-freee-import.ts` の先頭のコメント） |
+| 青色申告決算書の照合（実データ、ローカル専用） | `pnpm verify:tax-return`（`work/` を読む。使い方は `scripts/verify-tax-return.ts` の先頭のコメント） |
 | E2E（Playwright、Chromium） | `pnpm --filter @trebuchet/web e2e` |
 | web のビルド（`routeTree.gen.ts` を再生成する） | `pnpm --filter @trebuchet/web build` |
 
@@ -67,7 +68,7 @@ apps/server ──→ packages/schema
 | HTTP | `apps/server/src/routes/imports.ts` |
 | 画面 | `apps/web/src/features/imports/`、`apps/web/src/routes/e/$entityId/imports/` |
 
-- 実データ（`work/`）を読むのは `scripts/verify-freee-import.ts`（`pnpm verify:freee`）だけ。出力（件数、科目別の金額など）はコミットしない。ドキュメントや `tasks.md` にも実データの数値を書かない。
+- 実データ（`work/`）を読むのは `scripts/verify-freee-import.ts`（`pnpm verify:freee`）と `scripts/verify-tax-return.ts`（`pnpm verify:tax-return`）だけ。取込の共通部分は `scripts/lib/freee-import-runner.ts`。出力（件数、科目別の金額など）はコミットしない。ドキュメントや `tasks.md` にも実データの数値を書かない。
 - テストのフィクスチャは `packages/domain/test/fixtures/freee/` の **合成の** CSV。作り方と匿名化の方針は同じ場所の `README.md` に書いてある。CSV の生成スクリプトはリポジトリに置かない（使い捨て）。手で直す場合は、全項目をクォートし、LF で終える。元帳は UTF-8 の元（`ledger-2025.utf8.csv`）から CP932 の `ledger-2025.csv` を `iconv` で作る。フィクスチャを変えたら README の「検算」をして `expected.ts` を直す。
 - 取込のプロパティテスト（INV-14, 16, 17）は `packages/domain/test/freee-arbitraries.ts` のジェネレーターで、貸借一致の仕訳から freee 形式の仕訳帳と元帳を作って検証する。
 - 年初付の決算振替は仕訳として取り込まず、期首残高に繰り込む（[ADR 0004](docs/adr/0004-freee-closing-entries.md)）。
