@@ -1,4 +1,16 @@
 import type {
+  AppSettingKey,
+  AuthEvent,
+  AuthEventKind,
+  BackupRun,
+  NewAuthEvent,
+  NewBackupRun,
+  NewPasskey,
+  NewSession,
+  Passkey,
+  Session,
+} from "./auth/types.ts";
+import type {
   AccountMapping,
   ImportBatch,
   ImportRef,
@@ -236,4 +248,72 @@ export interface RegistryRepository {
   getEntity(id: string): EntitySummary | undefined;
   insertEntity(entity: EntitySummary): void;
   renameEntity(id: string, name: string): void;
+}
+
+/** macOS キーチェーン（R12）。テストはメモリの偽物。キーチェーンが使えない環境ではメモリの実装 */
+export interface SecretStore {
+  get(key: string): Promise<string | undefined>;
+  set(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
+/** passkeys・recovery_codes・sessions・auth_events・pairing_tokens・app_settings（registry） */
+export interface AuthStore {
+  // パスキー
+  listPasskeys(): Promise<Passkey[]>;
+  getPasskey(id: string): Promise<Passkey | undefined>;
+  addPasskey(passkey: NewPasskey): Promise<void>;
+  renamePasskey(id: string, name: string): Promise<void>;
+  deletePasskey(id: string): Promise<void>;
+  /** counter と last_used_at を更新する */
+  recordPasskeyUse(id: string, counter: number, at: string): Promise<void>;
+  // 回復コード（ハッシュは hashToken）
+  getActiveRecoveryCode(): Promise<{ id: string; codeHash: string } | undefined>;
+  /** 古い有効な行を closeAs で閉じて新しい行を追加する（1 トランザクション） */
+  replaceRecoveryCode(newCodeHash: string, now: string, closeAs: "used" | "revoked"): Promise<void>;
+  // セッション
+  createSession(session: NewSession): Promise<void>;
+  findSessionByTokenHash(tokenHash: string): Promise<Session | undefined>;
+  touchSession(id: string, at: string): Promise<void>;
+  revokeSession(id: string, at: string): Promise<void>;
+  /** 失効したセッションの id を返す */
+  revokeSessionsByPasskey(passkeyId: string, at: string): Promise<string[]>;
+  listActiveSessions(now: string): Promise<Session[]>;
+  /** 失効済みで before より古いものを消す。消した件数を返す */
+  deleteStaleSessions(before: string): Promise<number>;
+  // 認証の記録（追記のみ）
+  appendEvent(event: NewAuthEvent): Promise<void>;
+  /** 新しい順 */
+  listEvents(limit: number): Promise<AuthEvent[]>;
+  /** recoveryLocked の入力 */
+  listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]>;
+  // ペアリングのトークン（ハッシュは hashToken）
+  createPairingToken(token: {
+    id: string;
+    tokenHash: string;
+    rpId: string;
+    now: string;
+    expiresAt: string;
+  }): Promise<void>;
+  isPairingTokenValid(tokenHash: string, rpId: string, now: string): Promise<boolean>;
+  /** 有効なら used_at を付けて true（単回） */
+  consumePairingToken(tokenHash: string, rpId: string, now: string): Promise<boolean>;
+  deleteExpiredPairingTokens(before: string): Promise<number>;
+  // アプリの設定（app_settings の読み書きはここに寄せる）
+  getSetting(key: AppSettingKey): Promise<string | undefined>;
+  setSetting(key: AppSettingKey, value: string, now: string): Promise<void>;
+  getOrCreateMacId(newId: () => string): Promise<string>;
+}
+
+/** backup_runs だけ（app_settings は AuthStore の getSetting・setSetting） */
+export interface BackupStore {
+  /** 終わった実行を 1 行追加する */
+  recordRun(run: NewBackupRun): Promise<void>;
+  getLastRun(): Promise<BackupRun | undefined>;
+  /** 最後の succeeded または skipped */
+  getLastCheck(): Promise<BackupRun | undefined>;
+  /** 最後の succeeded */
+  getLastSuccess(): Promise<BackupRun | undefined>;
+  /** 新しい順 */
+  listRuns(limit: number): Promise<BackupRun[]>;
 }
