@@ -8,6 +8,9 @@ import type {
   ErrorCode,
   ErrorDetails,
   FiledDocumentKind,
+  InvoiceIssuer,
+  InvoiceTaxDisplay,
+  PaymentView,
   ReportSection,
   Side,
   TaxCategoryCode,
@@ -465,3 +468,52 @@ export type InvoicingAuditEntry = {
   beforeJson: string | null;
   afterJson: string | null;
 };
+
+/** 工数（`work_hours` の 1 行）。`halfHours` は半時間の整数（0.5 時間 = 1。R7） */
+export type WorkHoursRow = {
+  partnerId: string;
+  targetMonth: string;
+  halfHours: number;
+  updatedAt: string;
+};
+
+/** 発行済みの請求書（`invoices` の 1 行。写しの列は発行後に変えない。INV-38） */
+export type InvoiceRecord = {
+  id: string;
+  invoiceNo: string;
+  seq: number;
+  partnerId: string;
+  targetMonth: string;
+  issueDate: string;
+  salesDate: string;
+  dueDate: string;
+  recipientName: string;
+  recipientHonorific: Honorific;
+  issuer: InvoiceIssuer;
+  taxDisplay: InvoiceTaxDisplay;
+  total: number;
+  journalId: string;
+  createdAt: string;
+  voidedAt: string | null;
+  voidReason: string | null;
+  voidJournalId: string | null;
+};
+
+/** 請求書の明細（`invoice_items` の 1 行。発行後は更新・削除できない） */
+export type InvoiceItemRecord = {
+  id: string;
+  invoiceId: string;
+  lineNo: number;
+  name: string;
+  /** 数量 × 2（半単位の整数）。数量がなければ null */
+  quantityHalves: number | null;
+  unit: string | null;
+  unitPrice: number | null;
+  amount: number;
+  taxCategory: TaxCategoryCode;
+  /** 計上日の税率（%）。免税・課税でない区分は null */
+  taxRate: number | null;
+};
+
+/** 入金の消し込み（`invoice_payments` の 1 行）。取消は `voidedAt` で持つ */
+export type PaymentRecord = PaymentView & { invoiceId: string; createdAt: string };

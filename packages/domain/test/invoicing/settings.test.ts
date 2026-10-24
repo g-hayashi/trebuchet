@@ -9,6 +9,7 @@ import {
   saveInvoiceSettings,
 } from "../../src/usecases/invoicing.ts";
 import { FakeInvoicingUnitOfWork, FixedClock, SequentialIds } from "../fakes.ts";
+import { invoiceRecord } from "../invoicing-setup.ts";
 
 // 005 US4: 発行者の設定と請求の条件（FR-001〜004。R4・R5・R6・R23）
 
@@ -62,8 +63,8 @@ describe("getInvoiceSettings", () => {
   });
 
   it("minimumNextSeq は発行済みの最大の seq + 1", () => {
-    uow.invoicing.registerIssuedSeq(7);
-    uow.invoicing.registerIssuedSeq(3);
+    uow.invoicing.insertInvoice(invoiceRecord({ id: "inv-7", invoiceNo: "20261031-007", seq: 7 }));
+    uow.invoicing.insertInvoice(invoiceRecord({ id: "inv-3", invoiceNo: "20261031-003", seq: 3 }));
     const r = getInvoiceSettings(deps);
     if (!r.ok) throw new Error("expected ok");
     expect(r.value.minimumNextSeq).toBe(8);
@@ -97,7 +98,7 @@ describe("saveInvoiceSettings（FR-003, FR-004）", () => {
   });
 
   it("nextSeq が発行済みの最大の seq 以下なら INVOICE_SEQ_TOO_LOW（details.minimum）。保存も記録もされない", () => {
-    uow.invoicing.registerIssuedSeq(5);
+    uow.invoicing.insertInvoice(invoiceRecord({ id: "inv-5", invoiceNo: "20261031-005", seq: 5 }));
     const r = saveInvoiceSettings(deps, settingsInput({ nextSeq: 5 }));
     expect(r).toMatchObject({
       ok: false,
@@ -110,7 +111,7 @@ describe("saveInvoiceSettings（FR-003, FR-004）", () => {
   });
 
   it("nextSeq が最大の seq + 1 ちょうどなら保存できる", () => {
-    uow.invoicing.registerIssuedSeq(5);
+    uow.invoicing.insertInvoice(invoiceRecord({ id: "inv-5", invoiceNo: "20261031-005", seq: 5 }));
     expect(saveInvoiceSettings(deps, settingsInput({ nextSeq: 6 })).ok).toBe(true);
   });
 

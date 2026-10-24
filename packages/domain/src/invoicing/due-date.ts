@@ -18,6 +18,15 @@ export function clampDay(year: number, month: number, day: number): number {
   return Math.min(day, daysInMonth(year, month));
 }
 
+/** 月（`YYYY-MM`）の末日を `YYYY-MM-DD` で返す（売上の計上日の既定。R8） */
+export function monthEnd(month: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(month);
+  if (m === null) throw new RangeError(`不正な月: ${month}`);
+  const year = Number(m[1]);
+  const mon = Number(m[2]);
+  return `${pad(year, 4)}-${pad(mon)}-${pad(daysInMonth(year, mon))}`;
+}
+
 /**
  * 対象月（`YYYY-MM`）の `monthsAfter` か月後の月の `day` 日（末日を超えるときは末日）を
  * `YYYY-MM-DD` で返す。年をまたぐ（12 月分 + 1 か月 = 翌年 1 月）

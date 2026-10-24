@@ -31,6 +31,8 @@ import type {
   FiscalPeriod,
   FixedAsset,
   HomeUseAllocation,
+  InvoiceItemRecord,
+  InvoiceRecord,
   InvoicingAuditEntry,
   Journal,
   JournalLine,
@@ -39,6 +41,7 @@ import type {
   OpeningBalance,
   Page,
   Partner,
+  PaymentRecord,
   PostedLine,
   RentDetail,
   SubAccount,
@@ -49,6 +52,7 @@ import type {
   TaxReturnMemo,
   TaxSetting,
   ValidJournal,
+  WorkHoursRow,
 } from "./types.ts";
 
 export interface IdGenerator {
@@ -260,6 +264,31 @@ export interface InvoicingStore {
   getBillingTerms(partnerId: string): BillingTerms | null;
   upsertBillingTerms(row: BillingTerms): void;
   deleteBillingTerms(partnerId: string): void;
+  /** 対象月の工数（取引先の ID の順） */
+  listWorkHours(targetMonth: string): WorkHoursRow[];
+  getWorkHours(partnerId: string, targetMonth: string): WorkHoursRow | null;
+  /** （取引先, 対象月）で上書きする */
+  upsertWorkHours(row: WorkHoursRow): void;
+  /** 請求書の写しを保存する（明細は `insertInvoiceItems`。発行は同じトランザクションで両方を呼ぶ） */
+  insertInvoice(invoice: InvoiceRecord): void;
+  insertInvoiceItems(items: InvoiceItemRecord[]): void;
+  getInvoice(id: string): InvoiceRecord | null;
+  /** 行番号の順 */
+  listInvoiceItems(invoiceId: string): InvoiceItemRecord[];
+  /** 発行日の降順（同じ日は `seq` の降順）。取消済みを含む。`partnerId`・`month`（対象月）で絞り込む */
+  listInvoices(query: {
+    partnerId?: string | undefined;
+    month?: string | undefined;
+  }): InvoiceRecord[];
+  /** 取引先・対象月の取消でない請求書（`seq` の順。重複の警告・確認に使う。FR-016） */
+  listActiveInvoices(partnerId: string, targetMonth: string): InvoiceRecord[];
+  /** 請求書を取消済みにする（取消の列を NULL から一度だけ書く。写しは変えない） */
+  markInvoiceVoided(
+    id: string,
+    voided: { voidedAt: string; voidReason: string; voidJournalId: string | null },
+  ): void;
+  /** 請求書の消し込み（取消済みを含む。登録の順）。書き込みは US2 */
+  listPayments(invoiceId: string): PaymentRecord[];
   /** 仕訳が請求・入金・定期仕訳のどれから作られたか（H:§6.1）。取消の仕訳も元の請求・入金を指す。なければ null */
   originOfJournal(journalId: string): JournalOrigin | null;
 }

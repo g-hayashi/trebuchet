@@ -1,18 +1,28 @@
 import type {
+  InvoiceItemRecord,
+  InvoiceRecord,
   InvoicingAuditEntry,
   InvoicingStore,
   InvoicingUnitOfWork,
   LedgerRepository,
   MasterRepository,
+  PaymentRecord,
+  WorkHoursRow,
 } from "@trebuchet/domain";
-import type { BillingTerms, InvoiceSettings, JournalOrigin } from "@trebuchet/schema";
+import type {
+  BillingTerms,
+  InvoiceIssuer,
+  InvoiceSettings,
+  JournalOrigin,
+} from "@trebuchet/schema";
 import type { RunResult } from "better-sqlite3";
-import { asc, eq, max, or } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, max, or, sql } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { DrizzleLedgerRepository } from "./ledger-repository.ts";
 import { DrizzleMasterRepository } from "./master-repository.ts";
 import type * as tenantSchema from "./schema/tenant.ts";
 import {
+  invoiceItems,
   invoicePayments,
   invoiceSettings,
   invoices,
@@ -20,10 +30,17 @@ import {
   partnerBillingTerms,
   recurringJournals,
   recurringRuns,
+  workHours,
 } from "./schema/tenant.ts";
 
 /** テナントの DB、またはそのトランザクション */
 type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
+
+/** `invoices` の行を請求書の写しにする（`issuer_json` を読み戻す） */
+function toInvoiceRecord(row: typeof invoices.$inferSelect): InvoiceRecord {
+  const { issuerJson, ...rest } = row;
+  return { ...rest, issuer: JSON.parse(issuerJson) as InvoiceIssuer };
+}
 
 /** `invoicing_audit_log` に1行を追記する。InvoicingStore と RecurringStore が共有する（R23） */
 export function appendInvoicingAuditRow(db: TenantConn, entry: InvoicingAuditEntry): void {
@@ -102,6 +119,124 @@ export class DrizzleInvoicingStore implements InvoicingStore {
 
   deleteBillingTerms(partnerId: string): void {
     this.db.delete(partnerBillingTerms).where(eq(partnerBillingTerms.partnerId, partnerId)).run();
+  }
+
+  // ---- 工数 ----
+
+  listWorkHours(targetMonth: string): WorkHoursRow[] {
+    return this.db
+      .select()
+      .from(workHours)
+      .where(eq(workHours.targetMonth, targetMonth))
+      .orderBy(asc(workHours.partnerId))
+      .all();
+  }
+
+  getWorkHours(partnerId: string, targetMonth: string): WorkHoursRow | null {
+    return (
+      this.db
+        .select()
+        .from(workHours)
+        .where(and(eq(workHours.partnerId, partnerId), eq(workHours.targetMonth, targetMonth)))
+        .get() ?? null
+    );
+  }
+
+  upsertWorkHours(row: WorkHoursRow): void {
+    this.db
+      .insert(workHours)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [workHours.partnerId, workHours.targetMonth],
+        set: { halfHours: row.halfHours, updatedAt: row.updatedAt },
+      })
+      .run();
+  }
+
+  // ---- 請求書 ----
+
+  insertInvoice(invoice: InvoiceRecord): void {
+    const { issuer, ...rest } = invoice;
+    this.db
+      .insert(invoices)
+      .values({ ...rest, issuerJson: JSON.stringify(issuer) })
+      .run();
+  }
+
+  insertInvoiceItems(items: InvoiceItemRecord[]): void {
+    if (items.length === 0) return;
+    this.db.insert(invoiceItems).values(items).run();
+  }
+
+  getInvoice(id: string): InvoiceRecord | null {
+    const row = this.db.select().from(invoices).where(eq(invoices.id, id)).get();
+    return row === undefined ? null : toInvoiceRecord(row);
+  }
+
+  listInvoiceItems(invoiceId: string): InvoiceItemRecord[] {
+    return this.db
+      .select()
+      .from(invoiceItems)
+      .where(eq(invoiceItems.invoiceId, invoiceId))
+      .orderBy(asc(invoiceItems.lineNo))
+      .all()
+      .map((row) => ({ ...row, taxCategory: row.taxCategory as InvoiceItemRecord["taxCategory"] }));
+  }
+
+  listInvoices(query: {
+    partnerId?: string | undefined;
+    month?: string | undefined;
+  }): InvoiceRecord[] {
+    const conditions = [
+      query.partnerId === undefined ? undefined : eq(invoices.partnerId, query.partnerId),
+      query.month === undefined ? undefined : eq(invoices.targetMonth, query.month),
+    ];
+    return this.db
+      .select()
+      .from(invoices)
+      .where(and(...conditions))
+      .orderBy(desc(invoices.issueDate), desc(invoices.seq))
+      .all()
+      .map(toInvoiceRecord);
+  }
+
+  listActiveInvoices(partnerId: string, targetMonth: string): InvoiceRecord[] {
+    return this.db
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.partnerId, partnerId),
+          eq(invoices.targetMonth, targetMonth),
+          isNull(invoices.voidedAt),
+        ),
+      )
+      .orderBy(asc(invoices.seq))
+      .all()
+      .map(toInvoiceRecord);
+  }
+
+  markInvoiceVoided(
+    id: string,
+    voided: { voidedAt: string; voidReason: string; voidJournalId: string | null },
+  ): void {
+    const result = this.db
+      .update(invoices)
+      .set(voided)
+      .where(and(eq(invoices.id, id), isNull(invoices.voidedAt)))
+      .run();
+    if (result.changes !== 1) throw new Error(`取消できる請求書がありません: ${id}`);
+  }
+
+  // ---- 消し込み ----
+
+  listPayments(invoiceId: string): PaymentRecord[] {
+    return this.db
+      .select()
+      .from(invoicePayments)
+      .where(eq(invoicePayments.invoiceId, invoiceId))
+      .orderBy(asc(invoicePayments.createdAt), sql`${invoicePayments}.rowid ASC`)
+      .all();
   }
 
   /** 請求書・入金・定期仕訳の仕訳の ID から起点を引く。取消の仕訳（`void_journal_id`）も元の請求・入金を指す */

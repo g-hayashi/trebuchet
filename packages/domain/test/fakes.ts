@@ -54,12 +54,15 @@ import type {
   FiscalPeriod,
   FixedAsset,
   HomeUseAllocation,
+  InvoiceItemRecord,
+  InvoiceRecord,
   InvoicingAuditEntry,
   Journal,
   JournalQuery,
   OpeningBalance,
   Page,
   Partner,
+  PaymentRecord,
   RentDetail,
   SubAccount,
   Tag,
@@ -68,6 +71,7 @@ import type {
   TaxRate,
   TaxReturnMemo,
   TaxSetting,
+  WorkHoursRow,
 } from "../src/types.ts";
 
 /** ユースケースのテスト用のフェイク（メモリ上の実装） */
@@ -785,13 +789,17 @@ type InvoicingState = {
   audits: InvoicingAuditEntry[];
   settings: InvoiceSettings | null;
   billingTerms: BillingTerms[];
-  /** 発行済みの請求書の seq（請求書の保存は US1 のタスクで足す。それまではテストが登録する） */
-  issuedSeqs: number[];
+  workHours: WorkHoursRow[];
+  invoices: InvoiceRecord[];
+  items: InvoiceItemRecord[];
+  /** 消し込み。書き込みは US2（T017）で足すので、それまではテストが直接入れる */
+  payments: PaymentRecord[];
 };
 
 /**
  * InvoicingStore のフェイク。メソッドは各ストーリーのタスクで足す。
- * 仕訳の起点は、テストが `registerOrigin` で登録する（実装は請求書・入金・定期仕訳の表から引く）
+ * 仕訳の起点は請求書・入金の表から引く。定期仕訳の表は US3 まで無いので、
+ * テストが `registerOrigin` で登録した起点を最後に探す
  */
 export class InMemoryInvoicingStore implements InvoicingStore {
   state: InvoicingState = {
@@ -799,20 +807,19 @@ export class InMemoryInvoicingStore implements InvoicingStore {
     audits: [],
     settings: null,
     billingTerms: [],
-    issuedSeqs: [],
+    workHours: [],
+    invoices: [],
+    items: [],
+    payments: [],
   };
 
   get audits(): InvoicingAuditEntry[] {
     return this.state.audits;
   }
 
+  /** 定期仕訳の起点（定期仕訳の表は US3 で足す）。請求・入金の起点は表から引く */
   registerOrigin(journalId: string, origin: JournalOrigin): void {
     this.state.origins[journalId] = structuredClone(origin);
-  }
-
-  /** 発行済みの請求書の seq を登録する（請求書の保存が入るまでの代わり） */
-  registerIssuedSeq(seq: number): void {
-    this.state.issuedSeqs.push(seq);
   }
 
   appendInvoicingAudit(entry: InvoicingAuditEntry): void {
@@ -828,7 +835,9 @@ export class InMemoryInvoicingStore implements InvoicingStore {
   }
 
   maxInvoiceSeq(): number | null {
-    return this.state.issuedSeqs.length === 0 ? null : Math.max(...this.state.issuedSeqs);
+    return this.state.invoices.length === 0
+      ? null
+      : Math.max(...this.state.invoices.map((i) => i.seq));
   }
 
   listBillingTerms(): BillingTerms[] {
@@ -853,7 +862,115 @@ export class InMemoryInvoicingStore implements InvoicingStore {
     this.state.billingTerms = this.state.billingTerms.filter((t) => t.partnerId !== partnerId);
   }
 
+  listWorkHours(targetMonth: string): WorkHoursRow[] {
+    return structuredClone(
+      this.state.workHours
+        .filter((w) => w.targetMonth === targetMonth)
+        .sort((a, b) => a.partnerId.localeCompare(b.partnerId)),
+    );
+  }
+
+  getWorkHours(partnerId: string, targetMonth: string): WorkHoursRow | null {
+    const found = this.state.workHours.find(
+      (w) => w.partnerId === partnerId && w.targetMonth === targetMonth,
+    );
+    return found === undefined ? null : structuredClone(found);
+  }
+
+  upsertWorkHours(row: WorkHoursRow): void {
+    this.state.workHours = [
+      ...this.state.workHours.filter(
+        (w) => !(w.partnerId === row.partnerId && w.targetMonth === row.targetMonth),
+      ),
+      structuredClone(row),
+    ];
+  }
+
+  insertInvoice(invoice: InvoiceRecord): void {
+    const dup = this.state.invoices.some(
+      (i) => i.id === invoice.id || i.seq === invoice.seq || i.invoiceNo === invoice.invoiceNo,
+    );
+    if (dup) throw new Error("UNIQUE constraint failed: invoices");
+    this.state.invoices.push(structuredClone(invoice));
+  }
+
+  insertInvoiceItems(items: InvoiceItemRecord[]): void {
+    this.state.items.push(...structuredClone(items));
+  }
+
+  getInvoice(id: string): InvoiceRecord | null {
+    const found = this.state.invoices.find((i) => i.id === id);
+    return found === undefined ? null : structuredClone(found);
+  }
+
+  listInvoiceItems(invoiceId: string): InvoiceItemRecord[] {
+    return structuredClone(
+      this.state.items.filter((i) => i.invoiceId === invoiceId).sort((a, b) => a.lineNo - b.lineNo),
+    );
+  }
+
+  listInvoices(query: {
+    partnerId?: string | undefined;
+    month?: string | undefined;
+  }): InvoiceRecord[] {
+    return structuredClone(
+      this.state.invoices
+        .filter(
+          (i) =>
+            (query.partnerId === undefined || i.partnerId === query.partnerId) &&
+            (query.month === undefined || i.targetMonth === query.month),
+        )
+        .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.seq - a.seq),
+    );
+  }
+
+  listActiveInvoices(partnerId: string, targetMonth: string): InvoiceRecord[] {
+    return structuredClone(
+      this.state.invoices
+        .filter(
+          (i) => i.partnerId === partnerId && i.targetMonth === targetMonth && i.voidedAt === null,
+        )
+        .sort((a, b) => a.seq - b.seq),
+    );
+  }
+
+  markInvoiceVoided(
+    id: string,
+    voided: { voidedAt: string; voidReason: string; voidJournalId: string | null },
+  ): void {
+    const found = this.state.invoices.find((i) => i.id === id);
+    if (found === undefined) throw new Error(`請求書がない: ${id}`);
+    if (found.voidedAt !== null) throw new Error("取消済みの請求書は更新できません");
+    found.voidedAt = voided.voidedAt;
+    found.voidReason = voided.voidReason;
+    found.voidJournalId = voided.voidJournalId;
+  }
+
+  listPayments(invoiceId: string): PaymentRecord[] {
+    return structuredClone(this.state.payments.filter((p) => p.invoiceId === invoiceId));
+  }
+
   originOfJournal(journalId: string): JournalOrigin | null {
+    const invoice = this.state.invoices.find(
+      (i) => i.journalId === journalId || i.voidJournalId === journalId,
+    );
+    if (invoice !== undefined) {
+      return { kind: "invoice", invoiceId: invoice.id, invoiceNo: invoice.invoiceNo };
+    }
+    const payment = this.state.payments.find(
+      (p) => p.journalId === journalId || p.voidJournalId === journalId,
+    );
+    if (payment !== undefined) {
+      const owner = this.state.invoices.find((i) => i.id === payment.invoiceId);
+      if (owner !== undefined) {
+        return {
+          kind: "payment",
+          invoiceId: owner.id,
+          invoiceNo: owner.invoiceNo,
+          paymentId: payment.id,
+        };
+      }
+    }
     const origin = this.state.origins[journalId];
     return origin === undefined ? null : structuredClone(origin);
   }
