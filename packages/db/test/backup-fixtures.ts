@@ -40,6 +40,18 @@ function seedEntity(spec: EntitySpec): SeededEntity {
   );
   if (!created.ok) throw new Error(created.error.message);
   const entityId = created.value.id;
+  addJournals(entityId, spec.journals, spec.seed, spec.memo);
+  new DrizzleClosingStore(openTenant(entityId)).upsertClosingNote({
+    fiscalYear: 2026,
+    kind: "special_circumstances",
+    body: spec.note,
+    updatedAt: clock.now(),
+  });
+  return { id: entityId, name: spec.name };
+}
+
+/** 既存の事業体の最初の会計期間に、合成の仕訳を count 件足す */
+export function addJournals(entityId: string, count: number, seed: number, memo = ""): void {
   const db = openTenant(entityId);
   const masters = new DrizzleMasterRepository(db);
   const ledger = new DrizzleLedgerRepository(db);
@@ -48,7 +60,7 @@ function seedEntity(spec: EntitySpec): SeededEntity {
   const accounts = masters.listAccounts().filter((a) => a.isActive);
   const drafts = fc.sample(
     fc.record({ date: dateInPeriodArb(period), lines: balancedLinesArb(accounts) }),
-    { seed: spec.seed, numRuns: spec.journals },
+    { seed, numRuns: count },
   );
   const ctx = {
     accounts: masters.listAccounts(),
@@ -62,7 +74,7 @@ function seedEntity(spec: EntitySpec): SeededEntity {
   ledger.transaction((tx) => {
     if (!(tx instanceof DrizzleLedgerRepository)) throw new Error("想定外のリポジトリ");
     for (const draft of drafts) {
-      const valid = validateJournal({ ...draft, memo: spec.memo }, ctx);
+      const valid = validateJournal({ ...draft, memo }, ctx);
       if (!valid.ok) throw new Error(JSON.stringify(valid.error));
       const journal: NewJournal = {
         ...valid.value,
@@ -74,13 +86,6 @@ function seedEntity(spec: EntitySpec): SeededEntity {
       tx.insertJournal(journal);
     }
   });
-  new DrizzleClosingStore(db).upsertClosingNote({
-    fiscalYear: 2026,
-    kind: "special_circumstances",
-    body: spec.note,
-    updatedAt: clock.now(),
-  });
-  return { id: entityId, name: spec.name };
 }
 
 /** registry の端末に結びつく 7 表（バックアップから除く）に、marker を含む行を入れる */

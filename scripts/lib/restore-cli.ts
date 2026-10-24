@@ -1,0 +1,161 @@
+/**
+ * `pnpm restore -- --file <backup.tbk> [--data-dir <dir>] [--yes]` の本体（contracts/cli.md「復元のコマンド」）。
+ * 端末の入力と server の確認は deps で差し替えられる（テスト用）。パスフレーズは引数・環境変数では受け取らない。
+ * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む。
+ */
+import { existsSync } from "node:fs";
+import { connect } from "node:net";
+import { parseArgs } from "node:util";
+import {
+  type RestoreErrorCode,
+  type RestoreOptions,
+  type RestoreSummary,
+  restoreBackup,
+} from "../../packages/db/src/backup/restore.ts";
+
+export const EXIT_OK = 0;
+export const EXIT_INVALID = 1;
+export const EXIT_USAGE = 2;
+export const EXIT_SERVER_RUNNING = 3;
+export const EXIT_CANCELLED = 4;
+
+export const SERVER_PORT = 8787;
+
+export type RestoreCliDeps = {
+  env: Record<string, string | undefined>;
+  /** `--data-dir` も `TREBUCHET_DATA_DIR` もないときの場所（リポジトリ直下の `data/`） */
+  defaultDataDir: string;
+  /** 平文の写しの作業場所（`.tmp/`） */
+  tmpRoot: string;
+  /** 端末から、エコーなしでパスフレーズを 1 行読む */
+  readPassphrase: () => Promise<string>;
+  /** 端末で y/N を尋ねる */
+  confirm: (question: string) => Promise<boolean>;
+  isServerRunning: () => Promise<boolean>;
+  stdout: (line: string) => void;
+  stderr: (line: string) => void;
+  restore?: (options: RestoreOptions) => ReturnType<typeof restoreBackup>;
+};
+
+/** 127.0.0.1 の port に接続できれば、server（または何か）が動いているとみなす */
+export function isServerRunning(port: number = SERVER_PORT, timeoutMs = 1000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    const done = (running: boolean) => {
+      socket.destroy();
+      resolve(running);
+    };
+    socket.setTimeout(timeoutMs, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
+const USAGE = "使い方: pnpm restore -- --file <backup.tbk> [--data-dir <dir>] [--yes]";
+
+const MESSAGES: Record<RestoreErrorCode, string> = {
+  INVALID: "パスフレーズが違うか、ファイルが壊れています",
+  VERSION_MISMATCH:
+    "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください",
+  CANCELLED: "取り消しました",
+  BEFORE_BACKUP_FAILED:
+    "復元の前の帳簿のバックアップを書けなかったため、中止しました。帳簿は変わっていません",
+  RESTORE_FAILED: "復元に失敗しました。帳簿は変わっていません",
+};
+
+function formatSummary(summary: RestoreSummary): string[] {
+  const lines = [`作成日時: ${summary.createdAt}`, `作った Mac: ${summary.macId}`, "事業体:"];
+  if (summary.entities.length === 0) lines.push("  （なし）");
+  for (const e of summary.entities) {
+    const years = e.fiscalYears.map((y) => `${y.year}年度 ${y.journals}件`).join("、");
+    lines.push(`  ${e.name}: ${years === "" ? "年度なし" : years}`);
+  }
+  if (summary.differences.length > 0) {
+    lines.push("今の帳簿に同じ事業体があります（今の帳簿 → バックアップ）:");
+    for (const d of summary.differences) {
+      lines.push(
+        `  ${d.name}: 仕訳 ${d.current.journals}件 → ${d.backup.journals}件、` +
+          `最後の更新 ${d.current.lastUpdatedAt ?? "なし"} → ${d.backup.lastUpdatedAt ?? "なし"}`,
+      );
+    }
+  }
+  if (summary.hasExistingLedger) {
+    lines.push("今の帳簿は、復元の前にバックアップして残します。");
+  }
+  return lines;
+}
+
+/** 終了コードを返す（process.exit は呼ばない） */
+export async function runRestoreCli(argv: string[], deps: RestoreCliDeps): Promise<number> {
+  // pnpm は `--` をそのまま渡すことがある
+  const rest = argv[0] === "--" ? argv.slice(1) : argv;
+  let values: {
+    file?: string | undefined;
+    "data-dir"?: string | undefined;
+    yes?: boolean | undefined;
+  };
+  try {
+    ({ values } = parseArgs({
+      args: rest,
+      options: {
+        file: { type: "string" },
+        "data-dir": { type: "string" },
+        yes: { type: "boolean" },
+      },
+      strict: true,
+      allowPositionals: false,
+    }));
+  } catch {
+    deps.stderr(USAGE);
+    return EXIT_USAGE;
+  }
+  const file = values.file;
+  if (file === undefined || file === "") {
+    deps.stderr(`--file が必要です。${USAGE}`);
+    return EXIT_USAGE;
+  }
+  const dataDir = values["data-dir"] ?? deps.env.TREBUCHET_DATA_DIR ?? deps.defaultDataDir;
+
+  // 1. server が動いていれば中止
+  if (await deps.isServerRunning()) {
+    deps.stderr("server が動いています。停止してから復元してください");
+    return EXIT_SERVER_RUNNING;
+  }
+  if (!existsSync(file)) {
+    deps.stderr(`バックアップのファイルが見つかりません: ${file}`);
+    return EXIT_USAGE;
+  }
+
+  let passphrase: string;
+  try {
+    passphrase = await deps.readPassphrase();
+  } catch {
+    deps.stderr("パスフレーズは端末から入力してください");
+    return EXIT_USAGE;
+  }
+
+  const restore = deps.restore ?? restoreBackup;
+  const result = await restore({
+    file,
+    passphrase,
+    dataDir,
+    tmpRoot: deps.tmpRoot,
+    confirm: async (summary) => {
+      for (const line of formatSummary(summary)) deps.stdout(line);
+      if (values.yes === true) return true;
+      return deps.confirm("この内容で復元しますか");
+    },
+  });
+  if (!result.ok) {
+    deps.stderr(MESSAGES[result.error]);
+    return result.error === "CANCELLED" ? EXIT_CANCELLED : EXIT_INVALID;
+  }
+  if (result.value.beforeRestoreBackup !== null) {
+    deps.stdout(`復元の前の帳簿のバックアップ: ${result.value.beforeRestoreBackup}`);
+  }
+  if (result.value.previousDataDir !== null) {
+    deps.stdout(`元のデータ場所: ${result.value.previousDataDir}`);
+  }
+  deps.stdout("復元しました。アプリを起動し、パスキーを登録してください");
+  return EXIT_OK;
+}

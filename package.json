@@ -15,6 +15,7 @@
     "format": "biome check --write .",
     "bench:reports": "node scripts/bench-reports.ts",
     "bench:import": "node scripts/bench-import.ts",
+    "restore": "node scripts/restore-backup.ts",
     "verify:freee": "node scripts/verify-freee-import.ts",
     "verify:tax-return": "node scripts/verify-tax-return.ts"
   },

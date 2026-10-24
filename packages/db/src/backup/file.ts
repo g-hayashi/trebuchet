@@ -39,6 +39,24 @@ export function backupFileName(macId: string, at: Date): string {
   return `trebuchet-${prefix}-${stamp}.tbk`;
 }
 
+/**
+ * 復元の前に取る今の帳簿のバックアップ: `trebuchet-before-restore-<YYYYMMDD-HHmmss>.tbk`（UTC）。
+ * `NAME_PATTERN`（macId の 8 文字）に合わないので、`listBackupFiles` の対象にも世代の整理にもならない
+ */
+const BEFORE_RESTORE_PATTERN = /^trebuchet-before-restore-\d{8}-\d{6}\.tbk$/;
+
+export function beforeRestoreFileName(at: Date): string {
+  return `trebuchet-before-restore-${compactStamp(at)}.tbk`;
+}
+
+/** `YYYYMMDD-HHmmss`（UTC） */
+export function compactStamp(at: Date): string {
+  return (
+    `${pad(at.getUTCFullYear(), 4)}${pad(at.getUTCMonth() + 1)}${pad(at.getUTCDate())}` +
+    `-${pad(at.getUTCHours())}${pad(at.getUTCMinutes())}${pad(at.getUTCSeconds())}`
+  );
+}
+
 /** domain の `selectBackupsToPrune` にそのまま渡せるよう、domain の型を使う */
 export type { BackupFileInfo };
 
@@ -74,7 +92,9 @@ export async function writeBackupFile(
   bytes: Uint8Array,
   verify: (readBack: Buffer) => boolean | Promise<boolean>,
 ): Promise<void> {
-  if (parseName(name) === undefined) throw new BackupFileError("WRITE_FAILED");
+  if (parseName(name) === undefined && !BEFORE_RESTORE_PATTERN.test(name)) {
+    throw new BackupFileError("WRITE_FAILED");
+  }
   if (!isFolder(folder)) throw new BackupFileError("FOLDER_NOT_FOUND");
   const partial = join(folder, `.${name}.partial`);
   try {
