@@ -11,6 +11,7 @@
  * （その先の hono や @trebuchet/db は各パッケージの node_modules から解決される）。
  */
 import { useTempDataDir } from "../packages/db/src/testing.ts";
+import { createBenchHeaders } from "./lib/bench-session.ts";
 
 const JOURNALS = 2_000;
 const FISCAL_YEAR = 2026;
@@ -33,11 +34,18 @@ let exitCode = 1;
 try {
   const { app } = await import("../apps/server/src/app.ts");
 
+  // 認証（Host → CSRF → セッション）を通すためのヘッダー
+  const authHeaders = await createBenchHeaders();
+
   async function call(method: string, path: string, body?: unknown): Promise<Response> {
     const init: RequestInit =
       body === undefined
-        ? { method }
-        : { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+        ? { method, headers: authHeaders }
+        : {
+            method,
+            headers: { ...authHeaders, "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          };
     return app.request(`/api${path}`, init);
   }
 

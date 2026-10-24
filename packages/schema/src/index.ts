@@ -1,3 +1,5 @@
+export * from "./auth.ts";
+export * from "./backup.ts";
 export * from "./blue-return.ts";
 export * from "./entities.ts";
 export * from "./errors.ts";

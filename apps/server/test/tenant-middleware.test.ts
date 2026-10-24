@@ -1,7 +1,7 @@
 import { randomUUIDv7 } from "node:crypto";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { app } from "../src/app.ts";
+import { app } from "./helpers.ts";
 
 let tmp: TempDataDir;
 beforeEach(() => {

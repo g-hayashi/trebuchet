@@ -66,6 +66,22 @@ describe("describeError", () => {
     );
   });
 
+  it("RECOVERY_LOCKED は retryAfter（秒）を分に切り上げて示す", () => {
+    const e = new ApiError(429, "RECOVERY_LOCKED", "しばらく試せません", { retryAfter: 61 });
+    expect(describeError(e).message).toContain("約2分後");
+  });
+
+  it("認証のエラーは日本語の文言にする", () => {
+    const code = (c: ConstructorParameters<typeof ApiError>[1]) =>
+      describeError(new ApiError(400, c, "x")).message;
+    expect(code("RECOVERY_INVALID")).toBe("回復コードが違います。");
+    expect(code("LAST_PASSKEY")).toContain("最後のパスキー");
+    expect(code("WEBAUTHN_FAILED")).toContain("パスキーの確認に失敗しました");
+    expect(code("ALREADY_REGISTERED")).toContain("すでにパスキーが登録されています");
+    expect(code("HOST_NOT_ALLOWED")).toContain("localhost");
+    expect(code("UNAUTHENTICATED")).toContain("サインイン");
+  });
+
   it("その他のコードはサーバーのメッセージをそのまま", () => {
     const e = new ApiError(404, "ACCOUNT_NOT_FOUND", "勘定科目が見つかりません");
     expect(describeError(e)).toEqual({ message: "勘定科目が見つかりません", details: [] });

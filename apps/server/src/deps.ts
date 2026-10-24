@@ -1,5 +1,7 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
+  DrizzleAuthStore,
+  DrizzleBackupStore,
   DrizzleClosingStore,
   DrizzleClosingUnitOfWork,
   DrizzleImportStore,
@@ -7,10 +9,13 @@ import {
   DrizzleLedgerRepository,
   DrizzleMasterRepository,
   DrizzleRegistryRepository,
+  dataDir,
   openRegistry,
   type TenantDb,
 } from "@trebuchet/db";
 import type {
+  AuthStore,
+  BackupStore,
   Clock,
   ClosingSettingsDeps,
   ClosingStore,
@@ -22,7 +27,11 @@ import type {
   MasterDeps,
   MasterRepository,
   ReportDeps,
+  SecretStore,
 } from "@trebuchet/domain";
+import { type BackupRunner, createBackupRunner } from "./lib/backup-run.ts";
+import { createKeychainSecretStore, createMemorySecretStore } from "./lib/keychain.ts";
+import { TMP_ROOT } from "./lib/paths.ts";
 
 /** R8: 主キーは UUIDv7 */
 export const ids: IdGenerator = { next: () => randomUUIDv7() };
@@ -30,6 +39,30 @@ export const ids: IdGenerator = { next: () => randomUUIDv7() };
 export const clock: Clock = { now: () => new Date().toISOString() };
 
 export const registryRepository = () => new DrizzleRegistryRepository(openRegistry());
+
+/** 認証の情報（registry の DB）。要求のたびに今のデータの置き場所の registry を開く */
+export const authStore = (): AuthStore => new DrizzleAuthStore(openRegistry());
+
+/** バックアップの実行の記録（registry の backup_runs） */
+export const backupStore = (): BackupStore => new DrizzleBackupStore(openRegistry());
+
+/**
+ * バックアップのパスフレーズの置き場所（R12）。macOS はキーチェーン。それ以外はメモリだけ（保存しない）。
+ * キーチェーンが使えない Mac では、ここをメモリの実装に替える（未入力の間は自動のバックアップが止まる）
+ */
+export const secretStore: SecretStore =
+  process.platform === "darwin" ? createKeychainSecretStore() : createMemorySecretStore();
+
+/** バックアップの実行（同時に 1 つだけ）。app と自動のスケジューラーが同じものを使う */
+export const backupRunner: BackupRunner = createBackupRunner({
+  auth: authStore,
+  backups: backupStore,
+  secrets: secretStore,
+  clock,
+  ids,
+  dataDir,
+  tmpRoot: TMP_ROOT,
+});
 
 /** リクエストの事業体の DB（c.var.db）に対するマスタのユースケースの依存 */
 export function masterDeps(db: TenantDb): MasterDeps {

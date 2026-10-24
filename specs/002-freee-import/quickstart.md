@@ -21,7 +21,7 @@
 ## 2. 手動での確認（フィクスチャ）
 
 ```bash
-TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart-002" pnpm dev   # http://127.0.0.1:5173
+TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart-002" pnpm dev   # http://localhost:5173
 ```
 
 1. **準備**: 事業体を名称「取込テスト」・種別「個人」・開始年度「2025」で作成する

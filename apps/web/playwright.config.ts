@@ -8,7 +8,7 @@ const repoRoot = resolve(import.meta.dirname, "../..");
 process.env.TREBUCHET_E2E_DATA_DIR ??= join(repoRoot, ".tmp", `e2e-${randomUUID()}`);
 const dataDir = process.env.TREBUCHET_E2E_DATA_DIR;
 
-const baseURL = "http://127.0.0.1:5173";
+const baseURL = "http://localhost:5173";
 
 export default defineConfig({
   testDir: "./e2e",

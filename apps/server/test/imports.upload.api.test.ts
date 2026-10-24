@@ -2,8 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { app } from "../src/app.ts";
-import { createTestEntity, type ErrorBody } from "./helpers.ts";
+import { app, createTestEntity, type ErrorBody } from "./helpers.ts";
 
 let tmp: TempDataDir;
 let entityId: string;

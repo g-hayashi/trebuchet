@@ -108,12 +108,86 @@ export function describeError(error: unknown): ErrorDescription {
         details: [],
       };
     }
-    case "FILE_TOO_LARGE":
-      return { message: "ファイルが大きすぎます（5 MB まで）。", details: [] };
+    case "FILE_TOO_LARGE": {
+      const maxBytes = asNumber(error.details?.maxBytes);
+      const limit = maxBytes === undefined ? 5 : Math.round(maxBytes / (1024 * 1024));
+      return { message: `ファイルが大きすぎます（${limit} MB まで）。`, details: [] };
+    }
+    case "BACKUP_INVALID":
+      return { message: "パスフレーズが違うか、ファイルが壊れています。", details: [] };
+    case "BACKUP_VERSION_MISMATCH":
+      return {
+        message: "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください。",
+        details: [],
+      };
     case "REPORT_LINE_INVALID":
       return { message: "決算書の欄は、費用の科目の 8〜31 から選んでください。", details: [] };
     case "ENTITY_KIND_UNSUPPORTED":
       return { message: "青色申告決算書は、個人の事業体でだけ作れます。", details: [] };
+    case "UNAUTHENTICATED":
+      return { message: "サインインが必要です。", details: [] };
+    case "CSRF_REJECTED":
+      return {
+        message: "要求の送信元を確認できませんでした。画面を開き直してください。",
+        details: [],
+      };
+    case "HOST_NOT_ALLOWED":
+      return {
+        message:
+          "この接続先の名前では操作できません。Mac のローカルの名前（localhost）で開いてください。",
+        details: [],
+      };
+    case "ALREADY_REGISTERED":
+      return {
+        message: "すでにパスキーが登録されています。サインインしてください。",
+        details: [],
+      };
+    case "WEBAUTHN_FAILED":
+      return {
+        message: "パスキーの確認に失敗しました。もう一度お試しください。",
+        details: [],
+      };
+    case "RECOVERY_INVALID":
+      return { message: "回復コードが違います。", details: [] };
+    case "RECOVERY_LOCKED": {
+      // retryAfter は秒。画面には分で（切り上げ）示す
+      const seconds = asNumber(error.details?.retryAfter);
+      const minutes = seconds === undefined ? undefined : Math.max(1, Math.ceil(seconds / 60));
+      return {
+        message: `回復コードの失敗が続いたため、しばらく試せません。${
+          minutes === undefined ? "しばらく" : `約${minutes}分`
+        }後にもう一度お試しください。`,
+        details: [],
+      };
+    }
+    case "LAST_PASSKEY":
+      return {
+        message:
+          "この Mac（localhost）の最後のパスキーは削除できません。先に別のパスキーを追加してください。",
+        details: [],
+      };
+    case "PASSPHRASE_TOO_SHORT":
+      return { message: "パスフレーズは12文字以上にしてください。", details: [] };
+    case "PASSPHRASE_MISMATCH":
+      return { message: "パスフレーズと確認用の入力が一致しません。", details: [] };
+    case "PASSPHRASE_WRONG":
+      return { message: "今のパスフレーズが違います。", details: [] };
+    case "BACKUP_FOLDER_NOT_FOUND":
+      return {
+        message:
+          "置き場所のフォルダが見つからないか、書き込めません。絶対パスで、存在するフォルダを指定してください。",
+        details: [],
+      };
+    case "BACKUP_NOT_CONFIGURED":
+      return {
+        message: "バックアップの置き場所とパスフレーズが未設定です。先に設定してください。",
+        details: [],
+      };
+    case "BACKUP_RUNNING":
+      return {
+        message: "バックアップは実行中です。終わるまでお待ちください。",
+        details: [],
+      };
     case "INTERNAL":
       return {
         message: "サーバーでエラーが発生しました。時間をおいて再度お試しください。",

@@ -7,6 +7,11 @@ node_modules/
 data/
 .poc/
 
+# バックアップのファイルと、復元の作業用のフォルダ（004。.tmp/ の下は上で除外済み）
+*.tbk
+data.before-restore-*/
+data.restore-*/
+
 # build / test artifacts
 .tmp/
 dist/

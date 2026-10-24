@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { ensureSignedIn, ORIGIN_HEADERS } from "./helpers/auth.ts";
 
 type Line = { side?: "借方" | "貸方"; account: string; amount: string; description?: string };
 
@@ -16,6 +17,10 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
 }) => {
   const menu = page.getByRole("navigation", { name: "事業体のメニュー" });
   let entityId = "";
+
+  await test.step("登録またはサインインする", async () => {
+    await ensureSignedIn(page);
+  });
 
   await test.step("事業体を作成する", async () => {
     await page.goto("/");
@@ -115,7 +120,9 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
       await page.request.get(`/api/entities/${entityId}/accounts`)
     ).json()) as { accounts: { id: string; name: string }[] };
     const idOf = (name: string) => accounts.accounts.find((a) => a.name === name)?.id;
+    // page.request は Origin を付けないので、CSRF の検査（FR-009）を通すために付ける。cookie は画面と共有する
     const res = await page.request.post(`/api/entities/${entityId}/journals`, {
+      headers: ORIGIN_HEADERS,
       data: {
         date: "2026-10-31",
         lines: [

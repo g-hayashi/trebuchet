@@ -20,7 +20,7 @@
 ## 2. 手動での確認（合成のデータ）
 
 ```bash
-TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart-003" pnpm dev   # http://127.0.0.1:5173
+TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart-003" pnpm dev   # http://localhost:5173
 ```
 
 「決算書」の画面は `/e/<事業体>/blue-return/<年>`、控除の回答は `…/blue-return/<年>/deduction`、按分は `…/blue-return/<年>/home-use`、固定資産台帳は `/e/<事業体>/fixed-assets?year=<年>`、控えは `/e/<事業体>/tax-return/<年>`。金額は 002 のフィクスチャ（`journal-2025.csv`）を取り込んだ直後の値で、手順を進めると変わる箇所は注記した。

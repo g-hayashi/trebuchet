@@ -18,9 +18,9 @@ apps/server ──→ packages/schema
 | `packages/domain` | 業務ルール（仕訳の検証、締め、帳票、ユースケース） | **純粋関数のみ**。`node:fs` / `node:sqlite`、DB、Hono、React を import しない。Biome の `noRestrictedImports` で機械的に止める |
 | `packages/db` | SQLite（better-sqlite3 + Drizzle）、マイグレーション、リポジトリ実装 | DB へのアクセスはここに閉じる |
 | `apps/server` | Hono の API サーバー（`127.0.0.1:8787`） | HTTP の入出力と DI の組み立て。業務ルールは書かない |
-| `apps/web` | React + Vite の画面（`127.0.0.1:5173`、`/api` は 8787 へ proxy） | 業務ルールを持たない。`@trebuchet/schema` に依存する |
+| `apps/web` | React + Vite の画面（`http://localhost:5173`、`/api` は 8787 へ proxy） | 業務ルールを持たない。`@trebuchet/schema` に依存する |
 
-- `packages/domain` の禁止は Biome が止めるのは次の import だけ: `hono`、`react`、`drizzle-orm`、`better-sqlite3`、`node:fs`、`node:sqlite`。`node:` の他のモジュールや `zod` の直接 import は Biome では止まらない。レビューで確認する。
+- `packages/domain` の禁止は Biome が止めるのは次の import だけ: `hono`、`react`、`drizzle-orm`、`better-sqlite3`、`node:fs`、`node:sqlite`、`node:crypto`。`node:` の他のモジュールや `zod` の直接 import は Biome では止まらない。レビューで確認する。
 - `packages/domain` は `@trebuchet/schema` に依存する。`schema` は Zod に依存する。
 - `apps/web` は `@trebuchet/server` を devDependency に持つ。`hc<AppType>` のために型だけを import する（`import type`）。実行時のコードは参照しない。
 
@@ -36,6 +36,8 @@ apps/server ──→ packages/schema
 | 整形（Biome で書き換え） | `pnpm format` |
 | 性能計測（SC-004 の仕訳 2,000 件、003 の SC-006 の決算書） | `pnpm bench:reports` |
 | 性能計測（freee 取込の 500 仕訳、002 の SC-002） | `pnpm bench:import` |
+| 性能計測（バックアップ、004 の SC-005） | `pnpm bench:backup`（環境変数でしきい値と件数を変えられる。使い方は `scripts/bench-backup.ts` の先頭のコメント） |
+| バックアップ（`.tbk`）の復元（server を止めて行う） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--yes]`（使い方は `scripts/restore-backup.ts` の先頭のコメント） |
 | freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。使い方は `scripts/verify-freee-import.ts` の先頭のコメント） |
 | 青色申告決算書の照合（実データ、ローカル専用） | `pnpm verify:tax-return`（`work/` を読む。使い方は `scripts/verify-tax-return.ts` の先頭のコメント） |
 | E2E（Playwright、Chromium） | `pnpm --filter @trebuchet/web e2e` |
@@ -93,6 +95,34 @@ apps/server ──→ packages/schema
 - 様式の値（欄番号、行の定義）は `packages/domain/src/blue-return/form.ts` に置き、国税庁の様式の原本と照らして確かめる（research R2）。
 - 性能は `pnpm bench:reports` が SC-006（約 500 仕訳で決算書の画面が使う API が 2 秒以内）も確かめる。
 - 実データでの照合は `pnpm verify:tax-return`（`--closing` の JSON の形はスクリプトの先頭のコメント）。出力は欄の識別子と一致・不一致の件数だけで、金額・取引先名・按分率は出さない。
+
+## 認証とバックアップ（004）
+
+パスキーのサインイン、セッション、回復コード、暗号化したバックアップ（`.tbk`）と復元の実装は次に置く。
+
+| 層 | 場所 |
+|---|---|
+| 業務ルール（パスキー・セッションの判定、回復コード、公開の手続きの一覧 `requiresAuth`、バックアップの要否・世代の選び方・警告） | `packages/domain/src/auth/`、`packages/domain/src/backup/` |
+| 永続化（認証の表、トークンのハッシュ `hashToken`） | `packages/db/src/auth-hash.ts`、`auth-repository.ts` |
+| バックアップの形式と復元（スナップショット、アーカイブ、暗号化、ファイルの書き込みと読み戻し、バックアップの記録、復元） | `packages/db/src/backup/`（`snapshot.ts`、`archive.ts`、`crypto.ts`、`file.ts`、`repository.ts`、`restore.ts`） |
+| HTTP の検査（Host → CSRF → 認証の順） | `apps/server/src/middleware/`（`host.ts`、`csrf.ts`、`auth.ts`） |
+| server の部品 | `apps/server/src/lib/`（`origin.ts`、`session.ts`、`webauthn.ts`、`challenges.ts`、`recovery-code.ts`、`keychain.ts`、`backup-run.ts`、`backup-scheduler.ts`、`startup.ts`） |
+| HTTP のルート | `apps/server/src/routes/auth.ts`、`backup.ts` |
+| 画面 | `apps/web/src/features/auth/`、`apps/web/src/features/backup/`、`apps/web/src/routes/settings/`（`security.tsx`、`backup.tsx`） |
+| E2E の仮想の認証器 | `apps/web/e2e/helpers/`（`virtual-authenticator.ts`、`auth.ts`） |
+| 復元のコマンド | `scripts/restore-backup.ts`（本体は `scripts/lib/restore-cli.ts`） |
+
+- **開発の URL は `http://localhost:5173`**。`127.0.0.1` ではパスキーが使えない（RP ID は IP アドレスにできない）。`apps/web/vite.config.ts` の proxy は `changeOrigin: false` が必須（`true` だと Host が書き換わり、server が RP ID とオリジンを決められない。理由はファイルのコメント）。
+- **許す Host・オリジン・RP ID の決定は `apps/server/src/lib/origin.ts` の 1 か所**。Host の検査、CSRF、WebAuthn が同じ関数を使う。別の場所で名前の一覧を書かない。
+- **全 `/api` に Host → CSRF → 認証の順で検査を掛ける**。CSRF は `hono/csrf` を使わず自前のミドルウェア（`Content-Type` によらず、GET・HEAD・OPTIONS 以外の要求の `Origin` を検査する）。公開の手続きは `requiresAuth`（domain）の完全一致の一覧だけ。`apps/server/test/auth-coverage.test.ts`（INV-29）が、一覧にないルートは未サインインで 401 になることを確かめる。
+- **認証を無効にする設定・環境変数を作らない**。テストで認証を飛ばす分岐も本番のコードに作らない。
+- **パスフレーズ・回復コード・トークンを平文でログ・データ場所・リポジトリに置かない**。トークンと回復コードは DB にハッシュだけを保存する（ハッシュは db の `hashToken` に一本化し、server で別に書かない）。バックアップのパスフレーズはキーチェーンに置く。
+- **キーチェーンは `/usr/bin/security -i` の標準入力に 1 行を流す**。引数には載せない（`ps` に出るため。research R12 のゲートの結果）。テストはキーチェーンに触れず、`SecretStore` の偽物を使う。
+- **平文の写しは `.tmp/` の下に作り、`finally` で必ず消す**（バックアップのスナップショット、復元の展開先）。server の起動時に、前回の異常終了で残った `.tmp/backup-snapshot-*/` を消す。
+- **server のテストで API を呼ぶときは `apps/server/test/helpers.ts` の `createTestSession`・`testHeaders` を使う**（cookie と、許す Host・Origin を付ける）。
+- `pnpm bench:reports` は認証つき（`scripts/lib/bench-session.ts` がセッションを作る）。
+- バックアップには、端末に結びつく設定（Mac の ID、置き場所など。`app_settings`）と認証の表を含めない。復元した帳簿には認証の行がなく、次の起動でパスキーの登録から始まる。
+- Tailscale によるリモートの利用（US4: `pnpm start`、server の静的配信、ペアリング）は保留。未実装なので、これらのコマンドや場所を前提にしない。
 
 ## データと一時ファイル
 

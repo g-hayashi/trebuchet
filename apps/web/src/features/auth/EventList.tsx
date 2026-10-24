@@ -1,0 +1,69 @@
+import { useQuery } from "@tanstack/react-query";
+import type { AuthEventKind } from "@trebuchet/schema";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ApiErrorMessage } from "@/components/ui/form-error";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { formatDateTime } from "@/lib/format";
+import { eventsQuery } from "./api";
+
+const KIND_LABELS: Record<AuthEventKind, string> = {
+  register: "登録",
+  sign_in: "サインイン",
+  sign_in_failed: "サインインの失敗",
+  recovery_used: "回復コードの使用",
+  recovery_failed: "回復コードの失敗",
+  recovery_regenerated: "回復コードの作り直し",
+  passkey_renamed: "パスキーの名前の変更",
+  passkey_deleted: "パスキーの削除",
+  session_revoked: "セッションの失効",
+  sign_out: "サインアウト",
+  pairing_issued: "ペアリングの発行",
+  pairing_used: "ペアリングの使用",
+  remote_settings_changed: "リモートの設定の変更",
+};
+
+/** 認証の記録（FR-008）。サーバーが返した新しい順のまま並べる。書き換え・削除の操作はない */
+export function EventList() {
+  const { data: events, isPending, error } = useQuery(eventsQuery());
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>認証の記録</CardTitle>
+        <CardDescription>登録・サインイン・回復などの記録です（新しい順）。</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <ApiErrorMessage error={error} />
+        {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+        {events && (
+          <Table aria-label="認証の記録">
+            <TableHeader>
+              <TableRow>
+                <TableHead>日時</TableHead>
+                <TableHead>出来事</TableHead>
+                <TableHead>接続先</TableHead>
+                <TableHead>端末</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {events.map((e) => (
+                <TableRow key={e.id}>
+                  <TableCell>{formatDateTime(e.occurredAt)}</TableCell>
+                  <TableCell>{KIND_LABELS[e.kind]}</TableCell>
+                  <TableCell>{e.rpId ?? "—"}</TableCell>
+                  <TableCell>{e.userAgent ?? "不明"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
