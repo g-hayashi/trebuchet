@@ -29,7 +29,7 @@ pnpm typecheck && pnpm lint && pnpm test   # すべて成功すること
 実データ（`data/`）を汚さないよう、使い捨てのデータディレクトリで起動する（`pnpm dev` ではサーバーの作業ディレクトリが `apps/server` になるため、絶対パスで指定する）。
 
 ```bash
-TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart" pnpm dev   # server: http://127.0.0.1:8787 、web: http://127.0.0.1:5173
+TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart" pnpm dev   # server: http://127.0.0.1:8787 、web: http://localhost:5173
 ```
 
 事業体を開くと表示されるメニュー（ホーム・仕訳・勘定科目・取引先・タグ・消費税・会計期間・帳票）から操作する。
