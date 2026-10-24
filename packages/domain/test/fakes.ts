@@ -1,3 +1,4 @@
+import type { JournalOrigin } from "@trebuchet/schema";
 import { isSessionActive } from "../src/auth/session.ts";
 import type {
   AppSettingKey,
@@ -27,11 +28,15 @@ import {
   type IdGenerator,
   type ImportStore,
   type ImportUnitOfWork,
+  type InvoicingStore,
+  type InvoicingUnitOfWork,
   type JournalReplacement,
   type JournalRepository,
   type LedgerRepository,
   type MasterRepository,
   type NewJournal,
+  type RecurringStore,
+  type RecurringUnitOfWork,
   type RegistryRepository,
   RepositoryConflictError,
   type SecretStore,
@@ -49,6 +54,7 @@ import type {
   FiscalPeriod,
   FixedAsset,
   HomeUseAllocation,
+  InvoicingAuditEntry,
   Journal,
   JournalQuery,
   OpeningBalance,
@@ -769,6 +775,130 @@ export class FakeClosingUnitOfWork implements ClosingUnitOfWork {
       this.ledger.state = snapshot.ledger;
       this.masters.state = snapshot.masters;
       this.closing.state = snapshot.closing;
+      throw e;
+    }
+  }
+}
+
+type InvoicingState = {
+  origins: Record<string, JournalOrigin>;
+  audits: InvoicingAuditEntry[];
+};
+
+/**
+ * InvoicingStore のフェイク。メソッドは各ストーリーのタスクで足す。
+ * 仕訳の起点は、テストが `registerOrigin` で登録する（実装は請求書・入金・定期仕訳の表から引く）
+ */
+export class InMemoryInvoicingStore implements InvoicingStore {
+  state: InvoicingState = { origins: {}, audits: [] };
+
+  get audits(): InvoicingAuditEntry[] {
+    return this.state.audits;
+  }
+
+  registerOrigin(journalId: string, origin: JournalOrigin): void {
+    this.state.origins[journalId] = structuredClone(origin);
+  }
+
+  appendInvoicingAudit(entry: InvoicingAuditEntry): void {
+    this.state.audits.push(structuredClone(entry));
+  }
+
+  originOfJournal(journalId: string): JournalOrigin | null {
+    const origin = this.state.origins[journalId];
+    return origin === undefined ? null : structuredClone(origin);
+  }
+}
+
+/** RecurringStore のフェイク。メソッドは US3 のタスクで足す */
+export class InMemoryRecurringStore implements RecurringStore {
+  state: { audits: InvoicingAuditEntry[] } = { audits: [] };
+
+  get audits(): InvoicingAuditEntry[] {
+    return this.state.audits;
+  }
+
+  appendRecurringAudit(entry: InvoicingAuditEntry): void {
+    this.state.audits.push(structuredClone(entry));
+  }
+}
+
+/**
+ * InvoicingUnitOfWork のフェイク。transaction が**例外**で終わると状態をすべて元に戻し、
+ * `err` を返したときは確定する（drizzle のトランザクションと同じ。research R9）
+ */
+export class FakeInvoicingUnitOfWork implements InvoicingUnitOfWork {
+  readonly ledger: InMemoryLedgerRepository;
+  readonly masters: InMemoryMasterRepository;
+  readonly invoicing: InMemoryInvoicingStore;
+
+  constructor(
+    ledger = new InMemoryLedgerRepository(),
+    masters = new InMemoryMasterRepository(),
+    invoicing = new InMemoryInvoicingStore(),
+  ) {
+    this.ledger = ledger;
+    this.masters = masters;
+    this.invoicing = invoicing;
+  }
+
+  transaction<T>(
+    fn: (tx: {
+      ledger: LedgerRepository;
+      masters: MasterRepository;
+      invoicing: InvoicingStore;
+    }) => T,
+  ): T {
+    const snapshot = structuredClone({
+      ledger: this.ledger.state,
+      masters: this.masters.state,
+      invoicing: this.invoicing.state,
+    });
+    try {
+      return fn({ ledger: this.ledger, masters: this.masters, invoicing: this.invoicing });
+    } catch (e) {
+      this.ledger.state = snapshot.ledger;
+      this.masters.state = snapshot.masters;
+      this.invoicing.state = snapshot.invoicing;
+      throw e;
+    }
+  }
+}
+
+/** RecurringUnitOfWork のフェイク。巻き戻しは FakeInvoicingUnitOfWork と同じ */
+export class FakeRecurringUnitOfWork implements RecurringUnitOfWork {
+  readonly ledger: InMemoryLedgerRepository;
+  readonly masters: InMemoryMasterRepository;
+  readonly recurring: InMemoryRecurringStore;
+
+  constructor(
+    ledger = new InMemoryLedgerRepository(),
+    masters = new InMemoryMasterRepository(),
+    recurring = new InMemoryRecurringStore(),
+  ) {
+    this.ledger = ledger;
+    this.masters = masters;
+    this.recurring = recurring;
+  }
+
+  transaction<T>(
+    fn: (tx: {
+      ledger: LedgerRepository;
+      masters: MasterRepository;
+      recurring: RecurringStore;
+    }) => T,
+  ): T {
+    const snapshot = structuredClone({
+      ledger: this.ledger.state,
+      masters: this.masters.state,
+      recurring: this.recurring.state,
+    });
+    try {
+      return fn({ ledger: this.ledger, masters: this.masters, recurring: this.recurring });
+    } catch (e) {
+      this.ledger.state = snapshot.ledger;
+      this.masters.state = snapshot.masters;
+      this.recurring.state = snapshot.recurring;
       throw e;
     }
   }

@@ -6,8 +6,12 @@ import {
   DrizzleClosingUnitOfWork,
   DrizzleImportStore,
   DrizzleImportUnitOfWork,
+  DrizzleInvoicingStore,
+  DrizzleInvoicingUnitOfWork,
   DrizzleLedgerRepository,
   DrizzleMasterRepository,
+  DrizzleRecurringStore,
+  DrizzleRecurringUnitOfWork,
   DrizzleRegistryRepository,
   dataDir,
   openRegistry,
@@ -23,9 +27,13 @@ import type {
   IdGenerator,
   ImportStore,
   ImportUnitOfWork,
+  InvoicingStore,
+  InvoicingUnitOfWork,
   LedgerDeps,
   MasterDeps,
   MasterRepository,
+  RecurringStore,
+  RecurringUnitOfWork,
   ReportDeps,
   SecretStore,
 } from "@trebuchet/domain";
@@ -129,6 +137,36 @@ export function journalDeps(db: TenantDb): LedgerDeps {
 /** リクエストの事業体の DB に対する帳票のユースケースの依存 */
 export function reportDeps(db: TenantDb): ReportDeps {
   return { masters: new DrizzleMasterRepository(db), reports: new DrizzleLedgerRepository(db) };
+}
+
+/**
+ * 請求書（005）のユースケースの依存。仕訳・マスタ・請求の記録を1つのトランザクションで扱う（R9）。
+ * `clock` はルートが `invoicingRoutes({ clock })` で受け取るので、ここには含めない（R22）。
+ * `invoicing` はトランザクションの外の読み取り（`originOfJournal` など）に使う
+ */
+export function invoicingDeps(db: TenantDb): {
+  uow: InvoicingUnitOfWork;
+  invoicing: InvoicingStore;
+  ids: IdGenerator;
+} {
+  return {
+    uow: new DrizzleInvoicingUnitOfWork(db),
+    invoicing: new DrizzleInvoicingStore(db),
+    ids,
+  };
+}
+
+/** 定期仕訳（005）のユースケースの依存。`clock` はルートから渡す（R22） */
+export function recurringDeps(db: TenantDb): {
+  uow: RecurringUnitOfWork;
+  recurring: RecurringStore;
+  ids: IdGenerator;
+} {
+  return {
+    uow: new DrizzleRecurringUnitOfWork(db),
+    recurring: new DrizzleRecurringStore(db),
+    ids,
+  };
 }
 
 /**

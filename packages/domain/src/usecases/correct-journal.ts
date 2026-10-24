@@ -11,6 +11,7 @@ import {
 import { checkCorrectsTarget, loadContext } from "./create-journal.ts";
 import {
   checkReason,
+  type EditOptions,
   type LedgerDeps,
   loadEditableJournal,
   versionConflict,
@@ -40,6 +41,7 @@ export function correctJournal(
   deps: LedgerDeps,
   journalId: string,
   input: JournalCorrectionInput,
+  options: EditOptions = {},
 ): Result<Journal> {
   const { reason: rawReason, version, ...draft } = input;
   const reason = checkReason(rawReason);
@@ -47,7 +49,7 @@ export function correctJournal(
 
   return deps.ledger.transaction((tx) => {
     const ctx = loadContext(deps.masters);
-    const loaded = loadEditableJournal(tx, journalId, version, ctx.periods);
+    const loaded = loadEditableJournal(tx, journalId, version, ctx.periods, options);
     if (!loaded.ok) return loaded;
     const before = loaded.value;
 
@@ -55,7 +57,7 @@ export function correctJournal(
     if (!validated.ok) return err(combineErrors(validated.error));
     const valid = validated.value;
     if (valid.correctsJournalId !== null && valid.correctsJournalId !== before.correctsJournalId) {
-      const targetError = checkCorrectsTarget(tx, valid.correctsJournalId, ctx);
+      const targetError = checkCorrectsTarget(tx, valid.correctsJournalId, ctx, before.source);
       if (targetError !== undefined) return err(targetError);
     }
 

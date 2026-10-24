@@ -98,6 +98,17 @@ describe("createJournal（US2）", () => {
     expect(JSON.parse(ledger.audits[0]?.afterJson ?? "null")).toEqual(journal);
   });
 
+  it("options.source を保存する（省略時は manual）", () => {
+    const manual = createJournal(deps, sale(100, "2026-10-01"));
+    const invoice = createJournal(deps, sale(200, "2026-10-02"), { source: "invoice" });
+    const recurring = createJournal(deps, sale(300, "2026-10-03"), { source: "recurring" });
+    expect(manual.ok && manual.value.journal.source).toBe("manual");
+    expect(invoice.ok && invoice.value.journal.source).toBe("invoice");
+    expect(recurring.ok && recurring.value.journal.source).toBe("recurring");
+    if (!invoice.ok) return;
+    expect(ledger.getJournal(invoice.value.journal.id)?.source).toBe("invoice");
+  });
+
   it("FR-018: 直前の仕訳と日付・科目・金額の組が同じなら POSSIBLE_DUPLICATE を返すが、登録はされる", () => {
     const first = createJournal(deps, sale());
     const second = createJournal(deps, { ...sale(), memo: "別のメモ" });

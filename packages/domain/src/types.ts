@@ -433,3 +433,35 @@ export type ClosingAuditEntry = {
   beforeJson: string | null;
   afterJson: string | null;
 };
+
+// ---- 請求・定期仕訳（005） ----
+
+export type InvoicingAuditTargetType =
+  | "invoice_settings"
+  | "billing_terms"
+  | "work_hours"
+  | "invoice"
+  | "payment"
+  | "recurring_journal"
+  | "recurring_run";
+
+export type InvoicingAuditAction =
+  | "create"
+  | "update"
+  | "void"
+  | "pause"
+  | "resume"
+  | "skip"
+  | "acknowledge";
+
+/** 請求・定期仕訳の操作の記録（`invoicing_audit_log`。追記のみ。data-model §1.10、R23） */
+export type InvoicingAuditEntry = {
+  id: string;
+  occurredAt: string;
+  targetType: InvoicingAuditTargetType;
+  targetId: string;
+  action: InvoicingAuditAction;
+  reason: string | null;
+  beforeJson: string | null;
+  afterJson: string | null;
+};

@@ -1,6 +1,7 @@
 import { checkPeriod } from "../journal.ts";
 import type { Clock, IdGenerator, LedgerRepository, MasterRepository } from "../ports.ts";
 import { domainError, err, type FiscalPeriod, type Journal, ok, type Result } from "../types.ts";
+import { isLinkedSource, linkedError } from "./create-journal.ts";
 
 /** 訂正・取消のユースケースの依存。ledger と masters は同じテナントの DB */
 export type LedgerDeps = {
@@ -9,6 +10,12 @@ export type LedgerDeps = {
   ids: IdGenerator;
   clock: Clock;
 };
+
+/**
+ * 訂正・取消のオプション。`linked` は、請求・入金の取消（005）が自分の仕訳を直すときだけ true にする。
+ * なければ `source` が invoice・payment の仕訳は JOURNAL_LINKED（R13）
+ */
+export type EditOptions = { linked?: boolean };
 
 const REASON_MAX = 500;
 
@@ -34,6 +41,7 @@ export function loadEditableJournal(
   journalId: string,
   version: number,
   periods: readonly FiscalPeriod[],
+  options: EditOptions = {},
 ): Result<Journal> {
   const journal = ledger.getJournal(journalId);
   if (journal === undefined) {
@@ -43,6 +51,10 @@ export function loadEditableJournal(
     return err(
       domainError("JOURNAL_VOIDED", "取り消した仕訳は訂正・取消できません", { journalId }),
     );
+  }
+  // 請求・入金の仕訳は、請求・入金の取消（linked）だけが直せる（005 R13）
+  if (options.linked !== true && isLinkedSource(journal.source)) {
+    return err(linkedError(journalId));
   }
   if (journal.version !== version) return err(versionConflict(journal));
   const period = checkPeriod(journal.date, periods);

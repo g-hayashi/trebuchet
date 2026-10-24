@@ -1,3 +1,4 @@
+import type { JournalOrigin } from "@trebuchet/schema";
 import type {
   AppSettingKey,
   AuthEvent,
@@ -30,6 +31,7 @@ import type {
   FiscalPeriod,
   FixedAsset,
   HomeUseAllocation,
+  InvoicingAuditEntry,
   Journal,
   JournalLine,
   JournalQuery,
@@ -238,6 +240,45 @@ export interface ClosingUnitOfWork {
       journals: JournalRepository;
       masters: MasterRepository;
       closing: ClosingStore;
+    }) => T,
+  ): T;
+}
+
+/**
+ * 請求書（005 US1・US4）の永続化。メソッドは各ストーリーの db のタスクで、ポートと実装を同時に足す。
+ * 操作の記録は `invoicing_audit_log` を RecurringStore と共有する（R23）
+ */
+export interface InvoicingStore {
+  appendInvoicingAudit(entry: InvoicingAuditEntry): void;
+  /** 仕訳が請求・入金・定期仕訳のどれから作られたか（H:§6.1）。取消の仕訳も元の請求・入金を指す。なければ null */
+  originOfJournal(journalId: string): JournalOrigin | null;
+}
+
+/** 請求書の発行・入金・取消で、仕訳・マスタ・請求の記録を1つのトランザクションで扱う（R9） */
+export interface InvoicingUnitOfWork {
+  /** fn が例外を投げると、fn の中の書き込みをすべて元に戻す。`err` を返しても確定する（R9） */
+  transaction<T>(
+    fn: (tx: {
+      ledger: LedgerRepository;
+      masters: MasterRepository;
+      invoicing: InvoicingStore;
+    }) => T,
+  ): T;
+}
+
+/** 定期仕訳（005 US3）の永続化。メソッドは US3 の db のタスクで足す */
+export interface RecurringStore {
+  appendRecurringAudit(entry: InvoicingAuditEntry): void;
+}
+
+/** 定期仕訳の登録で、仕訳・マスタ・定期仕訳の記録を1つのトランザクションで扱う（R9） */
+export interface RecurringUnitOfWork {
+  /** fn が例外を投げると、fn の中の書き込みをすべて元に戻す。`err` を返しても確定する（R9） */
+  transaction<T>(
+    fn: (tx: {
+      ledger: LedgerRepository;
+      masters: MasterRepository;
+      recurring: RecurringStore;
     }) => T,
   ): T;
 }
