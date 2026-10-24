@@ -30,7 +30,7 @@
 | `unit_price` | integer | `hourly` なら NOT NULL かつ `> 0`、`monthly` なら NULL（CHECK） |
 | `monthly_amount` | integer | `monthly` なら NOT NULL かつ `> 0`、`hourly` なら NULL（CHECK） |
 | `due_months_after` | integer | `BETWEEN 0 AND 12`。既定 1 |
-| `due_day` | integer | `BETWEEN 1 AND 31`（月末を超えたら末日。31 = 末日）。既定 31 |
+| `due_day` | integer | `BETWEEN 1 AND 28 OR due_day = 31`（31 = 末日。29・30 は不可）。既定 31 |
 | `default_item_name` | text | `length > 0` |
 | `billing_name` | text | NULL 可（請求書の宛名。NULL なら取引先名） |
 | `updated_at` | text | |
@@ -113,7 +113,7 @@
 | `id` | text | PK |
 | `name` | text | `length > 0`（一覧の表示名） |
 | `memo` | text | NULL 可（仕訳の摘要） |
-| `day_of_month` | integer | `BETWEEN 1 AND 31`（31 = 末日。R8） |
+| `day_of_month` | integer | `BETWEEN 1 AND 28 OR day_of_month = 31`（31 = 末日。29・30 は不可。R8） |
 | `start_month` | text | `YYYY-MM` |
 | `end_month` | text | NULL 可、`>= start_month` |
 | `status` | text | `active` / `paused`（CHECK） |
@@ -151,7 +151,8 @@
 | `created_at` | text | |
 | `acknowledged_at` | text | NULL 可（利用者が確かめた時刻） |
 
-- 登録できない回（`blocked`）は保存しない（R17）。削除を禁止、更新は `acknowledged_at` を NULL から一度だけ（§2）
+- 登録できない回（`blocked`）は保存しない（R17）。利用者が「この回は登録しない」と確定した回（未登録の回を含む）だけ `skipped` として保存する。削除を禁止、更新は `acknowledged_at` を NULL から一度だけ（§2）
+- `blocked` の理由（保存しない計算上の値。契約 §5.8 の `BlockedRun.reason`）: `PERIOD_CLOSED`・`OUT_OF_PERIOD`・`ACCOUNT_INACTIVE`・`ACCOUNT_NOT_FOUND`・`PARTNER_INACTIVE`、および `JOURNAL_INVALID`（001 の `validateJournal` が返す `TAX_SETTING_GAP`・`TAX_METHOD_UNSUPPORTED`・補助科目の停止〔`VALIDATION`〕。元のエラーのコードを `details.code` に持つ。R17）
 
 ### 1.10 `invoicing_audit_log`（FR-032。R23）
 
@@ -173,7 +174,7 @@
 
 ## 3. 状態遷移
 
-- **請求書**（状態は保存しない。`invoiceStatus`。R14）: 発行 → `unpaid` → （消し込み）→ `partial` → `paid`。消し込みの取消で逆に戻る。`unpaid` のときだけ → `voided`（終端。入金があれば `INVOICE_HAS_PAYMENTS`）。`overdue` は `unpaid`・`partial` かつ `today > due_date` の表示上の印
+- **請求書**（状態は保存しない。`invoiceStatus`。R14）: 発行 → `unpaid` → （消し込み）→ `partial` → `paid`。消し込みの取消で逆に戻る。`unpaid` のときだけ → `voided`（終端。入金があれば `INVOICE_HAS_PAYMENTS`）。状態の値は `unpaid`・`partial`・`paid`・`voided` の4つ。期限切れは状態ではなく**期限切れの判定**（表示用、残額 > 0 かつ今日 > 支払期限。一覧の絞り込みの値 `overdue` と応答の `overdue` の印に使う）
 - **消し込み**: `active` → `voided`（終端）
 - **定期仕訳**: `active` ⇄ `paused`（再開で `start_month` を進める。R20）。`end_month` を過ぎても `active` のまま（登録の対象がないだけ）
 - **定期仕訳の回**: （計算上）未到来 → 予定日が今日以前で `post`（保存して `posted`）または `blocked`（保存しない）→ 利用者が飛ばすと `skipped`。`posted` → 確かめて `acknowledged_at`
@@ -185,15 +186,15 @@
 - **INV-32**: 発行・消し込み・取消は全部か無か。任意の段階の失敗（障害の注入）の後、請求書（消し込み）があること ⇔ 対応する仕訳があること、が保たれ、`next_seq` も進まない
 - **INV-33**: 各請求書で、取消でない消し込みの充当額の合計 ≤ `total`。状態は残額（`total` − 充当額の合計）だけで決まる（0 なら `paid`、`total` なら `unpaid`、間は `partial`）
 - **INV-34**: 任意の発行・消し込み・取消の操作列の後、取引先ごとに「請求・入金に結びつく仕訳（`source` が `invoice`・`payment`、訂正仕訳を含む、取消でない）の売掛金の残高」=「取消でない請求書の残額の合計」（SC-002）
-- **INV-35**: 任意の定期仕訳の定義の集合、任意の起動の日の列（同じ日の重複、停止・再開・変更・締めを含む）について、各（定期仕訳, 月）の `posted` の仕訳は高々1件。最後の判定の後、`start_month` 以降で予定日が今日以前の各月は `posted`・`skipped`・`blocked` のどれか1つ（漏れなし）。`posted` の仕訳の日付は `scheduledDate(月, day)`（SC-004）
-- **INV-36**: `clampDay` は常にその月の 1 日〜末日。`dueDate(month, n, d)` は `month` の n か月後の月にあり、`d >= 末日` なら末日。年をまたいでも同じ（12 月分 + 1 か月 = 翌年 1 月）
+- **INV-35**: 任意の定期仕訳の定義の集合、任意の起動の日の列（同じ日の重複、停止・再開・変更・締めを含む）について、各（定期仕訳, 月）の `posted` の仕訳は高々1件。最後の判定の後、`active` の定義で、再開後の `start_month` 以降、`end_month` 以前（あれば）、予定日が今日以前の各月は `posted`・`skipped`・`blocked` のどれか1つ（漏れなし）。`posted` の仕訳の日付は `scheduledDate(月, day)`（SC-004）
+- **INV-36**: （`d` は 1〜28 または 31） `clampDay` は常にその月の 1 日〜末日。`dueDate(month, n, d)` は `month` の n か月後の月にあり、`d >= 末日` なら末日。年をまたいでも同じ（12 月分 + 1 か月 = 翌年 1 月）
 - **INV-37**: 明細の金額 = `floor(quantity_halves × unit_price / 2)`（数量と単価があるとき）。別記の税抜の小計 + 税額 = 税込の合計（税率ごと）。すべて整数
 - **INV-38**: 発行済みの請求書の写し（宛名、発行者、税の表示、支払期限、明細、合計）は、設定・取引先・条件・工数のどんな変更の後も変わらない
 - **INV-39**: `source` が `invoice`・`payment` の仕訳は、請求・入金の取消（R12）以外では訂正・取消されない（`JOURNAL_LINKED`）。訂正元にできるのは同じ `source` の仕訳だけ
 
 ## 5. ドメインの関数とポート（tasks で参照する名前）
 
-- 純関数: `formatInvoiceNo(issueDate, seq)`、`itemAmount(quantityHalves, unitPrice)`、`taxBreakdown(items)`、`buildInvoiceDraft({ terms, partner, workHours, month, settings, ctx })`、`invoiceJournalDraft(invoice, items, accounts)`、`paymentJournalDraft(...)`、`reversalDraft(journal, today)`、`invoiceStatus(invoice, payments, today)`、`clampDay`、`dueDate`、`scheduledDate`、`planRecurringRuns`（R17）
-- ポート（`ports.ts`、同期）: `InvoicingStore`（設定・条件・工数・請求書・明細・消し込みの読み書き、`appendInvoicingAudit`、`originOfJournal(journalId)`）、`InvoicingUnitOfWork`（`{ ledger, masters, invoicing }`）、`RecurringStore`、`RecurringUnitOfWork`（`{ ledger, masters, recurring }`）
+- 純関数: `formatInvoiceNo(issueDate, seq)`、`itemAmount(quantityHalves, unitPrice)`、`taxBreakdown(items)`、`buildInvoiceDraft({ terms, partner, workHours, month, settings, ctx })`、`invoiceJournalDraft(invoice, items, accounts)`、`paymentJournalDraft(...)`、`reversalDraft(journal, today)`、`invoiceStatus(invoice, payments)`（状態と残額。`voided` / `paid` / `partial` / `unpaid`）、`isOverdue(invoice, remaining, today)`（期限切れの判定）、`clampDay`、`dueDate`、`scheduledDate`、`planRecurringRuns`（R17）
+- ポート（`ports.ts`、同期）: `InvoicingStore`（設定・条件・工数・請求書・明細・消し込みの読み書き、`appendInvoicingAudit`、`originOfJournal(journalId)`）、`InvoicingUnitOfWork`（`{ ledger, masters, invoicing }`）、`RecurringStore`（定義・行・回の読み書き、`appendRecurringAudit`）、`RecurringUnitOfWork`（`{ ledger, masters, recurring }`）。監査の表は `invoicing_audit_log` を共有し、それぞれのストアが自分の対象の記録を追記する
 - ユースケース: `saveInvoiceSettings`、`saveBillingTerms`、`saveWorkHours`、`draftInvoices`、`issueInvoice`、`voidInvoice`、`recordPayment`、`voidPayment`、`listInvoices`、`createRecurring`、`updateRecurring`、`pauseRecurring`、`resumeRecurring`、`skipRecurringRun`、`postDueRecurring(deps, today)`、`recurringStatus`、`acknowledgeRuns`
 - 001 の変更: `createJournal` の `options.source`、`voidJournal`・`correctJournal` の `options.linked`、`checkCorrectsTarget` の `source` の条件（R9・R13）

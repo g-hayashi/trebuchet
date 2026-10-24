@@ -62,7 +62,7 @@
 
 ## R8. 日付の純関数（支払期限・予定日）
 
-- **Decision**: 日（`day`）は 1〜31 の整数で持ち、**その月の末日を超えたら末日にする**（`clampDay(year, month, day)`）。画面の選択肢は 1〜28 と「末日」（= 31）。支払期限 = `dueDate(targetMonth, monthsAfter, day)`（`monthsAfter` は 0〜12、既定 1・末日 = 翌月末）。定期仕訳の予定日 = `scheduledDate(month, day)`。どちらも `packages/domain/src/invoicing/due-date.ts`・`recurring/schedule.ts` の純関数（INV-36）
+- **Decision**: 日（`day`）は「1〜28 または 31（末日）」の整数で持つ（Zod と CHECK `day BETWEEN 1 AND 28 OR day = 31` で 29・30 を拒否）。**その月の末日を超えたら末日にする**（`clampDay(year, month, day)`。31 → 末日）。画面の選択肢は 1〜28 と「末日」（= 31）。支払期限 = `dueDate(targetMonth, monthsAfter, day)`（`monthsAfter` は 0〜12、既定 1・末日 = 翌月末）。定期仕訳の予定日 = `scheduledDate(month, day)`。どちらも `packages/domain/src/invoicing/due-date.ts`・`recurring/schedule.ts` の純関数（INV-36）
 - **Rationale**: FR-002（D は 1〜28 または末日）と US3 の「31 日」→ 末日（Acceptance 3）を1つの表現で満たす
 
 ## R9. 発行・入金・取消のトランザクションと書く順序
@@ -100,14 +100,14 @@
 
 ## R13. 請求・入金の仕訳を通常の訂正・取消から守る
 
-- **Decision**: `source` が `invoice` / `payment` の仕訳は、001 の `PUT /journals/:id`・`POST /journals/:id/void` で 409 `JOURNAL_LINKED`（`details: { invoiceId }`）。請求・入金の取消（R12）だけが `{ linked: true }` で呼ぶ。訂正仕訳の起票でも、これらの仕訳を訂正元にできるのは `source` が同じ仕訳だけ（`checkCorrectsTarget` に条件を足す）。`recurring` の仕訳は通常の仕訳と同じく訂正・取消できる（FR-026）
+- **Decision**: `source` が `invoice` / `payment` の仕訳は、001 の `PUT /journals/:id`・`POST /journals/:id/void` で 409 `JOURNAL_LINKED`（`details: { journalId, invoiceId, paymentId? }`。domain の関数は `journalId` だけを返し、server のルート層が `originOfJournal` で `invoiceId`・`paymentId` を補う）。請求・入金の取消（R12）だけが `{ linked: true }` で呼ぶ。訂正仕訳の起票でも、これらの仕訳を訂正元にできるのは `source` が同じ仕訳だけ（`checkCorrectsTarget` に条件を足す）。`recurring` の仕訳は通常の仕訳と同じく訂正・取消できる（FR-026）
 - **Rationale**: 請求の合計と売上の仕訳の一致（SC-002、INV-30・34）を構造で守る
 - **Alternatives**: 訂正を許して不一致を警告 → SC-002 を満たせない
 
 ## R14. 入金の消し込みと状態
 
 - **Decision**: 消し込みの「充当額」= 入金額 + 手数料。`手数料を差額として扱う` を選ぶと、手数料 = 残額 − 入金額（> 0 のときだけ）。充当額の合計（取消でないもの）が請求の合計を超えたら 422 `PAYMENT_EXCEEDS_BALANCE`（FR-019）。入金額は正の整数
-  - 状態は保存しない（取消だけ列で持つ）。`invoiceStatus(invoice, payments)` = `voided`（取消）/ `paid`（残額 0）/ `partial`（0 < 充当 < 合計）/ `unpaid`。期限切れ = `unpaid`・`partial` かつ `today > due_date`（FR-020）
+  - 状態は保存しない（取消だけ列で持つ）。`invoiceStatus(invoice, payments)` = `voided`（取消）/ `paid`（残額 0）/ `partial`（0 < 充当 < 合計）/ `unpaid`、と残額。期限切れは状態ではなく表示用の判定 `isOverdue(invoice, remaining, today)` = 残額 > 0 かつ `today > due_date`（FR-020）。状態・残額は US1 の一覧・詳細が使い、期限切れの判定は US2 で足す
 - **Rationale**: 状態と残額を消し込みから導く（FR-020）。保存した状態と実際の食い違いが起きない
 
 ## R15. journals.source の追加
@@ -117,15 +117,15 @@
 
 ## R16. 定期仕訳の定義
 
-- **Decision**: `recurring_journals`（名前、摘要、`day_of_month` 1〜31、`start_month`・`end_month`（`YYYY-MM`、終了は任意）、`status` = `active` / `paused`、`version`）と `recurring_journal_lines`（001 の `LineDraft` と同じ項目。税区分は省略可）。保存のときに 001 の `validateJournal` を開始月の予定日で通し、貸借の不一致などを拒否する（FR-023）。変更は `version` の楽観ロック（001 の `VERSION_CONFLICT`）
+- **Decision**: `recurring_journals`（名前、摘要、`day_of_month`（1〜28 または 31 = 末日。R8）、`start_month`・`end_month`（`YYYY-MM`、終了は任意）、`status` = `active` / `paused`、`version`）と `recurring_journal_lines`（001 の `LineDraft` と同じ項目。税区分は省略可）。保存のときに 001 の `validateJournal` を開始月の予定日で通し、貸借の不一致などを拒否する（FR-023）。変更は `version` の楽観ロック（001 の `VERSION_CONFLICT`）
 - **Rationale**: 登録した仕訳は定義の写しなので、定義の変更は未登録の回にだけ効く（FR-026）。税区分を省略すれば、各回の予定日の設定で決まる（FR-013 と同じ考え方）
 
 ## R17. どの回を登録するかは純関数
 
 - **Decision**: `planRecurringRuns({ def, today, doneMonths, ctx })` → `{ post: { month, date, draft }[], blocked: { month, date, reason }[] }`（`recurring/due.ts`）
   - 対象の月: `start_month` 〜 `min(end_month, today の月)` のうち、`scheduledDate(month, day) <= today`、かつ `doneMonths`（登録済み・飛ばした月）にない月。`status = paused` なら空
-  - 各月の仕訳の案を 001 の `validateJournal` と `checkPeriod` に通す。`PERIOD_CLOSED`・`OUT_OF_PERIOD`・`ACCOUNT_INACTIVE`・`ACCOUNT_NOT_FOUND`・取引先の使用停止（`PARTNER_INACTIVE`。001 の検証は取引先の使用停止を見ないので、この関数で足す）は `blocked` に入れて登録しない（FR-027）
-  - `blocked` は**保存しない**（判定のたびに計算する）。期間の締めの解除や科目の再開で、次の判定で自動で登録される。利用者が「この回は登録しない」を選んだ月だけ `skipped` として保存する
+  - 各月の仕訳の案を 001 の `validateJournal` と `checkPeriod` に通す。`PERIOD_CLOSED`・`OUT_OF_PERIOD`・`ACCOUNT_INACTIVE`・`ACCOUNT_NOT_FOUND`・取引先の使用停止（`PARTNER_INACTIVE`。001 の検証は取引先の使用停止を見ないので、この関数で足す）は `blocked` に入れて登録しない（FR-027）。`validateJournal` が返す `TAX_SETTING_GAP`・`TAX_METHOD_UNSUPPORTED`・補助科目の停止（`VALIDATION`）も、`blocked` の理由 `JOURNAL_INVALID`（元のエラーのコードを `details.code` に持つ）として扱う。これらを例外やエラーとして上に返すと、1つの回の不備で事業体の全定義の判定が止まるため
+  - `blocked` は**保存しない**（判定のたびに計算する）。期間の締めの解除や科目の再開、消費税の設定の修正で、次の判定で自動で登録される。利用者が「この回は登録しない」を選んだ月（`blocked` の回と、まだ登録していない回）だけ `skipped` として保存する
 - **Rationale**: 時刻と DB に依存しない関数にして、SC-004 を fast-check の操作列（任意の起動の日の列）で検証する（INV-35）
 
 ## R18. 判定を走らせる場所
@@ -158,7 +158,7 @@
 
 ## R23. 操作の記録
 
-- **Decision**: `invoicing_audit_log`（003 の `closing_audit_log` と同じ形。追記のみ、トリガーで更新・削除を禁止）。対象は `invoice_settings`・`billing_terms`・`work_hours`・`invoice`・`payment`・`recurring_journal`・`recurring_run`、操作は `create`・`update`・`void`・`pause`・`resume`・`skip`。仕訳そのものの記録は 001 の `audit_log`（`createJournal`・`voidJournal` が書く）
+- **Decision**: `invoicing_audit_log`（003 の `closing_audit_log` と同じ形。追記のみ、トリガーで更新・削除を禁止）。対象は `invoice_settings`・`billing_terms`・`work_hours`・`invoice`・`payment`・`recurring_journal`・`recurring_run`、操作は `create`・`update`・`void`・`pause`・`resume`・`skip`・`acknowledge`（data-model §1.10 と同じ）。追記は `InvoicingStore.appendInvoicingAudit` と `RecurringStore.appendRecurringAudit`。仕訳そのものの記録は 001 の `audit_log`（`createJournal`・`voidJournal` が書く）
 - **Rationale**: FR-032。001 の `audit_log` の `target_type` の CHECK を広げるには表の作り直しが要る（R15 と同じ理由で避ける）
 
 ## R24. エラーコードと警告

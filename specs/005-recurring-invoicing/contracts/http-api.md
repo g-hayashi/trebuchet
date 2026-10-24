@@ -18,10 +18,12 @@
 | 422 | `PAYMENT_EXCEEDS_BALANCE` | 充当額が残額を超える。`details: { remaining, applied }` | FR-019 |
 | 409 | `PAYMENT_VOIDED` | 取消済みの消し込みの取消 | FR-021 |
 | 422 | `INVOICE_SEQ_TOO_LOW` | 次の通し番号が発行済みの最大以下。`details.minimum` | FR-004 |
-| 409 | `JOURNAL_LINKED` | 請求・入金の仕訳を 001 の訂正・取消・訂正仕訳で直そうとした。`details: { invoiceId, paymentId? }` | R13 |
+| 409 | `JOURNAL_LINKED` | 請求・入金の仕訳を 001 の訂正・取消・訂正仕訳で直そうとした。`details: { journalId, invoiceId, paymentId? }`。domain の関数は `journalId` だけを返し、server のルート層が `originOfJournal` で `invoiceId`・`paymentId` を補う | R13 |
 | 409 | `RECURRING_CONFIRM_REQUIRED` | 保存・再開で今日以前に登録される回があり、`confirm: true` がない。`details: { count, months }` | FR-029 |
 
-既存のコードの再利用: `VALIDATION`（Zod、0.5 の倍数でない工数、明細が0行・6行以上、存在しない取引先・科目は `details.field`）、`PERIOD_CLOSED`・`OUT_OF_PERIOD`（売上の計上日・入金日・取消の訂正仕訳の日付）、`REASON_REQUIRED`、`VERSION_CONFLICT`（定期仕訳。`details: { recurringId, currentVersion }`）、`ACCOUNT_NOT_FOUND`・`ACCOUNT_INACTIVE`、`UNBALANCED`（定期仕訳の定義）。
+既存のコードの再利用: `VALIDATION`（Zod、0.5 の倍数でない工数、明細が0行・6行以上、存在しない取引先・科目は `details.field`）、`PERIOD_CLOSED`・`OUT_OF_PERIOD`（売上の計上日・入金日・取消の訂正仕訳の日付）、`REASON_REQUIRED`、`VERSION_CONFLICT`（定期仕訳。`details: { recurringId, currentVersion }`）、`ACCOUNT_NOT_FOUND`・`ACCOUNT_INACTIVE`、`UNBALANCED`（定期仕訳の定義）、`TAX_SETTING_GAP`・`TAX_METHOD_UNSUPPORTED`（請求書の発行、入金の消し込み、取消の訂正仕訳の登録で 001 の検証が返す。定期仕訳の回では `blocked` の理由 `JOURNAL_INVALID` になる。§5.8）。
+
+取消の入力（§3.7、§4.2）は 005 専用の `{ reason }`（`packages/schema/src/invoicing.ts` の `InvoicingVoidInput`）。001 の `VoidInput` は `version` が必須なので使わない。
 
 ## 2. 発行者の設定と請求の条件（US4）
 
@@ -30,7 +32,7 @@
 | 2.1 | GET | `/invoice-settings` | — | 200 `{ settings: InvoiceSettings \| null, minimumNextSeq }` | FR-003, FR-004 |
 | 2.2 | PUT | `/invoice-settings` | `{ issuerName, tradeName?, address, contact, bankAccount, registrationNumber?, taxDisplay, nextSeq }` | 200 `{ settings }` / 422 `INVOICE_SEQ_TOO_LOW` | FR-003, FR-004 |
 | 2.3 | GET | `/billing-terms` | — | 200 `{ terms: (BillingTerms & { partnerName, honorific, partnerActive })[] }` | FR-001 |
-| 2.4 | PUT | `/partners/:partnerId/billing-terms` | `{ billingType, unitPrice?, monthlyAmount?, dueMonthsAfter, dueDay, defaultItemName, billingName? }`（型に合わない金額は `VALIDATION`） | 200 `{ terms }` | FR-001, FR-002 |
+| 2.4 | PUT | `/partners/:partnerId/billing-terms` | `{ billingType, unitPrice?, monthlyAmount?, dueMonthsAfter (0〜12), dueDay (1〜28 または 31 = 末日。29・30 は `VALIDATION`), defaultItemName, billingName? }`（型に合わない金額は `VALIDATION`） | 200 `{ terms }` | FR-001, FR-002 |
 | 2.5 | DELETE | `/partners/:partnerId/billing-terms` | — | 204（条件を外す。発行済みの請求書は変わらない） | FR-001 |
 
 敬称は 001 の `PATCH /partners/:partnerId` の `honorific` で直す。
@@ -42,8 +44,8 @@
 | 3.1 | GET | `/work-hours?month=YYYY-MM` | — | 200 `{ entries: { partnerId, hours }[] }`（時間単価型の有効な取引先。未入力は `hours: null`） | FR-005 |
 | 3.2 | PUT | `/work-hours/:month` | `{ entries: { partnerId, hours }[] }`（`hours` は 0 以上・0.5 の倍数） | 200 `{ entries }` | FR-005 |
 | 3.3 | POST | `/invoices/drafts` | `{ month, partnerIds? }`（省略で条件のある有効な取引先すべて） | 200 `{ drafts: InvoiceDraft[], skipped: { partnerId, reason: "NO_HOURS" \| "ZERO_HOURS" }[] }`。`InvoiceDraft` = `{ partnerId, targetMonth, issueDate, salesDate, dueDate, items, total, taxDisplay, taxBreakdown, warnings }`（`warnings` に `INVOICE_DUPLICATE_MONTH`）。保存しない（R3） | FR-006, FR-016 |
-| 3.4 | POST | `/invoices` | `{ partnerId, targetMonth, issueDate?, salesDate?, items: { name, quantity?, unit?, unitPrice?, amount, taxCategory? }[]（1〜5行）, confirmDuplicate? }`。`issueDate` の既定は今日、`salesDate` は対象月の末日。数量と単価があるとき `amount` は `floor(数量×2×単価/2)` と一致しなければ `VALIDATION` | 201 `{ invoice: InvoiceDetail, journal }` / 409 `INVOICE_DUPLICATE_MONTH` / 422 `INVOICE_ISSUER_INCOMPLETE`・`PARTNER_INACTIVE` / 409 `PERIOD_CLOSED` / 422 `OUT_OF_PERIOD` | FR-008〜FR-013, FR-015 |
-| 3.5 | GET | `/invoices?partnerId=&month=&status=` | `status` は `unpaid`・`partial`・`paid`・`voided`・`overdue` | 200 `{ invoices: InvoiceSummary[], outstandingByPartner: { partnerId, partnerName, outstanding, overdue }[] }`。`InvoiceSummary` = `{ id, invoiceNo, partnerId, recipientName, targetMonth, issueDate, dueDate, total, paid, remaining, status, overdue }`（発行日の降順） | FR-020, FR-022 |
+| 3.4 | POST | `/invoices` | `{ partnerId, targetMonth, issueDate?, salesDate?, items: { name, quantity?, unit?, unitPrice?, amount, taxCategory? }[]（1〜5行）, confirmDuplicate? }`。`issueDate` の既定は今日、`salesDate` は対象月の末日。数量と単価があるとき `amount` は `floor(数量×2×単価/2)` と一致しなければ `VALIDATION` | 201 `{ invoice: InvoiceDetail, journal }` / 409 `INVOICE_DUPLICATE_MONTH` / 422 `INVOICE_ISSUER_INCOMPLETE`・`PARTNER_INACTIVE`・`TAX_SETTING_GAP`・`TAX_METHOD_UNSUPPORTED` / 409 `PERIOD_CLOSED` / 422 `OUT_OF_PERIOD` | FR-008〜FR-013, FR-015 |
+| 3.5 | GET | `/invoices?partnerId=&month=&status=` | `status` は `unpaid`・`partial`・`paid`・`voided`・`overdue` | 200 `{ invoices: InvoiceSummary[], outstandingByPartner: { partnerId, partnerName, outstanding, overdue }[] }`。`InvoiceSummary` = `{ id, invoiceNo, partnerId, recipientName, targetMonth, issueDate, dueDate, total, paid, remaining, status, overdue }`（発行日の降順）。`status` は `unpaid`・`partial`・`paid`・`voided`。`overdue` は期限切れの判定（表示用。残額 > 0 かつ今日 > 支払期限）で、`status` の値ではない。絞り込みの `status=overdue` はこの判定が真のもの。基本形（US1）は絞り込みなしか `partnerId`・`month` だけで、`overdue` は偽、`outstandingByPartner` は `[]`。期限切れの判定・`status` の絞り込み・未回収の合計は US2 | FR-020, FR-022 |
 | 3.6 | GET | `/invoices/:invoiceId` | — | 200 `InvoiceDetail` = `InvoiceSummary` ＋ `{ salesDate, recipientHonorific, issuer, taxDisplay, items, taxBreakdown: { rate, inclusive, tax, exclusive }[], journalId, voidJournalId, voidedAt, voidReason, payments: PaymentView[] }` | FR-010, FR-011, FR-012 |
 | 3.7 | POST | `/invoices/:invoiceId/void` | `{ reason }` | 200 `{ invoice, journal }`（`journal` は取り消した仕訳、または締め済みの年度で起票した訂正仕訳）/ 409 `INVOICE_HAS_PAYMENTS`・`INVOICE_VOIDED` | FR-014 |
 
@@ -61,7 +63,7 @@
 
 ## 5. 定期仕訳（US3）
 
-`RecurringInput` = `{ name, memo?, dayOfMonth (1〜31。31 = 末日), startMonth, endMonth?, lines: LineDraft[] }`（001 の仕訳の行と同じ形。`taxCategory` は省略可）。
+`RecurringInput` = `{ name, memo?, dayOfMonth (1〜28 または 31。31 = 末日。29・30 は `VALIDATION`), startMonth, endMonth?, lines: LineDraft[] }`（001 の仕訳の行と同じ形。`taxCategory` は省略可）。
 
 | § | メソッド | パス | 入力 | 出力 | 要件 |
 |---|---|---|---|---|---|
@@ -71,8 +73,8 @@
 | 5.4 | PUT | `/recurring-journals/:id` | `RecurringInput & { version, confirm? }` | 200 `{ recurring, posted }` / 409 `VERSION_CONFLICT`・`RECURRING_CONFIRM_REQUIRED` | FR-023, FR-026 |
 | 5.5 | POST | `/recurring-journals/:id/pause` | `{ version }` | 200 `{ recurring }` | FR-023 |
 | 5.6 | POST | `/recurring-journals/:id/resume` | `{ version, fromMonth?, confirm? }`（`fromMonth` の既定は今日の月。R20） | 200 `{ recurring, posted }` / 409 `RECURRING_CONFIRM_REQUIRED` | FR-023, FR-029 |
-| 5.7 | POST | `/recurring-journals/:id/runs/:month/skip` | `{ reason }` | 200 `{ run }`（`blocked` の回を「登録しない」にする） | FR-027 |
-| 5.8 | GET | `/recurring-journals/status` | — | 200 `{ unacknowledged: { runId, recurringId, name, targetMonth, journal: JournalRef }[], blocked: BlockedRun[] }`（`BlockedRun` = `{ recurringId, name, targetMonth, date, reason: "PERIOD_CLOSED" \| "OUT_OF_PERIOD" \| "ACCOUNT_INACTIVE" \| "ACCOUNT_NOT_FOUND" \| "PARTNER_INACTIVE" }`） | FR-027, FR-028 |
+| 5.7 | POST | `/recurring-journals/:id/runs/:month/skip` | `{ reason }` | 200 `{ run }`（予定日が今日以前で `posted`・`skipped` でない回〔`blocked` を含む未登録の回〕を「この回は登録しない」として確定する）/ 対象外の月（未来の月、登録済み、飛ばし済み）は `VALIDATION`（`details.field = "month"`） | FR-027 |
+| 5.8 | GET | `/recurring-journals/status` | — | 200 `{ unacknowledged: { runId, recurringId, name, targetMonth, journal: JournalRef }[], blocked: BlockedRun[] }`（`BlockedRun` = `{ recurringId, name, targetMonth, date, reason: "PERIOD_CLOSED" \| "OUT_OF_PERIOD" \| "ACCOUNT_INACTIVE" \| "ACCOUNT_NOT_FOUND" \| "PARTNER_INACTIVE" \| "JOURNAL_INVALID", details?: { code } }`。`JOURNAL_INVALID` は 001 の `validateJournal` が返す `TAX_SETTING_GAP`・`TAX_METHOD_UNSUPPORTED`・補助科目の停止〔`VALIDATION`〕で、元のエラーのコードを `details.code` に持つ） | FR-027, FR-028 |
 | 5.9 | POST | `/recurring-journals/acknowledge` | `{ runIds }` | 204 | FR-028 |
 
 - `/recurring-journals/status`・`/acknowledge` は `/:id` より先に登録する（Hono のルートの順）

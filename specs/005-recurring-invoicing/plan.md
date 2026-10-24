@@ -14,7 +14,7 @@
 
 **Primary Dependencies**: 追加なし。既存の Hono、Drizzle ＋ better-sqlite3、Zod、React ＋ TanStack Router、Vitest ＋ fast-check、Playwright
 
-**Storage**: 事業体の DB（tenant）に 10 表（data-model §1）。マイグレーション `packages/db/drizzle/tenant/0005_invoicing.sql`（STRICT に置き換え）と `0006_invoicing_integrity.sql`（`--custom`、トリガー。data-model §2）。`journals` は作り直さず、`source` の値をトリガーで検査する（R15）。registry は変えない。バックアップは tenant の DB ごと含まれる（004 のアプリの版の数が 1 つ増える）
+**Storage**: 事業体の DB（tenant）に 10 表（data-model §1）。マイグレーション `packages/db/drizzle/tenant/0005_invoicing.sql`（STRICT に置き換え）と `0006_invoicing_integrity.sql`（`--custom`、トリガー。data-model §2）。`journals` は作り直さず、`source` の値をトリガーで検査する（R15）。registry は変えない。バックアップは tenant の DB ごと含まれる（004 のアプリの版の数が 2 つ（0005 と 0006）増える）
 
 **Testing**: Vitest ＋ fast-check（INV-30〜39。`fc.assert(fc.property(...))` を直接）、一時のデータ場所での db のテスト（トリガー・UNIQUE・障害の注入）、Hono の `app.request()`（`createTestSession`・`testHeaders`、偽の時計）、Testing Library ＋ jsdom、Playwright（発行 → 印刷 → 消し込みの1本。利用者の端末）
 
@@ -70,7 +70,7 @@ packages/
 │   ├── recurring.ts               # RecurringInput, RecurringView, BlockedRun など（契約 §5）
 │   └── errors.ts                  # エラーコード14種（契約 §1）
 ├── domain/src/
-│   ├── invoicing/                 # amounts.ts（itemAmount, taxBreakdown）、due-date.ts（clampDay, dueDate）、number.ts（formatInvoiceNo）、draft.ts（buildInvoiceDraft）、journal-drafts.ts（invoiceJournalDraft, paymentJournalDraft, reversalDraft）、status.ts（invoiceStatus）
+│   ├── invoicing/                 # amounts.ts（itemAmount, taxBreakdown）、due-date.ts（clampDay, dueDate）、number.ts（formatInvoiceNo）、draft.ts（buildInvoiceDraft）、journal-drafts.ts（invoiceJournalDraft, paymentJournalDraft, reversalDraft）、status.ts（invoiceStatus、isOverdue）
 │   ├── recurring/                 # schedule.ts（scheduledDate）、due.ts（planRecurringRuns）
 │   ├── usecases/invoicing.ts      # 設定・条件・工数・案・発行・取消・消し込み・一覧（data-model §5）
 │   ├── usecases/recurring.ts      # 作成・変更・停止・再開・飛ばす・postDueRecurring・status・acknowledge
@@ -113,7 +113,7 @@ apps/web/e2e/invoicing.spec.ts     # 発行 → 印刷 → 消し込み
 1. **Setup**: なし（依存の追加なし）。AGENTS.md に「請求と定期仕訳（005）」の表を足すのは Polish
 2. **Foundational**: Zod スキーマとエラーコード14種、`JournalSource` の追加、tenant の 0005（10表、STRICT）と 0006（トリガー）、ポートと偽物の UnitOfWork、001 の変更（`createJournal` の `source`、`JOURNAL_LINKED`。R9・R13）、`todayOf` と `createApp` の clock の配線（R22）
 3. **US4**（設定・条件・期限・番号の純関数）→ **US1**（工数、案、発行、写し、印刷、取消）→ **US2**（消し込み、手数料、状態、一覧、取消）→ **US3**（定義、回の計画、スケジューラー、知らせ）
-4. 各ストーリーで「性質／ユニットテスト → domain → db → server → web」の順。INV は US4: INV-36・37、US1: INV-30・31・32・38・39、US2: INV-33・34、US3: INV-35
+4. 各ストーリーで「性質／ユニットテスト → domain → db → server → web」の順。INV は Foundational（T003）: INV-39、US4: INV-36・37、US1: INV-30・31・32（発行・取消）・38、US2: INV-33・34・32（消し込み・取消）、US3: INV-35
 5. **Polish**: E2E（発行 → 印刷 → 消し込み）、AGENTS.md の更新（005 の層の表）、ADR 0008（請求と仕訳の結びつけ方: 請求・入金の仕訳の保護と取消の規則）、quickstart の手動確認（利用者の端末、SC-001・SC-005）、最終の全体検証
 
 ## 決定事項（2026-10-24、利用者が tasks に進めた）
