@@ -36,6 +36,20 @@
       "when": 1792455431240,
       "tag": "0004_tax_return_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792852491653,
+      "tag": "0005_invoicing",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792852515571,
+      "tag": "0006_invoicing_integrity",
+      "breakpoints": true
     }
   ]
 }

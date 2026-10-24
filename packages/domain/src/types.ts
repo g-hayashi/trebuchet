@@ -181,7 +181,7 @@ export type ValidJournal = {
 };
 
 export type JournalStatus = "active" | "voided";
-export type JournalSource = "manual" | "import_freee";
+export type JournalSource = "manual" | "import_freee" | "invoice" | "payment" | "recurring";
 
 export type JournalLine = ValidLine & { id: string };
 

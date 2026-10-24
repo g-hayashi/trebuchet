@@ -21,6 +21,17 @@ export const DateString = z
   .regex(DATE_PATTERN, "日付は YYYY-MM-DD で入力してください")
   .refine(isValidDateString, "存在しない日付です");
 
+/** 月（`YYYY-MM`。月は 01〜12） */
+export const MonthString = z
+  .string()
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "月は YYYY-MM で入力してください");
+
+/** 日（1〜28、または 31 = 末日。29・30 は不可。005 の R8） */
+export const DayOfMonthOrEnd = z
+  .number()
+  .int()
+  .refine((d) => (d >= 1 && d <= 28) || d === 31, "日は 1〜28 または末日（31）にしてください");
+
 export const Id = z.uuid();
 
 export const Side = z.enum(["debit", "credit"]);

@@ -206,7 +206,9 @@ export const journals = sqliteTable(
     memo: text("memo"),
     status: text("status", { enum: ["active", "voided"] }).notNull(),
     correctsJournalId: text("corrects_journal_id").references((): AnySQLiteColumn => journals.id),
-    source: text("source", { enum: ["manual", "import_freee"] })
+    source: text("source", {
+      enum: ["manual", "import_freee", "invoice", "payment", "recurring"],
+    })
       .notNull()
       .default("manual"),
     version: integer("version").notNull().default(1),
@@ -635,6 +637,303 @@ export const closingAuditLog = sqliteTable(
     check(
       "closing_audit_log_action",
       sql`${t.action} IN ('create', 'update', 'dispose', 'delete')`,
+    ),
+  ],
+);
+
+// ---- 005-recurring-invoicing（specs/005-recurring-invoicing/data-model.md §1） ----
+
+export const invoiceSettings = sqliteTable(
+  "invoice_settings",
+  {
+    id: integer("id").primaryKey(),
+    issuerName: text("issuer_name").notNull(),
+    tradeName: text("trade_name"),
+    address: text("address").notNull(),
+    contact: text("contact").notNull(),
+    bankAccount: text("bank_account").notNull(),
+    registrationNumber: text("registration_number"),
+    taxDisplay: text("tax_display", { enum: ["separate", "inclusive_only"] })
+      .notNull()
+      .default("inclusive_only"),
+    nextSeq: integer("next_seq").notNull().default(1),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    check("invoice_settings_single", sql`${t.id} = 1`),
+    check(
+      "invoice_settings_registration",
+      sql`${t.registrationNumber} GLOB 'T[0-9]*' AND length(${t.registrationNumber}) = 14`,
+    ),
+    check("invoice_settings_tax_display", sql`${t.taxDisplay} IN ('separate', 'inclusive_only')`),
+    check("invoice_settings_next_seq", sql`${t.nextSeq} >= 1`),
+  ],
+);
+
+export const partnerBillingTerms = sqliteTable(
+  "partner_billing_terms",
+  {
+    partnerId: text("partner_id")
+      .primaryKey()
+      .references(() => partners.id),
+    billingType: text("billing_type", { enum: ["hourly", "monthly"] }).notNull(),
+    unitPrice: integer("unit_price"),
+    monthlyAmount: integer("monthly_amount"),
+    dueMonthsAfter: integer("due_months_after").notNull().default(1),
+    dueDay: integer("due_day").notNull().default(31),
+    defaultItemName: text("default_item_name").notNull(),
+    billingName: text("billing_name"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    check("partner_billing_terms_type", sql`${t.billingType} IN ('hourly', 'monthly')`),
+    check(
+      "partner_billing_terms_amounts",
+      sql`(${t.billingType} = 'hourly' AND ${t.unitPrice} IS NOT NULL AND ${t.unitPrice} > 0 AND ${t.monthlyAmount} IS NULL) OR (${t.billingType} = 'monthly' AND ${t.monthlyAmount} IS NOT NULL AND ${t.monthlyAmount} > 0 AND ${t.unitPrice} IS NULL)`,
+    ),
+    check("partner_billing_terms_due_months", sql`${t.dueMonthsAfter} BETWEEN 0 AND 12`),
+    check("partner_billing_terms_due_day", sql`${t.dueDay} BETWEEN 1 AND 28 OR ${t.dueDay} = 31`),
+    check("partner_billing_terms_item_name", sql`length(${t.defaultItemName}) > 0`),
+  ],
+);
+
+export const workHours = sqliteTable(
+  "work_hours",
+  {
+    partnerId: text("partner_id")
+      .notNull()
+      .references(() => partners.id),
+    targetMonth: text("target_month").notNull(),
+    halfHours: integer("half_hours").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.partnerId, t.targetMonth] }),
+    check("work_hours_month", sql`${t.targetMonth} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'`),
+    check("work_hours_half_hours", sql`${t.halfHours} >= 0`),
+  ],
+);
+
+export const invoices = sqliteTable(
+  "invoices",
+  {
+    id: text("id").primaryKey(),
+    invoiceNo: text("invoice_no").notNull().unique(),
+    seq: integer("seq").notNull().unique(),
+    partnerId: text("partner_id")
+      .notNull()
+      .references(() => partners.id),
+    targetMonth: text("target_month").notNull(),
+    issueDate: text("issue_date").notNull(),
+    salesDate: text("sales_date").notNull(),
+    dueDate: text("due_date").notNull(),
+    recipientName: text("recipient_name").notNull(),
+    recipientHonorific: text("recipient_honorific", { enum: ["様", "御中"] }).notNull(),
+    issuerJson: text("issuer_json").notNull(),
+    taxDisplay: text("tax_display", { enum: ["separate", "inclusive_only"] }).notNull(),
+    total: integer("total").notNull(),
+    journalId: text("journal_id")
+      .notNull()
+      .unique()
+      .references(() => journals.id),
+    createdAt: text("created_at").notNull(),
+    voidedAt: text("voided_at"),
+    voidReason: text("void_reason"),
+    voidJournalId: text("void_journal_id").references(() => journals.id),
+  },
+  (t) => [
+    index("invoices_partner_month").on(t.partnerId, t.targetMonth),
+    index("invoices_due_date").on(t.dueDate),
+    check("invoices_seq", sql`${t.seq} >= 1`),
+    check("invoices_month", sql`${t.targetMonth} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'`),
+    check("invoices_recipient_name", sql`length(${t.recipientName}) > 0`),
+    check("invoices_honorific", sql`${t.recipientHonorific} IN ('様', '御中')`),
+    check("invoices_tax_display", sql`${t.taxDisplay} IN ('separate', 'inclusive_only')`),
+    check("invoices_total", sql`${t.total} > 0 AND ${t.total} < 1000000000000`),
+    check("invoices_void", sql`(${t.voidedAt} IS NULL) = (${t.voidReason} IS NULL)`),
+  ],
+);
+
+export const invoiceItems = sqliteTable(
+  "invoice_items",
+  {
+    id: text("id").primaryKey(),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => invoices.id),
+    lineNo: integer("line_no").notNull(),
+    name: text("name").notNull(),
+    quantityHalves: integer("quantity_halves"),
+    unit: text("unit"),
+    unitPrice: integer("unit_price"),
+    amount: integer("amount").notNull(),
+    taxCategory: text("tax_category")
+      .notNull()
+      .references(() => taxCategories.code),
+    taxRate: integer("tax_rate"),
+  },
+  (t) => [
+    unique("invoice_items_invoice_line").on(t.invoiceId, t.lineNo),
+    check("invoice_items_line_no", sql`${t.lineNo} BETWEEN 1 AND 5`),
+    check("invoice_items_name", sql`length(${t.name}) > 0`),
+    check("invoice_items_quantity", sql`${t.quantityHalves} IS NULL OR ${t.quantityHalves} > 0`),
+    check("invoice_items_unit_price", sql`${t.unitPrice} IS NULL OR ${t.unitPrice} > 0`),
+    check("invoice_items_amount", sql`${t.amount} > 0 AND ${t.amount} < 1000000000000`),
+    // 数量と単価がともにあれば amount = quantity_halves × unit_price / 2（SQLite の整数の除算 = 切り捨て）
+    check(
+      "invoice_items_amount_match",
+      sql`${t.quantityHalves} IS NULL OR ${t.unitPrice} IS NULL OR ${t.amount} = (${t.quantityHalves} * ${t.unitPrice}) / 2`,
+    ),
+  ],
+);
+
+export const invoicePayments = sqliteTable(
+  "invoice_payments",
+  {
+    id: text("id").primaryKey(),
+    invoiceId: text("invoice_id")
+      .notNull()
+      .references(() => invoices.id),
+    receivedOn: text("received_on").notNull(),
+    amount: integer("amount").notNull(),
+    feeAmount: integer("fee_amount").notNull(),
+    depositAccountId: text("deposit_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    depositSubAccountId: text("deposit_sub_account_id").references(() => subAccounts.id),
+    journalId: text("journal_id")
+      .notNull()
+      .unique()
+      .references(() => journals.id),
+    createdAt: text("created_at").notNull(),
+    voidedAt: text("voided_at"),
+    voidReason: text("void_reason"),
+    voidJournalId: text("void_journal_id").references(() => journals.id),
+  },
+  (t) => [
+    index("invoice_payments_invoice").on(t.invoiceId),
+    check("invoice_payments_amount", sql`${t.amount} > 0`),
+    check("invoice_payments_fee", sql`${t.feeAmount} >= 0`),
+    check("invoice_payments_void", sql`(${t.voidedAt} IS NULL) = (${t.voidReason} IS NULL)`),
+  ],
+);
+
+export const recurringJournals = sqliteTable(
+  "recurring_journals",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    memo: text("memo"),
+    dayOfMonth: integer("day_of_month").notNull(),
+    startMonth: text("start_month").notNull(),
+    endMonth: text("end_month"),
+    status: text("status", { enum: ["active", "paused"] }).notNull(),
+    version: integer("version").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    check("recurring_journals_name", sql`length(${t.name}) > 0`),
+    check("recurring_journals_day", sql`${t.dayOfMonth} BETWEEN 1 AND 28 OR ${t.dayOfMonth} = 31`),
+    check(
+      "recurring_journals_start_month",
+      sql`${t.startMonth} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'`,
+    ),
+    check(
+      "recurring_journals_end_month",
+      sql`${t.endMonth} IS NULL OR (${t.endMonth} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]' AND ${t.endMonth} >= ${t.startMonth})`,
+    ),
+    check("recurring_journals_status", sql`${t.status} IN ('active', 'paused')`),
+    check("recurring_journals_version", sql`${t.version} >= 1`),
+  ],
+);
+
+export const recurringJournalLines = sqliteTable(
+  "recurring_journal_lines",
+  {
+    id: text("id").primaryKey(),
+    recurringId: text("recurring_id")
+      .notNull()
+      .references(() => recurringJournals.id),
+    lineNo: integer("line_no").notNull(),
+    side: text("side", { enum: ["debit", "credit"] }).notNull(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    subAccountId: text("sub_account_id").references(() => subAccounts.id),
+    amount: integer("amount").notNull(),
+    taxCategory: text("tax_category").references(() => taxCategories.code),
+    partnerId: text("partner_id").references(() => partners.id),
+    description: text("description"),
+  },
+  (t) => [
+    unique("recurring_journal_lines_line").on(t.recurringId, t.lineNo),
+    check("recurring_journal_lines_side", sql`${t.side} IN ('debit', 'credit')`),
+    check("recurring_journal_lines_amount", sql`${t.amount} > 0 AND ${t.amount} < 1000000000000`),
+  ],
+);
+
+export const recurringRuns = sqliteTable(
+  "recurring_runs",
+  {
+    id: text("id").primaryKey(),
+    recurringId: text("recurring_id")
+      .notNull()
+      .references(() => recurringJournals.id),
+    targetMonth: text("target_month").notNull(),
+    status: text("status", { enum: ["posted", "skipped"] }).notNull(),
+    journalId: text("journal_id")
+      .unique()
+      .references(() => journals.id),
+    skipReason: text("skip_reason"),
+    createdAt: text("created_at").notNull(),
+    acknowledgedAt: text("acknowledged_at"),
+  },
+  (t) => [
+    // INV-35: 各（定期仕訳, 月）の回は高々1件
+    unique("recurring_runs_recurring_month").on(t.recurringId, t.targetMonth),
+    check("recurring_runs_month", sql`${t.targetMonth} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'`),
+    check("recurring_runs_status", sql`${t.status} IN ('posted', 'skipped')`),
+    check(
+      "recurring_runs_shape",
+      sql`(${t.status} = 'posted' AND ${t.journalId} IS NOT NULL) OR (${t.status} = 'skipped' AND ${t.journalId} IS NULL AND ${t.skipReason} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const invoicingAuditLog = sqliteTable(
+  "invoicing_audit_log",
+  {
+    id: text("id").primaryKey(),
+    occurredAt: text("occurred_at").notNull(),
+    targetType: text("target_type", {
+      enum: [
+        "invoice_settings",
+        "billing_terms",
+        "work_hours",
+        "invoice",
+        "payment",
+        "recurring_journal",
+        "recurring_run",
+      ],
+    }).notNull(),
+    targetId: text("target_id").notNull(),
+    action: text("action", {
+      enum: ["create", "update", "void", "pause", "resume", "skip", "acknowledge"],
+    }).notNull(),
+    reason: text("reason"),
+    beforeJson: text("before_json"),
+    afterJson: text("after_json"),
+  },
+  (t) => [
+    index("invoicing_audit_log_target").on(t.targetType, t.targetId),
+    check(
+      "invoicing_audit_log_target_type",
+      sql`${t.targetType} IN ('invoice_settings', 'billing_terms', 'work_hours', 'invoice', 'payment', 'recurring_journal', 'recurring_run')`,
+    ),
+    check(
+      "invoicing_audit_log_action",
+      sql`${t.action} IN ('create', 'update', 'void', 'pause', 'resume', 'skip', 'acknowledge')`,
     ),
   ],
 );
