@@ -1,4 +1,4 @@
-import type { JournalOrigin } from "@trebuchet/schema";
+import type { BillingTerms, InvoiceSettings, JournalOrigin } from "@trebuchet/schema";
 import { isSessionActive } from "../src/auth/session.ts";
 import type {
   AppSettingKey,
@@ -783,6 +783,10 @@ export class FakeClosingUnitOfWork implements ClosingUnitOfWork {
 type InvoicingState = {
   origins: Record<string, JournalOrigin>;
   audits: InvoicingAuditEntry[];
+  settings: InvoiceSettings | null;
+  billingTerms: BillingTerms[];
+  /** 発行済みの請求書の seq（請求書の保存は US1 のタスクで足す。それまではテストが登録する） */
+  issuedSeqs: number[];
 };
 
 /**
@@ -790,7 +794,13 @@ type InvoicingState = {
  * 仕訳の起点は、テストが `registerOrigin` で登録する（実装は請求書・入金・定期仕訳の表から引く）
  */
 export class InMemoryInvoicingStore implements InvoicingStore {
-  state: InvoicingState = { origins: {}, audits: [] };
+  state: InvoicingState = {
+    origins: {},
+    audits: [],
+    settings: null,
+    billingTerms: [],
+    issuedSeqs: [],
+  };
 
   get audits(): InvoicingAuditEntry[] {
     return this.state.audits;
@@ -800,8 +810,47 @@ export class InMemoryInvoicingStore implements InvoicingStore {
     this.state.origins[journalId] = structuredClone(origin);
   }
 
+  /** 発行済みの請求書の seq を登録する（請求書の保存が入るまでの代わり） */
+  registerIssuedSeq(seq: number): void {
+    this.state.issuedSeqs.push(seq);
+  }
+
   appendInvoicingAudit(entry: InvoicingAuditEntry): void {
     this.state.audits.push(structuredClone(entry));
+  }
+
+  getInvoiceSettings(): InvoiceSettings | null {
+    return structuredClone(this.state.settings);
+  }
+
+  upsertInvoiceSettings(row: InvoiceSettings): void {
+    this.state.settings = structuredClone(row);
+  }
+
+  maxInvoiceSeq(): number | null {
+    return this.state.issuedSeqs.length === 0 ? null : Math.max(...this.state.issuedSeqs);
+  }
+
+  listBillingTerms(): BillingTerms[] {
+    return structuredClone(
+      [...this.state.billingTerms].sort((a, b) => a.partnerId.localeCompare(b.partnerId)),
+    );
+  }
+
+  getBillingTerms(partnerId: string): BillingTerms | null {
+    const found = this.state.billingTerms.find((t) => t.partnerId === partnerId);
+    return found === undefined ? null : structuredClone(found);
+  }
+
+  upsertBillingTerms(row: BillingTerms): void {
+    this.state.billingTerms = [
+      ...this.state.billingTerms.filter((t) => t.partnerId !== row.partnerId),
+      structuredClone(row),
+    ];
+  }
+
+  deleteBillingTerms(partnerId: string): void {
+    this.state.billingTerms = this.state.billingTerms.filter((t) => t.partnerId !== partnerId);
   }
 
   originOfJournal(journalId: string): JournalOrigin | null {

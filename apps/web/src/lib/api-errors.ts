@@ -188,6 +188,13 @@ export function describeError(error: unknown): ErrorDescription {
         message: "バックアップは実行中です。終わるまでお待ちください。",
         details: [],
       };
+    case "INVOICE_SEQ_TOO_LOW": {
+      const minimum = asNumber(error.details?.minimum);
+      return {
+        message: `次の通し番号は ${minimum === undefined ? "発行済みの最大の番号より大きい値" : `${minimum} 以上`}にしてください（発行済みの番号は再び使えません）。`,
+        details: [],
+      };
+    }
     case "INTERNAL":
       return {
         message: "サーバーでエラーが発生しました。時間をおいて再度お試しください。",

@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { PartnerInput } from "@trebuchet/schema";
-import { useId, useState } from "react";
+import { Fragment, useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { type BillingTermsRow, billingTermsQuery } from "@/features/invoicing/api";
+import { BillingTermsForm } from "@/features/invoicing/BillingTermsForm";
 import { api, unwrap } from "@/lib/api";
+import { formatYen } from "@/lib/format";
 import { type Partner, partnersQuery, queryKeys } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/partners")({
@@ -31,7 +34,11 @@ function PartnersPage() {
   const { entityId } = Route.useParams();
   const queryClient = useQueryClient();
   const { data: partners, isPending, error } = useQuery(partnersQuery(entityId));
+  const { data: billingTerms } = useQuery(billingTermsQuery(entityId));
+  const termsByPartner = new Map((billingTerms ?? []).map((t) => [t.partnerId, t]));
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** 請求の条件を編集中の取引先（US4） */
+  const [billingId, setBillingId] = useState<string | null>(null);
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.partners(entityId) });
 
@@ -82,6 +89,7 @@ function PartnersPage() {
                   <TableHead>名称</TableHead>
                   <TableHead className="w-16">敬称</TableHead>
                   <TableHead>メモ</TableHead>
+                  <TableHead>請求</TableHead>
                   <TableHead className="w-0">
                     <span className="sr-only">操作</span>
                   </TableHead>
@@ -91,7 +99,7 @@ function PartnersPage() {
                 {partners.map((p) =>
                   editingId === p.id ? (
                     <TableRow key={p.id} className="hover:bg-transparent">
-                      <TableCell colSpan={4}>
+                      <TableCell colSpan={5}>
                         <PartnerForm
                           partner={p}
                           submitLabel="保存"
@@ -106,26 +114,50 @@ function PartnersPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    <TableRow key={p.id}>
-                      <TableCell>{p.name}</TableCell>
-                      <TableCell>{p.honorific ?? ""}</TableCell>
-                      <TableCell className="whitespace-pre-wrap text-muted-foreground">
-                        {p.memo ?? ""}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            update.reset();
-                            setEditingId(p.id);
-                          }}
-                        >
-                          編集
-                          <span className="sr-only">（{p.name}）</span>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                    <Fragment key={p.id}>
+                      <TableRow>
+                        <TableCell>{p.name}</TableCell>
+                        <TableCell>{p.honorific ?? ""}</TableCell>
+                        <TableCell className="whitespace-pre-wrap text-muted-foreground">
+                          {p.memo ?? ""}
+                        </TableCell>
+                        <TableCell>{billingSummary(termsByPartner.get(p.id))}</TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              update.reset();
+                              setEditingId(p.id);
+                            }}
+                          >
+                            編集
+                            <span className="sr-only">（{p.name}）</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-expanded={billingId === p.id}
+                            onClick={() => setBillingId(billingId === p.id ? null : p.id)}
+                          >
+                            請求の条件
+                            <span className="sr-only">（{p.name}）</span>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      {billingId === p.id && (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={5}>
+                            <BillingTermsForm
+                              entityId={entityId}
+                              partner={p}
+                              terms={termsByPartner.get(p.id) ?? null}
+                              onClose={() => setBillingId(null)}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
                   ),
                 )}
               </TableBody>
@@ -135,6 +167,14 @@ function PartnersPage() {
       </Card>
     </main>
   );
+}
+
+/** 一覧の「請求」の欄。条件がなければ「未設定」 */
+function billingSummary(terms: BillingTermsRow | undefined): string {
+  if (terms === undefined) return "未設定";
+  return terms.billingType === "hourly"
+    ? `時間単価 ${formatYen(terms.unitPrice ?? 0)} 円`
+    : `月額 ${formatYen(terms.monthlyAmount ?? 0)} 円`;
 }
 
 type PartnerFormInput = z.input<typeof PartnerInput>;

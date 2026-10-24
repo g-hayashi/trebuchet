@@ -15,6 +15,7 @@ import { Route as SettingsBackupRouteImport } from './routes/settings/backup'
 import { Route as SettingsSecurityRouteImport } from './routes/settings/security'
 import { Route as EEntityIdIndexRouteImport } from './routes/e/$entityId/index'
 import { Route as EEntityIdAccountsRouteImport } from './routes/e/$entityId/accounts'
+import { Route as EEntityIdInvoiceSettingsRouteImport } from './routes/e/$entityId/invoice-settings'
 import { Route as EEntityIdPartnersRouteImport } from './routes/e/$entityId/partners'
 import { Route as EEntityIdTagsRouteImport } from './routes/e/$entityId/tags'
 import { Route as EEntityIdTaxSettingsRouteImport } from './routes/e/$entityId/tax-settings'
@@ -70,6 +71,12 @@ const EEntityIdAccountsRoute = EEntityIdAccountsRouteImport.update({
   path: '/accounts',
   getParentRoute: () => EEntityIdRouteRoute,
 } as any)
+const EEntityIdInvoiceSettingsRoute =
+  EEntityIdInvoiceSettingsRouteImport.update({
+    id: '/invoice-settings',
+    path: '/invoice-settings',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
 const EEntityIdPartnersRoute = EEntityIdPartnersRouteImport.update({
   id: '/partners',
   path: '/partners',
@@ -210,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
+  '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
@@ -241,6 +249,7 @@ export interface FileRoutesByTo {
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
+  '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
@@ -274,6 +283,7 @@ export interface FileRoutesById {
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
+  '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
@@ -308,6 +318,7 @@ export interface FileRouteTypes {
     | '/settings/backup'
     | '/settings/security'
     | '/e/$entityId/accounts'
+    | '/e/$entityId/invoice-settings'
     | '/e/$entityId/partners'
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
@@ -339,6 +350,7 @@ export interface FileRouteTypes {
     | '/settings/backup'
     | '/settings/security'
     | '/e/$entityId/accounts'
+    | '/e/$entityId/invoice-settings'
     | '/e/$entityId/partners'
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
@@ -371,6 +383,7 @@ export interface FileRouteTypes {
     | '/settings/backup'
     | '/settings/security'
     | '/e/$entityId/accounts'
+    | '/e/$entityId/invoice-settings'
     | '/e/$entityId/partners'
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
@@ -447,6 +460,13 @@ declare module '@tanstack/react-router' {
       path: '/accounts'
       fullPath: '/e/$entityId/accounts'
       preLoaderRoute: typeof EEntityIdAccountsRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/invoice-settings': {
+      id: '/e/$entityId/invoice-settings'
+      path: '/invoice-settings'
+      fullPath: '/e/$entityId/invoice-settings'
+      preLoaderRoute: typeof EEntityIdInvoiceSettingsRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
     '/e/$entityId/partners': {
@@ -622,6 +642,7 @@ declare module '@tanstack/react-router' {
 
 interface EEntityIdRouteRouteChildren {
   EEntityIdAccountsRoute: typeof EEntityIdAccountsRoute
+  EEntityIdInvoiceSettingsRoute: typeof EEntityIdInvoiceSettingsRoute
   EEntityIdPartnersRoute: typeof EEntityIdPartnersRoute
   EEntityIdTagsRoute: typeof EEntityIdTagsRoute
   EEntityIdTaxSettingsRoute: typeof EEntityIdTaxSettingsRoute
@@ -651,6 +672,7 @@ interface EEntityIdRouteRouteChildren {
 
 const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdAccountsRoute: EEntityIdAccountsRoute,
+  EEntityIdInvoiceSettingsRoute: EEntityIdInvoiceSettingsRoute,
   EEntityIdPartnersRoute: EEntityIdPartnersRoute,
   EEntityIdTagsRoute: EEntityIdTagsRoute,
   EEntityIdTaxSettingsRoute: EEntityIdTaxSettingsRoute,

@@ -49,6 +49,16 @@ const DEFAULT_ROUTES: Record<string, Handler> = {
 };
 
 /**
+ * 事業体の下の API（`/api/entities/:entityId` を除いたパス）の既定の応答。事業体の ID によらない。
+ * 個別のテストが同じパスのキーを渡したときは、そちらを使う。005 の請求の設定・条件は、
+ * 取引先の画面など既存の画面が読むので、既存のテストが落ちないよう空の応答を置く
+ */
+const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
+  "GET /invoice-settings": () => ok({ settings: null, minimumNextSeq: 1 }),
+  "GET /billing-terms": () => ok({ terms: [] }),
+};
+
+/**
  * fetch を差し替え、"GET /api/..." の形のキーで応答を返す。受けた呼び出しを順に記録して返す。
  * `GET /api/auth/status` は、指定がなければ登録済み・サインイン済みの応答を返す。
  * 後片付けは vi.unstubAllGlobals() で行う
@@ -71,7 +81,9 @@ export function mockApi(given: Record<string, Handler>): ApiCall[] {
         form,
       };
       calls.push(call);
-      const handler = routes[`${method} ${url.pathname}`];
+      const entityPath = url.pathname.replace(/^\/api\/entities\/[^/]+/, "");
+      const handler =
+        routes[`${method} ${url.pathname}`] ?? DEFAULT_ENTITY_ROUTES[`${method} ${entityPath}`];
       const reply = handler
         ? await handler(call)
         : ok({ message: `${method} ${url.pathname} は未定義です` }, 500);

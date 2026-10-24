@@ -1,4 +1,4 @@
-import type { JournalOrigin } from "@trebuchet/schema";
+import type { BillingTerms, InvoiceSettings, JournalOrigin } from "@trebuchet/schema";
 import type {
   AppSettingKey,
   AuthEvent,
@@ -250,6 +250,16 @@ export interface ClosingUnitOfWork {
  */
 export interface InvoicingStore {
   appendInvoicingAudit(entry: InvoicingAuditEntry): void;
+  /** 発行者の設定（`invoice_settings` の 1 行）。なければ null */
+  getInvoiceSettings(): InvoiceSettings | null;
+  upsertInvoiceSettings(row: InvoiceSettings): void;
+  /** 発行済み（取消を含む）の請求書の最大の `seq`。1 件もなければ null（R6） */
+  maxInvoiceSeq(): number | null;
+  /** 請求の条件の全件（取引先の ID の順） */
+  listBillingTerms(): BillingTerms[];
+  getBillingTerms(partnerId: string): BillingTerms | null;
+  upsertBillingTerms(row: BillingTerms): void;
+  deleteBillingTerms(partnerId: string): void;
   /** 仕訳が請求・入金・定期仕訳のどれから作られたか（H:§6.1）。取消の仕訳も元の請求・入金を指す。なければ null */
   originOfJournal(journalId: string): JournalOrigin | null;
 }

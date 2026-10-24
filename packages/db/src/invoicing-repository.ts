@@ -5,17 +5,19 @@ import type {
   LedgerRepository,
   MasterRepository,
 } from "@trebuchet/domain";
-import type { JournalOrigin } from "@trebuchet/schema";
+import type { BillingTerms, InvoiceSettings, JournalOrigin } from "@trebuchet/schema";
 import type { RunResult } from "better-sqlite3";
-import { eq, or } from "drizzle-orm";
+import { asc, eq, max, or } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { DrizzleLedgerRepository } from "./ledger-repository.ts";
 import { DrizzleMasterRepository } from "./master-repository.ts";
 import type * as tenantSchema from "./schema/tenant.ts";
 import {
   invoicePayments,
+  invoiceSettings,
   invoices,
   invoicingAuditLog,
+  partnerBillingTerms,
   recurringJournals,
   recurringRuns,
 } from "./schema/tenant.ts";
@@ -41,6 +43,65 @@ export class DrizzleInvoicingStore implements InvoicingStore {
 
   appendInvoicingAudit(entry: InvoicingAuditEntry): void {
     appendInvoicingAuditRow(this.db, entry);
+  }
+
+  // ---- 発行者の設定 ----
+
+  getInvoiceSettings(): InvoiceSettings | null {
+    const row = this.db.select().from(invoiceSettings).where(eq(invoiceSettings.id, 1)).get();
+    if (row === undefined) return null;
+    const { id: _id, ...settings } = row;
+    return settings;
+  }
+
+  upsertInvoiceSettings(row: InvoiceSettings): void {
+    const values = { ...row };
+    this.db
+      .insert(invoiceSettings)
+      .values({ id: 1, ...values })
+      .onConflictDoUpdate({ target: invoiceSettings.id, set: values })
+      .run();
+  }
+
+  maxInvoiceSeq(): number | null {
+    const row = this.db
+      .select({ max: max(invoices.seq) })
+      .from(invoices)
+      .get();
+    return row?.max ?? null;
+  }
+
+  // ---- 請求の条件 ----
+
+  listBillingTerms(): BillingTerms[] {
+    return this.db
+      .select()
+      .from(partnerBillingTerms)
+      .orderBy(asc(partnerBillingTerms.partnerId))
+      .all();
+  }
+
+  getBillingTerms(partnerId: string): BillingTerms | null {
+    return (
+      this.db
+        .select()
+        .from(partnerBillingTerms)
+        .where(eq(partnerBillingTerms.partnerId, partnerId))
+        .get() ?? null
+    );
+  }
+
+  upsertBillingTerms(row: BillingTerms): void {
+    const { partnerId: _partnerId, ...set } = row;
+    this.db
+      .insert(partnerBillingTerms)
+      .values(row)
+      .onConflictDoUpdate({ target: partnerBillingTerms.partnerId, set })
+      .run();
+  }
+
+  deleteBillingTerms(partnerId: string): void {
+    this.db.delete(partnerBillingTerms).where(eq(partnerBillingTerms.partnerId, partnerId)).run();
   }
 
   /** 請求書・入金・定期仕訳の仕訳の ID から起点を引く。取消の仕訳（`void_journal_id`）も元の請求・入金を指す */
