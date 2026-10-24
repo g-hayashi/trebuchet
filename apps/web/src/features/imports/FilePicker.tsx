@@ -7,10 +7,18 @@ type FilePickerProps = {
   onChange: (file: File | undefined) => void;
   description?: string | undefined;
   disabled?: boolean | undefined;
+  /** 選べるファイルの拡張子（既定は `.csv`） */
+  accept?: string | undefined;
 };
 
-/** CSV のファイルを1つ選ぶ。選んだファイル名を入力欄の下に表示する */
-export function FilePicker({ label, onChange, description, disabled }: FilePickerProps) {
+/** ファイル（既定は CSV）を1つ選ぶ。選んだファイル名を入力欄の下に表示する */
+export function FilePicker({
+  label,
+  onChange,
+  description,
+  disabled,
+  accept = ".csv",
+}: FilePickerProps) {
   const id = useId();
   const descriptionId = `${id}-description`;
   const statusId = `${id}-status`;
@@ -33,7 +41,7 @@ export function FilePicker({ label, onChange, description, disabled }: FilePicke
       <Input
         id={id}
         type="file"
-        accept=".csv"
+        accept={accept}
         disabled={disabled}
         aria-describedby={description ? `${descriptionId} ${statusId}` : statusId}
         onChange={handleChange}

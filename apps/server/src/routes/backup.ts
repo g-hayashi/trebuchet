@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { accessSync, constants, statSync } from "node:fs";
 import { isAbsolute } from "node:path";
+import { type CryptoOptions, currentAppVersion, decryptBackup, unpackArchive } from "@trebuchet/db";
 import {
   type AuthStore,
   type BackupStore,
@@ -10,6 +11,7 @@ import {
   type SecretStore,
 } from "@trebuchet/domain";
 import {
+  type BackupInspection,
   BackupPassphraseInput,
   BackupSettingsInput,
   type BackupStatus,
@@ -19,6 +21,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { DomainException } from "../errors.ts";
 import { type BackupRunner, readPassphrase } from "../lib/backup-run.ts";
 import { BACKUP_PASSPHRASE_KEY } from "../lib/keychain.ts";
+import { readUpload, uploadLimitFor } from "../lib/upload.ts";
 import type { GuardEnv } from "../middleware/host.ts";
 import { validate } from "../validator.ts";
 
@@ -28,7 +31,14 @@ export type BackupRouteDeps = {
   secrets: SecretStore;
   runner: BackupRunner;
   clock: Clock;
+  /** 検査のファイルの上限（既定 200 MB）。テストが小さくする */
+  inspectMaxBytes?: number;
+  /** テストが鍵導出を軽くするための差し替え */
+  crypto?: CryptoOptions;
 };
+
+/** 検査に送れるバックアップのファイルの上限（research R13） */
+export const MAX_INSPECT_BYTES = 200 * 1024 * 1024;
 
 const DEFAULT_RUN_LIMIT = 50;
 const MAX_RUN_LIMIT = 200;
@@ -67,11 +77,15 @@ function isUsableFolder(folder: string): boolean {
   }
 }
 
+const invalidBackup = () =>
+  domainError("BACKUP_INVALID", "パスフレーズが違うか、ファイルが壊れています");
+
 const sha = (value: string): Buffer => createHash("sha256").update(value).digest();
 const sameSecret = (a: string, b: string): boolean => timingSafeEqual(sha(a), sha(b));
 
 export function backupRoutes(deps: BackupRouteDeps) {
   const { auth, backups, secrets, runner, clock } = deps;
+  const inspectMaxBytes = deps.inspectMaxBytes ?? MAX_INSPECT_BYTES;
 
   /** 設定・パスフレーズの変更の直後の最初のバックアップ。`manual` で始め、終わりは待たない */
   async function startFirstRun(): Promise<string | null> {
@@ -184,5 +198,44 @@ export function backupRoutes(deps: BackupRouteDeps) {
         }
       }
       return c.json({ runs: await backups().listRuns(limit) }, 200);
+    })
+    .post("/inspect", uploadLimitFor(1, inspectMaxBytes), async (c) => {
+      const upload = await readUpload(c, inspectMaxBytes);
+      const passphrase = (await c.req.parseBody()).passphrase;
+      if (typeof passphrase !== "string" || passphrase === "") {
+        const message = "パスフレーズを入力してください";
+        throw new DomainException(
+          domainError("VALIDATION", "入力が正しくありません", {
+            issues: [{ path: ["passphrase"], message }],
+          }),
+        );
+      }
+      // 復号はメモリだけで行う（平文をディスクに書かない）。誤ったパスフレーズと壊れたファイルは区別しない
+      const decrypted = await decryptBackup(
+        upload.bytes,
+        passphrase,
+        currentAppVersion(),
+        deps.crypto,
+      );
+      if (!decrypted.ok) {
+        throw new DomainException(
+          decrypted.error === "VERSION_MISMATCH"
+            ? domainError(
+                "BACKUP_VERSION_MISMATCH",
+                "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください",
+              )
+            : invalidBackup(),
+        );
+      }
+      const unpacked = unpackArchive(decrypted.value.archive);
+      if (!unpacked.ok) throw new DomainException(invalidBackup());
+      const { header } = decrypted.value;
+      const inspection: BackupInspection = {
+        createdAt: header.createdAt,
+        macId: header.macId,
+        appVersion: header.appVersion,
+        entities: unpacked.value.manifest.entities,
+      };
+      return c.json(inspection, 200);
     });
 }

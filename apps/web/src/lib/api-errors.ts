@@ -108,8 +108,18 @@ export function describeError(error: unknown): ErrorDescription {
         details: [],
       };
     }
-    case "FILE_TOO_LARGE":
-      return { message: "ファイルが大きすぎます（5 MB まで）。", details: [] };
+    case "FILE_TOO_LARGE": {
+      const maxBytes = asNumber(error.details?.maxBytes);
+      const limit = maxBytes === undefined ? 5 : Math.round(maxBytes / (1024 * 1024));
+      return { message: `ファイルが大きすぎます（${limit} MB まで）。`, details: [] };
+    }
+    case "BACKUP_INVALID":
+      return { message: "パスフレーズが違うか、ファイルが壊れています。", details: [] };
+    case "BACKUP_VERSION_MISMATCH":
+      return {
+        message: "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください。",
+        details: [],
+      };
     case "REPORT_LINE_INVALID":
       return { message: "決算書の欄は、費用の科目の 8〜31 から選んでください。", details: [] };
     case "ENTITY_KIND_UNSUPPORTED":

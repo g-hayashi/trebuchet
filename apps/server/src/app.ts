@@ -1,3 +1,4 @@
+import type { CryptoOptions } from "@trebuchet/db";
 import type { AuthStore, BackupStore, Clock, SecretStore } from "@trebuchet/domain";
 import { Hono } from "hono";
 import {
@@ -53,6 +54,10 @@ export type AppOptions = {
     runner?: BackupRunner;
     secrets?: SecretStore;
     store?: () => BackupStore;
+    /** 検査のファイルの上限（テストが小さくする） */
+    inspectMaxBytes?: number;
+    /** テストが鍵導出を軽くするための差し替え */
+    crypto?: CryptoOptions;
   };
 };
 
@@ -87,6 +92,10 @@ export function createApp(options: AppOptions = {}) {
         secrets: options.backup?.secrets ?? secretStore,
         runner: options.backup?.runner ?? backupRunner,
         clock,
+        ...(options.backup?.inspectMaxBytes === undefined
+          ? {}
+          : { inspectMaxBytes: options.backup.inspectMaxBytes }),
+        ...(options.backup?.crypto === undefined ? {} : { crypto: options.backup.crypto }),
       }),
     )
     .route("/entities", entitiesRoutes)

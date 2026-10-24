@@ -9,11 +9,13 @@ export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 /** multipart の境界・ヘッダと、`options` などの他のフィールドのための余裕 */
 const MULTIPART_ALLOWANCE_BYTES = 64 * 1024;
 
-const FILE_TOO_LARGE = {
-  code: "FILE_TOO_LARGE",
-  message: "ファイルが大きすぎます（上限 5 MB）",
-  details: { maxBytes: MAX_UPLOAD_BYTES },
-} as const;
+function fileTooLarge(maxBytes: number) {
+  return {
+    code: "FILE_TOO_LARGE",
+    message: `ファイルが大きすぎます（上限 ${Math.round(maxBytes / (1024 * 1024))} MB）`,
+    details: { maxBytes },
+  } as const;
+}
 
 /**
  * 要求のボディの大きさを制限する（413 FILE_TOO_LARGE）。
@@ -22,10 +24,10 @@ const FILE_TOO_LARGE = {
 export const uploadLimit: MiddlewareHandler = uploadLimitFor(1);
 
 /** ファイルを最大 files 個まで送れる要求のボディの上限（各ファイルの大きさは readUpload / readOptionalUpload で確かめる） */
-export function uploadLimitFor(files: number): MiddlewareHandler {
+export function uploadLimitFor(files: number, maxFileBytes = MAX_UPLOAD_BYTES): MiddlewareHandler {
   return bodyLimit({
-    maxSize: MAX_UPLOAD_BYTES * files + MULTIPART_ALLOWANCE_BYTES,
-    onError: (c: Context) => fail(c, FILE_TOO_LARGE),
+    maxSize: maxFileBytes * files + MULTIPART_ALLOWANCE_BYTES,
+    onError: (c: Context) => fail(c, fileTooLarge(maxFileBytes)),
   });
 }
 
@@ -39,8 +41,8 @@ export type Upload = {
  * multipart/form-data のフィールド `file` を読む。
  * `file` がない・ファイルでない → 400 VALIDATION、5 MB を超える → 413 FILE_TOO_LARGE（DomainException を投げ、onError が応答にする）
  */
-export async function readUpload(c: Context): Promise<Upload> {
-  const upload = await readOptionalUpload(c, "file");
+export async function readUpload(c: Context, maxFileBytes = MAX_UPLOAD_BYTES): Promise<Upload> {
+  const upload = await readOptionalUpload(c, "file", maxFileBytes);
   if (upload === undefined) {
     const message = "ファイルを選んでください";
     throw new DomainException({
@@ -56,7 +58,11 @@ export async function readUpload(c: Context): Promise<Upload> {
  * multipart/form-data の任意のファイルのフィールドを読む。フィールドがなければ undefined。
  * 文字列などファイルでない値 → 400 VALIDATION、5 MB を超える → 413 FILE_TOO_LARGE
  */
-export async function readOptionalUpload(c: Context, name: string): Promise<Upload | undefined> {
+export async function readOptionalUpload(
+  c: Context,
+  name: string,
+  maxFileBytes = MAX_UPLOAD_BYTES,
+): Promise<Upload | undefined> {
   const body = await c.req.parseBody();
   const file = body[name];
   if (file === undefined) return undefined;
@@ -68,7 +74,7 @@ export async function readOptionalUpload(c: Context, name: string): Promise<Uplo
       details: { issues: [{ path: [name], message }] },
     });
   }
-  if (file.size > MAX_UPLOAD_BYTES) throw new DomainException(FILE_TOO_LARGE);
+  if (file.size > maxFileBytes) throw new DomainException(fileTooLarge(maxFileBytes));
   return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
 }
 
