@@ -25,3 +25,6 @@ test-results/
 
 # playwright MCP の作業ファイル
 .playwright-mcp/
+
+# pnpm のストア（ローカル）
+.pnpm-store/

@@ -19,6 +19,11 @@ description: "Task list template for feature implementation"
 - **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
 - Include exact file paths in descriptions
 
+## Common rules
+
+- 共通のルール（テスト先行、依存の向き、整数の金額、`.tmp/`、実データを扱わない、Conventional Commits など）は **AGENTS.md の「開発の進め方」を参照する**。tasks.md の「全タスク共通のルール」には「AGENTS.md に従う」と、その機能に固有の規則だけを書く。前の機能の tasks.md を引き継ぐ書き方（「001 の共通ルールを引き継ぐ」など）はしない。
+- 1 タスク 1 行は **500 字程度まで**。長くなる細部は research・data-model・contracts の節に置き、タスクからは節の番号（R 番号、INV 番号、§）で参照する。
+
 ## Path Conventions
 
 - **Single project**: `src/`, `tests/` at repository root

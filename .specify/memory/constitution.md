@@ -1,3 +1,12 @@
+<!--
+Sync Impact Report
+- Version: 2.0.0 → 2.0.1（PATCH: 文言の明確化）
+- 変更した節: Technical Constraints の「バックアップ」。「Google Drive へ」を「利用者が選んだ同期フォルダへ暗号化して」に直した（実装はクラウドの API を使わず、利用者が選んだフォルダにファイルを書く。ADR 0007）
+- 原則の追加・削除・再定義: なし
+- テンプレートへの影響: なし。docs/requirements.md の NFR-06 の同じ記述も直した
+- 日付: 2026-10-25
+-->
+
 # Trebuchet Constitution
 
 個人事業主（将来は法人も）向けの、ローカルで動くプライベート会計ソフト。
@@ -67,7 +76,7 @@
 - 言語: TypeScript（`strict: true`）、ESM。パッケージ管理は pnpm の monorepo。
 - 画面: Vite + React。API: Hono。DB: SQLite + Drizzle ORM。検証: Zod。
 - テスト: Vitest + fast-check。E2E とスクレイピング: Playwright。
-- 認証: パスキー（WebAuthn）。バックアップ: パスフレーズで暗号化して Google Drive へ。
+- 認証: パスキー（WebAuthn）。バックアップ: パスフレーズで暗号化して、利用者が選んだ同期フォルダへ。
 - 対象環境: macOS（Apple Silicon）、Node.js の現行版。
 
 ## Development Workflow
@@ -88,4 +97,4 @@
 - plan.md の Constitution Check で各原則への適合を確認する。違反は Complexity Tracking で
   正当化されない限り認めない。
 
-**Version**: 2.0.0 | **Ratified**: 2026-10-18 | **Last Amended**: 2026-10-18
+**Version**: 2.0.1 | **Ratified**: 2026-10-18 | **Last Amended**: 2026-10-25

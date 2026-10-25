@@ -20,12 +20,8 @@ description: "Task list for 002-freee-import"
 
 ## 全タスク共通のルール
 
-- 001 の tasks.md の「全タスク共通のルール」をすべて引き継ぐ（パッケージ名、依存の向き、整数の金額、`IdGenerator`、テストの一時ファイルは `.tmp/`、Conventional Commits と Co-authored-by）
-- 相対 import には `.ts` を付ける（web は bundler の書き方）。enum・parameter properties・namespace は使わない。任意プロパティは `?: T | undefined`
-- **実データ（`work/`、`data/`）をテスト・フィクスチャ・文書・コミットに含めない。実データの金額・取引先・摘要を、コード・コメント・文書に書かない**。実データを読むのは `scripts/verify-freee-import.ts` の実行だけで、その出力もコミットしない
-- 取込のロジックは `packages/domain/src/import/` の純関数に置く。`TextDecoder` は使ってよい。`node:crypto` によるハッシュはサーバーで計算する
-- web のテストは Testing Library ＋ jsdom（`apps/web/test/render-route.tsx`、`apps/web/test/mock-api.ts`）。テストのためだけに node 用のロジックを切り出さない（利用者の指示）
-- drizzle のマイグレーションは生成後に `sed -i '' 's/^);$/) STRICT;/'` で STRICT にする。`pnpm --filter @trebuchet/web build` で routeTree.gen.ts を再生成してから typecheck する
+- **[AGENTS.md](../../AGENTS.md) の「開発の進め方」「freee の取込（002）」「データと一時ファイル」に従う**（共通の規約、実データを扱わない規則、web のテスト、マイグレーションの STRICT、routeTree の再生成）
+- この機能に固有: 取込のロジックは `packages/domain/src/import/` の純関数に置く。`TextDecoder` は使ってよい。`node:crypto` によるハッシュはサーバーで計算する
 - 依存（npm パッケージ）は追加しない（plan の Technical Context）
 
 ---

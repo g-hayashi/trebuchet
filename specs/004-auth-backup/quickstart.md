@@ -31,6 +31,8 @@ TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart-004" pnpm dev    # http://localhost:517
 
 ## 3. Tailscale 経由の確認（US4、利用者の端末）
 
+> **US4（Tailscale によるリモートの利用）は保留（2026-10-24）**。この節は未実装の機能の手順で、今は実行できない。
+
 ```bash
 pnpm start                                                 # http://localhost:8787
 tailscale serve --bg --https=443 http://127.0.0.1:8787

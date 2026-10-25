@@ -9,12 +9,14 @@
 
 ## 1. 自動テストでの確認
 
+コマンドの一覧は [AGENTS.md](../../AGENTS.md) の「コマンド」。この機能で確認する内容は次のとおり。
+
 | コマンド | 確認する内容 | 対応 |
 |---|---|---|
-| `pnpm --filter @trebuchet/domain test` | CSV の往復、文字コードの判別、仕訳の組み立て、決算振替の判定、期首残高の案、照合がすべて一致（INV-14, 16, 17） | FR-001〜006, FR-019〜023 |
-| `pnpm --filter @trebuchet/db test` | 失敗を注入しても何も残らない（INV-11）、同じファイルの2回目は0件（INV-12）、取消の後の帳票が取込の前と同じ（INV-15） | SC-005〜007 |
-| `pnpm --filter @trebuchet/server test` | エラーコード（`IMPORT_UNKNOWN_FORMAT`、`IMPORT_FILE_CHANGED`、`CORRECTED_JOURNALS` など）、5 MB の上限 | contracts/http-api.md |
-| `pnpm --filter @trebuchet/web test` | プレビュー・対応表・取消・照合の画面のコンポーネントテスト | US1〜US5 |
+| `pnpm vitest run --project domain` | CSV の往復、文字コードの判別、仕訳の組み立て、決算振替の判定、期首残高の案、照合がすべて一致（INV-14, 16, 17） | FR-001〜006, FR-019〜023 |
+| `pnpm vitest run --project db` | 失敗を注入しても何も残らない（INV-11）、同じファイルの2回目は0件（INV-12）、取消の後の帳票が取込の前と同じ（INV-15） | SC-005〜007 |
+| `pnpm vitest run --project server` | エラーコード（`IMPORT_UNKNOWN_FORMAT`、`IMPORT_FILE_CHANGED`、`CORRECTED_JOURNALS` など）、5 MB の上限 | contracts/http-api.md |
+| `pnpm vitest run --project web` | プレビュー・対応表・取消・照合の画面のコンポーネントテスト | US1〜US5 |
 | `pnpm --filter @trebuchet/web e2e` | フィクスチャの取込 → 期首残高 → 照合がすべて一致 | US1〜US3 |
 | `pnpm bench:import` | 500仕訳のプレビューが5秒以内、確定が10秒以内 | SC-002 |
 

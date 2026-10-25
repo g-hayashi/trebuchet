@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-19
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "002"（001 の spec の Assumptions で予定した「freee からのデータ取込」。これまで freee で付けてきた帳簿を、001 で作った帳簿へ移し、過去の青色申告決算書と照合できるようにする）
 

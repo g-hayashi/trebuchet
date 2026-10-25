@@ -16,11 +16,13 @@ pnpm typecheck && pnpm lint && pnpm test   # すべて成功すること
 
 ## 1. 自動テストでの確認
 
+コマンドの一覧は [AGENTS.md](../../AGENTS.md) の「コマンド」。この機能で確認する内容は次のとおり。
+
 | コマンド | 確認する内容 | 対応 |
 |---|---|---|
-| `pnpm --filter @trebuchet/domain test` | 不変条件 INV-1〜10 のプロパティテスト（1万件の仕訳で貸借・BS が一致） | SC-003 |
-| `pnpm --filter @trebuchet/db test` | 物理削除と監査ログの変更がトリガーで拒否される。テナント間でデータが見えない | FR-022, INV-9, SC-007 |
-| `pnpm --filter @trebuchet/server test` | エラーコード（UNBALANCED, PERIOD_CLOSED など）と警告 | contracts/http-api.md |
+| `pnpm vitest run --project domain` | 不変条件 INV-1〜10 のプロパティテスト（1万件の仕訳で貸借・BS が一致） | SC-003 |
+| `pnpm vitest run --project db` | 物理削除と監査ログの変更がトリガーで拒否される。テナント間でデータが見えない | FR-022, INV-9, SC-007 |
+| `pnpm vitest run --project server` | エラーコード（UNBALANCED, PERIOD_CLOSED など）と警告 | contracts/http-api.md |
 | `pnpm --filter @trebuchet/web e2e` | 事業体の作成 → 仕訳 → 試算表の流れ | US1, US2, US4 |
 | `pnpm bench:reports` | 2,000仕訳で各帳票が1秒以内 | SC-004 |
 
