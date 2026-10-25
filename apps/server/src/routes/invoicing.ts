@@ -9,10 +9,12 @@ import {
   issueInvoice,
   listBillingTerms,
   listInvoices,
+  recordPayment,
   saveBillingTerms,
   saveInvoiceSettings,
   saveWorkHours,
   voidInvoice,
+  voidPayment,
 } from "@trebuchet/domain";
 import {
   BillingTermsInput,
@@ -21,6 +23,7 @@ import {
   InvoiceListQuery,
   InvoiceSettingsInput,
   InvoicingVoidInput,
+  PaymentInput,
   WorkHoursInput,
   WorkHoursQuery,
 } from "@trebuchet/schema";
@@ -111,10 +114,9 @@ export function invoicingRoutes(options: { clock: Clock }) {
         if (!result.ok) return fail(c, result.error);
         return c.json(result.value, 201);
       })
-      // 一覧の基本形（US1。§3.5）。`status` の絞り込み・期限切れ・未回収の合計は US2（T018）
+      // 一覧（§3.5）。期限切れ・`status` の絞り込み・取引先ごとの未回収は「今日」で決まる
       .get("/invoices", validate("query", InvoiceListQuery), (c) => {
-        const { partnerId, month } = c.req.valid("query");
-        const result = listInvoices(deps(c.var.db), { partnerId, month }, todayOf(clock));
+        const result = listInvoices(deps(c.var.db), c.req.valid("query"), todayOf(clock));
         if (!result.ok) return fail(c, result.error);
         return c.json(result.value, 200);
       })
@@ -135,6 +137,33 @@ export function invoicingRoutes(options: { clock: Clock }) {
         if (!result.ok) return fail(c, result.error);
         return c.json(result.value, 200);
       })
+
+      // ---- 入金の消し込み（US2。§4.1・§4.2） ----
+      .post("/invoices/:invoiceId/payments", validate("json", PaymentInput), (c) => {
+        const result = recordPayment(
+          deps(c.var.db),
+          c.req.param("invoiceId"),
+          c.req.valid("json"),
+          todayOf(clock),
+        );
+        if (!result.ok) return fail(c, result.error);
+        return c.json(result.value, 201);
+      })
+      .post(
+        "/invoices/:invoiceId/payments/:paymentId/void",
+        validate("json", InvoicingVoidInput),
+        (c) => {
+          const result = voidPayment(
+            deps(c.var.db),
+            c.req.param("invoiceId"),
+            c.req.param("paymentId"),
+            c.req.valid("json"),
+            todayOf(clock),
+          );
+          if (!result.ok) return fail(c, result.error);
+          return c.json(result.value, 200);
+        },
+      )
 
       // ---- 仕訳の出所（§6.1） ----
       .get("/journals/:journalId/origin", (c) => {

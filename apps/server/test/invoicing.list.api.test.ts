@@ -7,7 +7,7 @@ import {
   okBody,
 } from "./invoicing-helpers.ts";
 
-// 005 US1: contracts/http-api.md §3.5（一覧の基本形。partnerId・month だけ）
+// 005 US1: contracts/http-api.md §3.5（一覧の基本形。status・期限切れ・未回収の詳しい検査は invoicing.payments.api.test.ts）
 
 let tmp: TempDataDir;
 let ctx: InvoicingTestContext;
@@ -60,7 +60,12 @@ describe("GET /invoices（§3.5 の基本形）", () => {
       issueDate: "2026-10-31",
       dueDate: "2026-11-30",
     });
-    expect(body.outstandingByPartner).toEqual([]);
+    expect(body.outstandingByPartner.map((o) => [o.partnerName, o.outstanding, o.overdue])).toEqual(
+      [
+        ["A 社", 200_000, 0],
+        ["B 社", 200_000, 0],
+      ],
+    );
   });
 
   it("partnerId・month で絞り込める", async () => {

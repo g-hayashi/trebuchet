@@ -15,13 +15,17 @@ import {
 } from "@/components/ui/table";
 import { formatDateTime, formatYen } from "@/lib/format";
 import { queryKeys } from "@/lib/queries";
-import { invoiceKeys, postInvoiceVoid } from "./api";
+import { invoiceKeys, postInvoiceVoid, postPaymentVoid } from "./api";
 import { quantityOf, recipientOf } from "./display";
+import { PaymentForm } from "./PaymentForm";
 import { INVOICE_STATUS_LABELS } from "./status";
 
 const linkClass = "text-primary underline underline-offset-4";
 
-/** 請求書の詳細（FR-010〜014）。発行時の写しの表示、売上の仕訳へのリンク、印刷、取消（理由つき） */
+/**
+ * 請求書の詳細（FR-010〜014、017〜021）。発行時の写しの表示、売上の仕訳へのリンク、印刷、取消（理由つき）、
+ * 入金の消し込みの入力・一覧・取消
+ */
 export function InvoiceDetail({
   entityId,
   invoice,
@@ -31,6 +35,7 @@ export function InvoiceDetail({
 }) {
   const queryClient = useQueryClient();
   const [voiding, setVoiding] = useState(false);
+  const [voidingPayment, setVoidingPayment] = useState<string | null>(null);
   const voided = invoice.status === "voided";
 
   const voidInvoice = useMutation({
@@ -49,6 +54,24 @@ export function InvoiceDetail({
     setVoiding(false);
   };
 
+  const voidPayment = useMutation({
+    mutationFn: ({ paymentId, reason }: { paymentId: string; reason: string }) =>
+      postPaymentVoid(entityId, invoice.id, paymentId, reason),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: invoiceKeys.invoices(entityId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.journals(entityId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.reports(entityId) }),
+      ]);
+    },
+  });
+
+  const confirmVoidPayment = async (reason: string) => {
+    if (voidingPayment === null) return;
+    await voidPayment.mutateAsync({ paymentId: voidingPayment, reason });
+    setVoidingPayment(null);
+  };
+
   return (
     <>
       <Card>
@@ -58,6 +81,11 @@ export function InvoiceDetail({
             <span className="rounded-md border px-2 py-0.5 text-sm">
               {INVOICE_STATUS_LABELS[invoice.status]}
             </span>
+            {invoice.overdue && (
+              <span className="rounded-md border border-destructive/60 px-2 py-0.5 text-sm text-destructive">
+                期限切れ
+              </span>
+            )}
             <Link
               to="/e/$entityId/invoices/$invoiceId/print"
               params={{ entityId, invoiceId: invoice.id }}
@@ -136,6 +164,84 @@ export function InvoiceDetail({
             )}
           </div>
 
+          {invoice.payments.length > 0 && (
+            <div className="grid gap-2">
+              <h2 className="text-base font-semibold">入金の消し込み</h2>
+              <Table aria-label="消し込みの一覧">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>入金日</TableHead>
+                    <TableHead className="text-right">入金額</TableHead>
+                    <TableHead className="text-right">振込手数料</TableHead>
+                    <TableHead>状態</TableHead>
+                    <TableHead>仕訳</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invoice.payments.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="tabular-nums">{p.receivedOn}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatYen(p.amount)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatYen(p.feeAmount)}
+                      </TableCell>
+                      <TableCell>
+                        {p.voidedAt === null ? (
+                          "有効"
+                        ) : (
+                          <>
+                            取消済み
+                            {p.voidReason !== null && (
+                              <span className="ml-2 text-muted-foreground">{`（${p.voidReason}）`}</span>
+                            )}
+                          </>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-3">
+                          <Link
+                            to="/e/$entityId/journals/$journalId"
+                            params={{ entityId, journalId: p.journalId }}
+                            className={linkClass}
+                          >
+                            仕訳を開く
+                          </Link>
+                          {p.voidJournalId !== null && (
+                            <Link
+                              to="/e/$entityId/journals/$journalId"
+                              params={{ entityId, journalId: p.voidJournalId }}
+                              className={linkClass}
+                            >
+                              取消の仕訳を開く
+                            </Link>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {p.voidedAt === null && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setVoidingPayment(p.id)}
+                          >
+                            消し込みを取り消す
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {!voided && invoice.remaining > 0 && (
+            <PaymentForm entityId={entityId} invoice={invoice} />
+          )}
+
           {voided && (
             <div className="grid gap-1 rounded-md border px-3 py-2 text-sm">
               {invoice.voidedAt !== null && (
@@ -154,6 +260,14 @@ export function InvoiceDetail({
         confirmLabel="取消を確定"
         onConfirm={confirmVoid}
         onCancel={() => setVoiding(false)}
+      />
+      <ReasonDialog
+        open={voidingPayment !== null}
+        title="消し込みの取消"
+        description="取り消すと、入金の仕訳も取り消され、請求書の残額が戻ります。理由は記録に残ります。"
+        confirmLabel="取消を確定"
+        onConfirm={confirmVoidPayment}
+        onCancel={() => setVoidingPayment(null)}
       />
     </>
   );

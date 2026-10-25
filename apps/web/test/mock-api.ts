@@ -60,6 +60,9 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   "GET /work-hours": () => ok({ entries: [] }),
   "GET /invoices": () => ok({ invoices: [], outstandingByPartner: [] }),
   "GET /journals/:id/origin": () => ok({ origin: null }),
+  // 請求書の詳細の消し込みの入力（US2）が入金先の科目・補助科目を読む
+  "GET /accounts": () => ok({ accounts: [] }),
+  "GET /accounts/:id/sub-accounts": () => ok({ subAccounts: [] }),
 };
 
 /** `:name` を 1 つのパスの区切りに当てはめて、事業体の下のパスの既定の応答を探す */

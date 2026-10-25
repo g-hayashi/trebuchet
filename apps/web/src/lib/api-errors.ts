@@ -188,6 +188,16 @@ export function describeError(error: unknown): ErrorDescription {
         message: "バックアップは実行中です。終わるまでお待ちください。",
         details: [],
       };
+    case "PAYMENT_EXCEEDS_BALANCE": {
+      const remaining = asNumber(error.details?.remaining);
+      return {
+        message:
+          remaining === undefined
+            ? "入金額が請求の残額を超えています。"
+            : `入金額が請求の残額（${formatYen(remaining)} 円）を超えています。`,
+        details: [],
+      };
+    }
     case "INVOICE_SEQ_TOO_LOW": {
       const minimum = asNumber(error.details?.minimum);
       return {

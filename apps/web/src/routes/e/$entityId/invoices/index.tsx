@@ -2,8 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { InvoiceListQuery } from "@trebuchet/schema";
 import { InvoiceList } from "@/features/invoicing/InvoiceList";
 
-/** URL の絞り込み。状態の絞り込み（`status`）は US2 で足す */
-const InvoiceSearch = InvoiceListQuery.pick({ partnerId: true, month: true });
+/** URL の絞り込み（取引先・対象月・状態） */
+const InvoiceSearch = InvoiceListQuery;
 
 export const Route = createFileRoute("/e/$entityId/invoices/")({
   validateSearch: InvoiceSearch,
@@ -46,6 +46,7 @@ function InvoicesPage() {
             search: {
               ...(next.partnerId === undefined ? {} : { partnerId: next.partnerId }),
               ...(next.month === undefined ? {} : { month: next.month }),
+              ...(next.status === undefined ? {} : { status: next.status }),
             },
           })
         }

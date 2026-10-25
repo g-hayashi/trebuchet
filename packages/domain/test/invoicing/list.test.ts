@@ -58,8 +58,8 @@ function seeded() {
 }
 
 describe("listInvoices（基本形）", () => {
-  it("発行日の降順（同じ日は seq の降順）。状態・充当額・残額つき。overdue は偽、未回収の合計は空", () => {
-    const { t } = seeded();
+  it("発行日の降順（同じ日は seq の降順）。状態・充当額・残額つき。overdue は偽、未回収の合計は取引先ごと", () => {
+    const { t, a, b } = seeded();
     const r = listInvoices(t.deps, {}, TODAY);
     if (!r.ok) throw new Error("expected ok");
     expect(r.value.invoices.map((i) => i.id)).toEqual(["i3", "i2", "i4", "i1"]);
@@ -76,7 +76,40 @@ describe("listInvoices（基本形）", () => {
       dueDate: "2026-11-30",
       total: 300_000,
     });
-    expect(r.value.outstandingByPartner).toEqual([]);
+    // 取消の i4 は数えない。支払期限は 2026-11-30 なので期限切れはない
+    expect(r.value.outstandingByPartner).toEqual([
+      { partnerId: a.id, partnerName: "A 社", outstanding: 280_000, overdue: 0 },
+      { partnerId: b.id, partnerName: "B 社", outstanding: 200_000, overdue: 0 },
+    ]);
+  });
+
+  it("T018: today が支払期限の翌日から overdue。status で絞り込める（overdue を含む）", () => {
+    const { t, a, b } = seeded();
+    const at = (today: string, status?: "unpaid" | "partial" | "paid" | "voided" | "overdue") => {
+      const r = listInvoices(t.deps, { status }, today);
+      if (!r.ok) throw new Error("expected ok");
+      return r.value;
+    };
+    expect(at("2026-11-30").invoices.every((i) => !i.overdue)).toBe(true);
+    const late = at("2026-12-01");
+    expect(late.invoices.map((i) => [i.id, i.overdue])).toEqual([
+      ["i3", true],
+      ["i2", true],
+      ["i4", false],
+      ["i1", true],
+    ]);
+    expect(late.outstandingByPartner).toEqual([
+      { partnerId: a.id, partnerName: "A 社", outstanding: 280_000, overdue: 280_000 },
+      { partnerId: b.id, partnerName: "B 社", outstanding: 200_000, overdue: 200_000 },
+    ]);
+    expect(at("2026-12-01", "overdue").invoices.map((i) => i.id)).toEqual(["i3", "i2", "i1"]);
+    expect(at(TODAY, "overdue").invoices).toEqual([]);
+    expect(at(TODAY, "partial").invoices.map((i) => i.id)).toEqual(["i3"]);
+    expect(at(TODAY, "unpaid").invoices.map((i) => i.id)).toEqual(["i2", "i1"]);
+    expect(at(TODAY, "voided").invoices.map((i) => i.id)).toEqual(["i4"]);
+    expect(at(TODAY, "paid").invoices).toEqual([]);
+    // 絞り込んでも未回収の合計は変わらない
+    expect(at(TODAY, "paid").outstandingByPartner).toHaveLength(2);
   });
 
   it("取引先・対象月で絞り込める（取消の請求書は voided で残る）", () => {
@@ -94,5 +127,9 @@ describe("listInvoices（基本形）", () => {
 
     const none = listInvoices(t.deps, { month: "2025-01" }, TODAY);
     expect(none).toEqual({ ok: true, value: { invoices: [], outstandingByPartner: [] } });
+    // 未回収の合計も partnerId・month で絞る
+    expect(byPartner.ok && byPartner.value.outstandingByPartner.map((o) => o.partnerId)).toEqual([
+      a.id,
+    ]);
   });
 });

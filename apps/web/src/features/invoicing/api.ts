@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { BillingTermsView, InvoiceDetail } from "@trebuchet/schema";
+import type { BillingTermsView, InvoiceDetail, InvoiceListStatus } from "@trebuchet/schema";
 import { api, unwrap } from "@/lib/api";
 
 // 請求の設定・取引先の請求の条件の API（005 contracts/http-api.md §2）
@@ -78,7 +78,11 @@ export const invoiceKeys = {
     ["entities", entityId, "journals", journalId, "origin"] as const,
 };
 
-export type InvoiceFilters = { partnerId?: string | undefined; month?: string | undefined };
+export type InvoiceFilters = {
+  partnerId?: string | undefined;
+  month?: string | undefined;
+  status?: InvoiceListStatus | undefined;
+};
 
 /** 対象月の工数（§3.1）。時間単価型の有効な取引先ごと。未入力は `hours: null` */
 export const workHoursQuery = (entityId: string, month: string) =>
@@ -126,6 +130,7 @@ export const invoiceListQuery = (entityId: string, filters: InvoiceFilters) =>
           query: {
             ...(filters.partnerId === undefined ? {} : { partnerId: filters.partnerId }),
             ...(filters.month === undefined ? {} : { month: filters.month }),
+            ...(filters.status === undefined ? {} : { status: filters.status }),
           },
         }),
       ),
@@ -143,6 +148,33 @@ export const postInvoiceVoid = async (entityId: string, invoiceId: string, reaso
   unwrap(
     await entityApi.invoices[":invoiceId"].void.$post({
       param: { entityId, invoiceId },
+      json: { reason },
+    }),
+  );
+
+/** 入金の消し込み（§4.1）。201 `{ payment, invoice, journal }` */
+export const postPayment = async (
+  entityId: string,
+  invoiceId: string,
+  json: Parameters<(typeof entityApi.invoices)[":invoiceId"]["payments"]["$post"]>[0]["json"],
+) =>
+  unwrap(
+    await entityApi.invoices[":invoiceId"].payments.$post({
+      param: { entityId, invoiceId },
+      json,
+    }),
+  );
+
+/** 消し込みの取消（§4.2） */
+export const postPaymentVoid = async (
+  entityId: string,
+  invoiceId: string,
+  paymentId: string,
+  reason: string,
+) =>
+  unwrap(
+    await entityApi.invoices[":invoiceId"].payments[":paymentId"].void.$post({
+      param: { entityId, invoiceId, paymentId },
       json: { reason },
     }),
   );

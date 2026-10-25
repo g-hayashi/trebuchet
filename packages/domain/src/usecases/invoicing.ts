@@ -8,10 +8,13 @@ import {
   type InvoiceDraftResponse,
   type InvoiceInput,
   type InvoiceListResponse,
+  type InvoiceListStatus,
   type InvoiceSettings,
   type InvoiceSettingsInput,
+  type InvoiceSummary,
   type InvoicingVoidInput,
   type JournalOrigin,
+  type OutstandingByPartner,
   type PaymentInput,
   type PaymentView,
   type WorkHoursEntry,
@@ -595,7 +598,7 @@ export function issueInvoice(
       beforeJson: null,
       afterJson: JSON.stringify({ invoice, items }),
     });
-    return ok({ invoice: buildInvoiceDetail(invoice, items, []), journal });
+    return ok({ invoice: buildInvoiceDetail(invoice, items, [], today), journal });
   });
 }
 
@@ -680,7 +683,12 @@ export function voidInvoice(
       afterJson: JSON.stringify(voidedInvoice),
     });
     return ok({
-      invoice: buildInvoiceDetail(voidedInvoice, invoicing.listInvoiceItems(invoiceId), payments),
+      invoice: buildInvoiceDetail(
+        voidedInvoice,
+        invoicing.listInvoiceItems(invoiceId),
+        payments,
+        today,
+      ),
       journal,
     });
   });
@@ -928,23 +936,54 @@ export function voidPayment(
 // ---- 一覧（US1 の基本形。H:§3.5） ----
 
 /**
- * 請求書の一覧の基本形。発行日の降順。各行の `status`・`paid`・`remaining` は消し込みから導く。
- * `overdue` は偽、`outstandingByPartner` は空（期限切れの判定・`status` の絞り込み・
- * 取引先ごとの未回収の合計は US2 の T018）
+ * 請求書の一覧。発行日の降順。各行の `status`・`paid`・`remaining` は消し込みから導き、
+ * `overdue` は `today` で判定する（`isOverdue`）。`status` は絞り込み（`overdue` は判定が真のもの）。
+ * `outstandingByPartner` は `status` の絞り込みに関わらず、`partnerId`・`month` で絞った請求書のうち
+ * 取消でなく残額のあるものを取引先ごとに合計する（取引先名の昇順。残額 0 の取引先は含めない。FR-022）
  */
 export function listInvoices(
   deps: Pick<InvoicingDeps, "uow">,
-  query: { partnerId?: string | undefined; month?: string | undefined },
-  _today: string,
+  query: {
+    partnerId?: string | undefined;
+    month?: string | undefined;
+    status?: InvoiceListStatus | undefined;
+  },
+  today: string,
 ): Result<InvoiceListResponse> {
-  return deps.uow.transaction(({ invoicing }) =>
-    ok({
-      invoices: invoicing
-        .listInvoices(query)
-        .map((invoice) => buildInvoiceSummary(invoice, invoicing.listPayments(invoice.id))),
-      outstandingByPartner: [],
-    }),
-  );
+  return deps.uow.transaction(({ invoicing, masters }) => {
+    const { status, ...filter } = query;
+    const all = invoicing
+      .listInvoices(filter)
+      .map((invoice) => buildInvoiceSummary(invoice, invoicing.listPayments(invoice.id), today));
+
+    const partnerNames = new Map(masters.listPartners().map((p) => [p.id, p.name]));
+    const totals = new Map<string, OutstandingByPartner>();
+    for (const summary of all) {
+      if (summary.remaining === 0) continue; // 取消の請求書は残額 0
+      const entry = totals.get(summary.partnerId) ?? {
+        partnerId: summary.partnerId,
+        partnerName: partnerNames.get(summary.partnerId) ?? summary.recipientName,
+        outstanding: 0,
+        overdue: 0,
+      };
+      entry.outstanding += summary.remaining;
+      if (summary.overdue) entry.overdue += summary.remaining;
+      totals.set(summary.partnerId, entry);
+    }
+
+    const matches = (summary: InvoiceSummary) =>
+      status === undefined
+        ? true
+        : status === "overdue"
+          ? summary.overdue
+          : summary.status === status;
+    return ok({
+      invoices: all.filter(matches),
+      outstandingByPartner: [...totals.values()].sort((x, y) =>
+        x.partnerName < y.partnerName ? -1 : x.partnerName > y.partnerName ? 1 : 0,
+      ),
+    });
+  });
 }
 
 // ---- 詳細・仕訳の起点（US1。H:§3.6・§6.1） ----
@@ -953,7 +992,7 @@ export function listInvoices(
 export function getInvoiceDetail(
   deps: Pick<InvoicingDeps, "uow">,
   invoiceId: string,
-  _today: string,
+  today: string,
 ): Result<InvoiceDetail> {
   return deps.uow.transaction(({ invoicing }) => {
     const invoice = invoicing.getInvoice(invoiceId);
@@ -963,6 +1002,7 @@ export function getInvoiceDetail(
         invoice,
         invoicing.listInvoiceItems(invoiceId),
         invoicing.listPayments(invoiceId),
+        today,
       ),
     );
   });
