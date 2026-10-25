@@ -112,7 +112,7 @@
 
 ## R13. MF ME からの取得（US4）
 
-- **Decision**: `playwright`（実行時）を `apps/server` の dependencies に足す（2026-10-25 に利用者が承認）。ブラウザは Playwright の Chromium（`pnpm exec playwright install chromium`）。保存しない文脈（`browser.newContext()`。クッキー・パスワードを残さない。FR-009）で、見えるウィンドウを開き、ログインの画面へ移る。利用者がログインと2段階認証を済ませ、ホームの URL に着くのを最大 5 分待つ。その後、対象の月ごとに入出金の画面へ移り、表の行を読む（`lib/mfme/dom.ts`）。読んだ行は R2 の貼り付けと同じ型（`PastedRow`）にして、同じプレビューへ渡す。進行は `lib/jobs.ts` の in-memory のジョブ（同時に1つ）で、web が状態を取りにくる。失敗（形が違う、時間切れ、ウィンドウを閉じた）では何も加えない
+- **Decision**: `playwright`（実行時）を `apps/server` の dependencies に足す（2026-10-25 に利用者が承認）。ブラウザは Playwright の Chromium（`pnpm --filter @trebuchet/server exec playwright install chromium`）。保存しない文脈（`browser.newContext()`。クッキー・パスワードを残さない。FR-009）で、見えるウィンドウを開き、ログインの画面へ移る。利用者がログインと2段階認証を済ませ、ホームの URL に着くのを最大 5 分待つ。その後、対象の月ごとに入出金の画面へ移り、表の行を読む（`lib/mfme/dom.ts`）。読んだ行は R2 の貼り付けと同じ型（`PastedRow`）にして、同じプレビューへ渡す。進行は `lib/jobs.ts` の in-memory のジョブ（同時に1つ）で、web が状態を取りにくる。失敗（形が違う、時間切れ、ウィンドウを閉じた）では何も加えない
 - **未確定**: 画面の DOM（行・列の要素、取引の ID の有無、月の移り方）は後で解析する（利用者の指示）。セレクターは `dom.ts` の1か所に置き、合成の HTML（`page.setContent`）でテストする。解析の結果で `external_id` が取れるかを決める
 - **Rationale**: 画面のボタンから使え（spec US4）、取り込みの経路は貼り付けと同じにする
 
