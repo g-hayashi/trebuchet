@@ -74,7 +74,7 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
   const result = page.getByRole("status", { name: "登録の結果" });
 
   await test.step("単一の仕訳を登録する", async () => {
-    await menu.getByRole("link", { name: "仕訳" }).click();
+    await menu.getByRole("link", { name: "仕訳", exact: true }).click();
     await page.getByRole("link", { name: "仕訳を入力" }).click();
     await expect(page.getByRole("heading", { name: "仕訳の入力" })).toBeVisible();
 
@@ -136,7 +136,7 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
       error: { code: "UNBALANCED", details: { diff: 5000 } },
     });
 
-    await menu.getByRole("link", { name: "仕訳" }).click();
+    await menu.getByRole("link", { name: "仕訳", exact: true }).click();
     const list = page.getByRole("table", { name: "仕訳の一覧" });
     await expect(list.getByRole("link", { name: /^仕訳 No\.\d+ の詳細$/ })).toHaveCount(2);
   });

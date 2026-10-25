@@ -36,7 +36,7 @@ export const isLinkedSource = (source: JournalSource): boolean =>
 export const linkedError = (journalId: string): DomainError =>
   domainError(
     "JOURNAL_LINKED",
-    "請求書・入金に結びついた仕訳は、請求書・入金の画面から取り消してください",
+    "請求書・入金に結びついた仕訳は、ここでは訂正・取消できません。請求書・入金の画面から取り消してください",
     { journalId },
   );
 

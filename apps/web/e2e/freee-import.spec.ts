@@ -65,7 +65,7 @@ test("freee の仕訳帳の取込から、元帳による期首残高、照合�
       page.getByRole("status").filter({ hasText: "14件の仕訳を取り込みました。" }),
     ).toBeVisible();
 
-    await menu.getByRole("link", { name: "仕訳" }).click();
+    await menu.getByRole("link", { name: "仕訳", exact: true }).click();
     const list = page.getByRole("table", { name: "仕訳の一覧" });
     await expect(list.getByRole("link", { name: /^仕訳 No\.\d+ の詳細$/ })).toHaveCount(14);
   });

@@ -50,7 +50,7 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
     await page.getByRole("button", { name: "追加する" }).click();
     await expect(page.getByRole("cell", { name: "取引先A", exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "請求の条件（取引先A）" }).click();
+    await page.getByRole("button", { name: /^請求の条件\s*（取引先A）$/ }).click();
     const terms = page.getByRole("form", { name: "請求の条件（取引先A）" });
     await terms.getByLabel("請求の型").selectOption({ label: "時間単価型（工数 × 単価）" });
     await terms.getByLabel("時間単価（円）").fill("5000");
