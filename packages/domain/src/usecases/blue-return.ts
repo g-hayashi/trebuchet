@@ -1,11 +1,15 @@
-import type {
-  AdjustmentProposal,
-  BlueReturn,
-  FiledDocumentInput,
-  FixedAssetInput,
-  HomeUseAllocationInput,
-  RentDetailInput,
-  TaxReturnMemoInput,
+import {
+  type AdjustmentProposal,
+  type BlueReturn,
+  CLOSING_NOTE_MAX,
+  type FiledDocumentInput,
+  type FixedAssetInput,
+  type HomeUseAllocationInput,
+  type RentDetailInput,
+  TAX_RETURN_LABEL_MAX,
+  TAX_RETURN_MEMO_MAX,
+  type TaxReturnMemoInput,
+  YEN_LIMIT,
 } from "@trebuchet/schema";
 import type { PriorPeriod } from "../blue-return/balance-sheet.ts";
 import { buildBlueReturn } from "../blue-return/build.ts";
@@ -50,9 +54,11 @@ import {
   type HomeUseAllocation,
   type Journal,
   ok,
+  periodNotFound,
   type RentDetail,
   type Result,
   type TaxReturnMemo,
+  validation,
 } from "../types.ts";
 import { createJournal } from "./create-journal.ts";
 import type { ReportDeps } from "./reports.ts";
@@ -98,9 +104,7 @@ function resolveYear(masters: MasterRepository, fiscalYear: number): Result<Fisc
   const individual = requireIndividual(masters);
   if (!individual.ok) return individual;
   const period = masters.getFiscalPeriodByYear(fiscalYear);
-  return period === undefined
-    ? err(domainError("VALIDATION", "会計期間が見つかりません", { fiscalYear }))
-    : ok(period);
+  return period === undefined ? err(periodNotFound(fiscalYear)) : ok(period);
 }
 
 /**
@@ -153,9 +157,6 @@ export function getBlueReturn(
     }),
   );
 }
-
-/** 決算のメモの長さの上限（schema の ClosingNoteInput と同じ） */
-const CLOSING_NOTE_MAX = 5000;
 
 /**
  * 決算のメモ（特殊事情・期首と前期末の差の説明）を年度・種類ごとに保存する（FR-027、FR-030）。
@@ -354,8 +355,6 @@ export function getRentDetails(
   if (!period.ok) return period;
   return ok(deps.closing.listRentDetails(params.fiscalYear));
 }
-
-const YEN_LIMIT = 1_000_000_000_000;
 
 function validateRentRow(row: RentDetailInput, rowIndex: number): Result<RentDetailInput> {
   const fail = (field: string, message: string) =>
@@ -787,11 +786,7 @@ export type TaxReturnRecordDeps = {
   ids: IdGenerator;
 };
 
-const MEMO_MAX = 1000;
-const LABEL_MAX = 200;
-
-const invalid = (field: string, message: string): Result<never> =>
-  err(domainError("VALIDATION", message, { field }));
+const invalid = (field: string, message: string): Result<never> => validation(message, { field });
 
 /** ファイルの場所（R13）。相対パスはサーバーの作業ディレクトリに依存するため拒否する。中身は読まない */
 function checkFilePath(value: string | null | undefined, required: boolean): Result<string | null> {
@@ -805,8 +800,8 @@ function checkFilePath(value: string | null | undefined, required: boolean): Res
 }
 
 const checkMemoText = (value: string | null | undefined): Result<string | null> =>
-  value != null && value.length > MEMO_MAX
-    ? invalid("memo", `メモは ${MEMO_MAX} 文字以内で入力してください`)
+  value != null && value.length > TAX_RETURN_MEMO_MAX
+    ? invalid("memo", `メモは ${TAX_RETURN_MEMO_MAX} 文字以内で入力してください`)
     : ok(value ?? null);
 
 /** 事業所得以外の控えの一覧（FR-033）。ファイルの有無はサーバーが付ける（R13） */
@@ -839,8 +834,8 @@ export function saveTaxReturnMemo(
   if (params.kind === "other" && label === null) {
     return invalid("label", "「その他」のときは項目名を入力してください");
   }
-  if (label !== null && label.length > LABEL_MAX) {
-    return invalid("label", `項目名は ${LABEL_MAX} 文字以内で入力してください`);
+  if (label !== null && label.length > TAX_RETURN_LABEL_MAX) {
+    return invalid("label", `項目名は ${TAX_RETURN_LABEL_MAX} 文字以内で入力してください`);
   }
   const amount = params.amount ?? null;
   if (amount !== null && (!Number.isInteger(amount) || amount < 0)) {

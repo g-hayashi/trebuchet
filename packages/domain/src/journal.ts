@@ -1,3 +1,4 @@
+import { YEN_LIMIT } from "@trebuchet/schema";
 import { isValidDate } from "./dates.ts";
 import { computeInclusiveTax, sumYen } from "./money.ts";
 import { isTaxableCategory, resolveTaxRate } from "./tax-rates.ts";
@@ -32,8 +33,6 @@ export type JournalContext = {
   taxSettings: readonly TaxSettingDraft[];
   taxRates: readonly TaxRate[];
 };
-
-const YEN_LIMIT = 1_000_000_000_000;
 
 const isValidAmount = (amount: number) =>
   Number.isSafeInteger(amount) && amount > 0 && amount < YEN_LIMIT;

@@ -1,3 +1,4 @@
+import { BILLING_TYPES, JOURNAL_SOURCES } from "@trebuchet/schema";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
@@ -206,11 +207,7 @@ export const journals = sqliteTable(
     memo: text("memo"),
     status: text("status", { enum: ["active", "voided"] }).notNull(),
     correctsJournalId: text("corrects_journal_id").references((): AnySQLiteColumn => journals.id),
-    source: text("source", {
-      enum: ["manual", "import_freee", "invoice", "payment", "recurring"],
-    })
-      .notNull()
-      .default("manual"),
+    source: text("source", { enum: JOURNAL_SOURCES }).notNull().default("manual"),
     version: integer("version").notNull().default(1),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -676,7 +673,7 @@ export const partnerBillingTerms = sqliteTable(
     partnerId: text("partner_id")
       .primaryKey()
       .references(() => partners.id),
-    billingType: text("billing_type", { enum: ["hourly", "monthly"] }).notNull(),
+    billingType: text("billing_type", { enum: BILLING_TYPES }).notNull(),
     unitPrice: integer("unit_price"),
     monthlyAmount: integer("monthly_amount"),
     dueMonthsAfter: integer("due_months_after").notNull().default(1),

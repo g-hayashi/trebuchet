@@ -17,11 +17,9 @@ const PATH_PATTERN =
   /^(?:registry|tenants\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sqlite$/i;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
+/** バイト列の SHA-256（小文字 16 進 64 文字）。content_sha256（R10）はアーカイブの平文にこれを掛けた値 */
 export const sha256Hex = (bytes: Uint8Array): string =>
   createHash("sha256").update(bytes).digest("hex");
-
-/** content_sha256（R10）: アーカイブの平文の SHA-256 */
-export const contentSha256 = sha256Hex;
 
 /** `マニフェストの長さ（uint32 BE）| マニフェスト（JSON）| ファイル1 | ファイル2 | …` */
 export function packArchive(snapshot: Snapshot): Buffer {

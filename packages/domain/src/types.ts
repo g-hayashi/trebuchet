@@ -10,6 +10,7 @@ import type {
   FiledDocumentKind,
   InvoiceIssuer,
   InvoiceTaxDisplay,
+  JournalSource,
   PaymentView,
   ReportSection,
   Side,
@@ -54,6 +55,18 @@ export const domainError = (
   message: string,
   details?: ErrorDetails,
 ): DomainError => (details === undefined ? { code, message } : { code, message, details });
+
+/** `VALIDATION` の `DomainError` */
+export const validationError = (message: string, details?: ErrorDetails): DomainError =>
+  domainError("VALIDATION", message, details);
+
+/** `VALIDATION` の失敗（`err(validationError(...))`） */
+export const validation = (message: string, details?: ErrorDetails) =>
+  err(validationError(message, details));
+
+/** 会計期間がない（`VALIDATION`、`details.fiscalYear` に年度）。HTTP のパスの年度は文字列のまま渡せる */
+export const periodNotFound = (fiscalYear: number | string): DomainError =>
+  validationError("会計期間が見つかりません", { fiscalYear });
 
 // ---- 事業体・マスタ ----
 
@@ -184,7 +197,7 @@ export type ValidJournal = {
 };
 
 export type JournalStatus = "active" | "voided";
-export type JournalSource = "manual" | "import_freee" | "invoice" | "payment" | "recurring";
+export type { JournalSource };
 
 export type JournalLine = ValidLine & { id: string };
 

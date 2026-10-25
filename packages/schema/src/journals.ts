@@ -1,6 +1,17 @@
 import { z } from "zod";
 import { DateString, Id, Side, TaxCategoryCode, YEN_LIMIT, Yen } from "./primitives.ts";
 
+/** 仕訳の出どころ。domain の型と db の列の enum はここから導出する（正本） */
+export const JOURNAL_SOURCES = [
+  "manual",
+  "import_freee",
+  "invoice",
+  "payment",
+  "recurring",
+] as const;
+export const JournalSource = z.enum(JOURNAL_SOURCES);
+export type JournalSource = z.infer<typeof JournalSource>;
+
 export const JournalLineInput = z.object({
   side: Side,
   accountId: Id,

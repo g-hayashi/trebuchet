@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { EntityKind } from "./primitives.ts";
 
-const EntityName = z.string().trim().min(1, "名称を入力してください").max(100);
+export const ENTITY_NAME_MAX = 100;
+const EntityName = z.string().trim().min(1, "名称を入力してください").max(ENTITY_NAME_MAX);
 
 export const EntityCreate = z.object({
   name: EntityName,

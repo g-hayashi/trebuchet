@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { isHalfStep } from "@trebuchet/schema";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
@@ -24,7 +25,7 @@ function parseHours(raw: string): number | undefined | null {
   const text = raw.trim();
   if (text === "") return undefined;
   const hours = Number(text);
-  if (!Number.isFinite(hours) || hours < 0 || !Number.isInteger(hours * 2)) return null;
+  if (!Number.isFinite(hours) || hours < 0 || !isHalfStep(hours)) return null;
   return hours;
 }
 

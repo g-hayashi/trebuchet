@@ -12,7 +12,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import type { Result } from "@trebuchet/domain";
 import Database from "better-sqlite3";
-import { contentSha256, packArchive, unpackArchive } from "./archive.ts";
+import { packArchive, sha256Hex, unpackArchive } from "./archive.ts";
 import { type BackupHeader, type CryptoOptions, decryptBackup, encryptBackup } from "./crypto.ts";
 import { beforeRestoreFileName, compactStamp, writeBackupFile } from "./file.ts";
 import { createSnapshotDir, currentAppVersion, snapshotDataDir } from "./snapshot.ts";
@@ -258,7 +258,7 @@ export async function restoreBackup(
       try {
         const snapshot = snapshotDataDir(dataDir, snapDir);
         const plain = packArchive(snapshot);
-        const sha = contentSha256(plain);
+        const sha = sha256Hex(plain);
         const encrypted = await encryptBackup(
           plain,
           options.passphrase,
@@ -275,7 +275,7 @@ export async function restoreBackup(
           return (
             check.ok &&
             unpackArchive(check.value.archive).ok &&
-            contentSha256(check.value.archive) === sha
+            sha256Hex(check.value.archive) === sha
           );
         });
       } finally {

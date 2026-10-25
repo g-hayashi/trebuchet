@@ -1,11 +1,10 @@
+import { itemAmountOfHalves } from "@trebuchet/schema";
 import { computeInclusiveTax } from "../money.ts";
 
 /** 金額・工数の計算（005 R7）。すべて整数で行い、浮動小数で金額を計算しない */
 
-/** 明細の金額 = `floor(数量（半単位の整数）× 単価 / 2)`（INV-37） */
-export function itemAmount(quantityHalves: number, unitPrice: number): number {
-  return Math.floor((quantityHalves * unitPrice) / 2);
-}
+/** 明細の金額 = `floor(数量（半単位の整数）× 単価 / 2)`（INV-37）。式の正本は schema */
+export const itemAmount = itemAmountOfHalves;
 
 /** 時間（0.5 の倍数）を半時間の整数にする。0.5 の倍数でない・負の値は RangeError */
 export function hoursToHalves(hours: number): number {

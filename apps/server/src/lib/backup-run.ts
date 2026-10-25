@@ -5,13 +5,13 @@ import {
   BackupFileError,
   backupFileName,
   type CryptoOptions,
-  contentSha256,
   createSnapshotDir,
   currentAppVersion,
   decryptBackup,
   encryptBackup,
   listBackupFiles,
   packArchive,
+  sha256Hex,
   snapshotDataDir,
   unpackArchive,
   writeBackupFile,
@@ -129,7 +129,7 @@ export function createBackupRunner(deps: BackupRunnerDeps): BackupRunner {
         if (tmpDir !== undefined) rmSync(tmpDir, { recursive: true, force: true });
       }
       await yieldToEventLoop();
-      const sha = contentSha256(archive);
+      const sha = sha256Hex(archive);
 
       // 置き場所の一覧（置き場所がなければここで FOLDER_NOT_FOUND）
       const existing = listBackupFiles(folder);
@@ -168,7 +168,7 @@ export function createBackupRunner(deps: BackupRunnerDeps): BackupRunner {
         const decrypted = await decryptBackup(readBack, passphrase, appVersion, deps.crypto);
         if (!decrypted.ok) return false;
         const unpacked = unpackArchive(decrypted.value.archive);
-        return unpacked.ok && contentSha256(decrypted.value.archive) === sha;
+        return unpacked.ok && sha256Hex(decrypted.value.archive) === sha;
       });
 
       if (forceWrite) await auth.setSetting("backup_force_write", "0", deps.clock.now());

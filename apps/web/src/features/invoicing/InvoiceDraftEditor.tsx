@@ -1,6 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { type InvoiceItemInput, itemAmountOf, MAX_INVOICE_ITEMS } from "@trebuchet/schema";
+import {
+  type InvoiceItemInput,
+  isHalfStep,
+  itemAmountOf,
+  MAX_INVOICE_ITEMS,
+} from "@trebuchet/schema";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
@@ -27,7 +32,7 @@ const parseQuantity = (raw: string) => {
   const text = raw.trim();
   if (text === "") return undefined;
   const n = Number(text);
-  return Number.isFinite(n) && n > 0 && Number.isInteger(n * 2) ? n : undefined;
+  return Number.isFinite(n) && n > 0 && isHalfStep(n) ? n : undefined;
 };
 
 /** 正の整数（円）。そうでなければ undefined */

@@ -30,6 +30,7 @@ import {
   ok,
   type RecurringRunRecord,
   type Result,
+  validation,
 } from "../types.ts";
 import { createJournal, loadContext } from "./create-journal.ts";
 import { checkReason } from "./journal-edit.ts";
@@ -40,9 +41,6 @@ export type RecurringDeps = {
   ids: IdGenerator;
   clock: Clock;
 };
-
-const validation = (message: string, details: Record<string, unknown>) =>
-  err(domainError("VALIDATION", message, details));
 
 const notFound = (id: string) =>
   err(domainError("RECURRING_NOT_FOUND", "定期仕訳が見つかりません", { recurringId: id }));

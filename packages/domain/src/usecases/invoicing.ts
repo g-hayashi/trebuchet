@@ -13,7 +13,9 @@ import {
   type InvoiceSettingsInput,
   type InvoiceSummary,
   type InvoicingVoidInput,
+  isHalfStep,
   type JournalOrigin,
+  MAX_INVOICE_ITEMS,
   type OutstandingByPartner,
   type PaymentInput,
   type PaymentView,
@@ -47,6 +49,7 @@ import {
   type Partner,
   type PaymentRecord,
   type Result,
+  validation,
 } from "../types.ts";
 import { createJournal, loadContext } from "./create-journal.ts";
 import { checkReason, type LedgerDeps } from "./journal-edit.ts";
@@ -304,7 +307,7 @@ export function saveWorkHours(
           ),
         );
       }
-      if (!Number.isInteger(entry.hours * 2) || entry.hours < 0) {
+      if (!isHalfStep(entry.hours) || entry.hours < 0) {
         return err(
           domainError("VALIDATION", "工数は 0.5 時間単位で入力してください", {
             field: "hours",
@@ -413,11 +416,6 @@ export function draftInvoices(
 
 export type IssuedInvoice = { invoice: InvoiceDetail; journal: Journal };
 
-const MAX_ITEMS = 5;
-
-const validation = (message: string, details: Record<string, unknown>) =>
-  err(domainError("VALIDATION", message, details));
-
 /**
  * 請求書を発行する。検査（発行者の設定 → 取引先 → 重複 → 明細 → 日付）→ 売上の仕訳（`createJournal`、
  * `source = invoice`）→ 通し番号を +1 → 請求書 → 明細 → 記録、の順に 1 トランザクションで書く（R9）。
@@ -483,8 +481,8 @@ export function issueInvoice(
       return validation("売上の計上日が正しい日付ではありません", { field: "salesDate" });
     }
 
-    if (input.items.length < 1 || input.items.length > MAX_ITEMS) {
-      return validation(`明細は 1〜${MAX_ITEMS} 行にしてください`, { field: "items" });
+    if (input.items.length < 1 || input.items.length > MAX_INVOICE_ITEMS) {
+      return validation(`明細は 1〜${MAX_INVOICE_ITEMS} 行にしてください`, { field: "items" });
     }
     const ctx = loadContext(masters);
     const defaultCategory = defaultSalesTaxCategory(salesDate, ctx.taxSettings);
@@ -498,7 +496,7 @@ export function issueInvoice(
       let quantityHalves: number | null = null;
       if (item.quantity !== undefined) {
         const halves = item.quantity * 2;
-        if (!Number.isInteger(halves) || halves < 1) {
+        if (!isHalfStep(item.quantity) || halves < 1) {
           return validation("数量は 0.5 単位の正の数で入力してください", { field, index });
         }
         quantityHalves = halves;

@@ -1,13 +1,12 @@
 import {
   closePeriod,
   createNextFiscalPeriod,
-  type DomainError,
-  domainError,
   err,
   type FiscalPeriod,
   getFiscalPeriodHistory,
   type MasterRepository,
   ok,
+  periodNotFound,
   type Result,
   reopenPeriod,
   replaceOpeningBalances,
@@ -19,19 +18,16 @@ import { fail } from "../errors.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 
-const yearError = (year: string): DomainError =>
-  domainError("VALIDATION", "会計期間が見つかりません", { fiscalYear: year });
-
 /** パスの `:year`（4桁の数字）を数値にする */
 export function parseYear(year: string): Result<number> {
-  return /^\d{4}$/.test(year) ? ok(Number(year)) : err(yearError(year));
+  return /^\d{4}$/.test(year) ? ok(Number(year)) : err(periodNotFound(year));
 }
 
 function findPeriod(repo: MasterRepository, year: string): Result<FiscalPeriod> {
   const parsed = parseYear(year);
   if (!parsed.ok) return parsed;
   const period = repo.getFiscalPeriodByYear(parsed.value);
-  return period === undefined ? err(yearError(year)) : ok(period);
+  return period === undefined ? err(periodNotFound(year)) : ok(period);
 }
 
 /** `/api/entities/:entityId` の下の会計期間・締め・期首残高（FR-011, FR-012, FR-024, FR-025） */

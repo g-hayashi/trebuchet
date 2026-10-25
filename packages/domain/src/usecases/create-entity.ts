@@ -1,3 +1,4 @@
+import { ENTITY_NAME_MAX } from "@trebuchet/schema";
 import { fiscalYearStart, oneYearEnd } from "../dates.ts";
 import type { Clock, IdGenerator, MasterRepository, RegistryRepository } from "../ports.ts";
 import { INDIVIDUAL_ACCOUNTS } from "../seed/accounts.individual.ts";
@@ -25,13 +26,13 @@ export type CreateEntityDeps = {
   clock: Clock;
 };
 
-const NAME_MAX = 100;
-
 function validateInput(input: CreateEntityInput): Result<CreateEntityInput> {
   const name = input.name.trim();
-  if (name.length === 0 || name.length > NAME_MAX) {
+  if (name.length === 0 || name.length > ENTITY_NAME_MAX) {
     return err(
-      domainError("VALIDATION", "名称は 1〜100 文字で入力してください", { field: "name" }),
+      domainError("VALIDATION", `名称は 1〜${ENTITY_NAME_MAX} 文字で入力してください`, {
+        field: "name",
+      }),
     );
   }
   const month = input.fiscalStartMonth;

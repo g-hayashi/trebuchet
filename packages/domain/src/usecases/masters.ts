@@ -16,6 +16,7 @@ import {
   type OpeningBalance,
   ok,
   type Partner,
+  periodNotFound,
   type ReportSection,
   type Result,
   type SubAccount,
@@ -470,7 +471,7 @@ export function replaceOpeningBalances(
   return deps.repo.transaction((tx) => {
     const period = tx.getFiscalPeriodByYear(fiscalYear);
     if (period === undefined) {
-      return err(domainError("VALIDATION", "会計期間が見つかりません", { fiscalYear }));
+      return err(periodNotFound(fiscalYear));
     }
     if (period.status === "closed") {
       return err(
