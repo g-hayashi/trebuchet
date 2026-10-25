@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ErrorDetails } from "./errors.ts";
 import { JournalInput } from "./journals.ts";
-import { DateString, Id } from "./primitives.ts";
+import { DateString, FiscalYearParam, Id } from "./primitives.ts";
 
 // 003-tax-return（contracts/http-api.md、data-model.md §1・§2）
 
@@ -118,8 +118,8 @@ export type DeductionAnswersInput = z.infer<typeof DeductionAnswersInput>;
 export const ClosingNoteKind = z.enum(["special_circumstances", "opening_difference"]);
 export type ClosingNoteKind = z.infer<typeof ClosingNoteKind>;
 
-/** PUT /blue-return/:year/notes/:kind のパス（year の形は route の parseYear で検査する） */
-export const ClosingNoteParam = z.object({ year: z.string(), kind: ClosingNoteKind });
+/** PUT /blue-return/:year/notes/:kind のパス */
+export const ClosingNoteParam = FiscalYearParam.extend({ kind: ClosingNoteKind });
 
 export const ClosingNoteInput = z.object({ body: z.string().max(CLOSING_NOTE_MAX) });
 export type ClosingNoteInput = z.infer<typeof ClosingNoteInput>;
@@ -153,6 +153,12 @@ export const TaxReturnMemoInput = z
     path: ["label"],
   });
 export type TaxReturnMemoInput = z.infer<typeof TaxReturnMemoInput>;
+
+/** `/tax-return/:year/memos/:memoId` のパス（ID の形は検査しない。ないものは domain が見つからないとする） */
+export const TaxReturnMemoParam = FiscalYearParam.extend({ memoId: z.string() });
+
+/** `/tax-return/:year/documents/:documentId` のパス */
+export const FiledDocumentParam = FiscalYearParam.extend({ documentId: z.string() });
 
 export const FiledDocumentKind = z.enum(["blue_return", "tax_return", "attachment", "other"]);
 export type FiledDocumentKind = z.infer<typeof FiledDocumentKind>;

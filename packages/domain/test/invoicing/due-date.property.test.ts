@@ -1,6 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { clampDay, daysInMonth, dueDate } from "../../src/invoicing/due-date.ts";
+import { clampDay, daysInMonth } from "../../src/dates.ts";
+import { dueDate } from "../../src/invoicing/due-date.ts";
 
 // INV-36（data-model §4、R8）
 

@@ -1,8 +1,8 @@
 import type { RecurringInput } from "@trebuchet/schema";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { dateInMonth, monthAtIndex, monthIndex } from "../src/dates.ts";
 import { planRecurringRuns } from "../src/recurring/due.ts";
-import { monthAtIndex, monthIndex, scheduledDate } from "../src/recurring/schedule.ts";
 import { loadContext } from "../src/usecases/create-journal.ts";
 import {
   createRecurring,
@@ -24,7 +24,7 @@ import { setupRecurring } from "./recurring-setup.ts";
 
 // INV-35: 任意の定期仕訳の定義の集合と、起動の日の列（同じ日の重複、停止・再開・変更・締め・締めの解除・取消を挟む）で
 // postDueRecurring を繰り返しても、各（定期仕訳, 月）の posted は高々 1 件、最後の判定の後は active の定義の
-// 対象の月がすべて posted・skipped・blocked のどれか 1 つ、仕訳の日付は scheduledDate、取り消しても再登録されない
+// 対象の月がすべて posted・skipped・blocked のどれか 1 つ、仕訳の日付は dateInMonth、取り消しても再登録されない
 
 const NOW = "2026-10-01T00:00:00.000Z";
 
@@ -89,7 +89,7 @@ function targetMonths(
   );
   for (let i = monthIndex(def.startMonth); i <= last; i++) {
     const month = monthAtIndex(i);
-    if (scheduledDate(month, def.dayOfMonth) <= today) out.push(month);
+    if (dateInMonth(month, def.dayOfMonth) <= today) out.push(month);
   }
   return out;
 }
@@ -111,11 +111,11 @@ function runSequence(start: string, ops: RecurringOp[]) {
       expect(def).not.toBeNull();
       if (def === null) continue;
       stats.posted += 1;
-      // 停止中の定義は登録しない。開始月以降・終了月以前、予定日が今日以前、日付は scheduledDate
+      // 停止中の定義は登録しない。開始月以降・終了月以前、予定日が今日以前、日付は dateInMonth
       expect(def.status).toBe("active");
       expect(p.targetMonth >= def.startMonth).toBe(true);
       expect(def.endMonth === null || p.targetMonth <= def.endMonth).toBe(true);
-      expect(p.journal.date).toBe(scheduledDate(p.targetMonth, def.dayOfMonth));
+      expect(p.journal.date).toBe(dateInMonth(p.targetMonth, def.dayOfMonth));
       expect(p.journal.date <= today).toBe(true);
       expect(p.journal.source).toBe("recurring");
     }

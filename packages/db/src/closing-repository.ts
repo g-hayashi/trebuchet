@@ -12,10 +12,8 @@ import type {
   TaxParameter,
   TaxReturnMemo,
 } from "@trebuchet/domain";
-import type { RunResult } from "better-sqlite3";
-import { asc, eq, sql } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
-import type * as tenantSchema from "./schema/tenant.ts";
+import { asc, eq } from "drizzle-orm";
+import { insertionOrder, type TenantConn } from "./internal.ts";
 import {
   adjustmentJournalRefs,
   blueDeductionAnswers,
@@ -29,12 +27,6 @@ import {
   taxReturnMemos,
 } from "./schema/tenant.ts";
 import { drizzleUnitOfWork } from "./unit-of-work.ts";
-
-/** テナントの DB、またはそのトランザクション */
-type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
-
-/** 挿入の順（一覧の既定の順） */
-const insertionOrder = sql`rowid`;
 
 /** ClosingStore の Drizzle（better-sqlite3）による実装。メソッドはすべて同期 */
 export class DrizzleClosingStore implements ClosingStore {

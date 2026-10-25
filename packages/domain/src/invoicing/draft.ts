@@ -5,10 +5,11 @@ import type {
   InvoiceItemInput,
   InvoiceSettings,
 } from "@trebuchet/schema";
+import { monthEnd } from "../dates.ts";
 import type { JournalContext } from "../journal.ts";
 import type { InvoiceRecord, Partner } from "../types.ts";
 import { itemAmount } from "./amounts.ts";
-import { dueDate, monthEnd } from "./due-date.ts";
+import { dueDate } from "./due-date.ts";
 import {
   defaultSalesTaxCategory,
   effectiveTaxDisplay,

@@ -39,7 +39,6 @@ export * from "./money.ts";
 export * from "./opening.ts";
 export * from "./ports.ts";
 export * from "./recurring/due.ts";
-export * from "./recurring/schedule.ts";
 export * from "./reports/balance-sheet.ts";
 export * from "./reports/balances.ts";
 export * from "./reports/csv.ts";

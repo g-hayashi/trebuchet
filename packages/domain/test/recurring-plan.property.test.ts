@@ -1,8 +1,8 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { dateInMonth } from "../src/dates.ts";
 import { validateJournal } from "../src/journal.ts";
 import { planRecurringRuns, type RecurringContext } from "../src/recurring/due.ts";
-import { scheduledDate } from "../src/recurring/schedule.ts";
 import { loadContext } from "../src/usecases/create-journal.ts";
 import { setupInvoicing } from "./invoicing-setup.ts";
 import {
@@ -54,7 +54,7 @@ function targetMonths(
   const last = def.endMonth === null ? indexOfMonth("2030-12") : indexOfMonth(def.endMonth);
   for (let i = indexOfMonth(def.startMonth); i <= last; i++) {
     const month = monthFromIndex(i);
-    if (scheduledDate(month, def.dayOfMonth) <= today) out.push(month);
+    if (dateInMonth(month, def.dayOfMonth) <= today) out.push(month);
   }
   return out;
 }
@@ -85,14 +85,14 @@ describe("planRecurringRuns (INV-35 の純関数)", () => {
         for (const m of postMonths) expect(blockedMonths).not.toContain(m);
         for (const m of [...postMonths, ...blockedMonths]) expect(doneSet.has(m)).toBe(false);
 
-        // 予定日はすべて今日以前で、scheduledDate と一致する
+        // 予定日はすべて今日以前で、dateInMonth と一致する
         for (const p of result.post) {
-          expect(p.date).toBe(scheduledDate(p.month, def.dayOfMonth));
+          expect(p.date).toBe(dateInMonth(p.month, def.dayOfMonth));
           expect(p.date <= today).toBe(true);
           expect(p.draft.date).toBe(p.date);
         }
         for (const b of result.blocked) {
-          expect(b.date).toBe(scheduledDate(b.month, def.dayOfMonth));
+          expect(b.date).toBe(dateInMonth(b.month, def.dayOfMonth));
           expect(b.date <= today).toBe(true);
         }
 

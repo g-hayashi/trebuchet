@@ -1,9 +1,5 @@
 import type { Result } from "@trebuchet/domain";
-import type { RunResult } from "better-sqlite3";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
-import type * as tenantSchema from "./schema/tenant.ts";
-
-type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
+import type { TenantConn } from "./internal.ts";
 
 /**
  * fn が返した `err` でトランザクションを巻き戻すための例外。drizzle のトランザクションは

@@ -13,6 +13,7 @@ import type {
   SkipRunInput,
 } from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
+import { dateInMonth, monthAtIndex, monthIndex, monthOfDate } from "../dates.ts";
 import { combineErrors, type JournalContext, validateJournal } from "../journal.ts";
 import type { Clock, IdGenerator, RecurringStore, RecurringUnitOfWork } from "../ports.ts";
 import {
@@ -21,7 +22,6 @@ import {
   type RecurringPlan,
   recurringJournalDraft,
 } from "../recurring/due.ts";
-import { monthIndex, scheduledDate } from "../recurring/schedule.ts";
 import {
   type DomainError,
   domainError,
@@ -52,8 +52,6 @@ const versionConflict = (def: Recurring) =>
       currentVersion: def.version,
     }),
   );
-
-const monthOfDate = (date: string) => date.slice(0, 7);
 
 /** 保存の段階では見ない違反。予定日の期間・消費税の設定は回ごとの判定（blocked）に任せる（R17） */
 const TIME_DEPENDENT_CODES: ReadonlySet<string> = new Set([
@@ -330,7 +328,7 @@ export function skipRecurringRun(
     if (month < def.startMonth || (def.endMonth !== null && month > def.endMonth)) {
       return invalidMonth("この定期仕訳の対象の月ではありません");
     }
-    if (scheduledDate(month, def.dayOfMonth) > today) {
+    if (dateInMonth(month, def.dayOfMonth) > today) {
       return invalidMonth("予定日がまだ来ていない月は飛ばせません");
     }
     if (doneMonthsOf(recurring, id).includes(month)) {
@@ -535,10 +533,9 @@ function nextDate(def: Recurring, today: string): string | null {
   if (def.status === "paused") return null;
   let index = Math.max(monthIndex(def.startMonth), monthIndex(monthOfDate(today)));
   for (let step = 0; step < 2; step++, index++) {
-    const year = Math.floor(index / 12);
-    const month = `${String(year).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
+    const month = monthAtIndex(index);
     if (def.endMonth !== null && month > def.endMonth) return null;
-    const date = scheduledDate(month, def.dayOfMonth);
+    const date = dateInMonth(month, def.dayOfMonth);
     if (date > today) return date;
   }
   return null;

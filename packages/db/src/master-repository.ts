@@ -10,15 +10,12 @@ import type {
   SubAccount,
   Tag,
   TaxCategory,
-  TaxCategoryCode,
   TaxRate,
   TaxSetting,
 } from "@trebuchet/domain";
-import type { RunResult } from "better-sqlite3";
 import { asc, eq, sql } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import { asTaxCategory, insertionOrder, rowidOf, type TenantConn } from "./internal.ts";
 import { inTransaction } from "./rollback.ts";
-import type * as tenantSchema from "./schema/tenant.ts";
 import {
   accounts,
   auditLog,
@@ -33,12 +30,6 @@ import {
   taxCategories,
   taxRates,
 } from "./schema/tenant.ts";
-
-/** テナントの DB、またはそのトランザクション */
-type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
-
-/** 挿入の順（一覧の既定の順） */
-const insertionOrder = sql`rowid`;
 
 /** MasterRepository の Drizzle（better-sqlite3）による実装。メソッドはすべて同期 */
 export class DrizzleMasterRepository implements MasterRepository {
@@ -153,7 +144,7 @@ export class DrizzleMasterRepository implements MasterRepository {
       .from(taxCategories)
       .orderBy(insertionOrder)
       .all()
-      .map((row) => ({ ...row, code: row.code as TaxCategoryCode }));
+      .map((row) => ({ ...row, code: asTaxCategory(row.code) }));
   }
 
   listTaxRates(): TaxRate[] {
@@ -162,7 +153,7 @@ export class DrizzleMasterRepository implements MasterRepository {
       .from(taxRates)
       .orderBy(asc(taxRates.effectiveFrom), insertionOrder)
       .all()
-      .map((row) => ({ ...row, categoryCode: row.categoryCode as TaxCategoryCode }));
+      .map((row) => ({ ...row, categoryCode: asTaxCategory(row.categoryCode) }));
   }
 
   listTaxSettings(): TaxSetting[] {
@@ -208,7 +199,7 @@ export class DrizzleMasterRepository implements MasterRepository {
       .select()
       .from(auditLog)
       .where(eq(auditLog.targetType, "fiscal_period"))
-      .orderBy(sql`${auditLog}.rowid`)
+      .orderBy(rowidOf(auditLog))
       .all();
   }
 

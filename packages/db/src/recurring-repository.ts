@@ -5,17 +5,12 @@ import type {
   RecurringStore,
   RecurringUnitOfWork,
 } from "@trebuchet/domain";
-import type { Recurring, TaxCategoryCode } from "@trebuchet/schema";
-import type { RunResult } from "better-sqlite3";
+import type { Recurring } from "@trebuchet/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import { asTaxCategory, type TenantConn } from "./internal.ts";
 import { appendInvoicingAuditRow } from "./invoicing-repository.ts";
-import type * as tenantSchema from "./schema/tenant.ts";
 import { recurringJournalLines, recurringJournals, recurringRuns } from "./schema/tenant.ts";
 import { drizzleUnitOfWork } from "./unit-of-work.ts";
-
-/** テナントの DB、またはそのトランザクション */
-type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
 
 /** 行の ID はテナントの DB の中だけで使う（ドメインの `Recurring` は行の ID を持たない） */
 const toLineRows = (def: Recurring): (typeof recurringJournalLines.$inferInsert)[] =>
@@ -50,8 +45,7 @@ export class DrizzleRecurringStore implements RecurringStore {
         .filter((l) => l.recurringId === row.id)
         .map(({ id: _id, recurringId: _recurringId, ...line }) => ({
           ...line,
-          // tax_category は FK で 001 の税区分に結びついている（列の型は text）
-          taxCategory: line.taxCategory as TaxCategoryCode | null,
+          taxCategory: asTaxCategory(line.taxCategory),
         })),
     }));
   }

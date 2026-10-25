@@ -1,4 +1,4 @@
-import type { DomainError } from "@trebuchet/domain";
+import type { DomainError, Result } from "@trebuchet/domain";
 import { RepositoryConflictError } from "@trebuchet/domain";
 import type { ErrorCode, ErrorDetails, ErrorResponse } from "@trebuchet/schema";
 import type { Context, ErrorHandler } from "hono";
@@ -6,7 +6,7 @@ import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 /** contracts/http-api.md のエラー表 */
-export const ERROR_STATUS = {
+const ERROR_STATUS = {
   VALIDATION: 400,
   UNBALANCED: 422,
   ACCOUNT_INACTIVE: 422,
@@ -77,8 +77,6 @@ export const ERROR_STATUS = {
   RECURRING_CONFIRM_REQUIRED: 409,
 } as const satisfies Record<ErrorCode, ContentfulStatusCode>;
 
-export type ErrorStatus = (typeof ERROR_STATUS)[ErrorCode];
-
 export function errorBody(error: DomainError): ErrorResponse {
   const { code, message, details } = error;
   return { error: details === undefined ? { code, message } : { code, message, details } };
@@ -87,6 +85,15 @@ export function errorBody(error: DomainError): ErrorResponse {
 /** ドメインのエラーをレスポンスにする。ルートからは `return fail(c, r.error)` で使う */
 export function fail(c: Context, error: DomainError) {
   return c.json(errorBody(error), ERROR_STATUS[error.code]);
+}
+
+/**
+ * ユースケースの結果をレスポンスにする。失敗は `fail`、成功は `onOk` が返すレスポンス
+ * （`return respond(c, result, (v) => c.json({ account: v }, 201))`）。
+ * 成功のレスポンスをルート側で作るので、hc の型（ステータスと本文）はそのまま保たれる
+ */
+export function respond<T, R>(c: Context, result: Result<T>, onOk: (value: T) => R) {
+  return result.ok ? onOk(result.value) : fail(c, result.error);
 }
 
 /** ルートの外（ミドルウェアなど）から投げるためのドメインエラー */
@@ -99,32 +106,36 @@ export class DomainException extends Error {
   }
 }
 
-type IssueLike = { path: readonly PropertyKey[]; message: string };
+/** Standard Schema・Zod の issue の形（server は zod に直接依存しないため、形で受け取る） */
+export type IssueLike = {
+  path?: readonly (PropertyKey | { key: PropertyKey })[] | undefined;
+  message: string;
+};
 
-/** Zod の ZodError（server は zod に直接依存しないため、形で判定する） */
-function isZodError(e: unknown): e is Error & { issues: IssueLike[] } {
-  return (
-    e instanceof Error && e.name === "ZodError" && Array.isArray((e as { issues?: unknown }).issues)
-  );
-}
-
-function zodDetails(e: { issues: IssueLike[] }): ErrorDetails {
-  return {
-    issues: e.issues.map((i) => ({ path: i.path.map(String), message: i.message })),
+/**
+ * 入力の検証エラー（400 VALIDATION）。Zod の issue を `details.issues` に写す。
+ * `pathPrefix` は path の先頭に足す（multipart のフィールド名など）
+ */
+export function validationError(
+  issues: readonly IssueLike[],
+  pathPrefix: readonly string[] = [],
+): DomainError {
+  const details: ErrorDetails = {
+    issues: issues.map((i) => ({
+      path: [
+        ...pathPrefix,
+        ...(i.path ?? []).map((p) => String(typeof p === "object" ? p.key : p)),
+      ],
+      message: i.message,
+    })),
   };
+  return { code: "VALIDATION", message: "入力が正しくありません", details };
 }
 
 export const onError: ErrorHandler = (e, c) => {
   if (e instanceof DomainException) return fail(c, e.error);
   if (e instanceof RepositoryConflictError) {
     return fail(c, { code: "VERSION_CONFLICT", message: e.message });
-  }
-  if (isZodError(e)) {
-    return fail(c, {
-      code: "VALIDATION",
-      message: "入力が正しくありません",
-      details: zodDetails(e),
-    });
   }
   if (e instanceof HTTPException) return e.getResponse();
   console.error(e);

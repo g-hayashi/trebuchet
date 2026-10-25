@@ -13,10 +13,8 @@ import type {
   InvoiceSettings,
   JournalOrigin,
 } from "@trebuchet/schema";
-import type { RunResult } from "better-sqlite3";
-import { and, asc, desc, eq, isNull, max, or, sql } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
-import type * as tenantSchema from "./schema/tenant.ts";
+import { and, asc, desc, eq, isNull, max, or } from "drizzle-orm";
+import { rowidOf, type TenantConn } from "./internal.ts";
 import {
   invoiceItems,
   invoicePayments,
@@ -29,9 +27,6 @@ import {
   workHours,
 } from "./schema/tenant.ts";
 import { drizzleUnitOfWork } from "./unit-of-work.ts";
-
-/** テナントの DB、またはそのトランザクション */
-type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
 
 /** `invoices` の行を請求書の写しにする（`issuer_json` を読み戻す） */
 function toInvoiceRecord(row: typeof invoices.$inferSelect): InvoiceRecord {
@@ -232,7 +227,7 @@ export class DrizzleInvoicingStore implements InvoicingStore {
       .select()
       .from(invoicePayments)
       .where(eq(invoicePayments.invoiceId, invoiceId))
-      .orderBy(asc(invoicePayments.createdAt), sql`${invoicePayments}.rowid ASC`)
+      .orderBy(asc(invoicePayments.createdAt), asc(rowidOf(invoicePayments)))
       .all();
   }
 

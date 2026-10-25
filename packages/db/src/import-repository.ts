@@ -6,14 +6,11 @@ import type {
   ImportUnitOfWork,
   Journal,
   JournalSignature,
-  TaxCategoryCode,
   TaxMapping,
 } from "@trebuchet/domain";
-import type { RunResult } from "better-sqlite3";
-import { and, asc, between, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import { and, asc, between, desc, eq, inArray, isNull } from "drizzle-orm";
+import { asTaxCategory, insertionOrder, type TenantConn } from "./internal.ts";
 import { DrizzleLedgerRepository } from "./ledger-repository.ts";
-import type * as tenantSchema from "./schema/tenant.ts";
 import {
   importAccountMappings,
   importBatches,
@@ -24,12 +21,7 @@ import {
 } from "./schema/tenant.ts";
 import { drizzleUnitOfWork } from "./unit-of-work.ts";
 
-/** テナントの DB、またはそのトランザクション */
-type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
-
 type BatchRow = typeof importBatches.$inferSelect;
-
-const insertionOrder = sql`rowid`;
 
 function toBatch({ fiscalYearsJson, ...row }: BatchRow): ImportBatch {
   return { ...row, fiscalYears: JSON.parse(fiscalYearsJson) as number[] };
@@ -93,8 +85,7 @@ export class DrizzleImportStore implements ImportStore {
       .all()
       .map((row) => ({
         ...row,
-        // tax_category は tax_categories への外部キーで、値は TaxCategoryCode に限られる
-        taxCategory: row.taxCategory as TaxCategoryCode,
+        taxCategory: asTaxCategory(row.taxCategory),
       }));
   }
 

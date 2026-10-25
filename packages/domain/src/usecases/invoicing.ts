@@ -24,11 +24,11 @@ import {
   YEN_LIMIT,
 } from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
-import { isValidDate } from "../dates.ts";
+import { isValidDate, monthEnd } from "../dates.ts";
 import { itemAmount } from "../invoicing/amounts.ts";
 import { buildInvoiceDetail, buildInvoiceSummary, toPaymentView } from "../invoicing/detail.ts";
 import { buildInvoiceDraft } from "../invoicing/draft.ts";
-import { dueDate, monthEnd } from "../invoicing/due-date.ts";
+import { dueDate } from "../invoicing/due-date.ts";
 import {
   invoiceJournalDraft,
   paymentJournalDraft,
