@@ -55,10 +55,88 @@ export type InferenceResult = {
 };
 
 type AiMethod = "local_ai" | "external_ai";
-type Work = { record: StatementRecord; account: StatementAccount };
-type Suggested = { value: ParsedSuggestion; method: AiMethod; model: string };
+export type AiWork = { record: StatementRecord; account: StatementAccount };
+type Work = AiWork;
+export type AiSuggested = { value: ParsedSuggestion; method: AiMethod; model: string };
 /** AI を呼んだ結果。`suggestion` がなければ、使える出力がなかった（`failure` に理由） */
-type Outcome = { work: Work; suggestion: Suggested | null; failure: string };
+export type AiOutcome = { suggestion: AiSuggested | null; failure: string };
+type Outcome = AiOutcome & { work: Work };
+
+/**
+ * 端末内 → 外部の順で AI を呼ぶ部品（R8）。推定（`inferWithAi`）と評価（`runEvaluation`）が共有する。
+ * AI に渡すのは `buildAiPayload` の結果だけ（INV-45）。端末内の結果がない・確信度が `threshold` より低く、
+ * 外部が有効（`externalEnabled` かつ `available()`）なら外部へ
+ */
+export function createAiSuggester(
+  deps: Pick<InferenceDeps, "local" | "external" | "externalEnabled" | "models">,
+  env: {
+    context: SuggestionContext;
+    ledgerAccounts: readonly Account[];
+    threshold: number;
+  },
+) {
+  let localChecked: boolean | undefined;
+  let externalChecked: boolean | undefined;
+  let externalUsed = false;
+  let localUsed = false;
+  const localAvailable = async (): Promise<boolean> => {
+    localChecked ??= await deps.local.available();
+    return localChecked;
+  };
+  const externalReady = async (): Promise<boolean> => {
+    externalChecked ??= deps.externalEnabled && (await deps.external.available());
+    return externalChecked;
+  };
+
+  const attempt = async (
+    provider: SuggestionProvider,
+    method: AiMethod,
+    model: string,
+    item: AiWork,
+  ): Promise<{ suggestion: AiSuggested } | { failure: string }> => {
+    const response = await provider.suggest(buildAiPayload(item.record, item.account), env.context);
+    if (!response.ok) return { failure: response.error.message };
+    const parsed = parseSuggestion(response.value, env.ledgerAccounts);
+    if (!parsed.ok) return { failure: parsed.error.message };
+    return { suggestion: { value: parsed.value, method, model } };
+  };
+
+  return {
+    localAvailable,
+    /** 外部を呼んだか */
+    externalUsed: () => externalUsed,
+    /** 呼んだモデルの名前（端末内、外部の順） */
+    usedModels: (): string[] => [
+      ...(localUsed ? [deps.models.local] : []),
+      ...(externalUsed ? [deps.models.external] : []),
+    ],
+    /** 1 件の推定。どちらも呼ばなかったら undefined */
+    async suggest(item: AiWork): Promise<AiOutcome | undefined> {
+      let suggestion: AiSuggested | null = null;
+      let failure = "";
+      let called = false;
+      if (await localAvailable()) {
+        called = true;
+        localUsed = true;
+        const r = await attempt(deps.local, "local_ai", deps.models.local, item);
+        if ("suggestion" in r) suggestion = r.suggestion;
+        else failure = r.failure;
+      }
+      // 端末内の結果がない・確信度がしきい値より低いとき、外部が有効なら外部へ（外部の出力が使えなければ端末内のまま）
+      if (
+        (suggestion === null || suggestion.value.confidence < env.threshold) &&
+        (await externalReady())
+      ) {
+        called = true;
+        externalUsed = true;
+        const r = await attempt(deps.external, "external_ai", deps.models.external, item);
+        if ("suggestion" in r) suggestion = r.suggestion;
+        else if (failure === "") failure = r.failure;
+      }
+      return called ? { suggestion, failure } : undefined;
+    },
+  };
+}
 
 /** AI に回す対象か（未処理で 0 円でなく、候補がない・none。前の段で候補ができた明細は呼ばない。R8） */
 const needsAi = (state: StatementState, candidate: StatementCandidateRecord | undefined) =>
@@ -122,51 +200,14 @@ export async function inferWithAi(
   const { work, context, ledgerAccounts, threshold } = read.value;
 
   // 2. AI を呼ぶ（UnitOfWork の外）
-  const localAvailable = await deps.local.available();
-  let externalChecked: boolean | undefined;
-  const externalReady = async (): Promise<boolean> => {
-    externalChecked ??= deps.externalEnabled && (await deps.external.available());
-    return externalChecked;
-  };
-  let externalUsed = false;
-
-  const attempt = async (
-    provider: SuggestionProvider,
-    method: AiMethod,
-    model: string,
-    item: Work,
-  ): Promise<{ suggestion: Suggested } | { failure: string }> => {
-    const response = await provider.suggest(buildAiPayload(item.record, item.account), context);
-    if (!response.ok) return { failure: response.error.message };
-    const parsed = parseSuggestion(response.value, ledgerAccounts);
-    if (!parsed.ok) return { failure: parsed.error.message };
-    return { suggestion: { value: parsed.value, method, model } };
-  };
-
+  const suggester = createAiSuggester(deps, { context, ledgerAccounts, threshold });
+  const localAvailable = await suggester.localAvailable();
   const outcomes = new Map<string, Outcome>();
   for (const item of work) {
-    let suggestion: Suggested | null = null;
-    let failure = "";
-    let called = false;
-    if (localAvailable) {
-      called = true;
-      const r = await attempt(deps.local, "local_ai", deps.models.local, item);
-      if ("suggestion" in r) suggestion = r.suggestion;
-      else failure = r.failure;
-    }
-    // 端末内の結果がない・確信度がしきい値より低いとき、外部が有効なら外部へ（外部の出力が使えなければ端末内のまま）
-    if (
-      (suggestion === null || suggestion.value.confidence < threshold) &&
-      (await externalReady())
-    ) {
-      called = true;
-      externalUsed = true;
-      const r = await attempt(deps.external, "external_ai", deps.models.external, item);
-      if ("suggestion" in r) suggestion = r.suggestion;
-      else if (failure === "") failure = r.failure;
-    }
-    if (called) outcomes.set(item.record.id, { work: item, suggestion, failure });
+    const outcome = await suggester.suggest(item);
+    if (outcome !== undefined) outcomes.set(item.record.id, { work: item, ...outcome });
   }
+  const externalUsed = suggester.externalUsed();
 
   // 3. 書く（待ちの間に状態が変わった明細は書かない）
   const written = deps.uow.run((tx) => {

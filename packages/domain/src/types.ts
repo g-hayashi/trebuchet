@@ -587,6 +587,20 @@ export type InferenceRuleHistoryRecord = {
 };
 
 /**
+ * 評価の実行の記録（`eval_runs` の 1 行。006 data-model §1.9、R17）。`resultJson` は項目ごとの一致率・方法ごとの
+ * 件数と一致率（千分率の整数）、`modelsJson` は使ったモデル名（JSON の配列）
+ */
+export type EvalRunRecord = {
+  id: string;
+  splitDate: string;
+  includeAi: boolean;
+  sampleCount: number;
+  resultJson: string;
+  modelsJson: string;
+  createdAt: string;
+};
+
+/**
  * 定期仕訳の回（`recurring_runs` の 1 行。data-model §1.9）。`posted` は仕訳を持ち、`skipped` は理由を持つ。
  * 登録できない回（`blocked`）は保存しない（R17）
  */

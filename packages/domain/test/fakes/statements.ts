@@ -7,6 +7,7 @@ import type {
 } from "../../src/ports.ts";
 import {
   domainError,
+  type EvalRunRecord,
   err,
   type InferenceRule,
   type InferenceRuleHistoryRecord,
@@ -30,6 +31,7 @@ type StatementState = {
   rules: InferenceRule[];
   ruleHistory: InferenceRuleHistoryRecord[];
   settings: StatementSettings | undefined;
+  evalRuns: EvalRunRecord[];
 };
 
 /**
@@ -47,6 +49,7 @@ export class InMemoryStatementStore implements StatementStore {
     rules: [],
     ruleHistory: [],
     settings: undefined,
+    evalRuns: [],
   };
   /** true なら insertStatements で、1 行目を書いた後に例外を投げる（ロールバックの確認用） */
   failOnInsertStatements = false;
@@ -226,6 +229,19 @@ export class InMemoryStatementStore implements StatementStore {
 
   saveStatementSettings(settings: StatementSettings): void {
     this.state.settings = structuredClone(settings);
+  }
+
+  insertEvalRun(run: EvalRunRecord): void {
+    if (this.state.evalRuns.some((r) => r.id === run.id)) {
+      throw new Error("UNIQUE constraint failed: eval_runs.id");
+    }
+    this.state.evalRuns.push(structuredClone(run));
+  }
+
+  listEvalRuns(): EvalRunRecord[] {
+    return structuredClone(this.state.evalRuns).sort(
+      (a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+    );
   }
 }
 

@@ -1,10 +1,11 @@
 import { randomUUIDv7 } from "node:crypto";
-import type { PastedRow } from "@trebuchet/domain";
+import type { PastedRow, Result } from "@trebuchet/domain";
 import type { JobView } from "@trebuchet/schema";
 
 /**
- * MF ME の取得のジョブ（006 R13。in-memory）。同時に 1 つだけ。取得した行は server のメモリにだけ置き、
- * 保存しない（FR-009）。再起動で消える（`JOB_NOT_FOUND`）。ジョブは事業体に結びつけ、ほかの事業体からは見えない
+ * 長い処理のジョブ（006 R13・R17。in-memory）。MF ME の取得（`start`）と評価（`startTask`）。
+ * どちらも合わせて同時に 1 つだけ。取得した行は server のメモリにだけ置き、保存しない（FR-009）。
+ * 再起動で消える（`JOB_NOT_FOUND`）。ジョブは事業体に結びつけ、ほかの事業体からは見えない
  */
 
 /** 取得の期間（`YYYY-MM`、両端を含む） */
@@ -35,6 +36,10 @@ export class MfmeFetchError extends Error {
 export const FETCH_FAILED_CODE = "MFME_FETCH_FAILED";
 const FETCH_FAILED_MESSAGE = "取得に失敗しました。貼り付けで取り込んでください";
 
+/** 評価のジョブの想定外の例外の理由（元のメッセージは出さない） */
+export const EVAL_FAILED_CODE = "EVAL_FAILED";
+const EVAL_FAILED_MESSAGE = "評価に失敗しました";
+
 type Job = {
   id: string;
   entityId: string;
@@ -48,6 +53,11 @@ type Job = {
 export type JobStore = {
   /** 動いているジョブがあれば `undefined`（呼び出し側が `JOB_RUNNING` にする） */
   start(entityId: string, range: MfmeRange, fetcher: MfmeFetcher): { jobId: string } | undefined;
+  /**
+   * 評価などの処理を、行を持たないジョブとして動かす（R17）。`work` が失敗の Result を返すとその
+   * エラーコードで、例外を投げると `EVAL_FAILED` で `failed` にする。動いているジョブがあれば `undefined`
+   */
+  startTask(entityId: string, work: () => Promise<Result<unknown>>): { jobId: string } | undefined;
   /** 事業体が違えば見つからない（`undefined`） */
   view(entityId: string, jobId: string): JobView | undefined;
   /** 取得の行。`done` でないジョブは `"not_done"`、見つからなければ `undefined` */
@@ -87,6 +97,29 @@ export function createJobStore(): JobStore {
   };
 
   return {
+    startTask(entityId, work) {
+      if ([...jobs.values()].some(isActive)) return undefined;
+      const job: Job = { id: randomUUIDv7(), entityId, status: "running" };
+      jobs.set(job.id, job);
+      void Promise.resolve()
+        .then(work)
+        .then(
+          (result) => {
+            if (result.ok) {
+              job.status = "done";
+            } else {
+              job.status = "failed";
+              job.error = { code: result.error.code, message: result.error.message };
+            }
+          },
+          () => {
+            job.status = "failed";
+            job.error = { code: EVAL_FAILED_CODE, message: EVAL_FAILED_MESSAGE };
+          },
+        )
+        .finally(prune);
+      return { jobId: job.id };
+    },
     start(entityId, range, fetcher) {
       if ([...jobs.values()].some(isActive)) return undefined;
       const job: Job = { id: randomUUIDv7(), entityId, status: "running" };
