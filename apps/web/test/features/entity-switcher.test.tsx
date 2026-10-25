@@ -3,7 +3,10 @@ import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/rea
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { queryKeys } from "@/lib/queries";
+import { accountKeys } from "@/features/accounts/api";
+import { entityKeys } from "@/features/entities/api";
+import { journalKeys } from "@/features/journals/api";
+import { reportKeys } from "@/features/reports/api";
 import { Route as RootRoute } from "@/routes/__root";
 import { Route as EntityRoute } from "@/routes/e/$entityId/route";
 import { Route as HomeRoute } from "@/routes/index";
@@ -118,18 +121,18 @@ describe("EntitySwitcher（US6, T113）", () => {
     const { queryClient } = renderApp(`/e/${entityA.id}`);
     const select = await switcher();
     await waitFor(() => expect(select).toHaveValue(entityA.id));
-    queryClient.setQueryData(queryKeys.accounts(entityA.id), [{ id: "cash-a", name: "現金" }]);
-    queryClient.setQueryData(queryKeys.reports(entityA.id), { kind: "trial-balance" });
-    queryClient.setQueryData(queryKeys.journal(entityA.id, "j1"), { id: "j1" });
+    queryClient.setQueryData(accountKeys.list(entityA.id), [{ id: "cash-a", name: "現金" }]);
+    queryClient.setQueryData(reportKeys.all(entityA.id), { kind: "trial-balance" });
+    queryClient.setQueryData(journalKeys.detail(entityA.id, "j1"), { id: "j1" });
 
     await userEvent.selectOptions(select, "株式会社B");
 
     await waitFor(() => {
-      expect(queryClient.getQueryData(queryKeys.accounts(entityA.id))).toBeUndefined();
-      expect(queryClient.getQueryData(queryKeys.reports(entityA.id))).toBeUndefined();
-      expect(queryClient.getQueryData(queryKeys.journal(entityA.id, "j1"))).toBeUndefined();
+      expect(queryClient.getQueryData(accountKeys.list(entityA.id))).toBeUndefined();
+      expect(queryClient.getQueryData(reportKeys.all(entityA.id))).toBeUndefined();
+      expect(queryClient.getQueryData(journalKeys.detail(entityA.id, "j1"))).toBeUndefined();
     });
-    expect(queryClient.getQueryData(queryKeys.entities)).toHaveLength(2);
+    expect(queryClient.getQueryData(entityKeys.all)).toHaveLength(2);
     expect(entitiesFetches()).toBe(1);
   });
 

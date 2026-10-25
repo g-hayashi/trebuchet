@@ -2,12 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiErrorMessage } from "@/components/ui/form-error";
+import { accountsQuery } from "@/features/accounts/api";
 import { AdjustmentPanel } from "@/features/blue-return/AdjustmentPanel";
 import { adjustmentsQuery, homeUseQuery, rentDetailsQuery } from "@/features/blue-return/api";
 import { HomeUseForm } from "@/features/blue-return/HomeUseForm";
 import { RentDetailsTable } from "@/features/blue-return/RentDetailsTable";
 import { fixedAssetsQuery } from "@/features/fixed-assets/api";
-import { accountsQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/blue-return/$year/home-use")({
   component: HomeUsePage,

@@ -1,6 +1,6 @@
 import type { ImportPreview, ImportWarning } from "@trebuchet/schema";
+import type { Account } from "@/features/accounts/api";
 import { formatYen } from "@/lib/format";
-import type { Account } from "@/lib/queries";
 import { WARNING_LABELS } from "./labels";
 
 const ENCODING_LABELS: Record<ImportPreview["file"]["encoding"], string> = {

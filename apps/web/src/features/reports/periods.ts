@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { type FiscalPeriod, fiscalPeriodsQuery } from "@/features/periods/api";
 import { today } from "@/lib/dates";
-import { type FiscalPeriod, fiscalPeriodsQuery } from "@/lib/queries";
 
 export type DateRange = { from: string; to: string };
 

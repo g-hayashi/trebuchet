@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ImportBatch, ReconciliationResult, ReconciliationRow } from "@trebuchet/schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FiscalPeriod } from "@/lib/queries";
+import type { FiscalPeriod } from "@/features/periods/api";
 import { Route as ImportsRoute } from "@/routes/e/$entityId/imports/index";
 import { Route } from "@/routes/e/$entityId/imports/reconcile";
 import { type ApiCall, apiError, formFields, mockApi, ok } from "../mock-api";

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { type TrialBalance, trialBalanceQuery } from "@/features/reports/api";
 import { CsvLink, PeriodPicker } from "@/features/reports/controls";
 import { useReportRange } from "@/features/reports/periods";
 import { BalancedBadge, ReportPage } from "@/features/reports/ReportPage";
@@ -13,7 +14,6 @@ import {
   ReportTable,
 } from "@/features/reports/ReportTable";
 import { RangeSearch } from "@/features/reports/search";
-import { type TrialBalance, trialBalanceQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/reports/trial-balance")({
   validateSearch: RangeSearch,

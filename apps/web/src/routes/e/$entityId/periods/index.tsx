@@ -21,14 +21,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api, unwrap } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
 import {
+  closePeriod,
+  createNextPeriod,
   type FiscalPeriod,
   fiscalPeriodHistoryQuery,
   fiscalPeriodsQuery,
-  queryKeys,
-} from "@/lib/queries";
+  periodKeys,
+  reopenPeriod,
+} from "@/features/periods/api";
+import { formatDateTime } from "@/lib/format";
 
 export const Route = createFileRoute("/e/$entityId/periods/")({
   component: PeriodsPage,
@@ -46,34 +48,19 @@ function PeriodsPage() {
   const [reopening, setReopening] = useState<FiscalPeriod>();
 
   // 会計期間のキーの前方一致で、一覧・履歴・期首残高をまとめて読み直す
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.fiscalPeriods(entityId) });
-  const periodApi = api.api.entities[":entityId"]["fiscal-periods"];
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: periodKeys.list(entityId) });
 
   const createNext = useMutation({
-    mutationFn: async () =>
-      (await unwrap(await periodApi.$post({ param: { entityId } }))).fiscalPeriod,
+    mutationFn: () => createNextPeriod(entityId),
     onSuccess: invalidate,
   });
   const close = useMutation({
-    mutationFn: async (year: number) =>
-      (
-        await unwrap(
-          await periodApi[":year"].close.$post({ param: { entityId, year: String(year) } }),
-        )
-      ).fiscalPeriod,
+    mutationFn: (year: number) => closePeriod(entityId, year),
     onSuccess: invalidate,
   });
   const reopen = useMutation({
-    mutationFn: async ({ year, reason }: { year: number; reason: string }) =>
-      (
-        await unwrap(
-          await periodApi[":year"].reopen.$post({
-            param: { entityId, year: String(year) },
-            json: { reason },
-          }),
-        )
-      ).fiscalPeriod,
+    mutationFn: ({ year, reason }: { year: number; reason: string }) =>
+      reopenPeriod(entityId, year, reason),
     onSuccess: invalidate,
   });
 

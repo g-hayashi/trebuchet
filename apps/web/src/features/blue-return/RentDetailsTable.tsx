@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatYen, parseYenInput } from "@/lib/format";
+import { formatYen, parseWholeYen } from "@/lib/format";
 import { blueReturnKeys, putRentDetails, type RentDetailRow } from "./api";
 
 type Row = {
@@ -25,12 +25,6 @@ type Row = {
 };
 
 const AMOUNT_ERROR = "賃借料と必要経費算入額は 0 以上の整数（円）で入力してください";
-
-/** 金額の入力欄の文字列を 0 以上の整数にする。そうでなければ undefined */
-const toYen = (raw: string): number | undefined => {
-  const n = parseYenInput(raw);
-  return n !== undefined && Number.isInteger(n) && n >= 0 ? n : undefined;
-};
 
 /**
  * 地代家賃の内訳（FR-017）。全件を置き換えて保存する。必要経費算入額の合計と決算書の欄23の
@@ -80,11 +74,11 @@ export function RentDetailsTable({
     const converted = items.map((r) => ({
       payee: r.payee,
       property: r.property,
-      annualRent: toYen(r.annualRent),
-      deductibleAmount: toYen(r.deductibleAmount),
+      annualRent: parseWholeYen(r.annualRent, { min: 0 }),
+      deductibleAmount: parseWholeYen(r.deductibleAmount, { min: 0 }),
     }));
     const valid = converted.flatMap((r) =>
-      r.annualRent === undefined || r.deductibleAmount === undefined
+      r.annualRent === null || r.deductibleAmount === null
         ? []
         : [{ ...r, annualRent: r.annualRent, deductibleAmount: r.deductibleAmount }],
     );

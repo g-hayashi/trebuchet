@@ -9,8 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api, unwrap } from "@/lib/api";
-import { entitiesQuery, queryKeys } from "@/lib/queries";
+import { entitiesQuery, entityKeys, patchEntity } from "@/features/entities/api";
 
 export const Route = createFileRoute("/e/$entityId/")({
   component: EntityHome,
@@ -36,9 +35,8 @@ function RenameEntityForm({ entityId, name }: { entityId: string; name: string }
   });
   const message = form.formState.errors.name?.message;
   const rename = useMutation({
-    mutationFn: async (json: EntityPatch) =>
-      unwrap(await api.api.entities[":entityId"].$patch({ param: { entityId }, json })),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.entities }),
+    mutationFn: (json: EntityPatch) => patchEntity(entityId, json),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: entityKeys.all }),
   });
 
   return (

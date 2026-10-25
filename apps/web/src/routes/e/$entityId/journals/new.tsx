@@ -5,18 +5,13 @@ import { useState } from "react";
 import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
+import { accountsQuery } from "@/features/accounts/api";
+import { taxCategoriesQuery, taxSettingsQuery } from "@/features/entities/api";
+import { journalQuery, postJournal } from "@/features/journals/api";
 import { JournalForm } from "@/features/journals/JournalForm";
-import { api, unwrap } from "@/lib/api";
+import { partnersQuery, tagsQuery } from "@/features/masters/api";
 import { today } from "@/lib/dates";
-import {
-  accountsQuery,
-  journalQuery,
-  partnersQuery,
-  queryKeys,
-  tagsQuery,
-  taxCategoriesQuery,
-  taxSettingsQuery,
-} from "@/lib/queries";
+import { invalidateLedger } from "@/lib/queries";
 
 /** correctsJournalId を付けて開くと、その仕訳の訂正仕訳を起票する（FR-019a） */
 const NewJournalSearch = z.object({ correctsJournalId: Id.optional() });
@@ -46,16 +41,12 @@ function NewJournalPage() {
   const [defaultDate, setDefaultDate] = useState(today);
 
   const save = useMutation({
-    mutationFn: async (json: JournalInput) =>
-      unwrap(await api.api.entities[":entityId"].journals.$post({ param: { entityId }, json })),
+    mutationFn: (json: JournalInput) => postJournal(entityId, json),
     onSuccess: async ({ journal }) => {
       // 続けて入力できるよう、日付を残してフォームを空にする
       setDefaultDate(journal.date);
       setFormKey((k) => k + 1);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.journals(entityId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.reports(entityId) }),
-      ]);
+      await invalidateLedger(queryClient, entityId);
     },
   });
   const saved = save.isSuccess ? save.data : undefined;

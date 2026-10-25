@@ -14,8 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { today } from "@/lib/dates";
-import { queryKeys } from "@/lib/queries";
+import { thisMonth } from "@/lib/dates";
+import { invalidateLedger } from "@/lib/queries";
 import { confirmDetailsOf, postPause, postResume, recurringKeys } from "./api";
 import { blockedMessage, dayLabel, periodLabel, STATUS_LABELS } from "./labels";
 import { RecurringForm } from "./RecurringForm";
@@ -116,20 +116,14 @@ function Actions({
 }) {
   const id = useId();
   const queryClient = useQueryClient();
-  const [fromMonth, setFromMonth] = useState(() => today().slice(0, 7));
+  const [fromMonth, setFromMonth] = useState(thisMonth);
   const [confirming, setConfirming] = useState<{ count: number; months: string[] }>();
 
   const refresh = async (posted: number) => {
     setConfirming(undefined);
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: recurringKeys.all(entityId) }),
-      ...(posted > 0
-        ? [
-            queryClient.invalidateQueries({ queryKey: queryKeys.journals(entityId) }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.reports(entityId) }),
-          ]
-        : []),
-    ]);
+    await (posted > 0
+      ? invalidateLedger(queryClient, entityId)
+      : queryClient.invalidateQueries({ queryKey: recurringKeys.all(entityId) }));
   };
 
   const pause = useMutation({

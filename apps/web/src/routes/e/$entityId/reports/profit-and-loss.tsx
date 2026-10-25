@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
+import { type ProfitAndLoss, profitAndLossQuery } from "@/features/reports/api";
 import { CompareToggle, CsvLink, PeriodPicker } from "@/features/reports/controls";
 import { useReportRange } from "@/features/reports/periods";
 import { ReportPage } from "@/features/reports/ReportPage";
 import { type StatementLine, StatementTable } from "@/features/reports/StatementTable";
 import { CompareSearch, RangeSearch } from "@/features/reports/search";
 import { SECTION_LABELS } from "@/lib/accounts";
-import { type ProfitAndLoss, profitAndLossQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/reports/profit-and-loss")({
   validateSearch: RangeSearch.extend(CompareSearch.shape),

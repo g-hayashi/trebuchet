@@ -14,25 +14,24 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { accountsQuery, subAccountsQuery } from "@/features/accounts/api";
+import { taxCategoriesQuery, taxSettingsQuery } from "@/features/entities/api";
 import { JournalOrigin } from "@/features/invoicing/JournalOrigin";
-import { JournalForm } from "@/features/journals/JournalForm";
-import { ApiError, api, unwrap } from "@/lib/api";
-import { formatDateTime, formatYen } from "@/lib/format";
 import {
-  accountsQuery,
-  fiscalPeriodsQuery,
   type HistoryEntry,
   type Journal,
   type JournalDetail,
   journalHistoryQuery,
   journalQuery,
-  partnersQuery,
-  queryKeys,
-  subAccountsQuery,
-  tagsQuery,
-  taxCategoriesQuery,
-  taxSettingsQuery,
-} from "@/lib/queries";
+  postJournalVoid,
+  putJournal,
+} from "@/features/journals/api";
+import { JournalForm } from "@/features/journals/JournalForm";
+import { partnersQuery, tagsQuery } from "@/features/masters/api";
+import { fiscalPeriodsQuery } from "@/features/periods/api";
+import { ApiError } from "@/lib/api";
+import { formatDateTime, formatYen } from "@/lib/format";
+import { invalidateLedger } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/journals/$journalId")({
   component: JournalDetailPage,
@@ -83,22 +82,14 @@ function JournalDetailPage() {
   const [voiding, setVoiding] = useState(false);
   const [closedYear, setClosedYear] = useState<number>();
 
-  const invalidate = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.journals(entityId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.reports(entityId) }),
-    ]);
-  const param = { param: { entityId, journalId } };
+  const invalidate = () => invalidateLedger(queryClient, entityId);
   const correct = useMutation({
-    mutationFn: async (json: JournalCorrection) =>
-      unwrap(await api.api.entities[":entityId"].journals[":journalId"].$put({ ...param, json })),
+    mutationFn: (json: JournalCorrection) => putJournal(entityId, journalId, json),
     onSuccess: invalidate,
   });
   const voidJournal = useMutation({
-    mutationFn: async (json: { reason: string; version: number }) =>
-      unwrap(
-        await api.api.entities[":entityId"].journals[":journalId"].void.$post({ ...param, json }),
-      ),
+    mutationFn: (json: { reason: string; version: number }) =>
+      postJournalVoid(entityId, journalId, json),
     onSuccess: invalidate,
   });
 

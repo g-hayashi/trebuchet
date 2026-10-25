@@ -17,9 +17,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { createEntity, entitiesQuery, entityKeys } from "@/features/entities/api";
 import { entityToRestore } from "@/features/entities/EntitySwitcher";
-import { api, unwrap } from "@/lib/api";
-import { entitiesQuery, queryKeys } from "@/lib/queries";
+import { thisYear } from "@/lib/dates";
 
 export const Route = createFileRoute("/")({
   // タブの最初の表示なら、前回の事業体の画面を開く（US6）
@@ -109,16 +109,15 @@ function EntityCreateForm() {
       name: "",
       kind: "individual",
       fiscalStartMonth: 1,
-      firstFiscalYear: new Date().getFullYear(),
+      firstFiscalYear: thisYear(),
     },
   });
   const { errors } = form.formState;
 
   const create = useMutation({
-    mutationFn: async (input: EntityCreate) =>
-      (await unwrap(await api.api.entities.$post({ json: input }))).entity,
+    mutationFn: (input: EntityCreate) => createEntity(input),
     onSuccess: async (entity) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.entities });
+      await queryClient.invalidateQueries({ queryKey: entityKeys.all });
       await navigate({ to: "/e/$entityId", params: { entityId: entity.id } });
     },
   });

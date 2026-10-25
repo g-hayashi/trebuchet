@@ -6,25 +6,30 @@ import type {
 } from "@trebuchet/schema";
 import { uploadForm } from "@/features/imports/upload";
 import { api, unwrap } from "@/lib/api";
-import { queryKeys } from "@/lib/queries";
 
 // バックアップの API（contracts/http-api.md の「バックアップ」）。判定はサーバーに従い、画面は結果を表示するだけ
 
 const backup = api.api.backup;
+
+/** クエリのキー。状態は全画面の上部の知らせも読む */
+export const backupKeys = {
+  status: ["backup", "status"] as const,
+  runs: ["backup", "runs"] as const,
+};
 
 /** 実行中は、終わりが分かるまで取り直す */
 const POLL_MS = 2000;
 
 export const backupStatusQuery = () =>
   queryOptions({
-    queryKey: queryKeys.backupStatus,
+    queryKey: backupKeys.status,
     queryFn: async () => unwrap(await backup.status.$get()),
     refetchInterval: (query) => (query.state.data?.running ? POLL_MS : false),
   });
 
 export const backupRunsQuery = () =>
   queryOptions({
-    queryKey: queryKeys.backupRuns,
+    queryKey: backupKeys.runs,
     queryFn: async () => (await unwrap(await backup.runs.$get())).runs,
   });
 

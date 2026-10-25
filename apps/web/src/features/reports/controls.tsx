@@ -2,7 +2,7 @@ import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { FiscalPeriod } from "@/lib/queries";
+import type { FiscalPeriod } from "@/features/periods/api";
 import type { DateRange } from "./periods";
 
 type PeriodPickerProps = {

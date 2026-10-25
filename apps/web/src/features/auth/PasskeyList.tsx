@@ -15,8 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
-import { queryKeys } from "@/lib/queries";
-import { addPasskey, deletePasskey, passkeysQuery, renamePasskey } from "./api";
+import { addPasskey, authKeys, deletePasskey, passkeysQuery, renamePasskey } from "./api";
 
 /** パスキーの一覧（FR-005）。名前の変更・削除・追加。削除できるかどうかはサーバーが決める（LAST_PASSKEY） */
 export function PasskeyList() {
@@ -26,7 +25,7 @@ export function PasskeyList() {
   const [deleting, setDeleting] = useState<string>();
   const [newName, setNewName] = useState("");
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.authPasskeys });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: authKeys.passkeys });
   const rename = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) => renamePasskey(id, name),
     onSuccess: async () => {
@@ -40,8 +39,8 @@ export function PasskeyList() {
       setDeleting(undefined);
       await refresh();
       // 削除したパスキーのセッションとサインインの記録が変わる
-      await queryClient.invalidateQueries({ queryKey: queryKeys.authSessions });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.authEvents });
+      await queryClient.invalidateQueries({ queryKey: authKeys.sessions });
+      await queryClient.invalidateQueries({ queryKey: authKeys.events });
     },
   });
   const add = useMutation({
@@ -49,7 +48,7 @@ export function PasskeyList() {
     onSuccess: async () => {
       setNewName("");
       await refresh();
-      await queryClient.invalidateQueries({ queryKey: queryKeys.authEvents });
+      await queryClient.invalidateQueries({ queryKey: authKeys.events });
     },
   });
 

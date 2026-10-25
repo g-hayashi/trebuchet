@@ -4,12 +4,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { regenerateRecoveryCode, signOut } from "@/features/auth/api";
+import { authKeys, regenerateRecoveryCode, signOut } from "@/features/auth/api";
 import { EventList } from "@/features/auth/EventList";
 import { PasskeyList } from "@/features/auth/PasskeyList";
 import { RecoveryCodePanel } from "@/features/auth/RecoveryCodePanel";
 import { SessionList } from "@/features/auth/SessionList";
-import { queryKeys } from "@/lib/queries";
 
 export const Route = createFileRoute("/settings/security")({
   component: SecurityPage,
@@ -60,7 +59,7 @@ function RecoveryCard() {
           <RecoveryCodePanel
             code={code}
             onDone={async () => {
-              await queryClient.invalidateQueries({ queryKey: queryKeys.authStatus });
+              await queryClient.invalidateQueries({ queryKey: authKeys.status });
               setCode(undefined);
             }}
           />
@@ -77,7 +76,7 @@ function SignOutCard() {
     onSuccess: async () => {
       // 帳簿のデータを画面に残さない。認証の状態を取り直すと、AuthGate がサインインの画面にする
       queryClient.removeQueries({ predicate: ({ queryKey }) => queryKey[0] !== "auth" });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.authStatus });
+      await queryClient.invalidateQueries({ queryKey: authKeys.status });
     },
   });
   return (

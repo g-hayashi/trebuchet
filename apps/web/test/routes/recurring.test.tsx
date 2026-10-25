@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/lib/queries";
+import type { Account } from "@/features/accounts/api";
 import { Route as DetailRoute } from "@/routes/e/$entityId/recurring/$recurringId";
 import { Route as ListRoute } from "@/routes/e/$entityId/recurring/index";
 import { Route as NewRoute } from "@/routes/e/$entityId/recurring/new";

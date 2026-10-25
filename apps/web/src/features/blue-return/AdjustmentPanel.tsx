@@ -12,10 +12,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { Account } from "@/features/accounts/api";
 import { formatYen } from "@/lib/format";
-import type { Account } from "@/lib/queries";
-import { queryKeys } from "@/lib/queries";
-import { blueReturnKeys, type HomeUseAllocationRow, postAdjustment } from "./api";
+import { invalidateLedger } from "@/lib/queries";
+import { type HomeUseAllocationRow, postAdjustment } from "./api";
 import { formatRatioAsPercent } from "./ratio";
 
 /** 画面が見た案の金額（借方の行の金額）。確定のとき API が帳簿から作り直した案と比べる */
@@ -54,13 +54,7 @@ export function AdjustmentPanel({
         expected: { amount: debitTotal(proposal) },
       }),
     // 失敗（案の金額が変わった）でも、決算書と案を読み直して新しい案を見せる
-    onSettled: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: blueReturnKeys.year(entityId, year) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.journals(entityId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.reports(entityId) }),
-      ]);
-    },
+    onSettled: () => invalidateLedger(queryClient, entityId),
   });
 
   return (

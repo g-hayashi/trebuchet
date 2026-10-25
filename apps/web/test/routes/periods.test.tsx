@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FiscalPeriod } from "@/lib/queries";
+import type { FiscalPeriod } from "@/features/periods/api";
 import { Route } from "@/routes/e/$entityId/periods/index";
 import { type ApiCall, type ApiReply, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";

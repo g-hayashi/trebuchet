@@ -3,8 +3,8 @@ import { WorkHoursQuery } from "@trebuchet/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { defaultTargetMonth } from "@/features/invoicing/months";
 import { WorkHoursTable } from "@/features/invoicing/WorkHoursTable";
+import { previousMonth, thisMonth } from "@/lib/dates";
 
 export const Route = createFileRoute("/e/$entityId/work-hours")({
   validateSearch: WorkHoursQuery.partial(),
@@ -15,7 +15,7 @@ function WorkHoursPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
-  const month = search.month ?? defaultTargetMonth();
+  const month = search.month ?? previousMonth(thisMonth());
 
   return (
     <main className="grid gap-6">

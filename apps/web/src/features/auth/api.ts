@@ -6,33 +6,40 @@ import {
 import { queryOptions } from "@tanstack/react-query";
 import type { RegisterVerifyInput } from "@trebuchet/schema";
 import { ApiError, api, unwrap } from "@/lib/api";
-import { queryKeys } from "@/lib/queries";
 
 // 認証の API（contracts/http-api.md の「認証」）。サーバーの判定に従い、画面は結果を表示するだけ
 
 const auth = api.api.auth;
 
+/** クエリのキー。AuthGate が認証の状態を持ち、設定の画面が残りを読む */
+export const authKeys = {
+  status: ["auth", "status"] as const,
+  passkeys: ["auth", "passkeys"] as const,
+  sessions: ["auth", "sessions"] as const,
+  events: ["auth", "events"] as const,
+};
+
 export const authStatusQuery = () =>
   queryOptions({
-    queryKey: queryKeys.authStatus,
+    queryKey: authKeys.status,
     queryFn: async () => unwrap(await auth.status.$get()),
   });
 
 export const passkeysQuery = () =>
   queryOptions({
-    queryKey: queryKeys.authPasskeys,
+    queryKey: authKeys.passkeys,
     queryFn: async () => (await unwrap(await auth.passkeys.$get())).passkeys,
   });
 
 export const sessionsQuery = () =>
   queryOptions({
-    queryKey: queryKeys.authSessions,
+    queryKey: authKeys.sessions,
     queryFn: async () => (await unwrap(await auth.sessions.$get())).sessions,
   });
 
 export const eventsQuery = () =>
   queryOptions({
-    queryKey: queryKeys.authEvents,
+    queryKey: authKeys.events,
     queryFn: async () => (await unwrap(await auth.events.$get({ query: {} }))).events,
   });
 
@@ -53,7 +60,7 @@ async function ceremony<T>(run: () => Promise<T>): Promise<T> {
  * パスキーの登録の流れ。options を取り、ブラウザで作り、verify に渡す。
  * 名前が空なら送らない（サーバーの既定の名前になる）
  */
-export async function registerWith<R>(
+async function registerWith<R>(
   getOptions: () => Promise<Response>,
   verify: (input: RegisterVerifyInput) => Promise<R>,
   name?: string,

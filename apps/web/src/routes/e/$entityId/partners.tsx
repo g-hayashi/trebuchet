@@ -20,15 +20,18 @@ import {
 } from "@/components/ui/table";
 import { type BillingTermsRow, billingTermsQuery } from "@/features/invoicing/api";
 import { BillingTermsForm } from "@/features/invoicing/BillingTermsForm";
-import { api, unwrap } from "@/lib/api";
+import {
+  masterKeys,
+  type Partner,
+  partnersQuery,
+  patchPartner,
+  postPartner,
+} from "@/features/masters/api";
 import { formatYen } from "@/lib/format";
-import { type Partner, partnersQuery, queryKeys } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/partners")({
   component: PartnersPage,
 });
-
-const partnerApi = api.api.entities[":entityId"].partners;
 
 function PartnersPage() {
   const { entityId } = Route.useParams();
@@ -40,16 +43,15 @@ function PartnersPage() {
   /** 請求の条件を編集中の取引先（US4） */
   const [billingId, setBillingId] = useState<string | null>(null);
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.partners(entityId) });
+    queryClient.invalidateQueries({ queryKey: masterKeys.partners(entityId) });
 
   const create = useMutation({
-    mutationFn: async (json: PartnerInput) =>
-      unwrap(await partnerApi.$post({ param: { entityId }, json })),
+    mutationFn: (json: PartnerInput) => postPartner(entityId, json),
     onSuccess: invalidate,
   });
   const update = useMutation({
-    mutationFn: async ({ partnerId, json }: { partnerId: string; json: PartnerInput }) =>
-      unwrap(await partnerApi[":partnerId"].$patch({ param: { entityId, partnerId }, json })),
+    mutationFn: ({ partnerId, json }: { partnerId: string; json: PartnerInput }) =>
+      patchPartner(entityId, partnerId, json),
     onSuccess: async () => {
       setEditingId(null);
       await invalidate();

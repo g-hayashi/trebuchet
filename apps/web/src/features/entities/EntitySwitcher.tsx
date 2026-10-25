@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { entitiesQuery, queryKeys } from "@/lib/queries";
+import { entitiesQuery, entityKeys } from "./api";
 
 const LAST_ENTITY_KEY = "trebuchet:lastEntityId";
 /** このタブで復元の機会を使ったか（トップ画面を表示した、または事業体の画面を開いた）。以降のトップ画面は一覧を見せる */
@@ -40,7 +40,7 @@ export function EntitySwitcher() {
     // 他の事業体のキャッシュを破棄する（キーは事業体ごとに分かれているが、古いデータを持ち越さない）
     queryClient.removeQueries({
       predicate: ({ queryKey }) =>
-        queryKey[0] === queryKeys.entities[0] && queryKey.length > 1 && queryKey[1] !== current,
+        queryKey[0] === entityKeys.all[0] && queryKey.length > 1 && queryKey[1] !== current,
     });
   }, [current, queryClient]);
 

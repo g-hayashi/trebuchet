@@ -30,20 +30,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { type Account, accountsQuery, subAccountsQuery } from "@/features/accounts/api";
 import { proposeFreeeOpening } from "@/features/imports/api";
 import { FilePicker } from "@/features/imports/FilePicker";
 import { OpeningProposalPanel } from "@/features/imports/OpeningProposalPanel";
-import { groupAccountsBySection } from "@/lib/accounts";
-import { api, unwrap } from "@/lib/api";
-import { formatYen, parseYenInput } from "@/lib/format";
 import {
-  type Account,
-  accountsQuery,
   type OpeningBalancesData,
   openingBalancesQuery,
-  queryKeys,
-  subAccountsQuery,
-} from "@/lib/queries";
+  periodKeys,
+  putOpeningBalances,
+} from "@/features/periods/api";
+import { groupAccountsBySection } from "@/lib/accounts";
+import { formatYen, parseYenInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/e/$entityId/periods/$year/opening-balances")({
@@ -161,18 +159,12 @@ function OpeningBalancesForm({
   };
 
   const save = useMutation({
-    mutationFn: async (json: OpeningBalancesPut) =>
-      unwrap(
-        await api.api.entities[":entityId"]["fiscal-periods"][":year"]["opening-balances"].$put({
-          param: { entityId, year },
-          json,
-        }),
-      ),
+    mutationFn: (json: OpeningBalancesPut) => putOpeningBalances(entityId, year, json),
     onSuccess: async (saved) => {
-      queryClient.setQueryData(queryKeys.openingBalances(entityId, year), saved);
+      queryClient.setQueryData(periodKeys.openingBalances(entityId, year), saved);
       form.reset({ rows: toFormRows(saved) });
       closeProposal();
-      await queryClient.invalidateQueries({ queryKey: queryKeys.openingBalances(entityId, year) });
+      await queryClient.invalidateQueries({ queryKey: periodKeys.openingBalances(entityId, year) });
     },
   });
 

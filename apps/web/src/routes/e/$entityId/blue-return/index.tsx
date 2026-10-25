@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { fiscalPeriodsQuery } from "@/lib/queries";
+import { fiscalPeriodsQuery } from "@/features/periods/api";
 
 export const Route = createFileRoute("/e/$entityId/blue-return/")({
   component: BlueReturnListPage,

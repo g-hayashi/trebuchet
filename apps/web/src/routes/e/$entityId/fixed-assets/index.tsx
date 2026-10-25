@@ -14,14 +14,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { accountsQuery } from "@/features/accounts/api";
 import { AdjustmentPanel } from "@/features/blue-return/AdjustmentPanel";
 import { adjustmentsQuery } from "@/features/blue-return/api";
 import { formatRatioAsPercent } from "@/features/blue-return/ratio";
 import { fixedAssetsQuery } from "@/features/fixed-assets/api";
 import { DisposeDialog } from "@/features/fixed-assets/DisposeDialog";
 import { FixedAssetForm } from "@/features/fixed-assets/FixedAssetForm";
+import { thisYear } from "@/lib/dates";
 import { formatYen } from "@/lib/format";
-import { accountsQuery } from "@/lib/queries";
 
 /** 年分は暦年（個人）。不正な値は捨てて、今年にする */
 const Search = z.object({ year: z.number().int().min(1900).max(9999).optional().catch(undefined) });
@@ -36,7 +37,7 @@ function FixedAssetsPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
-  const year = search.year ?? new Date().getFullYear();
+  const year = search.year ?? thisYear();
   const [yearText, setYearText] = useState(String(year));
   const [editingId, setEditingId] = useState<string>();
   const [disposingId, setDisposingId] = useState<string>();

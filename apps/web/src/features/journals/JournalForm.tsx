@@ -22,17 +22,12 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
+import { type Account, subAccountsQuery } from "@/features/accounts/api";
+import type { TaxCategory, TaxSetting } from "@/features/entities/api";
+import type { Partner, Tag } from "@/features/masters/api";
 import { groupAccountsBySection } from "@/lib/accounts";
 import { ApiError } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
-import {
-  type Account,
-  type Partner,
-  subAccountsQuery,
-  type Tag,
-  type TaxCategory,
-  type TaxSetting,
-} from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 const SIDE_LABELS: Record<Side, string> = { debit: "借方", credit: "貸方" };
@@ -85,7 +80,7 @@ function defaultTaxCategory(
  * フォームの初期値になる仕訳の形。訂正する仕訳（`Journal`）のほか、定期仕訳の定義
  * （005。税区分が null = 自動、タグなし、訂正元なし）も同じ形で渡せる
  */
-export type JournalFormSource = {
+type JournalFormSource = {
   date: string;
   memo: string | null;
   correctsJournalId?: string | null | undefined;

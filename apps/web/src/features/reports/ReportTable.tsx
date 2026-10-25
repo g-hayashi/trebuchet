@@ -12,8 +12,8 @@ import {
 import { formatSignedYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-export const reportFeatures = tableFeatures({});
-export type ReportFeatures = typeof reportFeatures;
+const reportFeatures = tableFeatures({});
+type ReportFeatures = typeof reportFeatures;
 export type ReportColumns<T extends RowData> = TableOptions<ReportFeatures, T>["columns"];
 
 /** 帳票の金額（3 桁区切り、マイナスは ▲、右寄せ）。blankZero なら 0 は空欄にする（元帳の借方・貸方） */

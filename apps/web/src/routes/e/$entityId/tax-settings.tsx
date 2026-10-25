@@ -22,8 +22,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api, unwrap } from "@/lib/api";
-import { queryKeys, type TaxSetting, taxSettingsQuery } from "@/lib/queries";
+import {
+  entityKeys,
+  putTaxSettings,
+  type TaxSetting,
+  taxSettingsQuery,
+} from "@/features/entities/api";
+import { previousDay } from "@/lib/dates";
 
 export const Route = createFileRoute("/e/$entityId/tax-settings")({
   component: TaxSettingsPage,
@@ -40,12 +45,6 @@ const ACCOUNTING_METHOD_LABELS: Record<AccountingMethod, string> = {
   tax_included: "税込経理",
   tax_excluded: "税抜経理",
 };
-
-function previousDay(date: string): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
 
 /** 設定を適用開始日の順に並べ、適用終了日（次の設定の前日。最後は null）を付ける */
 function withEffectiveTo(settings: readonly TaxSetting[]) {
@@ -78,15 +77,10 @@ function TaxSettingsPage() {
 
   // 一覧の全体を置き換える API のため、追加・削除のどちらも全件を送る
   const replace = useMutation({
-    mutationFn: async (json: TaxSettingsPut) =>
-      (
-        await unwrap(
-          await api.api.entities[":entityId"]["tax-settings"].$put({ param: { entityId }, json }),
-        )
-      ).taxSettings,
+    mutationFn: (json: TaxSettingsPut) => putTaxSettings(entityId, json),
     onSuccess: async (taxSettings) => {
-      queryClient.setQueryData(queryKeys.taxSettings(entityId), taxSettings);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.taxSettings(entityId) });
+      queryClient.setQueryData(entityKeys.taxSettings(entityId), taxSettings);
+      await queryClient.invalidateQueries({ queryKey: entityKeys.taxSettings(entityId) });
     },
   });
 

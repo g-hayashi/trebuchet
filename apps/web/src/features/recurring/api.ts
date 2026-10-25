@@ -43,14 +43,6 @@ export const recurringStatusQuery = (entityId: string) =>
     queryFn: async () => unwrap(await recurringApi.status.$get({ param: { entityId } })),
   });
 
-export type RecurringRow = Awaited<
-  ReturnType<NonNullable<ReturnType<typeof recurringListQuery>["queryFn"]>>
->[number];
-export type RecurringStatusData = Awaited<
-  ReturnType<NonNullable<ReturnType<typeof recurringStatusQuery>["queryFn"]>>
->;
-export type BlockedRunView = RecurringStatusData["blocked"][number];
-
 /** 作成（§5.2）。201 `{ recurring, posted }` */
 export const postRecurring = async (entityId: string, json: RecurringInput) =>
   unwrap(await recurringApi.$post({ param: { entityId }, json }));

@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
+import { entitiesQuery } from "@/features/entities/api";
 import { RecurringNotice } from "@/features/recurring/RecurringNotice";
-import { entitiesQuery } from "@/lib/queries";
+import { thisYear } from "@/lib/dates";
 
 export const Route = createFileRoute("/e/$entityId")({
   component: EntityLayout,
@@ -60,7 +61,7 @@ function EntityLayout() {
             key={item.label}
             to={item.to}
             // 申告の控えは年分が要る。個人の年分は暦年なので、開くときは今年にする（画面で変えられる）
-            params={{ entityId, year: String(new Date().getFullYear()) }}
+            params={{ entityId, year: String(thisYear()) }}
             activeOptions={{ exact: item.to === "/e/$entityId" }}
             activeProps={{ className: "font-semibold underline", "aria-current": "page" }}
           >

@@ -5,6 +5,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableCell, TableRow } from "@/components/ui/table";
+import {
+  type Account,
+  accountsQuery,
+  type SubAccount,
+  subAccountsQuery,
+} from "@/features/accounts/api";
+import { type GeneralLedger, generalLedgerQuery } from "@/features/reports/api";
 import { CsvLink, PeriodPicker } from "@/features/reports/controls";
 import { JournalLink } from "@/features/reports/JournalLink";
 import { useReportRange } from "@/features/reports/periods";
@@ -18,14 +25,6 @@ import {
 } from "@/features/reports/ReportTable";
 import { LedgerSearch } from "@/features/reports/search";
 import { groupAccountsBySection } from "@/lib/accounts";
-import {
-  type Account,
-  accountsQuery,
-  type GeneralLedger,
-  generalLedgerQuery,
-  type SubAccount,
-  subAccountsQuery,
-} from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/reports/general-ledger")({
   validateSearch: LedgerSearch,

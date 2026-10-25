@@ -14,19 +14,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { type Account, accountsQuery } from "@/features/accounts/api";
+import { type Journal, type JournalSearch, journalSearchQuery } from "@/features/journals/api";
+import { type Partner, partnersQuery, type Tag, tagsQuery } from "@/features/masters/api";
 import { groupAccountsBySection } from "@/lib/accounts";
-import { formatYen, parseYenInput } from "@/lib/format";
-import {
-  type Account,
-  accountsQuery,
-  type Journal,
-  type JournalSearch,
-  journalSearchQuery,
-  type Partner,
-  partnersQuery,
-  type Tag,
-  tagsQuery,
-} from "@/lib/queries";
+import { formatYen, parseWholeYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /** URL の検索パラメータ（FR-023）。ページの指定（cursor・limit）は URL に残さない */
@@ -135,9 +127,7 @@ type SearchInput = (typeof JournalSearchParams)["_zod"]["input"];
 
 /** 金額の条件の入力。空欄は指定なし、0 以上の整数でなければ null */
 function parseAmount(raw: string): number | undefined | null {
-  if (raw.trim() === "") return undefined;
-  const value = parseYenInput(raw);
-  return value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  return raw.trim() === "" ? undefined : parseWholeYen(raw, { min: 0 });
 }
 
 /** 検索の条件のフォーム（FR-023）。条件は URL の検索パラメータに入れる */

@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { type Account, accountsQuery, subAccountsQuery } from "@/lib/queries";
+import { type Account, accountsQuery, subAccountsQuery } from "@/features/accounts/api";
 import { blueReturnKeys, type HomeUseAllocationRow, putHomeUse } from "./api";
 import { formatRatioAsPercent, parsePercentToRatio } from "./ratio";
 
