@@ -18,13 +18,23 @@ afterEach(() => {
   tmp.cleanup();
 });
 
-const deps = (runner: BackupEnv["runner"] | { start: ReturnType<typeof vi.fn> }) => ({
+const deps = (
+  runner: BackupEnv["runner"] | { start: ReturnType<typeof vi.fn> },
+  entities: () => string[] = () => [],
+) => ({
   runner: runner as BackupEnv["runner"],
   auth: env.auth,
   backups: env.backups,
   secrets: env.secrets,
   clock: env.clock.clock,
   tmpRoot: env.tmpRoot,
+  recurring: {
+    entities,
+    openUnitOfWork: () => {
+      throw new Error("この事業体は開かない");
+    },
+    ids: { next: () => "id" },
+  },
 });
 
 describe("startBackgroundServices", () => {
@@ -52,6 +62,31 @@ describe("startBackgroundServices", () => {
     const services = startBackgroundServices(deps({ start }));
     await vi.waitFor(() => expect(start).toHaveBeenCalledWith("auto"));
     services.stop();
+  });
+
+  it("起動の直後に定期仕訳の判定も一度行う（事業体の一覧を引く）。止めた後は間隔で動かない", async () => {
+    const entities = vi.fn(() => [] as string[]);
+    const services = startBackgroundServices(deps({ start: vi.fn() }, entities));
+    await vi.waitFor(() => expect(entities).toHaveBeenCalledTimes(1));
+    services.stop();
+  });
+
+  it("定期仕訳の判定が失敗しても例外は外に出ず、自動のバックアップは動く", async () => {
+    await configure(env);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const start = vi.fn(async () => ({
+      ok: false as const,
+      error: { code: "BACKUP_RUNNING" as const, message: "" },
+    }));
+    const services = startBackgroundServices(
+      deps({ start }, () => {
+        throw new Error("registry が開けない");
+      }),
+    );
+    await vi.waitFor(() => expect(start).toHaveBeenCalledWith("auto"));
+    await vi.waitFor(() => expect(log).toHaveBeenCalled());
+    services.stop();
+    log.mockRestore();
   });
 
   it("未設定なら実行しない", async () => {

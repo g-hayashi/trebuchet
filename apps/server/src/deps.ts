@@ -15,6 +15,7 @@ import {
   DrizzleRegistryRepository,
   dataDir,
   openRegistry,
+  openTenant,
   type TenantDb,
 } from "@trebuchet/db";
 import type {
@@ -168,6 +169,16 @@ export function recurringDeps(db: TenantDb): {
     ids,
   };
 }
+
+/** 定期仕訳の自動登録（スケジューラー）が判定する事業体の ID。registry の全事業体 */
+export const entityIds = (): string[] =>
+  registryRepository()
+    .listEntities()
+    .map((e) => e.id);
+
+/** 定期仕訳の自動登録（スケジューラー）が使う、事業体ごとの UnitOfWork */
+export const openRecurringUnitOfWork = (entityId: string): RecurringUnitOfWork =>
+  new DrizzleRecurringUnitOfWork(openTenant(entityId));
 
 /**
  * リクエストの事業体の DB に対する取込のユースケースの依存。

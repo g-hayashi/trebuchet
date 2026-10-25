@@ -1,7 +1,16 @@
 import { serve } from "@hono/node-server";
 import { closeAll } from "@trebuchet/db";
 import { app } from "./app.ts";
-import { authStore, backupRunner, backupStore, clock, secretStore } from "./deps.ts";
+import {
+  authStore,
+  backupRunner,
+  backupStore,
+  clock,
+  entityIds,
+  ids,
+  openRecurringUnitOfWork,
+  secretStore,
+} from "./deps.ts";
 import { TMP_ROOT } from "./lib/paths.ts";
 import { startBackgroundServices } from "./lib/startup.ts";
 
@@ -13,7 +22,7 @@ const server = serve({ fetch: app.fetch, hostname, port }, (info) => {
   console.log(`server listening on http://${info.address}:${info.port}`);
 });
 
-// 古い平文の写しの掃除と、自動のバックアップ（R9・R10）
+// 古い平文の写しの掃除と、自動のバックアップ（004 R9・R10）、定期仕訳の自動登録（005 R18）
 const background = startBackgroundServices({
   runner: backupRunner,
   auth: authStore,
@@ -21,6 +30,7 @@ const background = startBackgroundServices({
   secrets: secretStore,
   clock,
   tmpRoot: TMP_ROOT,
+  recurring: { entities: entityIds, openUnitOfWork: openRecurringUnitOfWork, ids },
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
