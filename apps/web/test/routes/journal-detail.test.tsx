@@ -140,7 +140,9 @@ function mockDetailApi(
     closed2025 = false,
     put,
     voidReply,
+    origin,
   }: {
+    origin?: unknown;
     closed2025?: boolean;
     put?: (call: ApiCall) => ApiReply;
     voidReply?: (call: ApiCall) => ApiReply;
@@ -173,6 +175,7 @@ function mockDetailApi(
     ),
     [`GET ${path}`]: () => ok(detail),
     [`GET ${path}/history`]: () => ok({ history }),
+    ...(origin !== undefined && { [`GET ${path}/origin`]: () => ok({ origin }) }),
     ...(put && { [`PUT ${path}`]: put }),
     ...(voidReply && { [`POST ${path}/void`]: voidReply }),
   });
@@ -405,6 +408,49 @@ describe("仕訳の詳細（US3）", () => {
       "href",
       `/e/e1/journals/${fix2.id}`,
     );
+  });
+
+  describe("仕訳の出所（005。FR-009・FR-028。GET /journals/:id/origin）", () => {
+    const detail = { journal: j1, correctsJournal: null, correctingJournals: [] };
+
+    it("請求書の売上の仕訳なら、請求書へのリンクを出す", async () => {
+      mockDetailApi(detail, {
+        origin: { kind: "invoice", invoiceId: "inv1", invoiceNo: "2026-0001" },
+      });
+      renderDetail(j1.id);
+
+      expect(await screen.findByRole("link", { name: "請求書 2026-0001" })).toHaveAttribute(
+        "href",
+        "/e/e1/invoices/inv1",
+      );
+    });
+
+    it("入金の仕訳なら、入金の消し込みをした請求書へのリンクを出す", async () => {
+      mockDetailApi(detail, {
+        origin: { kind: "payment", invoiceId: "inv1", invoiceNo: "2026-0001", paymentId: "pay1" },
+      });
+      renderDetail(j1.id);
+
+      const link = await screen.findByRole("link", { name: "請求書 2026-0001" });
+      expect(link.closest("p")).toHaveTextContent("入金の消し込み");
+    });
+
+    it("定期仕訳から自動で登録した仕訳なら、定期仕訳の名前と対象月を出す", async () => {
+      mockDetailApi(detail, {
+        origin: { kind: "recurring", recurringId: "r1", name: "家賃", targetMonth: "2026-10" },
+      });
+      renderDetail(j1.id);
+
+      expect(await screen.findByText(/定期仕訳「家賃」（2026-10）/)).toBeInTheDocument();
+    });
+
+    it("出所がなければ何も出さない（mock-api の既定は origin: null）", async () => {
+      mockDetailApi(detail);
+      renderDetail(j1.id);
+
+      await screen.findByRole("heading", { name: "仕訳 No.1" });
+      expect(screen.queryByText(/請求書|定期仕訳/)).not.toBeInTheDocument();
+    });
   });
 
   it("仕訳が見つからなければその旨を表示する", async () => {

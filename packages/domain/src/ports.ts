@@ -1,3 +1,4 @@
+import type { BillingTerms, InvoiceSettings, JournalOrigin, Recurring } from "@trebuchet/schema";
 import type {
   AppSettingKey,
   AuthEvent,
@@ -30,6 +31,9 @@ import type {
   FiscalPeriod,
   FixedAsset,
   HomeUseAllocation,
+  InvoiceItemRecord,
+  InvoiceRecord,
+  InvoicingAuditEntry,
   Journal,
   JournalLine,
   JournalQuery,
@@ -37,7 +41,9 @@ import type {
   OpeningBalance,
   Page,
   Partner,
+  PaymentRecord,
   PostedLine,
+  RecurringRunRecord,
   RentDetail,
   SubAccount,
   Tag,
@@ -47,6 +53,7 @@ import type {
   TaxReturnMemo,
   TaxSetting,
   ValidJournal,
+  WorkHoursRow,
 } from "./types.ts";
 
 export interface IdGenerator {
@@ -238,6 +245,100 @@ export interface ClosingUnitOfWork {
       journals: JournalRepository;
       masters: MasterRepository;
       closing: ClosingStore;
+    }) => T,
+  ): T;
+}
+
+/**
+ * 請求書（005 US1・US4）の永続化。メソッドは各ストーリーの db のタスクで、ポートと実装を同時に足す。
+ * 操作の記録は `invoicing_audit_log` を RecurringStore と共有する（R23）
+ */
+export interface InvoicingStore {
+  appendInvoicingAudit(entry: InvoicingAuditEntry): void;
+  /** 発行者の設定（`invoice_settings` の 1 行）。なければ null */
+  getInvoiceSettings(): InvoiceSettings | null;
+  upsertInvoiceSettings(row: InvoiceSettings): void;
+  /** 発行済み（取消を含む）の請求書の最大の `seq`。1 件もなければ null（R6） */
+  maxInvoiceSeq(): number | null;
+  /** 請求の条件の全件（取引先の ID の順） */
+  listBillingTerms(): BillingTerms[];
+  getBillingTerms(partnerId: string): BillingTerms | null;
+  upsertBillingTerms(row: BillingTerms): void;
+  deleteBillingTerms(partnerId: string): void;
+  /** 対象月の工数（取引先の ID の順） */
+  listWorkHours(targetMonth: string): WorkHoursRow[];
+  getWorkHours(partnerId: string, targetMonth: string): WorkHoursRow | null;
+  /** （取引先, 対象月）で上書きする */
+  upsertWorkHours(row: WorkHoursRow): void;
+  /** 請求書の写しを保存する（明細は `insertInvoiceItems`。発行は同じトランザクションで両方を呼ぶ） */
+  insertInvoice(invoice: InvoiceRecord): void;
+  insertInvoiceItems(items: InvoiceItemRecord[]): void;
+  getInvoice(id: string): InvoiceRecord | null;
+  /** 行番号の順 */
+  listInvoiceItems(invoiceId: string): InvoiceItemRecord[];
+  /** 発行日の降順（同じ日は `seq` の降順）。取消済みを含む。`partnerId`・`month`（対象月）で絞り込む */
+  listInvoices(query: {
+    partnerId?: string | undefined;
+    month?: string | undefined;
+  }): InvoiceRecord[];
+  /** 取引先・対象月の取消でない請求書（`seq` の順。重複の警告・確認に使う。FR-016） */
+  listActiveInvoices(partnerId: string, targetMonth: string): InvoiceRecord[];
+  /** 請求書を取消済みにする（取消の列を NULL から一度だけ書く。写しは変えない） */
+  markInvoiceVoided(
+    id: string,
+    voided: { voidedAt: string; voidReason: string; voidJournalId: string | null },
+  ): void;
+  /** 請求書の消し込み（取消済みを含む。登録の順） */
+  listPayments(invoiceId: string): PaymentRecord[];
+  /** 消し込みを保存する（入金の仕訳と同じトランザクションで呼ぶ。`journalId` は一意） */
+  insertPayment(payment: PaymentRecord): void;
+  /** 消し込みを取消済みにする（取消の列を NULL から一度だけ書く。写しは変えない） */
+  markPaymentVoided(
+    id: string,
+    voided: { voidedAt: string; voidReason: string; voidJournalId: string | null },
+  ): void;
+  /** 仕訳が請求・入金・定期仕訳のどれから作られたか（H:§6.1）。取消の仕訳も元の請求・入金を指す。なければ null */
+  originOfJournal(journalId: string): JournalOrigin | null;
+}
+
+/** 請求書の発行・入金・取消で、仕訳・マスタ・請求の記録を1つのトランザクションで扱う（R9） */
+export interface InvoicingUnitOfWork {
+  /** fn が例外を投げると、fn の中の書き込みをすべて元に戻す。`err` を返しても確定する（R9） */
+  transaction<T>(
+    fn: (tx: {
+      ledger: LedgerRepository;
+      masters: MasterRepository;
+      invoicing: InvoicingStore;
+    }) => T,
+  ): T;
+}
+
+/** 定期仕訳（005 US3）の永続化。メソッドはすべて同期。操作の記録は `invoicing_audit_log`（R23） */
+export interface RecurringStore {
+  appendRecurringAudit(entry: InvoicingAuditEntry): void;
+  /** 定義の全件（行を含む。行番号の順）。作成の順（`createdAt`、同じなら `id`） */
+  listRecurring(): Recurring[];
+  getRecurring(id: string): Recurring | null;
+  /** 定義と行を保存する（`id`・`version`・`createdAt` は呼び出し側が決める） */
+  insertRecurring(def: Recurring): void;
+  /** 定義の列を上書きし、行を全件置き換える（`version` の検査はドメインが先に行う。R16） */
+  updateRecurring(def: Recurring): void;
+  /** 回の全件、または 1 つの定義の回（対象月の昇順） */
+  listRuns(recurringId?: string): RecurringRunRecord[];
+  /** 回を保存する。（定義, 対象月）の重複と、同じ仕訳の再利用は一意制約の違反で例外（R19） */
+  insertRun(run: RecurringRunRecord): void;
+  /** 回を確認済みにする（`acknowledged_at` を NULL から一度だけ書く。R21） */
+  markRunsAcknowledged(runIds: string[], at: string): void;
+}
+
+/** 定期仕訳の登録で、仕訳・マスタ・定期仕訳の記録を1つのトランザクションで扱う（R9） */
+export interface RecurringUnitOfWork {
+  /** fn が例外を投げると、fn の中の書き込みをすべて元に戻す。`err` を返しても確定する（R9） */
+  transaction<T>(
+    fn: (tx: {
+      ledger: LedgerRepository;
+      masters: MasterRepository;
+      recurring: RecurringStore;
     }) => T,
   ): T;
 }

@@ -2,6 +2,7 @@ import { RepositoryConflictError } from "../ports.ts";
 import { err, type Journal, ok, type Result } from "../types.ts";
 import {
   checkReason,
+  type EditOptions,
   type LedgerDeps,
   loadEditableJournal,
   versionConflict,
@@ -17,6 +18,7 @@ export function voidJournal(
   deps: LedgerDeps,
   journalId: string,
   input: VoidJournalInput,
+  options: EditOptions = {},
 ): Result<Journal> {
   const reason = checkReason(input.reason);
   if (!reason.ok) return reason;
@@ -27,6 +29,7 @@ export function voidJournal(
       journalId,
       input.version,
       deps.masters.listFiscalPeriods(),
+      options,
     );
     if (!loaded.ok) return loaded;
     const before = loaded.value;

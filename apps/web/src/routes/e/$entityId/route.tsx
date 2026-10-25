@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
+import { RecurringNotice } from "@/features/recurring/RecurringNotice";
 import { entitiesQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId")({
@@ -18,7 +19,9 @@ type NavTo =
   | "/e/$entityId/blue-return"
   | "/e/$entityId/fixed-assets"
   | "/e/$entityId/tax-return/$year"
-  | "/e/$entityId/imports";
+  | "/e/$entityId/imports"
+  | "/e/$entityId/invoices"
+  | "/e/$entityId/recurring";
 
 /** 事業体ごとの画面の共通レイアウト。ナビの項目は各画面を追加するときに足す（US1〜US5） */
 const NAV: { label: string; to: NavTo }[] = [
@@ -34,6 +37,9 @@ const NAV: { label: string; to: NavTo }[] = [
   { label: "固定資産台帳", to: "/e/$entityId/fixed-assets" },
   { label: "申告の控え", to: "/e/$entityId/tax-return/$year" },
   { label: "取込", to: "/e/$entityId/imports" },
+  // 請求書の一覧から、工数・請求書の作成・設定へ進む
+  { label: "請求", to: "/e/$entityId/invoices" },
+  { label: "定期仕訳", to: "/e/$entityId/recurring" },
 ];
 
 function EntityLayout() {
@@ -62,6 +68,8 @@ function EntityLayout() {
           </Link>
         ))}
       </nav>
+      {/* 自動で登録した定期仕訳の確認と、登録できなかった回の知らせ（005 FR-027・028） */}
+      <RecurringNotice entityId={entityId} />
       <Outlet />
     </div>
   );

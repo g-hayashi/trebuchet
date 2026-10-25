@@ -1,5 +1,7 @@
-import { openTenant } from "@trebuchet/db";
+import { randomUUIDv7 } from "node:crypto";
+import { DrizzleLedgerRepository, DrizzleMasterRepository, openTenant } from "@trebuchet/db";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
+import { createJournal, type JournalSource } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { client, createTestEntity, errorOf } from "./helpers.ts";
 
@@ -354,5 +356,143 @@ describe("GET /journals の検索（US3, FR-023）", () => {
     const res = await e.journals.$get({ param: param(), query: { amountMin: "-5" } });
     expect(res.status).toBe(400);
     expect((await errorOf(res)).code).toBe("VALIDATION");
+  });
+});
+
+describe("請求・入金の仕訳の保護（005 R13、INV-39、H:§1）", () => {
+  const NOW = "2026-10-24T09:00:00.000Z";
+  const ids = { next: () => randomUUIDv7() };
+  const clock = { now: () => NOW };
+
+  /** source を直接指定して仕訳を作る（請求書・入金の行は各テストが直接挿入する） */
+  function insertJournalWithSource(source: JournalSource): string {
+    const db = openTenant(entityId);
+    const r = createJournal(
+      {
+        ledger: new DrizzleLedgerRepository(db),
+        masters: new DrizzleMasterRepository(db),
+        ids,
+        clock,
+      },
+      { date: "2026-10-31", lines: lines("売掛金", "売上高", 110_000) },
+      { source },
+    );
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    return r.value.journal.id;
+  }
+
+  /** 請求書を直接挿入する（invoice の仕訳に結びつける） */
+  function insertInvoice(journalId: string): string {
+    const db = openTenant(entityId).$client;
+    const partnerId = randomUUIDv7();
+    db.prepare("INSERT INTO partners (id, name, honorific, is_active) VALUES (?, ?, ?, 1)").run(
+      partnerId,
+      "株式会社A",
+      "御中",
+    );
+    const invoiceId = randomUUIDv7();
+    db.prepare(
+      `INSERT INTO invoices (id, invoice_no, seq, partner_id, target_month, issue_date, sales_date, due_date,
+         recipient_name, recipient_honorific, issuer_json, tax_display, total, journal_id, created_at)
+       VALUES (?, '20261031-001', 1, ?, '2026-10', '2026-10-31', '2026-10-31', '2026-11-30',
+         '株式会社A', '御中', '{}', 'inclusive_only', 110000, ?, ?)`,
+    ).run(invoiceId, partnerId, journalId, NOW);
+    return invoiceId;
+  }
+
+  function insertPayment(invoiceId: string, journalId: string): string {
+    const paymentId = randomUUIDv7();
+    openTenant(entityId)
+      .$client.prepare(
+        `INSERT INTO invoice_payments (id, invoice_id, received_on, amount, fee_amount, deposit_account_id,
+           journal_id, created_at)
+         VALUES (?, ?, '2026-11-30', 110000, 0, ?, ?, ?)`,
+      )
+      .run(paymentId, invoiceId, acc("現金"), journalId, NOW);
+    return paymentId;
+  }
+
+  /** 2026 年度を締め、訂正仕訳を起票できる 2027 年度（未締め）を足す */
+  function close2026AndOpen2027() {
+    const raw = openTenant(entityId).$client;
+    raw
+      .prepare(
+        "UPDATE fiscal_periods SET status = 'closed', closed_at = ? WHERE fiscal_year = 2026",
+      )
+      .run("2027-03-01T00:00:00.000Z");
+    raw
+      .prepare(
+        `INSERT INTO fiscal_periods (id, fiscal_year, start_date, end_date, status)
+         VALUES (?, 2027, '2027-01-01', '2027-12-31', 'open')`,
+      )
+      .run(randomUUIDv7());
+  }
+
+  const fixBody = () => ({
+    date: "2026-10-31",
+    lines: lines("売掛金", "売上高", 120_000),
+    reason: "訂正",
+    version: 1,
+  });
+
+  it("請求書の仕訳の訂正・取消は 409 JOURNAL_LINKED で、details に journalId と invoiceId", async () => {
+    const journalId = insertJournalWithSource("invoice");
+    const invoiceId = insertInvoice(journalId);
+    const corrected = await put(journalId, fixBody());
+    expect(corrected.status).toBe(409);
+    expect(await errorOf(corrected)).toMatchObject({
+      code: "JOURNAL_LINKED",
+      details: { journalId, invoiceId },
+    });
+    const voided = await voidIt(journalId, { reason: "取消", version: 1 });
+    expect(voided.status).toBe(409);
+    expect(await errorOf(voided)).toMatchObject({
+      code: "JOURNAL_LINKED",
+      details: { journalId, invoiceId },
+    });
+  });
+
+  it("入金の仕訳は details に invoiceId と paymentId も入る", async () => {
+    const invoiceId = insertInvoice(insertJournalWithSource("invoice"));
+    const journalId = insertJournalWithSource("payment");
+    const paymentId = insertPayment(invoiceId, journalId);
+    const res = await voidIt(journalId, { reason: "取消", version: 1 });
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toMatchObject({
+      code: "JOURNAL_LINKED",
+      details: { journalId, invoiceId, paymentId },
+    });
+  });
+
+  it("訂正仕訳の訂正元が請求書の仕訳なら 409 JOURNAL_LINKED", async () => {
+    const journalId = insertJournalWithSource("invoice");
+    const invoiceId = insertInvoice(journalId);
+    close2026AndOpen2027();
+    const res = await e.journals.$post({
+      param: param(),
+      json: {
+        date: "2027-01-10",
+        lines: lines("売掛金", "売上高", 120_000),
+        correctsJournalId: journalId,
+      },
+    });
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toMatchObject({
+      code: "JOURNAL_LINKED",
+      details: { journalId, invoiceId },
+    });
+  });
+
+  it("結びつく行が見つからない仕訳では details は journalId だけ", async () => {
+    const journalId = insertJournalWithSource("payment");
+    const res = await voidIt(journalId, { reason: "取消", version: 1 });
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).details).toEqual({ journalId });
+  });
+
+  it("定期仕訳の仕訳（source = recurring）は通常どおり訂正・取消できる（FR-026）", async () => {
+    const journalId = insertJournalWithSource("recurring");
+    expect((await put(journalId, fixBody())).status).toBe(200);
+    expect((await voidIt(journalId, { reason: "取消", version: 2 })).status).toBe(200);
   });
 });

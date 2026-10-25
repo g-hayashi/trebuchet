@@ -23,24 +23,34 @@ import { blueReturnRoutes } from "./routes/blue-return.ts";
 import { entitiesRoutes, entityRoutes } from "./routes/entities.ts";
 import { fixedAssetRoutes } from "./routes/fixed-assets.ts";
 import { importRoutes } from "./routes/imports.ts";
+import { invoicingRoutes } from "./routes/invoicing.ts";
 import { journalRoutes } from "./routes/journals.ts";
 import { masterRoutes } from "./routes/masters.ts";
 import { periodRoutes } from "./routes/periods.ts";
+import { recurringRoutes } from "./routes/recurring.ts";
 import { reportRoutes } from "./routes/reports.ts";
 import { taxReturnRoutes } from "./routes/tax-return.ts";
 import { type TenantEnv, tenant } from "./tenant.ts";
 
-const tenantRoutes = new Hono<TenantEnv>()
-  .use(tenant)
-  .route("/", entityRoutes)
-  .route("/", masterRoutes)
-  .route("/", periodRoutes)
-  .route("/", journalRoutes)
-  .route("/", reportRoutes)
-  .route("/", importRoutes)
-  .route("/", blueReturnRoutes)
-  .route("/", fixedAssetRoutes)
-  .route("/", taxReturnRoutes);
+/**
+ * 事業体の下のルート。請求・定期仕訳のルートは「今日」の元になる clock を受け取るので、
+ * `createApp` の中で組み立てる（005 R22）
+ */
+function tenantRoutes(clock: Clock) {
+  return new Hono<TenantEnv>()
+    .use(tenant)
+    .route("/", entityRoutes)
+    .route("/", masterRoutes)
+    .route("/", periodRoutes)
+    .route("/", journalRoutes)
+    .route("/", reportRoutes)
+    .route("/", importRoutes)
+    .route("/", blueReturnRoutes)
+    .route("/", fixedAssetRoutes)
+    .route("/", taxReturnRoutes)
+    .route("/", invoicingRoutes({ clock }))
+    .route("/", recurringRoutes({ clock }));
+}
 
 export type AppOptions = {
   /** リモート（ts.net）の設定の読み込み。既定は無効。T016 が app_settings からの読み込みを渡す */
@@ -99,7 +109,7 @@ export function createApp(options: AppOptions = {}) {
       }),
     )
     .route("/entities", entitiesRoutes)
-    .route("/entities/:entityId", tenantRoutes);
+    .route("/entities/:entityId", tenantRoutes(clock));
 
   app.onError(onError);
   return app;

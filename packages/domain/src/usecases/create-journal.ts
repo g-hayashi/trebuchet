@@ -8,7 +8,9 @@ import {
   type Journal,
   type JournalDraft,
   type JournalLine,
+  type JournalSource,
   ok,
+  type Partner,
   type Result,
   type ValidLine,
 } from "../types.ts";
@@ -23,7 +25,25 @@ export type JournalDeps = {
 
 export type CreatedJournal = { journal: Journal; warnings: DomainWarning[] };
 
-export function loadContext(masters: MasterRepository): JournalContext {
+/** 仕訳の登録のオプション。`source` の既定は `manual`（005 R9） */
+export type CreateJournalOptions = { source?: JournalSource };
+
+/** 請求書・入金に結びついた仕訳か。これらは請求・入金の取消の経路でしか訂正・取消できない（005 R13） */
+export const isLinkedSource = (source: JournalSource): boolean =>
+  source === "invoice" || source === "payment";
+
+/** 請求・入金の仕訳を通常の訂正・取消から守る。`invoiceId` などは server のルート層が補う */
+export const linkedError = (journalId: string): DomainError =>
+  domainError(
+    "JOURNAL_LINKED",
+    "請求書・入金に結びついた仕訳は、ここでは訂正・取消できません。請求書・入金の画面から取り消してください",
+    { journalId },
+  );
+
+/** 取引先は使用停止の情報（`isActive`）も持つ（定期仕訳の判定が使う。005 R17） */
+export function loadContext(
+  masters: MasterRepository,
+): JournalContext & { partners: readonly Partner[] } {
   return {
     accounts: masters.listAccounts(),
     subAccounts: masters.listSubAccounts(),
@@ -43,12 +63,17 @@ export function checkCorrectsTarget(
   ledger: Pick<JournalRepository, "getJournal">,
   correctsJournalId: string,
   ctx: Pick<JournalContext, "periods">,
+  source: JournalSource = "manual",
 ): DomainError | undefined {
   const target = ledger.getJournal(correctsJournalId);
   if (target === undefined) {
     return domainError("VALIDATION", "訂正元の仕訳が見つかりません", {
       field: "correctsJournalId",
     });
+  }
+  // 請求・入金の仕訳は、同じ source の仕訳（請求・入金の取消）だけが訂正元にできる（005 R13）
+  if (isLinkedSource(target.source) && target.source !== source) {
+    return linkedError(target.id);
   }
   const period = checkPeriod(target.date, ctx.periods);
   if (period.ok || period.error.code !== "PERIOD_CLOSED") {
@@ -92,7 +117,12 @@ function duplicateWarning(
  * 仕訳を登録する（US2, FR-013〜018）。
  * 検証・採番・保存・監査ログの記録を1つのトランザクションで行い、違反があれば何も書き込まない
  */
-export function createJournal(deps: JournalDeps, draft: JournalDraft): Result<CreatedJournal> {
+export function createJournal(
+  deps: JournalDeps,
+  draft: JournalDraft,
+  options: CreateJournalOptions = {},
+): Result<CreatedJournal> {
+  const source = options.source ?? "manual";
   return deps.ledger.transaction((tx) => {
     const ctx = loadContext(deps.masters);
     const validated = validateJournal(draft, ctx);
@@ -100,7 +130,7 @@ export function createJournal(deps: JournalDeps, draft: JournalDraft): Result<Cr
     const valid = validated.value;
 
     if (valid.correctsJournalId !== null) {
-      const targetError = checkCorrectsTarget(tx, valid.correctsJournalId, ctx);
+      const targetError = checkCorrectsTarget(tx, valid.correctsJournalId, ctx, source);
       if (targetError !== undefined) return err(targetError);
     }
 
@@ -112,6 +142,7 @@ export function createJournal(deps: JournalDeps, draft: JournalDraft): Result<Cr
       ...valid,
       id,
       journalNo: tx.nextJournalNo(),
+      source,
       createdAt: now,
       lines,
     });

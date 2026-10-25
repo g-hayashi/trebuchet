@@ -58,6 +58,21 @@ export const ErrorCode = z.enum([
   "REMOTE_HOST_INVALID",
   "REMOTE_NOT_CONFIGURED",
   "PAIRING_TOKEN_INVALID",
+  // 005-recurring-invoicing（contracts/http-api.md §1）
+  "INVOICE_NOT_FOUND",
+  "PAYMENT_NOT_FOUND",
+  "RECURRING_NOT_FOUND",
+  "BILLING_TERMS_MISSING",
+  "INVOICE_ISSUER_INCOMPLETE",
+  "PARTNER_INACTIVE",
+  "INVOICE_DUPLICATE_MONTH",
+  "INVOICE_VOIDED",
+  "INVOICE_HAS_PAYMENTS",
+  "PAYMENT_EXCEEDS_BALANCE",
+  "PAYMENT_VOIDED",
+  "INVOICE_SEQ_TOO_LOW",
+  "JOURNAL_LINKED",
+  "RECURRING_CONFIRM_REQUIRED",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 
@@ -78,6 +93,7 @@ export const WarningCode = z.enum([
   "POSSIBLE_DUPLICATE",
   "NEGATIVE_BALANCE",
   "OPENING_BALANCE_MISSING",
+  "INVOICE_DUPLICATE_MONTH",
 ]);
 export type WarningCode = z.infer<typeof WarningCode>;
 

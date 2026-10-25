@@ -49,6 +49,38 @@ const DEFAULT_ROUTES: Record<string, Handler> = {
 };
 
 /**
+ * 事業体の下の API（`/api/entities/:entityId` を除いたパス）の既定の応答。事業体の ID によらない。
+ * 個別のテストが同じパスのキーを渡したときは、そちらを使う。005 の請求の設定・条件は、
+ * 取引先の画面など既存の画面が読むので、既存のテストが落ちないよう空の応答を置く
+ */
+const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
+  "GET /invoice-settings": () => ok({ settings: null, minimumNextSeq: 1 }),
+  "GET /billing-terms": () => ok({ terms: [] }),
+  // 工数・請求書の一覧（US1）。仕訳の詳細は出所を読む（`:id` は 1 つのパスの区切り）
+  "GET /work-hours": () => ok({ entries: [] }),
+  "GET /invoices": () => ok({ invoices: [], outstandingByPartner: [] }),
+  "GET /journals/:id/origin": () => ok({ origin: null }),
+  // 請求書の詳細の消し込みの入力（US2）が入金先の科目・補助科目を読む
+  "GET /accounts": () => ok({ accounts: [] }),
+  "GET /accounts/:id/sub-accounts": () => ok({ subAccounts: [] }),
+  // 定期仕訳（US3）。事業体の画面の上部の知らせが status を読む（`/recurring-journals/:id` より具体的なので先に当たる）
+  "GET /recurring-journals": () => ok({ recurring: [] }),
+  "GET /recurring-journals/status": () => ok({ unacknowledged: [], blocked: [] }),
+};
+
+/** `:name` を 1 つのパスの区切りに当てはめて、事業体の下のパスの既定の応答を探す */
+function defaultEntityHandler(method: string, entityPath: string): Handler | undefined {
+  const exact = DEFAULT_ENTITY_ROUTES[`${method} ${entityPath}`];
+  if (exact) return exact;
+  for (const [key, handler] of Object.entries(DEFAULT_ENTITY_ROUTES)) {
+    if (!key.includes(":")) continue;
+    const pattern = new RegExp(`^${key.replace(/:[A-Za-z]+/g, "[^/]+")}$`);
+    if (pattern.test(`${method} ${entityPath}`)) return handler;
+  }
+  return undefined;
+}
+
+/**
  * fetch を差し替え、"GET /api/..." の形のキーで応答を返す。受けた呼び出しを順に記録して返す。
  * `GET /api/auth/status` は、指定がなければ登録済み・サインイン済みの応答を返す。
  * 後片付けは vi.unstubAllGlobals() で行う
@@ -71,7 +103,9 @@ export function mockApi(given: Record<string, Handler>): ApiCall[] {
         form,
       };
       calls.push(call);
-      const handler = routes[`${method} ${url.pathname}`];
+      const entityPath = url.pathname.replace(/^\/api\/entities\/[^/]+/, "");
+      const handler =
+        routes[`${method} ${url.pathname}`] ?? defaultEntityHandler(method, entityPath);
       const reply = handler
         ? await handler(call)
         : ok({ message: `${method} ${url.pathname} は未定義です` }, 500);
