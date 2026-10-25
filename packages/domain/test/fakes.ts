@@ -950,6 +950,26 @@ export class InMemoryInvoicingStore implements InvoicingStore {
     return structuredClone(this.state.payments.filter((p) => p.invoiceId === invoiceId));
   }
 
+  insertPayment(payment: PaymentRecord): void {
+    const dup = this.state.payments.some(
+      (p) => p.id === payment.id || p.journalId === payment.journalId,
+    );
+    if (dup) throw new Error("UNIQUE constraint failed: invoice_payments");
+    this.state.payments.push(structuredClone(payment));
+  }
+
+  markPaymentVoided(
+    id: string,
+    voided: { voidedAt: string; voidReason: string; voidJournalId: string | null },
+  ): void {
+    const found = this.state.payments.find((p) => p.id === id);
+    if (found === undefined) throw new Error(`消し込みがない: ${id}`);
+    if (found.voidedAt !== null) throw new Error("取消済みの消し込みは更新できません");
+    found.voidedAt = voided.voidedAt;
+    found.voidReason = voided.voidReason;
+    found.voidJournalId = voided.voidJournalId;
+  }
+
   originOfJournal(journalId: string): JournalOrigin | null {
     const invoice = this.state.invoices.find(
       (i) => i.journalId === journalId || i.voidJournalId === journalId,

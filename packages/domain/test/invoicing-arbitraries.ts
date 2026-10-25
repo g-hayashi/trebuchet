@@ -113,6 +113,66 @@ export const arbIssueSpecs = fc.array(arbIssueSpec, { minLength: 1, maxLength: 8
 /** 発行と取消の列 */
 export const arbOps = fc.array(arbOp, { minLength: 1, maxLength: 10 });
 
+/**
+ * 消し込みの操作。`target` はそれまでに発行した請求書の何番目か（剰余で選ぶ）。
+ * `mode`: `full` = 残額ちょうど、`partial` = 残額の `pct`%（1 円以上）、`fee` = `partial` の額で
+ * 差額を手数料として扱う、`over` = 残額を `extra` 円超える額
+ */
+export type PayOp = {
+  kind: "pay";
+  target: number;
+  mode: "full" | "partial" | "fee" | "over";
+  pct: number;
+  extra: number;
+  /** 入金日（2025 年度・2026 年度。年度の締めの後は 2025 年の入金が PERIOD_CLOSED になる） */
+  year: 2025 | 2026;
+  month: number;
+  day: number;
+};
+
+/** 消し込みの取消。`target` はそれまでに登録した消し込みの何番目か（剰余で選ぶ。取消済みも選びうる） */
+export type VoidPayOp = { kind: "voidPayment"; target: number; reason: string };
+
+export type LedgerOp = Op | PayOp | VoidPayOp;
+
+export const arbPayOp: fc.Arbitrary<PayOp> = fc.record({
+  kind: fc.constant("pay" as const),
+  target: fc.nat(100),
+  mode: fc.constantFrom(
+    "full" as const,
+    "partial" as const,
+    "partial" as const,
+    "fee" as const,
+    "over" as const,
+  ),
+  pct: fc.integer({ min: 1, max: 100 }),
+  extra: fc.integer({ min: 1, max: 1_000 }),
+  year: fc.constantFrom(2025 as const, 2025 as const, 2026 as const),
+  month: fc.integer({ min: 1, max: 12 }),
+  day: fc.integer({ min: 1, max: 28 }),
+});
+
+export const arbVoidPayOp: fc.Arbitrary<VoidPayOp> = fc.record({
+  kind: fc.constant("voidPayment" as const),
+  target: fc.nat(100),
+  reason: fc.constantFrom("誤り", "二重入力", "取り直し"),
+});
+
+/** 発行・取消・消し込み・消し込みの取消の列（INV-32・33・34）。消し込みの取消を請求書の取消より多めにする */
+export const arbLedgerOp: fc.Arbitrary<LedgerOp> = fc.oneof(
+  { weight: 4, arbitrary: arbIssueSpec.map((spec): LedgerOp => ({ kind: "issue", spec })) },
+  {
+    weight: 1,
+    arbitrary: fc
+      .record({ target: fc.nat(100), reason: fc.constantFrom("誤り", "二重発行") })
+      .map(({ target, reason }): LedgerOp => ({ kind: "void", target, reason })),
+  },
+  { weight: 6, arbitrary: arbPayOp },
+  { weight: 2, arbitrary: arbVoidPayOp },
+);
+
+export const arbLedgerOps = fc.array(arbLedgerOp, { minLength: 6, maxLength: 16 });
+
 /** 発行の後に行う、設定・条件・工数・取引先の変更（INV-38） */
 export type Change =
   | {

@@ -58,6 +58,56 @@ export function reversalDraft(journal: Journal, today: string): JournalDraft {
   };
 }
 
+export type PaymentJournalSource = {
+  invoiceNo: string;
+  partnerId: string;
+  receivedOn: string;
+  /** 入金額 */
+  amount: number;
+  /** 支払手数料として扱った差額（0 ならなし） */
+  feeAmount: number;
+  depositAccountId: string;
+  depositSubAccountId?: string | null | undefined;
+};
+
+/**
+ * 入金の消し込みの仕訳の案（R10・R14）。借方 入金先（補助科目つき）に入金額、手数料 > 0 なら借方 支払手数料、
+ * 貸方 売掛金に充当額（入金額 + 手数料）。全行に取引先、摘要は `入金 <番号>`、日付は入金日
+ */
+export function paymentJournalDraft(
+  payment: PaymentJournalSource,
+  accounts: readonly Pick<Account, "id" | "code">[],
+): Result<JournalDraft> {
+  const receivable = findAccountByCode(accounts, INVOICING_ACCOUNT_CODES.receivable);
+  if (!receivable.ok) return receivable;
+  const lines: LineDraft[] = [
+    {
+      side: "debit",
+      accountId: payment.depositAccountId,
+      ...(payment.depositSubAccountId == null ? {} : { subAccountId: payment.depositSubAccountId }),
+      amount: payment.amount,
+      partnerId: payment.partnerId,
+    },
+  ];
+  if (payment.feeAmount > 0) {
+    const fee = findAccountByCode(accounts, INVOICING_ACCOUNT_CODES.paymentFee);
+    if (!fee.ok) return fee;
+    lines.push({
+      side: "debit",
+      accountId: fee.value,
+      amount: payment.feeAmount,
+      partnerId: payment.partnerId,
+    });
+  }
+  lines.push({
+    side: "credit",
+    accountId: receivable.value,
+    amount: payment.amount + payment.feeAmount,
+    partnerId: payment.partnerId,
+  });
+  return ok({ date: payment.receivedOn, memo: `入金 ${payment.invoiceNo}`, lines });
+}
+
 export type InvoiceJournalSource = {
   invoiceNo: string;
   partnerId: string;

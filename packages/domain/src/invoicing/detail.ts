@@ -1,12 +1,16 @@
 import type { InvoiceDetail, InvoiceSummary, PaymentView } from "@trebuchet/schema";
 import type { InvoiceItemRecord, InvoiceRecord, PaymentRecord } from "../types.ts";
-import { invoiceStatus } from "./status.ts";
+import { invoiceStatus, isOverdue } from "./status.ts";
 import { taxBreakdownEntries } from "./tax.ts";
 
-/** 一覧の 1 行（H:§3.5）。`overdue` は US2（T017・T018）まで偽 */
+/**
+ * 一覧の 1 行（H:§3.5）。`today` を渡すと `overdue` を判定する（`isOverdue`）。省略すると偽
+ * （一覧・詳細への期限切れの反映は T018）
+ */
 export function buildInvoiceSummary(
   invoice: InvoiceRecord,
   payments: readonly PaymentRecord[],
+  today?: string,
 ): InvoiceSummary {
   const standing = invoiceStatus(invoice, payments);
   return {
@@ -21,11 +25,11 @@ export function buildInvoiceSummary(
     paid: standing.paid,
     remaining: standing.remaining,
     status: standing.status,
-    overdue: false,
+    overdue: today === undefined ? false : isOverdue(invoice, standing.remaining, today),
   };
 }
 
-const toPaymentView = (p: PaymentRecord): PaymentView => ({
+export const toPaymentView = (p: PaymentRecord): PaymentView => ({
   id: p.id,
   receivedOn: p.receivedOn,
   amount: p.amount,
@@ -46,9 +50,10 @@ export function buildInvoiceDetail(
   invoice: InvoiceRecord,
   items: readonly InvoiceItemRecord[],
   payments: readonly PaymentRecord[],
+  today?: string,
 ): InvoiceDetail {
   return {
-    ...buildInvoiceSummary(invoice, payments),
+    ...buildInvoiceSummary(invoice, payments, today),
     salesDate: invoice.salesDate,
     recipientHonorific: invoice.recipientHonorific,
     issuer: invoice.issuer,

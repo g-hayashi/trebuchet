@@ -239,6 +239,22 @@ export class DrizzleInvoicingStore implements InvoicingStore {
       .all();
   }
 
+  insertPayment(payment: PaymentRecord): void {
+    this.db.insert(invoicePayments).values(payment).run();
+  }
+
+  markPaymentVoided(
+    id: string,
+    voided: { voidedAt: string; voidReason: string; voidJournalId: string | null },
+  ): void {
+    const result = this.db
+      .update(invoicePayments)
+      .set(voided)
+      .where(and(eq(invoicePayments.id, id), isNull(invoicePayments.voidedAt)))
+      .run();
+    if (result.changes !== 1) throw new Error(`取消できる消し込みがありません: ${id}`);
+  }
+
   /** 請求書・入金・定期仕訳の仕訳の ID から起点を引く。取消の仕訳（`void_journal_id`）も元の請求・入金を指す */
   originOfJournal(journalId: string): JournalOrigin | null {
     const invoice = this.db

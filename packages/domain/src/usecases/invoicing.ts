@@ -12,18 +12,25 @@ import {
   type InvoiceSettingsInput,
   type InvoicingVoidInput,
   type JournalOrigin,
+  type PaymentInput,
+  type PaymentView,
   type WorkHoursEntry,
   type WorkHoursInput,
   YEN_LIMIT,
 } from "@trebuchet/schema";
 import { isValidDate } from "../dates.ts";
 import { itemAmount } from "../invoicing/amounts.ts";
-import { buildInvoiceDetail, buildInvoiceSummary } from "../invoicing/detail.ts";
+import { buildInvoiceDetail, buildInvoiceSummary, toPaymentView } from "../invoicing/detail.ts";
 import { buildInvoiceDraft } from "../invoicing/draft.ts";
 import { dueDate, monthEnd } from "../invoicing/due-date.ts";
-import { invoiceJournalDraft, reversalDraft } from "../invoicing/journal-drafts.ts";
+import {
+  invoiceJournalDraft,
+  paymentJournalDraft,
+  reversalDraft,
+} from "../invoicing/journal-drafts.ts";
 import { formatInvoiceNo } from "../invoicing/number.ts";
 import { runInTransaction } from "../invoicing/rollback.ts";
+import { invoiceStatus } from "../invoicing/status.ts";
 import { defaultSalesTaxCategory, effectiveTaxDisplay, itemTaxRate } from "../invoicing/tax.ts";
 import { checkPeriod } from "../journal.ts";
 import type { Clock, IdGenerator, InvoicingStore, InvoicingUnitOfWork } from "../ports.ts";
@@ -35,10 +42,11 @@ import {
   type Journal,
   ok,
   type Partner,
+  type PaymentRecord,
   type Result,
 } from "../types.ts";
 import { createJournal, loadContext } from "./create-journal.ts";
-import { checkReason } from "./journal-edit.ts";
+import { checkReason, type LedgerDeps } from "./journal-edit.ts";
 import { voidJournal } from "./void-journal.ts";
 
 /** 請求書（005）のユースケースの依存。読み取りも UnitOfWork 越しに行う（同じ接続・トランザクション） */
@@ -637,31 +645,16 @@ export function voidInvoice(
         }),
       );
     }
-    const period = checkPeriod(original.date, masters.listFiscalPeriods());
-    if (!period.ok && period.error.code !== "PERIOD_CLOSED") return period;
 
     // (2) 最初の書き込みは仕訳。未締めなら取消、締め済みなら今日付の逆仕訳
-    const ledgerDeps = { ledger, masters, ids: deps.ids, clock: deps.clock };
-    let journal: Journal;
-    let voidJournalId: string | null;
-    if (period.ok) {
-      const voided = voidJournal(
-        ledgerDeps,
-        original.id,
-        { reason: reason.value, version: original.version },
-        { linked: true },
-      );
-      if (!voided.ok) return voided;
-      journal = voided.value;
-      voidJournalId = null;
-    } else {
-      const reversal = createJournal(ledgerDeps, reversalDraft(original, today), {
-        source: original.source,
-      });
-      if (!reversal.ok) return reversal;
-      journal = reversal.value.journal;
-      voidJournalId = journal.id;
-    }
+    const undone = undoLinkedJournal(
+      { ledger, masters, ids: deps.ids, clock: deps.clock },
+      original,
+      reason.value,
+      today,
+    );
+    if (!undone.ok) return undone;
+    const { journal, voidJournalId } = undone.value;
 
     // (3) 以降の書き込みの失敗は例外で全体を巻き戻す
     const now = deps.clock.now();
@@ -688,6 +681,245 @@ export function voidInvoice(
     });
     return ok({
       invoice: buildInvoiceDetail(voidedInvoice, invoicing.listInvoiceItems(invoiceId), payments),
+      journal,
+    });
+  });
+}
+
+/**
+ * 請求書・入金の仕訳を取り消す（R12）。元の仕訳の期間が未締めなら 001 の `voidJournal(…, { linked: true })`、
+ * 締め済みなら今日付の逆仕訳（`createJournal`。`source` は元と同じ）。`voidJournalId` は逆仕訳の ID
+ * （直接の取消なら null）。書くのは仕訳だけなので、`err` のときは何も残らない
+ */
+function undoLinkedJournal(
+  ledgerDeps: LedgerDeps,
+  original: Journal,
+  reason: string,
+  today: string,
+): Result<{ journal: Journal; voidJournalId: string | null }> {
+  const period = checkPeriod(original.date, ledgerDeps.masters.listFiscalPeriods());
+  if (!period.ok && period.error.code !== "PERIOD_CLOSED") return period;
+  if (period.ok) {
+    const voided = voidJournal(
+      ledgerDeps,
+      original.id,
+      { reason, version: original.version },
+      { linked: true },
+    );
+    if (!voided.ok) return voided;
+    return ok({ journal: voided.value, voidJournalId: null });
+  }
+  const reversal = createJournal(ledgerDeps, reversalDraft(original, today), {
+    source: original.source,
+  });
+  if (!reversal.ok) return reversal;
+  return ok({ journal: reversal.value.journal, voidJournalId: reversal.value.journal.id });
+}
+
+// ---- 入金の消し込み（US2。H:§4。R12・R14） ----
+
+export type PaymentResult = { payment: PaymentView; invoice: InvoiceDetail; journal: Journal };
+
+/**
+ * 入金を消し込む。検査（請求書 → 取消済み `INVOICE_VOIDED` → 入金額・入金日 → 手数料 → 超過
+ * `PAYMENT_EXCEEDS_BALANCE`）→ 入金の仕訳（`createJournal`、`source = payment`。001 の検査の `err` は
+ * そのまま返す）→ 消し込み → 記録、の順に 1 トランザクションで書く（R9）。
+ * `treatDifferenceAsFee` なら手数料 = 残額 − 入金額（0 以下は `VALIDATION`）。充当額 = 入金額 + 手数料
+ */
+export function recordPayment(
+  deps: InvoicingDeps,
+  invoiceId: string,
+  input: PaymentInput,
+  today: string,
+): Result<PaymentResult> {
+  return runInTransaction(deps.uow, ({ ledger, masters, invoicing }) => {
+    // (1) 読み取りと検査
+    const invoice = invoicing.getInvoice(invoiceId);
+    if (invoice === null) return err(invoiceNotFound(invoiceId));
+    if (invoice.voidedAt !== null) {
+      return err(
+        domainError("INVOICE_VOIDED", "この請求書はすでに取り消されています", { invoiceId }),
+      );
+    }
+    if (!Number.isSafeInteger(input.amount) || input.amount < 1 || input.amount >= YEN_LIMIT) {
+      return validation("入金額は 1 円以上 1 兆円未満の整数で入力してください", {
+        field: "amount",
+      });
+    }
+    if (!isValidDate(input.receivedOn)) {
+      return validation("入金日が正しい日付ではありません", { field: "receivedOn" });
+    }
+    const payments = invoicing.listPayments(invoiceId);
+    const { remaining } = invoiceStatus(invoice, payments);
+    let feeAmount = 0;
+    if (input.treatDifferenceAsFee === true) {
+      feeAmount = remaining - input.amount;
+      if (feeAmount <= 0) {
+        return validation("手数料にできる差額がありません（入金額が残額より少ないときだけです）", {
+          field: "amount",
+          remaining,
+        });
+      }
+    }
+    const applied = input.amount + feeAmount;
+    if (applied > remaining) {
+      return err(
+        domainError("PAYMENT_EXCEEDS_BALANCE", "入金額が請求の残額を超えています", {
+          invoiceId,
+          remaining,
+          applied,
+        }),
+      );
+    }
+    const ctx = loadContext(masters);
+    const draft = paymentJournalDraft(
+      {
+        invoiceNo: invoice.invoiceNo,
+        partnerId: invoice.partnerId,
+        receivedOn: input.receivedOn,
+        amount: input.amount,
+        feeAmount,
+        depositAccountId: input.depositAccountId,
+        depositSubAccountId: input.depositSubAccountId,
+      },
+      ctx.accounts,
+    );
+    if (!draft.ok) return draft;
+
+    // (2) 最初の書き込みは入金の仕訳。その err はそのまま返す
+    const posted = createJournal(
+      { ledger, masters, ids: deps.ids, clock: deps.clock },
+      draft.value,
+      { source: "payment" },
+    );
+    if (!posted.ok) return posted;
+    const journal = posted.value.journal;
+
+    // (3) 以降の書き込みの失敗は例外で全体を巻き戻す
+    const now = deps.clock.now();
+    const payment: PaymentRecord = {
+      id: deps.ids.next(),
+      invoiceId,
+      receivedOn: input.receivedOn,
+      amount: input.amount,
+      feeAmount,
+      depositAccountId: input.depositAccountId,
+      depositSubAccountId: input.depositSubAccountId ?? null,
+      journalId: journal.id,
+      createdAt: now,
+      voidedAt: null,
+      voidReason: null,
+      voidJournalId: null,
+    };
+    invoicing.insertPayment(payment);
+    invoicing.appendInvoicingAudit({
+      id: deps.ids.next(),
+      occurredAt: now,
+      targetType: "payment",
+      targetId: payment.id,
+      action: "create",
+      reason: null,
+      beforeJson: null,
+      afterJson: JSON.stringify(payment),
+    });
+    return ok({
+      payment: toPaymentView(payment),
+      invoice: buildInvoiceDetail(
+        invoice,
+        invoicing.listInvoiceItems(invoiceId),
+        [...payments, payment],
+        today,
+      ),
+      journal,
+    });
+  });
+}
+
+/**
+ * 入金の消し込みを取り消す。理由は 001 の `checkReason`。ない消し込み（別の請求書のものを含む）は
+ * `PAYMENT_NOT_FOUND`、取消済みは `PAYMENT_VOIDED`。入金の仕訳の期間が未締めなら 001 の
+ * `voidJournal(…, { linked: true })`、締め済みなら今日付の逆仕訳。消し込みに取消の列を書き、記録を残す。
+ * 返す `journal` は、取り消した元の仕訳、または起票した逆仕訳
+ */
+export function voidPayment(
+  deps: InvoicingDeps,
+  invoiceId: string,
+  paymentId: string,
+  input: InvoicingVoidInput,
+  today: string,
+): Result<PaymentResult> {
+  const reason = checkReason(input.reason);
+  if (!reason.ok) return reason;
+
+  return runInTransaction(deps.uow, ({ ledger, masters, invoicing }) => {
+    // (1) 読み取りと検査
+    const invoice = invoicing.getInvoice(invoiceId);
+    if (invoice === null) return err(invoiceNotFound(invoiceId));
+    const payments = invoicing.listPayments(invoiceId);
+    const payment = payments.find((p) => p.id === paymentId);
+    if (payment === undefined) {
+      return err(
+        domainError("PAYMENT_NOT_FOUND", "入金の消し込みが見つかりません", {
+          invoiceId,
+          paymentId,
+        }),
+      );
+    }
+    if (payment.voidedAt !== null) {
+      return err(
+        domainError("PAYMENT_VOIDED", "この消し込みはすでに取り消されています", { paymentId }),
+      );
+    }
+    const original = ledger.getJournal(payment.journalId);
+    if (original === undefined) {
+      return err(
+        domainError("JOURNAL_NOT_FOUND", "入金の仕訳が見つかりません", {
+          journalId: payment.journalId,
+        }),
+      );
+    }
+
+    // (2) 最初の書き込みは仕訳。未締めなら取消、締め済みなら今日付の逆仕訳
+    const undone = undoLinkedJournal(
+      { ledger, masters, ids: deps.ids, clock: deps.clock },
+      original,
+      reason.value,
+      today,
+    );
+    if (!undone.ok) return undone;
+    const { journal, voidJournalId } = undone.value;
+
+    // (3) 以降の書き込みの失敗は例外で全体を巻き戻す
+    const now = deps.clock.now();
+    invoicing.markPaymentVoided(paymentId, {
+      voidedAt: now,
+      voidReason: reason.value,
+      voidJournalId,
+    });
+    const voided: PaymentRecord = {
+      ...payment,
+      voidedAt: now,
+      voidReason: reason.value,
+      voidJournalId,
+    };
+    invoicing.appendInvoicingAudit({
+      id: deps.ids.next(),
+      occurredAt: now,
+      targetType: "payment",
+      targetId: paymentId,
+      action: "void",
+      reason: reason.value,
+      beforeJson: JSON.stringify(payment),
+      afterJson: JSON.stringify(voided),
+    });
+    return ok({
+      payment: toPaymentView(voided),
+      invoice: buildInvoiceDetail(
+        invoice,
+        invoicing.listInvoiceItems(invoiceId),
+        payments.map((p) => (p.id === paymentId ? voided : p)),
+        today,
+      ),
       journal,
     });
   });

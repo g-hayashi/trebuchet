@@ -287,8 +287,15 @@ export interface InvoicingStore {
     id: string,
     voided: { voidedAt: string; voidReason: string; voidJournalId: string | null },
   ): void;
-  /** 請求書の消し込み（取消済みを含む。登録の順）。書き込みは US2 */
+  /** 請求書の消し込み（取消済みを含む。登録の順） */
   listPayments(invoiceId: string): PaymentRecord[];
+  /** 消し込みを保存する（入金の仕訳と同じトランザクションで呼ぶ。`journalId` は一意） */
+  insertPayment(payment: PaymentRecord): void;
+  /** 消し込みを取消済みにする（取消の列を NULL から一度だけ書く。写しは変えない） */
+  markPaymentVoided(
+    id: string,
+    voided: { voidedAt: string; voidReason: string; voidJournalId: string | null },
+  ): void;
   /** 仕訳が請求・入金・定期仕訳のどれから作られたか（H:§6.1）。取消の仕訳も元の請求・入金を指す。なければ null */
   originOfJournal(journalId: string): JournalOrigin | null;
 }
