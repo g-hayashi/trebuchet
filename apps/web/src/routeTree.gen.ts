@@ -33,6 +33,9 @@ import { Route as EEntityIdJournalsIndexRouteImport } from './routes/e/$entityId
 import { Route as EEntityIdJournalsJournalIdRouteImport } from './routes/e/$entityId/journals/$journalId'
 import { Route as EEntityIdJournalsNewRouteImport } from './routes/e/$entityId/journals/new'
 import { Route as EEntityIdPeriodsIndexRouteImport } from './routes/e/$entityId/periods/index'
+import { Route as EEntityIdRecurringIndexRouteImport } from './routes/e/$entityId/recurring/index'
+import { Route as EEntityIdRecurringRecurringIdRouteImport } from './routes/e/$entityId/recurring/$recurringId'
+import { Route as EEntityIdRecurringNewRouteImport } from './routes/e/$entityId/recurring/new'
 import { Route as EEntityIdReportsIndexRouteImport } from './routes/e/$entityId/reports/index'
 import { Route as EEntityIdReportsBalanceSheetRouteImport } from './routes/e/$entityId/reports/balance-sheet'
 import { Route as EEntityIdReportsGeneralLedgerRouteImport } from './routes/e/$entityId/reports/general-ledger'
@@ -172,6 +175,22 @@ const EEntityIdPeriodsIndexRoute = EEntityIdPeriodsIndexRouteImport.update({
   path: '/periods/',
   getParentRoute: () => EEntityIdRouteRoute,
 } as any)
+const EEntityIdRecurringIndexRoute = EEntityIdRecurringIndexRouteImport.update({
+  id: '/recurring/',
+  path: '/recurring/',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdRecurringRecurringIdRoute =
+  EEntityIdRecurringRecurringIdRouteImport.update({
+    id: '/recurring/$recurringId',
+    path: '/recurring/$recurringId',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
+const EEntityIdRecurringNewRoute = EEntityIdRecurringNewRouteImport.update({
+  id: '/recurring/new',
+  path: '/recurring/new',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
 const EEntityIdReportsIndexRoute = EEntityIdReportsIndexRouteImport.update({
   id: '/reports/',
   path: '/reports/',
@@ -262,6 +281,8 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
+  '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
+  '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
   '/e/$entityId/reports/general-ledger': typeof EEntityIdReportsGeneralLedgerRoute
   '/e/$entityId/reports/journal-book': typeof EEntityIdReportsJournalBookRoute
@@ -274,6 +295,7 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/invoices/': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals/': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/recurring/': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/blue-return/$year/deduction': typeof EEntityIdBlueReturnYearDeductionRoute
   '/e/$entityId/blue-return/$year/home-use': typeof EEntityIdBlueReturnYearHomeUseRoute
@@ -299,6 +321,8 @@ export interface FileRoutesByTo {
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
+  '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
+  '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
   '/e/$entityId/reports/general-ledger': typeof EEntityIdReportsGeneralLedgerRoute
   '/e/$entityId/reports/journal-book': typeof EEntityIdReportsJournalBookRoute
@@ -311,6 +335,7 @@ export interface FileRoutesByTo {
   '/e/$entityId/invoices': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/recurring': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/blue-return/$year/deduction': typeof EEntityIdBlueReturnYearDeductionRoute
   '/e/$entityId/blue-return/$year/home-use': typeof EEntityIdBlueReturnYearHomeUseRoute
@@ -338,6 +363,8 @@ export interface FileRoutesById {
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
+  '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
+  '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
   '/e/$entityId/reports/general-ledger': typeof EEntityIdReportsGeneralLedgerRoute
   '/e/$entityId/reports/journal-book': typeof EEntityIdReportsJournalBookRoute
@@ -350,6 +377,7 @@ export interface FileRoutesById {
   '/e/$entityId/invoices/': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals/': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/recurring/': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/blue-return/$year/deduction': typeof EEntityIdBlueReturnYearDeductionRoute
   '/e/$entityId/blue-return/$year/home-use': typeof EEntityIdBlueReturnYearHomeUseRoute
@@ -378,6 +406,8 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
+    | '/e/$entityId/recurring/$recurringId'
+    | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
     | '/e/$entityId/reports/general-ledger'
     | '/e/$entityId/reports/journal-book'
@@ -390,6 +420,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/'
     | '/e/$entityId/journals/'
     | '/e/$entityId/periods/'
+    | '/e/$entityId/recurring/'
     | '/e/$entityId/reports/'
     | '/e/$entityId/blue-return/$year/deduction'
     | '/e/$entityId/blue-return/$year/home-use'
@@ -415,6 +446,8 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
+    | '/e/$entityId/recurring/$recurringId'
+    | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
     | '/e/$entityId/reports/general-ledger'
     | '/e/$entityId/reports/journal-book'
@@ -427,6 +460,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices'
     | '/e/$entityId/journals'
     | '/e/$entityId/periods'
+    | '/e/$entityId/recurring'
     | '/e/$entityId/reports'
     | '/e/$entityId/blue-return/$year/deduction'
     | '/e/$entityId/blue-return/$year/home-use'
@@ -453,6 +487,8 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
+    | '/e/$entityId/recurring/$recurringId'
+    | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
     | '/e/$entityId/reports/general-ledger'
     | '/e/$entityId/reports/journal-book'
@@ -465,6 +501,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/'
     | '/e/$entityId/journals/'
     | '/e/$entityId/periods/'
+    | '/e/$entityId/recurring/'
     | '/e/$entityId/reports/'
     | '/e/$entityId/blue-return/$year/deduction'
     | '/e/$entityId/blue-return/$year/home-use'
@@ -650,6 +687,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EEntityIdPeriodsIndexRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
+    '/e/$entityId/recurring/': {
+      id: '/e/$entityId/recurring/'
+      path: '/recurring'
+      fullPath: '/e/$entityId/recurring/'
+      preLoaderRoute: typeof EEntityIdRecurringIndexRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/recurring/$recurringId': {
+      id: '/e/$entityId/recurring/$recurringId'
+      path: '/recurring/$recurringId'
+      fullPath: '/e/$entityId/recurring/$recurringId'
+      preLoaderRoute: typeof EEntityIdRecurringRecurringIdRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/recurring/new': {
+      id: '/e/$entityId/recurring/new'
+      path: '/recurring/new'
+      fullPath: '/e/$entityId/recurring/new'
+      preLoaderRoute: typeof EEntityIdRecurringNewRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
     '/e/$entityId/reports/': {
       id: '/e/$entityId/reports/'
       path: '/reports'
@@ -752,6 +810,8 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdInvoicesNewRoute: typeof EEntityIdInvoicesNewRoute
   EEntityIdJournalsJournalIdRoute: typeof EEntityIdJournalsJournalIdRoute
   EEntityIdJournalsNewRoute: typeof EEntityIdJournalsNewRoute
+  EEntityIdRecurringRecurringIdRoute: typeof EEntityIdRecurringRecurringIdRoute
+  EEntityIdRecurringNewRoute: typeof EEntityIdRecurringNewRoute
   EEntityIdReportsBalanceSheetRoute: typeof EEntityIdReportsBalanceSheetRoute
   EEntityIdReportsGeneralLedgerRoute: typeof EEntityIdReportsGeneralLedgerRoute
   EEntityIdReportsJournalBookRoute: typeof EEntityIdReportsJournalBookRoute
@@ -764,6 +824,7 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdInvoicesIndexRoute: typeof EEntityIdInvoicesIndexRoute
   EEntityIdJournalsIndexRoute: typeof EEntityIdJournalsIndexRoute
   EEntityIdPeriodsIndexRoute: typeof EEntityIdPeriodsIndexRoute
+  EEntityIdRecurringIndexRoute: typeof EEntityIdRecurringIndexRoute
   EEntityIdReportsIndexRoute: typeof EEntityIdReportsIndexRoute
   EEntityIdBlueReturnYearDeductionRoute: typeof EEntityIdBlueReturnYearDeductionRoute
   EEntityIdBlueReturnYearHomeUseRoute: typeof EEntityIdBlueReturnYearHomeUseRoute
@@ -787,6 +848,8 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdInvoicesNewRoute: EEntityIdInvoicesNewRoute,
   EEntityIdJournalsJournalIdRoute: EEntityIdJournalsJournalIdRoute,
   EEntityIdJournalsNewRoute: EEntityIdJournalsNewRoute,
+  EEntityIdRecurringRecurringIdRoute: EEntityIdRecurringRecurringIdRoute,
+  EEntityIdRecurringNewRoute: EEntityIdRecurringNewRoute,
   EEntityIdReportsBalanceSheetRoute: EEntityIdReportsBalanceSheetRoute,
   EEntityIdReportsGeneralLedgerRoute: EEntityIdReportsGeneralLedgerRoute,
   EEntityIdReportsJournalBookRoute: EEntityIdReportsJournalBookRoute,
@@ -799,6 +862,7 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdInvoicesIndexRoute: EEntityIdInvoicesIndexRoute,
   EEntityIdJournalsIndexRoute: EEntityIdJournalsIndexRoute,
   EEntityIdPeriodsIndexRoute: EEntityIdPeriodsIndexRoute,
+  EEntityIdRecurringIndexRoute: EEntityIdRecurringIndexRoute,
   EEntityIdReportsIndexRoute: EEntityIdReportsIndexRoute,
   EEntityIdBlueReturnYearDeductionRoute: EEntityIdBlueReturnYearDeductionRoute,
   EEntityIdBlueReturnYearHomeUseRoute: EEntityIdBlueReturnYearHomeUseRoute,

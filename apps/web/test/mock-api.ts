@@ -63,6 +63,9 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 請求書の詳細の消し込みの入力（US2）が入金先の科目・補助科目を読む
   "GET /accounts": () => ok({ accounts: [] }),
   "GET /accounts/:id/sub-accounts": () => ok({ subAccounts: [] }),
+  // 定期仕訳（US3）。事業体の画面の上部の知らせが status を読む（`/recurring-journals/:id` より具体的なので先に当たる）
+  "GET /recurring-journals": () => ok({ recurring: [] }),
+  "GET /recurring-journals/status": () => ok({ unacknowledged: [], blocked: [] }),
 };
 
 /** `:name` を 1 つのパスの区切りに当てはめて、事業体の下のパスの既定の応答を探す */

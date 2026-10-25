@@ -27,7 +27,6 @@ import { ApiError } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
 import {
   type Account,
-  type Journal,
   type Partner,
   subAccountsQuery,
   type Tag,
@@ -82,9 +81,29 @@ function defaultTaxCategory(
   return "OUT_OF_SCOPE";
 }
 
+/**
+ * フォームの初期値になる仕訳の形。訂正する仕訳（`Journal`）のほか、定期仕訳の定義
+ * （005。税区分が null = 自動、タグなし、訂正元なし）も同じ形で渡せる
+ */
+export type JournalFormSource = {
+  date: string;
+  memo: string | null;
+  correctsJournalId?: string | null | undefined;
+  lines: readonly {
+    side: Side;
+    accountId: string;
+    subAccountId: string | null;
+    amount: number;
+    taxCategory: TaxCategoryCode | null;
+    partnerId: string | null;
+    description: string | null;
+    tagIds?: readonly string[] | undefined;
+  }[];
+};
+
 /** 訂正する仕訳をフォームの値にする。税区分は既定値と同じなら「自動」にする */
 function valuesOf(
-  journal: Journal,
+  journal: JournalFormSource,
   accounts: readonly Account[],
   settings: readonly TaxSetting[],
 ): FormInput {
@@ -98,17 +117,18 @@ function valuesOf(
       subAccountId: l.subAccountId ?? undefined,
       amount: l.amount,
       taxCategory:
+        l.taxCategory === null ||
         l.taxCategory ===
-        defaultTaxCategory(
-          journal.date,
-          accounts.find((a) => a.id === l.accountId),
-          settings,
-        )
+          defaultTaxCategory(
+            journal.date,
+            accounts.find((a) => a.id === l.accountId),
+            settings,
+          )
           ? undefined
           : l.taxCategory,
       partnerId: l.partnerId ?? undefined,
       description: l.description ?? undefined,
-      tagIds: l.tagIds,
+      tagIds: [...(l.tagIds ?? [])],
     })),
   };
 }
@@ -193,10 +213,19 @@ export type JournalFormProps = {
   taxCategories: TaxCategory[];
   defaultDate: string;
   /** 訂正する仕訳。その内容で始め、使っている使用停止の科目・補助科目・取引先も選べるようにする */
-  journal?: Journal | undefined;
+  journal?: JournalFormSource | undefined;
   /** 訂正仕訳として登録するときの訂正元（FR-019a） */
   correctsJournalId?: string | undefined;
   submitLabel?: string | undefined;
+  /** フォームの名前（読み上げ・テストの検索用）。既定は「仕訳」 */
+  formLabel?: string | undefined;
+  /**
+   * 日付の入力を出さない（定期仕訳。005）。`defaultDate`（または `journal.date`）は税区分の「自動」の
+   * 表示にだけ使い、`onSubmit` の `date` はそのまま返す。呼び出し側は使わない
+   */
+  hideDate?: boolean | undefined;
+  /** 日付・メモの前に差し込む入力（定期仕訳の名前・予定日など）。値は呼び出し側が持つ */
+  leading?: ReactNode;
   /** 失敗したら ApiError を投げる。エラーはフォームが該当の行・項目に表示する */
   onSubmit: (input: JournalInput) => Promise<unknown>;
 };
@@ -213,6 +242,9 @@ export function JournalForm({
   journal,
   correctsJournalId,
   submitLabel = "登録する",
+  formLabel = "仕訳",
+  hideDate = false,
+  leading,
   onSubmit,
 }: JournalFormProps) {
   const form: Form = useForm<FormInput, unknown, FormOutput>({
@@ -285,31 +317,34 @@ export function JournalForm({
   const pending = form.formState.isSubmitting;
 
   return (
-    <form noValidate aria-label="仕訳" onSubmit={submit}>
+    <form noValidate aria-label={formLabel} onSubmit={submit}>
       <fieldset disabled={pending} className="grid gap-4">
-        <div className="grid gap-4 sm:grid-cols-[12rem_1fr]">
-          <div className="grid content-start gap-1">
-            <label htmlFor="journal-date" className="text-sm font-medium">
-              日付
-            </label>
-            <Input
-              id="journal-date"
-              type="date"
-              aria-invalid={errors.date ? true : undefined}
-              aria-describedby="journal-date-error"
-              {...form.register("date")}
-            />
-            <FieldError id="journal-date-error" message={errors.date?.message} />
-            {suggestPeriod && (
-              <Link
-                to="/e/$entityId/periods"
-                params={{ entityId }}
-                className="text-sm text-primary underline underline-offset-4"
-              >
-                会計期間を作成する
-              </Link>
-            )}
-          </div>
+        {leading}
+        <div className={cn("grid gap-4", hideDate ? undefined : "sm:grid-cols-[12rem_1fr]")}>
+          {!hideDate && (
+            <div className="grid content-start gap-1">
+              <label htmlFor="journal-date" className="text-sm font-medium">
+                日付
+              </label>
+              <Input
+                id="journal-date"
+                type="date"
+                aria-invalid={errors.date ? true : undefined}
+                aria-describedby="journal-date-error"
+                {...form.register("date")}
+              />
+              <FieldError id="journal-date-error" message={errors.date?.message} />
+              {suggestPeriod && (
+                <Link
+                  to="/e/$entityId/periods"
+                  params={{ entityId }}
+                  className="text-sm text-primary underline underline-offset-4"
+                >
+                  会計期間を作成する
+                </Link>
+              )}
+            </div>
+          )}
           <div className="grid content-start gap-1">
             <label htmlFor="journal-memo" className="text-sm font-medium">
               メモ
