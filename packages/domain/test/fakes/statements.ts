@@ -115,6 +115,19 @@ export class InMemoryStatementStore implements StatementStore {
     target.changedAckAt = null;
   }
 
+  acknowledgeStatementChange(id: string, at: string): void {
+    const target = this.state.statements.find((s) => s.id === id);
+    if (target === undefined) throw new Error(`statement not found: ${id}`);
+    target.changedAckAt = at;
+  }
+
+  setStatementExcluded(id: string, excluded: { at: string; reason: string | null } | null): void {
+    const target = this.state.statements.find((s) => s.id === id);
+    if (target === undefined) throw new Error(`statement not found: ${id}`);
+    target.excludedAt = excluded?.at ?? null;
+    target.excludedReason = excluded?.reason ?? null;
+  }
+
   listStatementCandidates(): StatementCandidateRecord[] {
     return structuredClone(this.state.candidates);
   }
@@ -156,6 +169,15 @@ export class InMemoryStatementStore implements StatementStore {
       }
     }
     this.state.links.push(structuredClone(link));
+  }
+
+  revokeStatementLink(id: string, at: string, reason: string): void {
+    const target = this.state.links.find((l) => l.id === id);
+    if (target === undefined || target.revokedAt !== null) {
+      throw new Error(`active statement link not found: ${id}`);
+    }
+    target.revokedAt = at;
+    target.revokedReason = reason;
   }
 
   getStatementSettings(): StatementSettings | undefined {

@@ -237,7 +237,7 @@ describe("buildCandidates: 振替の対（R6）", () => {
       { side: "credit", accountId: ctx.bank, amount: 5000 },
     ]);
     expect(candidateOf(idOf("受取"))?.method).toBe("none");
-    // private の口座の明細は AI に回さない
+    // 振替の対として作った候補は AI に回さない
     expect(r.needsAi).toEqual([]);
   });
 
@@ -273,6 +273,20 @@ describe("buildCandidates: none・対象・作り直し", () => {
     });
     expect(c?.reason).not.toBe("");
     expect(r).toEqual({ built: 1, needsAi: [idOf("ショップ001")] });
+  });
+
+  it("private の口座の none も AI に回す（私用の口座の出金も事業／私用の判定が要る。US2-5）", () => {
+    mapBank();
+    mapPrivate();
+    importRows([
+      row({ accountName: "テスト現金", content: "私用の口座の支払い", amount: -2_000 }),
+      row({ content: "銀行の支払い", amount: -500 }),
+    ]);
+    const r = ok(buildCandidates(ctx.deps));
+    const id = idOf("私用の口座の支払い");
+    expect(candidateOf(id)).toMatchObject({ method: "none", purpose: null, draftJson: null });
+    expect(candidateOf(id)?.reason).not.toContain("除外してください");
+    expect([...r.needsAi].sort()).toEqual([id, idOf("銀行の支払い")].sort());
   });
 
   it("0 円は候補を作らない（AI にも回さない）", () => {

@@ -75,5 +75,6 @@ export * from "./usecases/journal-queries.ts";
 export * from "./usecases/masters.ts";
 export * from "./usecases/recurring.ts";
 export * from "./usecases/reports.ts";
+export * from "./usecases/statement-approval.ts";
 export * from "./usecases/statements.ts";
 export * from "./usecases/void-journal.ts";

@@ -122,7 +122,7 @@ export type BuildResult = { built: number; needsAi: string[] };
  * 候補を作る（R8: 既存の仕訳 → 振替の対 → none。ルールの段は US3 が足す）。
  * `targetIds` のうち、未処理で 0 円でない明細の候補を作り直す。0 円の明細は候補を作らず、あれば消す。
  * AI の候補（`local_ai`・`external_ai`）は、前の段で作れなかったとき `rebuild` でなければ残す（AI の呼び出しは遅い）。
- * `built` は書いた候補の数（none を含む）。`needsAi` は none で、AI に回す明細（`private` の口座を除く）
+ * `built` は書いた候補の数（none を含む）。`needsAi` は none で、AI に回す明細（`private` の口座も含む）
  */
 export function buildCandidatesInTx(
   deps: { clock: { now(): string } },
@@ -206,10 +206,7 @@ export function buildCandidatesInTx(
     // 3. （ルール・AI は後の段）作れなければ none
     const previous = existing.get(record.id);
     if (!rebuild && previous !== undefined && AI_METHODS.has(previous.method)) continue;
-    if (account.usage === "private") {
-      write(record.id, noneBody(PRIVATE_ACCOUNT_REASON));
-      continue;
-    }
+    // private の口座の出金・入金も事業／私用の判定が要るので、AI に回す（US2-5）
     const guess = inferUnpairedTransfer(record);
     write(
       record.id,

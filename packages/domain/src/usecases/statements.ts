@@ -179,7 +179,7 @@ export type StatementImportCommitInput = StatementImportInput & {
   expected: { inputSha256: string; countNew: number };
 };
 
-type StatementTx = Parameters<Parameters<StatementUnitOfWork["run"]>[0]>[0];
+export type StatementTx = Parameters<Parameters<StatementUnitOfWork["run"]>[0]>[0];
 
 /** 計画を立てる（保存済みの明細と口座を読む）。`accounts` は口座の ID の引き当てにも使う */
 function buildPlan(statements: StatementStore, rows: PastedRow[]) {
@@ -423,48 +423,54 @@ export function listStatements(
   deps: Pick<StatementDeps, "uow">,
   query: StatementListQuery = {},
 ): Result<StatementView[]> {
-  return deps.uow.run((tx) => {
-    const accounts = new Map(tx.statements.listStatementAccounts().map((a) => [a.id, a]));
-    const candidates = new Map(
-      tx.statements.listStatementCandidates().map((c) => [c.statementId, c]),
-    );
-    const views: StatementView[] = [];
-    for (const { record, status, activeLinks } of loadStatementStates(tx)) {
-      if (query.accountId !== undefined && record.statementAccountId !== query.accountId) continue;
-      if (query.from !== undefined && record.date < query.from) continue;
-      if (query.to !== undefined && record.date > query.to) continue;
-      const account = accounts.get(record.statementAccountId) as StatementAccount;
-      const changed =
-        record.changedJson !== null && record.changedAckAt === null
-          ? {
-              before: contentOf(record, account.name),
-              after: JSON.parse(record.changedJson) as StatementChange["after"],
-            }
-          : null;
-      if (
-        query.status === "changed"
-          ? changed === null
-          : query.status !== undefined && query.status !== status
-      ) {
-        continue;
-      }
-      const candidate = candidates.get(record.id);
-      views.push({
-        id: record.id,
-        date: record.date,
-        amount: record.amount,
-        content: record.content,
-        accountName: account.name,
-        usage: account.usage,
-        status,
-        changed,
-        candidate: candidate === undefined ? null : toCandidateView(candidate),
-        links: activeLinks.map((l) => ({ journalId: l.journalId, kind: l.kind })),
-      });
+  return deps.uow.run((tx) => ok(statementViewsInTx(tx, query)));
+}
+
+/** `listStatements` の中身。UnitOfWork の中（`tx`）で呼ぶ（承認・除外などが更新後の 1 件を返すのに使う） */
+export function statementViewsInTx(
+  tx: StatementTx,
+  query: StatementListQuery = {},
+): StatementView[] {
+  const accounts = new Map(tx.statements.listStatementAccounts().map((a) => [a.id, a]));
+  const candidates = new Map(
+    tx.statements.listStatementCandidates().map((c) => [c.statementId, c]),
+  );
+  const views: StatementView[] = [];
+  for (const { record, status, activeLinks } of loadStatementStates(tx)) {
+    if (query.accountId !== undefined && record.statementAccountId !== query.accountId) continue;
+    if (query.from !== undefined && record.date < query.from) continue;
+    if (query.to !== undefined && record.date > query.to) continue;
+    const account = accounts.get(record.statementAccountId) as StatementAccount;
+    const changed =
+      record.changedJson !== null && record.changedAckAt === null
+        ? {
+            before: contentOf(record, account.name),
+            after: JSON.parse(record.changedJson) as StatementChange["after"],
+          }
+        : null;
+    if (
+      query.status === "changed"
+        ? changed === null
+        : query.status !== undefined && query.status !== status
+    ) {
+      continue;
     }
-    // 取り込んだ順の新しい方を先にして、日付で安定に並べる
-    return ok(views.reverse().sort((a, b) => b.date.localeCompare(a.date)));
-  });
+    const candidate = candidates.get(record.id);
+    views.push({
+      id: record.id,
+      date: record.date,
+      amount: record.amount,
+      content: record.content,
+      accountName: account.name,
+      usage: account.usage,
+      status,
+      changed,
+      candidate: candidate === undefined ? null : toCandidateView(candidate),
+      links: activeLinks.map((l) => ({ journalId: l.journalId, kind: l.kind })),
+    });
+  }
+  // 取り込んだ順の新しい方を先にして、日付で安定に並べる
+  return views.reverse().sort((a, b) => b.date.localeCompare(a.date));
 }
 
 // ---- 設定（§1.8、R12、FR-018・027） ----

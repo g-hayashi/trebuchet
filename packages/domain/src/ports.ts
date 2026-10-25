@@ -373,6 +373,10 @@ export interface StatementStore {
   listStatements(): StatementRecord[];
   /** `changed_json` を書き、`changed_ack_at` を NULL に戻す（FR-005）。明細がなければ例外 */
   markStatementChanged(id: string, changedJson: string): void;
+  /** `changed_ack_at` を書く（「確認した」。FR-005）。明細がなければ例外 */
+  acknowledgeStatementChange(id: string, at: string): void;
+  /** 除外する（`{ at, reason }`）か、除外を取り消す（null。`excluded_*` を NULL に戻す）。明細がなければ例外（FR-017） */
+  setStatementExcluded(id: string, excluded: { at: string; reason: string | null } | null): void;
 
   // ---- 候補（US2。§1.4） ----
   /** 明細ごとに高々 1 件。並びは問わない */
@@ -386,6 +390,8 @@ export interface StatementStore {
   listStatementLinks(): StatementLinkRecord[];
   /** 有効な結びつきの重複（明細ごと・仕訳の行ごと）は一意制約の違反で例外（INV-43） */
   insertStatementLink(link: StatementLinkRecord): void;
+  /** 有効な結びつきを失効させる（`revoked_at`・`revoked_reason`）。ない・失効済みなら例外 */
+  revokeStatementLink(id: string, at: string, reason: string): void;
 
   // ---- 設定（US2。§1.8） ----
   /** 保存がなければ undefined */

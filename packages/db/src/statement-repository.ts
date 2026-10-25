@@ -7,7 +7,7 @@ import type {
   StatementUnitOfWork,
 } from "@trebuchet/domain";
 import type { StatementAccount, StatementBatch, StatementSettings } from "@trebuchet/schema";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { insertionOrder, type TenantConn } from "./internal.ts";
 import {
   statementAccounts,
@@ -89,6 +89,24 @@ export class DrizzleStatementStore implements StatementStore {
     if (result.changes === 0) throw new Error(`statement not found: ${id}`);
   }
 
+  acknowledgeStatementChange(id: string, at: string): void {
+    const result = this.db
+      .update(statements)
+      .set({ changedAckAt: at })
+      .where(eq(statements.id, id))
+      .run();
+    if (result.changes === 0) throw new Error(`statement not found: ${id}`);
+  }
+
+  setStatementExcluded(id: string, excluded: { at: string; reason: string | null } | null): void {
+    const result = this.db
+      .update(statements)
+      .set({ excludedAt: excluded?.at ?? null, excludedReason: excluded?.reason ?? null })
+      .where(eq(statements.id, id))
+      .run();
+    if (result.changes === 0) throw new Error(`statement not found: ${id}`);
+  }
+
   listStatementCandidates(): StatementCandidateRecord[] {
     return this.db.select().from(statementCandidates).orderBy(insertionOrder).all();
   }
@@ -115,6 +133,15 @@ export class DrizzleStatementStore implements StatementStore {
 
   insertStatementLink(link: StatementLinkRecord): void {
     this.db.insert(statementLinks).values(link).run();
+  }
+
+  revokeStatementLink(id: string, at: string, reason: string): void {
+    const result = this.db
+      .update(statementLinks)
+      .set({ revokedAt: at, revokedReason: reason })
+      .where(and(eq(statementLinks.id, id), isNull(statementLinks.revokedAt)))
+      .run();
+    if (result.changes === 0) throw new Error(`active statement link not found: ${id}`);
   }
 
   getStatementSettings(): StatementSettings | undefined {
