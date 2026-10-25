@@ -5,7 +5,14 @@ import {
   type TempDataDir,
   useTempDataDir,
 } from "@trebuchet/db/testing";
-import { domainError, err, ok, type SuggestionProvider } from "@trebuchet/domain";
+import {
+  domainError,
+  err,
+  ok,
+  type SuggestionContext,
+  type SuggestionPayload,
+  type SuggestionProvider,
+} from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.ts";
 import { statementDeps, unavailableSuggestionProvider } from "../src/deps.ts";
@@ -21,6 +28,18 @@ beforeEach(() => {
 afterEach(() => tmp.cleanup());
 
 const clock = { now: () => "2026-10-31T03:00:00.000Z" };
+
+const PAYLOAD: SuggestionPayload = {
+  date: "2026-05-10",
+  amount: 1,
+  direction: "out",
+  content: "",
+  categoryMajor: null,
+  categoryMinor: null,
+  accountKind: "bank",
+  accountUsage: "business",
+};
+const CONTEXT: SuggestionContext = { accounts: [], taxCategories: [] };
 
 describe("statementDeps", () => {
   it("UnitOfWork・ids・clock と、端末内・外部の SuggestionProvider を返す", () => {
@@ -38,7 +57,7 @@ describe("statementDeps", () => {
     const { suggestion } = statementDeps(db, clock);
     for (const provider of [suggestion.local, suggestion.external]) {
       expect(await provider.available()).toBe(false);
-      const r = await provider.suggest({}, {});
+      const r = await provider.suggest(PAYLOAD, CONTEXT);
       expect(r.ok).toBe(false);
     }
     expect(await unavailableSuggestionProvider.available()).toBe(false);
@@ -57,7 +76,7 @@ describe("statementDeps", () => {
     const deps = statementDeps(db, clock, { local, external });
     expect(deps.suggestion.local).toBe(local);
     expect(deps.suggestion.external).toBe(external);
-    expect(await deps.suggestion.local.suggest({}, {})).toEqual(ok({ from: "local" }));
+    expect(await deps.suggestion.local.suggest(PAYLOAD, CONTEXT)).toEqual(ok({ from: "local" }));
   });
 
   it("db を取り違えない（別の事業体の UnitOfWork は別の DB）", () => {

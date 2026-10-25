@@ -26,7 +26,7 @@ import {
 // 候補の作成の中身（006 R5〜R8）。`usecases/statements.ts` の `buildCandidates`・`saveStatementAccount`・
 // `listStatements` が使う。UnitOfWork の中（`tx`）で呼ぶ。入れ子の UnitOfWork を作らない
 
-type StatementTx = Parameters<Parameters<StatementUnitOfWork["run"]>[0]>[0];
+export type StatementTx = Parameters<Parameters<StatementUnitOfWork["run"]>[0]>[0];
 
 /** 明細と、導出した状態・有効な結びつき */
 export type StatementState = {
@@ -89,9 +89,9 @@ export function journalsBetween(ledger: LedgerRepository, from: string, to: stri
 }
 
 /** 候補の中身（明細の ID と作成の日時は書くときに付ける） */
-type CandidateBody = Omit<StatementCandidateRecord, "statementId" | "createdAt">;
+export type CandidateBody = Omit<StatementCandidateRecord, "statementId" | "createdAt">;
 
-const noneBody = (reason: string): CandidateBody => ({
+export const noneBody = (reason: string): CandidateBody => ({
   method: "none",
   purpose: null,
   confidence: null,
@@ -116,7 +116,7 @@ const transferBody = (
   model: null,
 });
 
-const PRIVATE_ACCOUNT_REASON = "私用の口座の明細です（仕訳にしません。除外してください）";
+export const PRIVATE_ACCOUNT_REASON = "私用の口座の明細です（仕訳にしません。除外してください）";
 const AI_METHODS = new Set<string>(["local_ai", "external_ai"]);
 
 export type BuildResult = { built: number; needsAi: string[] };

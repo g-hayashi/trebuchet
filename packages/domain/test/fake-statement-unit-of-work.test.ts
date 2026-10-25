@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { NewJournal } from "../src/ports.ts";
+import type { NewJournal, SuggestionPayload } from "../src/ports.ts";
 import { domainError, err, ok, type StatementAuditEntry } from "../src/types.ts";
 import { FakeSuggestionProvider, fakeStatementUnitOfWork } from "./fakes.ts";
 
@@ -98,20 +98,33 @@ describe("fakeStatementUnitOfWork", () => {
   });
 });
 
+const EMPTY_PAYLOAD: SuggestionPayload = {
+  date: "2026-05-10",
+  amount: 1,
+  direction: "out",
+  content: "",
+  categoryMajor: null,
+  categoryMinor: null,
+  accountKind: "bank",
+  accountUsage: "business",
+};
+
 describe("FakeSuggestionProvider", () => {
   it("available と suggest の応答を差し替えられ、呼び出しを記録する", async () => {
     const provider = new FakeSuggestionProvider({ available: true });
     expect(await provider.available()).toBe(true);
     provider.respondWith(ok({ accountCode: "6200" }));
-    const r = await provider.suggest({ amount: -500 }, { accounts: [] });
+    const payload = { ...EMPTY_PAYLOAD, amount: 500 };
+    const context = { accounts: [], taxCategories: [] };
+    const r = await provider.suggest(payload, context);
     expect(r).toEqual(ok({ accountCode: "6200" }));
-    expect(provider.calls).toEqual([{ payload: { amount: -500 }, context: { accounts: [] } }]);
+    expect(provider.calls).toEqual([{ payload, context }]);
   });
 
   it("既定は使えない（available が false、suggest は失敗）", async () => {
     const provider = new FakeSuggestionProvider();
     expect(await provider.available()).toBe(false);
-    const r = await provider.suggest({}, {});
+    const r = await provider.suggest(EMPTY_PAYLOAD, { accounts: [], taxCategories: [] });
     expect(r.ok).toBe(false);
   });
 });
