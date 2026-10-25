@@ -1,4 +1,5 @@
 import type { ImportPreview, ReconciliationResult } from "@trebuchet/schema";
+import { auditEntry } from "../audit.ts";
 import { type FreeeOpeningProposal, proposeOpeningBalances } from "../import/freee/opening.ts";
 import {
   type ImportPlan,
@@ -250,20 +251,15 @@ export function commitFreeeImport(
         source: "import_freee",
         lines,
       });
-      tx.ledger.appendAudit({
-        id: deps.ids.next(),
-        occurredAt: now,
-        targetType: "journal",
-        targetId: journal.id,
-        action: "create",
-        reason: null,
-        beforeJson: null,
-        afterJson: JSON.stringify({
-          ...journal,
-          importBatchId: batchId,
-          freeeJournalId: p.freee.freeeJournalId,
+      tx.ledger.appendAudit(
+        auditEntry(deps, {
+          targetType: "journal",
+          targetId: journal.id,
+          action: "create",
+          after: { ...journal, importBatchId: batchId, freeeJournalId: p.freee.freeeJournalId },
+          at: now,
         }),
-      });
+      );
       journals.push(journal);
       refs.push({
         journalId: journal.id,
@@ -666,16 +662,17 @@ export function voidImportBatch(
     const now = deps.clock.now();
     for (const before of journals) {
       const after = tx.ledger.voidJournal(before.id, before.version, now);
-      tx.ledger.appendAudit({
-        id: deps.ids.next(),
-        occurredAt: now,
-        targetType: "journal",
-        targetId: before.id,
-        action: "void",
-        reason: reason.value,
-        beforeJson: JSON.stringify(before),
-        afterJson: JSON.stringify(after),
-      });
+      tx.ledger.appendAudit(
+        auditEntry(deps, {
+          targetType: "journal",
+          targetId: before.id,
+          action: "void",
+          reason: reason.value,
+          before,
+          after,
+          at: now,
+        }),
+      );
     }
     tx.imports.voidBatch(batch.id, reason.value, now);
     const voided = tx.imports.getBatch(batch.id);

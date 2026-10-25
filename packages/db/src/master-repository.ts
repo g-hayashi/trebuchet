@@ -6,6 +6,7 @@ import type {
   MasterRepository,
   OpeningBalance,
   Partner,
+  Result,
   SubAccount,
   Tag,
   TaxCategory,
@@ -16,6 +17,7 @@ import type {
 import type { RunResult } from "better-sqlite3";
 import { asc, eq, sql } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import { inTransaction } from "./rollback.ts";
 import type * as tenantSchema from "./schema/tenant.ts";
 import {
   accounts,
@@ -46,9 +48,9 @@ export class DrizzleMasterRepository implements MasterRepository {
     this.db = db;
   }
 
-  /** SQLite のトランザクション（入れ子は SAVEPOINT）。例外でロールバックする */
-  transaction<T>(fn: (tx: MasterRepository) => T): T {
-    return this.db.transaction((tx) => fn(new DrizzleMasterRepository(tx)));
+  /** SQLite のトランザクション（入れ子は SAVEPOINT）。`err` か例外でロールバックする */
+  transaction<T>(fn: (tx: MasterRepository) => Result<T>): Result<T> {
+    return inTransaction(this.db, (tx) => fn(new DrizzleMasterRepository(tx)));
   }
 
   appendAudit(entry: AuditEntry): void {

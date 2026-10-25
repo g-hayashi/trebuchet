@@ -11,6 +11,7 @@ import {
   type TaxReturnMemoInput,
   YEN_LIMIT,
 } from "@trebuchet/schema";
+import { auditEntry } from "../audit.ts";
 import type { PriorPeriod } from "../blue-return/balance-sheet.ts";
 import { buildBlueReturn } from "../blue-return/build.ts";
 import {
@@ -208,16 +209,16 @@ function saveClosingNoteIn(
     updatedAt: now,
   };
   deps.closing.upsertClosingNote(saved);
-  deps.closing.appendClosingAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "closing_note",
-    targetId: `${params.fiscalYear}:${params.kind}`,
-    action: before === undefined ? "create" : "update",
-    reason: null,
-    beforeJson: before === undefined ? null : JSON.stringify(before),
-    afterJson: JSON.stringify(saved),
-  });
+  deps.closing.appendClosingAudit(
+    auditEntry(deps, {
+      targetType: "closing_note",
+      targetId: `${params.fiscalYear}:${params.kind}`,
+      action: before === undefined ? "create" : "update",
+      before,
+      after: saved,
+      at: now,
+    }),
+  );
   return ok(saved);
 }
 
@@ -273,16 +274,16 @@ function saveDeductionAnswersIn(
     updatedAt: now,
   };
   deps.closing.upsertDeductionAnswers(saved);
-  deps.closing.appendClosingAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "blue_deduction_answer",
-    targetId: String(params.fiscalYear),
-    action: before === undefined ? "create" : "update",
-    reason: null,
-    beforeJson: before === undefined ? null : JSON.stringify(before),
-    afterJson: JSON.stringify(saved),
-  });
+  deps.closing.appendClosingAudit(
+    auditEntry(deps, {
+      targetType: "blue_deduction_answer",
+      targetId: String(params.fiscalYear),
+      action: before === undefined ? "create" : "update",
+      before,
+      after: saved,
+      at: now,
+    }),
+  );
   return ok(viewOf(saved, period.value, deps.closing));
 }
 
@@ -343,16 +344,17 @@ function saveHomeUseAllocationIn(
     updatedAt: now,
   };
   deps.closing.upsertHomeUseAllocation(saved);
-  deps.closing.appendClosingAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "home_use_allocation",
-    targetId: saved.id,
-    action: before === undefined ? "create" : "update",
-    reason: saved.changeReason,
-    beforeJson: before === undefined ? null : JSON.stringify(before),
-    afterJson: JSON.stringify(saved),
-  });
+  deps.closing.appendClosingAudit(
+    auditEntry(deps, {
+      targetType: "home_use_allocation",
+      targetId: saved.id,
+      action: before === undefined ? "create" : "update",
+      reason: saved.changeReason,
+      before,
+      after: saved,
+      at: now,
+    }),
+  );
   return ok(saved);
 }
 
@@ -434,16 +436,15 @@ function saveRentDetailsIn(
   }));
   deps.closing.replaceRentDetails(params.fiscalYear, rows);
   if (before.length > 0 || rows.length > 0) {
-    deps.closing.appendClosingAudit({
-      id: deps.ids.next(),
-      occurredAt: deps.clock.now(),
-      targetType: "rent_detail",
-      targetId: String(params.fiscalYear),
-      action: before.length === 0 ? "create" : rows.length === 0 ? "delete" : "update",
-      reason: null,
-      beforeJson: before.length === 0 ? null : JSON.stringify(before),
-      afterJson: rows.length === 0 ? null : JSON.stringify(rows),
-    });
+    deps.closing.appendClosingAudit(
+      auditEntry(deps, {
+        targetType: "rent_detail",
+        targetId: String(params.fiscalYear),
+        action: before.length === 0 ? "create" : rows.length === 0 ? "delete" : "update",
+        before: before.length === 0 ? null : before,
+        after: rows.length === 0 ? null : rows,
+      }),
+    );
   }
   return ok(rows);
 }
@@ -524,16 +525,17 @@ function saveFixedAssetIn(
     updatedAt: now,
   };
   deps.closing.upsertFixedAsset(saved);
-  deps.closing.appendClosingAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "fixed_asset",
-    targetId: saved.id,
-    action: before === undefined ? "create" : "update",
-    reason: params.reason?.trim() || null,
-    beforeJson: before === undefined ? null : JSON.stringify(before),
-    afterJson: JSON.stringify(saved),
-  });
+  deps.closing.appendClosingAudit(
+    auditEntry(deps, {
+      targetType: "fixed_asset",
+      targetId: saved.id,
+      action: before === undefined ? "create" : "update",
+      reason: params.reason?.trim() || null,
+      before,
+      after: saved,
+      at: now,
+    }),
+  );
   return ok(saved);
 }
 
@@ -579,16 +581,17 @@ function disposeFixedAssetIn(
   const now = deps.clock.now();
   const saved: FixedAsset = { ...before, disposedOn: params.disposedOn, updatedAt: now };
   deps.closing.upsertFixedAsset(saved);
-  deps.closing.appendClosingAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "fixed_asset",
-    targetId: saved.id,
-    action: "dispose",
-    reason: params.reason.trim() || null,
-    beforeJson: JSON.stringify(before),
-    afterJson: JSON.stringify(saved),
-  });
+  deps.closing.appendClosingAudit(
+    auditEntry(deps, {
+      targetType: "fixed_asset",
+      targetId: saved.id,
+      action: "dispose",
+      reason: params.reason.trim() || null,
+      before,
+      after: saved,
+      at: now,
+    }),
+  );
   return ok(saved);
 }
 

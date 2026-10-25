@@ -9,6 +9,7 @@ import {
   INDIVIDUAL_ACCOUNTS,
   NORMAL_SIDE,
   type OpeningBalance,
+  ok,
   TAX_CATEGORIES,
   TAX_RATES,
 } from "@trebuchet/domain";
@@ -305,9 +306,9 @@ describe("DrizzleMasterRepository", () => {
       const a = account("asset");
       const result = repo.transaction((tx) => {
         tx.insertAccount(a);
-        return tx.getAccount(a.id);
+        return ok(tx.getAccount(a.id));
       });
-      expect(result).toEqual(a);
+      expect(result).toEqual(ok(a));
       expect(repo.getAccount(a.id)).toEqual(a);
     });
 
@@ -331,7 +332,7 @@ describe("DrizzleMasterRepository", () => {
       expect(() =>
         repo.transaction((tx) => {
           tx.insertAccount(a);
-          tx.transaction((inner) => {
+          return tx.transaction((inner) => {
             inner.insertAccount(b);
             throw new Error("inner");
           });

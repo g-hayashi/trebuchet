@@ -1,3 +1,4 @@
+import { type AuditInput, auditEntry } from "../audit.ts";
 import { addDays, oneYearEnd } from "../dates.ts";
 import { type OpeningBalanceDraft, validateOpeningBalances } from "../opening.ts";
 import type {
@@ -55,27 +56,13 @@ function validName(
 const accountNotFound = (accountId: string) =>
   err(domainError("ACCOUNT_NOT_FOUND", "勘定科目が見つかりません", { accountId }));
 
+/** マスタの変更を audit_log に残す（理由なし、日時は今） */
 function appendAudit(
   deps: MasterDeps,
   tx: MasterRepository,
-  entry: {
-    targetType: AuditTargetType;
-    targetId: string;
-    action: AuditAction;
-    before: unknown;
-    after: unknown;
-  },
+  entry: AuditInput<AuditTargetType, AuditAction>,
 ): void {
-  tx.appendAudit({
-    id: deps.ids.next(),
-    occurredAt: deps.clock.now(),
-    targetType: entry.targetType,
-    targetId: entry.targetId,
-    action: entry.action,
-    reason: null,
-    beforeJson: JSON.stringify(entry.before),
-    afterJson: JSON.stringify(entry.after),
-  });
+  tx.appendAudit(auditEntry(deps, entry));
 }
 
 // ---- 勘定科目（FR-004, FR-005） ----
@@ -289,16 +276,15 @@ export function setAccountReportLine(
     if (account.reportLine === reportLine) return ok(account);
     const updated = { ...account, reportLine };
     tx.updateAccount(updated);
-    deps.closing.appendClosingAudit({
-      id: deps.ids.next(),
-      occurredAt: deps.clock.now(),
-      targetType: "account_report_line",
-      targetId: accountId,
-      action: "update",
-      reason: null,
-      beforeJson: JSON.stringify({ reportLine: account.reportLine }),
-      afterJson: JSON.stringify({ reportLine }),
-    });
+    deps.closing.appendClosingAudit(
+      auditEntry(deps, {
+        targetType: "account_report_line",
+        targetId: accountId,
+        action: "update",
+        before: { reportLine: account.reportLine },
+        after: { reportLine },
+      }),
+    );
     return ok(updated);
   });
 }

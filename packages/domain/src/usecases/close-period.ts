@@ -1,3 +1,4 @@
+import { auditEntry } from "../audit.ts";
 import type { MasterRepository } from "../ports.ts";
 import {
   type AuditAction,
@@ -35,16 +36,17 @@ function transition(
   now: string,
 ): FiscalPeriod {
   tx.updateFiscalPeriod(after);
-  tx.appendAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "fiscal_period",
-    targetId: before.id,
-    action,
-    reason,
-    beforeJson: JSON.stringify(before),
-    afterJson: JSON.stringify(after),
-  });
+  tx.appendAudit(
+    auditEntry(deps, {
+      targetType: "fiscal_period",
+      targetId: before.id,
+      action,
+      reason,
+      before,
+      after,
+      at: now,
+    }),
+  );
   return after;
 }
 

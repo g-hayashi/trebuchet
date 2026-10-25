@@ -142,7 +142,7 @@ const emptyState = (): MasterState => ({
 });
 
 /**
- * MasterRepository のフェイク。transaction は例外のときに状態を巻き戻す。
+ * MasterRepository のフェイク。transaction は err か例外のときに状態を巻き戻す。
  * 仕訳で使われた科目は usedAccountIds で表す。
  */
 export class InMemoryMasterRepository implements MasterRepository {
@@ -156,10 +156,12 @@ export class InMemoryMasterRepository implements MasterRepository {
     return this.state.audits;
   }
 
-  transaction<T>(fn: (tx: MasterRepository) => T): T {
+  transaction<T>(fn: (tx: MasterRepository) => Result<T>): Result<T> {
     const snapshot = structuredClone(this.state);
     try {
-      return fn(this);
+      const result = fn(this);
+      if (!result.ok) this.state = snapshot;
+      return result;
     } catch (e) {
       this.state = snapshot;
       throw e;
@@ -277,7 +279,7 @@ export class InMemoryMasterRepository implements MasterRepository {
   }
 }
 
-/** LedgerRepository のフェイク。transaction は例外のときに状態を巻き戻す */
+/** LedgerRepository のフェイク。transaction は err か例外のときに状態を巻き戻す */
 export class InMemoryLedgerRepository implements LedgerRepository {
   state: { journals: Journal[]; audits: AuditEntry[] } = { journals: [], audits: [] };
   /** true なら appendAudit で例外を投げる（ロールバックの確認用） */
@@ -290,10 +292,12 @@ export class InMemoryLedgerRepository implements LedgerRepository {
     return this.state.audits;
   }
 
-  transaction<T>(fn: (tx: LedgerRepository) => T): T {
+  transaction<T>(fn: (tx: LedgerRepository) => Result<T>): Result<T> {
     const snapshot = structuredClone(this.state);
     try {
-      return fn(this);
+      const result = fn(this);
+      if (!result.ok) this.state = snapshot;
+      return result;
     } catch (e) {
       this.state = snapshot;
       throw e;

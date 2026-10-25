@@ -23,6 +23,7 @@ import {
   type WorkHoursInput,
   YEN_LIMIT,
 } from "@trebuchet/schema";
+import { auditEntry } from "../audit.ts";
 import { isValidDate } from "../dates.ts";
 import { itemAmount } from "../invoicing/amounts.ts";
 import { buildInvoiceDetail, buildInvoiceSummary, toPaymentView } from "../invoicing/detail.ts";
@@ -131,16 +132,16 @@ export function saveInvoiceSettings(
       updatedAt: now,
     };
     invoicing.upsertInvoiceSettings(saved);
-    invoicing.appendInvoicingAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "invoice_settings",
-      targetId: "1",
-      action: before === null ? "create" : "update",
-      reason: null,
-      beforeJson: before === null ? null : JSON.stringify(before),
-      afterJson: JSON.stringify(saved),
-    });
+    invoicing.appendInvoicingAudit(
+      auditEntry(deps, {
+        targetType: "invoice_settings",
+        targetId: "1",
+        action: before === null ? "create" : "update",
+        before,
+        after: saved,
+        at: now,
+      }),
+    );
     return ok(saved);
   });
 }
@@ -205,16 +206,16 @@ export function saveBillingTerms(
       updatedAt: now,
     };
     invoicing.upsertBillingTerms(saved);
-    invoicing.appendInvoicingAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "billing_terms",
-      targetId: partnerId,
-      action: before === null ? "create" : "update",
-      reason: null,
-      beforeJson: before === null ? null : JSON.stringify(before),
-      afterJson: JSON.stringify(saved),
-    });
+    invoicing.appendInvoicingAudit(
+      auditEntry(deps, {
+        targetType: "billing_terms",
+        targetId: partnerId,
+        action: before === null ? "create" : "update",
+        before,
+        after: saved,
+        at: now,
+      }),
+    );
     return ok(saved);
   });
 }
@@ -228,16 +229,14 @@ export function deleteBillingTerms(deps: InvoicingSettingsDeps, partnerId: strin
     const before = invoicing.getBillingTerms(partnerId);
     if (before === null) return ok(null);
     invoicing.deleteBillingTerms(partnerId);
-    invoicing.appendInvoicingAudit({
-      id: deps.ids.next(),
-      occurredAt: deps.clock.now(),
-      targetType: "billing_terms",
-      targetId: partnerId,
-      action: "void",
-      reason: null,
-      beforeJson: JSON.stringify(before),
-      afterJson: null,
-    });
+    invoicing.appendInvoicingAudit(
+      auditEntry(deps, {
+        targetType: "billing_terms",
+        targetId: partnerId,
+        action: "void",
+        before,
+      }),
+    );
     return ok(null);
   });
 }
@@ -325,16 +324,16 @@ export function saveWorkHours(
         updatedAt: now,
       };
       invoicing.upsertWorkHours(row);
-      invoicing.appendInvoicingAudit({
-        id: deps.ids.next(),
-        occurredAt: now,
-        targetType: "work_hours",
-        targetId: `${entry.partnerId}:${month}`,
-        action: before === null ? "create" : "update",
-        reason: null,
-        beforeJson: before === null ? null : JSON.stringify(before),
-        afterJson: JSON.stringify(row),
-      });
+      invoicing.appendInvoicingAudit(
+        auditEntry(deps, {
+          targetType: "work_hours",
+          targetId: `${entry.partnerId}:${month}`,
+          action: before === null ? "create" : "update",
+          before,
+          after: row,
+          at: now,
+        }),
+      );
     }
     return ok(workHoursEntries(invoicing, masters.listPartners(), month));
   });
@@ -585,16 +584,15 @@ export function issueInvoice(
       invoiceId: invoice.id,
     }));
     invoicing.insertInvoiceItems(items);
-    invoicing.appendInvoicingAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "invoice",
-      targetId: invoice.id,
-      action: "create",
-      reason: null,
-      beforeJson: null,
-      afterJson: JSON.stringify({ invoice, items }),
-    });
+    invoicing.appendInvoicingAudit(
+      auditEntry(deps, {
+        targetType: "invoice",
+        targetId: invoice.id,
+        action: "create",
+        after: { invoice, items },
+        at: now,
+      }),
+    );
     return ok({ invoice: buildInvoiceDetail(invoice, items, [], today), journal });
   });
 }
@@ -669,16 +667,17 @@ export function voidInvoice(
       voidReason: reason.value,
       voidJournalId,
     };
-    invoicing.appendInvoicingAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "invoice",
-      targetId: invoiceId,
-      action: "void",
-      reason: reason.value,
-      beforeJson: JSON.stringify(invoice),
-      afterJson: JSON.stringify(voidedInvoice),
-    });
+    invoicing.appendInvoicingAudit(
+      auditEntry(deps, {
+        targetType: "invoice",
+        targetId: invoiceId,
+        action: "void",
+        reason: reason.value,
+        before: invoice,
+        after: voidedInvoice,
+        at: now,
+      }),
+    );
     return ok({
       invoice: buildInvoiceDetail(
         voidedInvoice,
@@ -817,16 +816,15 @@ export function recordPayment(
       voidJournalId: null,
     };
     invoicing.insertPayment(payment);
-    invoicing.appendInvoicingAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "payment",
-      targetId: payment.id,
-      action: "create",
-      reason: null,
-      beforeJson: null,
-      afterJson: JSON.stringify(payment),
-    });
+    invoicing.appendInvoicingAudit(
+      auditEntry(deps, {
+        targetType: "payment",
+        targetId: payment.id,
+        action: "create",
+        after: payment,
+        at: now,
+      }),
+    );
     return ok({
       payment: toPaymentView(payment),
       invoice: buildInvoiceDetail(
@@ -907,16 +905,17 @@ export function voidPayment(
       voidReason: reason.value,
       voidJournalId,
     };
-    invoicing.appendInvoicingAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "payment",
-      targetId: paymentId,
-      action: "void",
-      reason: reason.value,
-      beforeJson: JSON.stringify(payment),
-      afterJson: JSON.stringify(voided),
-    });
+    invoicing.appendInvoicingAudit(
+      auditEntry(deps, {
+        targetType: "payment",
+        targetId: paymentId,
+        action: "void",
+        reason: reason.value,
+        before: payment,
+        after: voided,
+        at: now,
+      }),
+    );
     return ok({
       payment: toPaymentView(voided),
       invoice: buildInvoiceDetail(

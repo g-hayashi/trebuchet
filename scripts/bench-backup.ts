@@ -28,7 +28,7 @@ import { DrizzleMasterRepository } from "../packages/db/src/master-repository.ts
 import { DrizzleRegistryRepository } from "../packages/db/src/registry-repository.ts";
 import { openRegistry, openTenant } from "../packages/db/src/tenant-store.ts";
 import { TMP_ROOT, useTempDataDir } from "../packages/db/src/testing.ts";
-import type { JournalLine, ValidLine } from "../packages/domain/src/types.ts";
+import { type JournalLine, ok, type ValidLine } from "../packages/domain/src/types.ts";
 import { createEntity } from "../packages/domain/src/usecases/create-entity.ts";
 import { createNextFiscalPeriod } from "../packages/domain/src/usecases/masters.ts";
 
@@ -130,6 +130,7 @@ try {
           journalCount += 1;
         }
       }
+      return ok(null);
     });
   }
   console.log(

@@ -1,3 +1,4 @@
+export * from "./audit.ts";
 export * from "./auth/access.ts";
 export * from "./auth/passkeys.ts";
 export * from "./auth/recovery.ts";

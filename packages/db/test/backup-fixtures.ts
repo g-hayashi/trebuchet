@@ -1,5 +1,11 @@
 import { randomUUIDv7 } from "node:crypto";
-import { createEntity, type EntityKind, type NewJournal, validateJournal } from "@trebuchet/domain";
+import {
+  createEntity,
+  type EntityKind,
+  type NewJournal,
+  ok,
+  validateJournal,
+} from "@trebuchet/domain";
 import { balancedLinesArb, dateInPeriodArb, fc } from "@trebuchet/domain/testing";
 import type Database from "better-sqlite3";
 import { DrizzleClosingStore } from "../src/closing-repository.ts";
@@ -85,6 +91,7 @@ export function addJournals(entityId: string, count: number, seed: number, memo 
       };
       tx.insertJournal(journal);
     }
+    return ok(null);
   });
 }
 

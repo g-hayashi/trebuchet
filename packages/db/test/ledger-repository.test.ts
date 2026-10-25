@@ -7,6 +7,7 @@ import {
   type Journal,
   type JournalDraft,
   type NewJournal,
+  ok,
   validateJournal,
 } from "@trebuchet/domain";
 import { balancedLinesArb, dateInPeriodArb, fc } from "@trebuchet/domain/testing";
@@ -170,6 +171,7 @@ describe("DrizzleLedgerRepository（US2）", () => {
       expect(no).toBe(1);
       tx.insertJournal(newJournal(sale(), no));
       expect(tx.nextJournalNo()).toBe(2);
+      return ok(null);
     });
     expect(ledger.nextJournalNo()).toBe(2);
     expect(() =>
@@ -209,6 +211,7 @@ describe("DrizzleLedgerRepository（US2）", () => {
       fc.property(fc.array(journalArb, { minLength: 1000, maxLength: 1000 }), (drafts) => {
         ledger.transaction((tx) => {
           for (const draft of drafts) tx.insertJournal(newJournal(draft, tx.nextJournalNo(), ctx));
+          return ok(null);
         });
         expect(db.$client.prepare("SELECT * FROM v_unbalanced_journals").all()).toEqual([]);
       }),

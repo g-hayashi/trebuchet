@@ -1,3 +1,4 @@
+import { auditEntry } from "../audit.ts";
 import { RepositoryConflictError } from "../ports.ts";
 import { err, type Journal, ok, type Result } from "../types.ts";
 import {
@@ -42,16 +43,17 @@ export function voidJournal(
       if (e instanceof RepositoryConflictError) return err(versionConflict(before));
       throw e;
     }
-    tx.appendAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "journal",
-      targetId: journalId,
-      action: "void",
-      reason: reason.value,
-      beforeJson: JSON.stringify(before),
-      afterJson: JSON.stringify(after),
-    });
+    tx.appendAudit(
+      auditEntry(deps, {
+        targetType: "journal",
+        targetId: journalId,
+        action: "void",
+        reason: reason.value,
+        before,
+        after,
+        at: now,
+      }),
+    );
     return ok(after);
   });
 }

@@ -110,6 +110,7 @@ export function createEntity(
         accountingMethod: "tax_included",
       },
     ]);
+    return ok(null);
   });
 
   deps.registry.insertEntity({

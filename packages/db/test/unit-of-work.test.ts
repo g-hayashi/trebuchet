@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createClosingUnitOfWork } from "../src/closing-repository.ts";
 import { createImportUnitOfWork } from "../src/import-repository.ts";
 import { createInvoicingUnitOfWork } from "../src/invoicing-repository.ts";
+import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { createRecurringUnitOfWork } from "../src/recurring-repository.ts";
 import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
@@ -203,5 +204,84 @@ describe("drizzleUnitOfWork の入れ子", () => {
     });
     expect(r).toEqual(ok(null));
     expect(counts().journals).toBe((before.journals ?? 0) + 1);
+  });
+});
+
+/** リポジトリ 1 つのトランザクション（001 の ledger.transaction・repo.transaction）への書き込み */
+type RepoKind = {
+  name: string;
+  attempt: (db: TenantDb, write: number, outcome: Outcome) => Result<number>;
+};
+
+const repoAudit = () => ({
+  id: randomUUIDv7(),
+  occurredAt: NOW,
+  targetType: "account" as const,
+  targetId: randomUUIDv7(),
+  action: "create" as const,
+  reason: null,
+  beforeJson: null,
+  afterJson: "{}",
+});
+
+const boom = new Error("途中で失敗");
+const finish = (outcome: Outcome, n: number): Result<number> => {
+  if (outcome === "err") return err(failure);
+  if (outcome === "throw") throw boom;
+  return ok(n);
+};
+
+const REPO_KINDS: RepoKind[] = [
+  {
+    name: "LedgerRepository.transaction",
+    attempt: (db, writes, outcome) => {
+      const masters = new DrizzleMasterRepository(db);
+      return new DrizzleLedgerRepository(db).transaction((tx) => {
+        for (let i = 0; i < writes; i += 1) {
+          post({ ledger: tx, masters });
+          tx.appendAudit(repoAudit());
+        }
+        return finish(outcome, writes);
+      });
+    },
+  },
+  {
+    name: "MasterRepository.transaction",
+    attempt: (db, writes, outcome) =>
+      new DrizzleMasterRepository(db).transaction((tx) => {
+        for (let i = 0; i < writes; i += 1) {
+          tx.insertTag({ id: randomUUIDv7(), name: `タグ${randomUUIDv7()}` });
+          tx.appendAudit(repoAudit());
+        }
+        return finish(outcome, writes);
+      }),
+  },
+];
+
+describe.each(REPO_KINDS)("$name", (kind) => {
+  it("ok なら書き込みが残り、err・例外なら transaction の前と同じ（err と例外はそのまま返す・投げる）", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 3 }),
+        fc.constantFrom<Outcome>("ok", "err", "throw"),
+        (writes, outcome) => {
+          const before = counts();
+          if (outcome === "throw") {
+            expect(() => kind.attempt(db, writes, outcome)).toThrow(boom);
+            expect(counts()).toEqual(before);
+            return;
+          }
+          const result = kind.attempt(db, writes, outcome);
+          if (outcome === "err") {
+            expect(result).toEqual(err(failure));
+            expect(counts()).toEqual(before);
+            return;
+          }
+          expect(result).toEqual(ok(writes));
+          expect(counts().audit_log).toBeGreaterThan(before.audit_log ?? 0);
+        },
+      ),
+      { numRuns: 20 },
+    );
   });
 });

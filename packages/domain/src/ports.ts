@@ -90,7 +90,11 @@ export interface AuditLog {
 
 /** 仕訳の登録と参照（packages/db が実装）。メソッドはすべて同期 */
 export interface JournalRepository extends AuditLog {
-  transaction<T>(fn: (tx: JournalRepository) => T): T;
+  /**
+   * fn を 1 つのトランザクションで実行する（入れ子は SAVEPOINT）。fn が `err` を返すか例外を投げると、
+   * fn の中の書き込みをすべて巻き戻し、同じ `err` を返す・同じ例外を投げ直す（TenantUnitOfWork と同じ）
+   */
+  transaction<T>(fn: (tx: JournalRepository) => Result<T>): Result<T>;
   /** 次の仕訳番号（INV-8）。同じトランザクションの中で insertJournal する */
   nextJournalNo(): number;
   /** 仕訳番号が最大の仕訳（取消済みを含む） */
@@ -104,7 +108,7 @@ export interface JournalRepository extends AuditLog {
 
 /** 仕訳の訂正・取消・履歴・検索（US3） */
 export interface LedgerRepository extends JournalRepository {
-  transaction<T>(fn: (tx: LedgerRepository) => T): T;
+  transaction<T>(fn: (tx: LedgerRepository) => Result<T>): Result<T>;
   /**
    * 日付・メモ・訂正元と行・タグを全件置き換え、version を +1 する。
    * version が一致しなければ RepositoryConflictError
@@ -134,7 +138,8 @@ export interface ReportRepository {
 
 /** マスタの読み書き（packages/db が実装） */
 export interface MasterRepository extends AuditLog {
-  transaction<T>(fn: (tx: MasterRepository) => T): T;
+  /** JournalRepository.transaction と同じ（`err` か例外で巻き戻す） */
+  transaction<T>(fn: (tx: MasterRepository) => Result<T>): Result<T>;
 
   getProfile(): EntityProfile | undefined;
   saveProfile(profile: EntityProfile): void;

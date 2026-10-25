@@ -11,11 +11,13 @@ import {
   type PostedLine,
   type ReportRepository,
   RepositoryConflictError,
+  type Result,
   type TaxCategoryCode,
 } from "@trebuchet/domain";
 import type { RunResult } from "better-sqlite3";
 import { and, asc, between, desc, eq, inArray, max, type SQL, sql } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import { inTransaction } from "./rollback.ts";
 import type * as tenantSchema from "./schema/tenant.ts";
 import {
   accounts,
@@ -47,9 +49,9 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
     this.db = db;
   }
 
-  /** SQLite のトランザクション（入れ子は SAVEPOINT）。例外でロールバックする */
-  transaction<T>(fn: (tx: LedgerRepository) => T): T {
-    return this.db.transaction((tx) => fn(new DrizzleLedgerRepository(tx)));
+  /** SQLite のトランザクション（入れ子は SAVEPOINT）。`err` か例外でロールバックする */
+  transaction<T>(fn: (tx: LedgerRepository) => Result<T>): Result<T> {
+    return inTransaction(this.db, (tx) => fn(new DrizzleLedgerRepository(tx)));
   }
 
   appendAudit(entry: AuditEntry): void {

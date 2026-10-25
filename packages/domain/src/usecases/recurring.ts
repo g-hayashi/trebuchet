@@ -12,6 +12,7 @@ import type {
   ResumeInput,
   SkipRunInput,
 } from "@trebuchet/schema";
+import { auditEntry } from "../audit.ts";
 import { combineErrors, type JournalContext, validateJournal } from "../journal.ts";
 import type { Clock, IdGenerator, RecurringStore, RecurringUnitOfWork } from "../ports.ts";
 import {
@@ -153,16 +154,15 @@ export function createRecurring(
     if (confirm !== undefined) return err(confirm);
 
     recurring.insertRecurring(def);
-    recurring.appendRecurringAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "recurring_journal",
-      targetId: def.id,
-      action: "create",
-      reason: null,
-      beforeJson: null,
-      afterJson: JSON.stringify(def),
-    });
+    recurring.appendRecurringAudit(
+      auditEntry(deps, {
+        targetType: "recurring_journal",
+        targetId: def.id,
+        action: "create",
+        after: def,
+        at: now,
+      }),
+    );
     return ok(def);
   });
 }
@@ -201,16 +201,16 @@ export function updateRecurring(
     if (confirm !== undefined) return err(confirm);
 
     recurring.updateRecurring(after);
-    recurring.appendRecurringAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "recurring_journal",
-      targetId: id,
-      action: "update",
-      reason: null,
-      beforeJson: JSON.stringify(before),
-      afterJson: JSON.stringify(after),
-    });
+    recurring.appendRecurringAudit(
+      auditEntry(deps, {
+        targetType: "recurring_journal",
+        targetId: id,
+        action: "update",
+        before,
+        after,
+        at: now,
+      }),
+    );
     return ok(after);
   });
 }
@@ -235,16 +235,16 @@ export function pauseRecurring(
       updatedAt: now,
     };
     recurring.updateRecurring(after);
-    recurring.appendRecurringAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "recurring_journal",
-      targetId: id,
-      action: "pause",
-      reason: null,
-      beforeJson: JSON.stringify(before),
-      afterJson: JSON.stringify(after),
-    });
+    recurring.appendRecurringAudit(
+      auditEntry(deps, {
+        targetType: "recurring_journal",
+        targetId: id,
+        action: "pause",
+        before,
+        after,
+        at: now,
+      }),
+    );
     return ok(after);
   });
 }
@@ -285,16 +285,16 @@ export function resumeRecurring(
     if (confirm !== undefined) return err(confirm);
 
     recurring.updateRecurring(after);
-    recurring.appendRecurringAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "recurring_journal",
-      targetId: id,
-      action: "resume",
-      reason: null,
-      beforeJson: JSON.stringify(before),
-      afterJson: JSON.stringify(after),
-    });
+    recurring.appendRecurringAudit(
+      auditEntry(deps, {
+        targetType: "recurring_journal",
+        targetId: id,
+        action: "resume",
+        before,
+        after,
+        at: now,
+      }),
+    );
     return ok(after);
   });
 }
@@ -349,16 +349,16 @@ export function skipRecurringRun(
       acknowledgedAt: null,
     };
     recurring.insertRun(run);
-    recurring.appendRecurringAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "recurring_run",
-      targetId: run.id,
-      action: "skip",
-      reason: reason.value,
-      beforeJson: null,
-      afterJson: JSON.stringify(run),
-    });
+    recurring.appendRecurringAudit(
+      auditEntry(deps, {
+        targetType: "recurring_run",
+        targetId: run.id,
+        action: "skip",
+        reason: reason.value,
+        after: run,
+        at: now,
+      }),
+    );
     return ok(toRunView(run));
   });
 }
@@ -410,16 +410,15 @@ export function postDueRecurring(deps: RecurringDeps, today: string): PostDueRes
           acknowledgedAt: null,
         };
         recurring.insertRun(run);
-        recurring.appendRecurringAudit({
-          id: deps.ids.next(),
-          occurredAt: now,
-          targetType: "recurring_run",
-          targetId: run.id,
-          action: "create",
-          reason: null,
-          beforeJson: null,
-          afterJson: JSON.stringify(run),
-        });
+        recurring.appendRecurringAudit(
+          auditEntry(deps, {
+            targetType: "recurring_run",
+            targetId: run.id,
+            action: "create",
+            after: run,
+            at: now,
+          }),
+        );
         return ok(journal);
       });
       if (!posted.ok) {
@@ -513,16 +512,16 @@ export function acknowledgeRuns(deps: RecurringDeps, runIds: string[]): Result<n
       now,
     );
     for (const run of targets) {
-      recurring.appendRecurringAudit({
-        id: deps.ids.next(),
-        occurredAt: now,
-        targetType: "recurring_run",
-        targetId: run.id,
-        action: "acknowledge",
-        reason: null,
-        beforeJson: JSON.stringify(run),
-        afterJson: JSON.stringify({ ...run, acknowledgedAt: now }),
-      });
+      recurring.appendRecurringAudit(
+        auditEntry(deps, {
+          targetType: "recurring_run",
+          targetId: run.id,
+          action: "acknowledge",
+          before: run,
+          after: { ...run, acknowledgedAt: now },
+          at: now,
+        }),
+      );
     }
     return ok(null);
   });

@@ -7,6 +7,8 @@ import {
   fakeImportUnitOfWork,
   fakeInvoicingUnitOfWork,
   fakeRecurringUnitOfWork,
+  InMemoryLedgerRepository,
+  InMemoryMasterRepository,
 } from "./fakes.ts";
 
 // TenantUnitOfWork のフェイク（FakeUnitOfWork）の巻き戻し。db の実装と同じ性質を持つことを確かめる:
@@ -248,5 +250,48 @@ describe("FakeUnitOfWork（TenantUnitOfWork の性質）", () => {
     expect(r2).toEqual(err(failure));
     expect(uow.ledger.journals.map((j) => j.id)).toEqual(["j-1"]);
     expect(uow.masters.listTags().map((t) => t.id)).toEqual(["t-1"]);
+  });
+});
+
+describe("リポジトリ 1 つの transaction のフェイク（db と同じ性質）", () => {
+  it("InMemoryLedgerRepository・InMemoryMasterRepository: ok なら残り、err・例外なら前の状態に戻る", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 4 }), outcomeArb, (writes, outcome) => {
+        const ledger = new InMemoryLedgerRepository();
+        const masters = new InMemoryMasterRepository();
+        const boom = new Error("途中で失敗");
+        const finish = (n: number) => {
+          if (outcome === "err") return err(failure);
+          if (outcome === "throw") throw boom;
+          return ok(n);
+        };
+        const before = structuredClone({ ledger: ledger.state, masters: masters.state });
+        const runLedger = () =>
+          ledger.transaction((tx) => {
+            for (let i = 0; i < writes; i += 1) tx.insertJournal(journal(`j-${i}`, i + 1));
+            return finish(writes);
+          });
+        const runMasters = () =>
+          masters.transaction((tx) => {
+            for (let i = 0; i < writes; i += 1) tx.insertTag({ id: `t-${i}`, name: `t${i}` });
+            return finish(writes);
+          });
+        if (outcome === "throw") {
+          expect(runLedger).toThrow(boom);
+          expect(runMasters).toThrow(boom);
+        } else {
+          const expected = outcome === "err" ? err(failure) : ok(writes);
+          expect(runLedger()).toEqual(expected);
+          expect(runMasters()).toEqual(expected);
+        }
+        const after = structuredClone({ ledger: ledger.state, masters: masters.state });
+        if (outcome === "ok") {
+          expect(after.ledger.journals).toHaveLength(writes);
+          expect(after.masters.tags).toHaveLength(writes);
+        } else {
+          expect(after).toEqual(before);
+        }
+      }),
+    );
   });
 });
