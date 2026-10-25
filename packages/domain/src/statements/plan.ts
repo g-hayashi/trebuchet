@@ -174,14 +174,26 @@ export function planStatementImport(
   };
 }
 
-const contentGroup = (accountName: string, content: string): string =>
+/** 重複の疑いで突き合わせる単位（口座の名前と正規化した内容が同じ明細）のキー */
+export const contentGroup = (accountName: string, content: string): string =>
   `${accountName}\u0000${normalizeContent(content)}`;
 
-/** 口座・正規化した内容が同じ保存済みの明細に、重複の疑いのあるものがあるか（R3） */
-function isPossibleDuplicate(row: PastedRow, sameContent: readonly ExistingStatement[]): boolean {
-  const from = addDays(row.date, -DUPLICATE_WINDOW_DAYS);
-  const to = addDays(row.date, DUPLICATE_WINDOW_DAYS);
-  return sameContent.some((e) =>
-    e.amount === row.amount ? e.date >= from && e.date <= to : e.date === row.date,
+/**
+ * 口座・正規化した内容が同じ明細（`sameContent`）のうち、`target` と重複の疑いのあるもの（R3）:
+ * 金額が同じで日付が 3 日以内、または日付が同じで金額が違う。
+ * 取込の計画（新規の行）と、明細の一覧の `duplicateOf` が同じ判定を使う
+ */
+export function possibleDuplicatesOf<T extends { date: string; amount: number }>(
+  target: { date: string; amount: number },
+  sameContent: readonly T[],
+): T[] {
+  const from = addDays(target.date, -DUPLICATE_WINDOW_DAYS);
+  const to = addDays(target.date, DUPLICATE_WINDOW_DAYS);
+  return sameContent.filter((e) =>
+    e.amount === target.amount ? e.date >= from && e.date <= to : e.date === target.date,
   );
 }
+
+/** 口座・正規化した内容が同じ保存済みの明細に、重複の疑いのあるものがあるか（R3） */
+const isPossibleDuplicate = (row: PastedRow, sameContent: readonly ExistingStatement[]): boolean =>
+  possibleDuplicatesOf(row, sameContent).length > 0;

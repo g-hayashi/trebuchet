@@ -239,6 +239,7 @@ describe("GET /journals/:id の訂正元・訂正仕訳（US3, FR-019a）", () =
       journal: original,
       correctsJournal: null,
       correctingJournals: [{ id: fix.id, journalNo: 2, date: "2027-01-10", status: "active" }],
+      statements: [],
     });
     const back = await e.journals[":journalId"].$get(journalParam(fix.id));
     if (back.status !== 200) throw new Error(String(back.status));

@@ -1,7 +1,10 @@
 import type {
+  CandidateMethod,
   StatementAccountKind,
   StatementAccountUsage,
   StatementOrigin,
+  StatementStatus,
+  StatementStatusFilter,
 } from "@trebuchet/schema";
 
 export const USAGE_LABELS: Record<StatementAccountUsage, string> = {
@@ -20,6 +23,31 @@ export const KIND_LABELS: Record<StatementAccountKind, string> = {
 export const ORIGIN_LABELS: Record<StatementOrigin, string> = {
   paste: "貼り付け",
   mfme_fetch: "自動取得",
+};
+
+export const STATUS_LABELS: Record<StatementStatus, string> = {
+  unprocessed: "未処理",
+  registered: "登録済み",
+  excluded: "除外",
+};
+
+/** 一覧の絞り込みの選択肢（`status` が空は「すべて」） */
+export const STATUS_FILTER_OPTIONS: { value: StatementStatusFilter | ""; label: string }[] = [
+  { value: "unprocessed", label: "未処理" },
+  { value: "registered", label: "登録済み" },
+  { value: "excluded", label: "除外" },
+  { value: "changed", label: "変更あり" },
+  { value: "", label: "すべて" },
+];
+
+/** 候補の判定の方法（R8） */
+export const METHOD_LABELS: Record<CandidateMethod, string> = {
+  match: "既存の仕訳と一致",
+  transfer: "振替の対",
+  rule: "ルール",
+  local_ai: "端末内の AI",
+  external_ai: "外部の AI",
+  none: "候補なし",
 };
 
 /** 変更ありの行の項目の名前（`changed.before`・`after` のキー） */

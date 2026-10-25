@@ -2,7 +2,6 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Account } from "@/features/accounts/api";
-import { Route as LayoutRoute } from "@/routes/e/$entityId/route";
 import { Route as ImportRoute } from "@/routes/e/$entityId/statements/import";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
@@ -430,13 +429,12 @@ describe("取込の履歴（§3.3）", () => {
 });
 
 describe("メニュー", () => {
-  it("事業体のメニューに「明細」があり、取込の画面へ進む", async () => {
-    mockApi({ "GET /api/entities": () => ok({ entities: [] }) });
-    renderRoute(LayoutRoute, { path: "/e/$entityId", url: "/e/e1" });
-    const nav = await screen.findByRole("navigation", { name: "事業体のメニュー" });
-    expect(within(nav).getByRole("link", { name: "明細" })).toHaveAttribute(
+  it("取込の画面から明細の一覧へ戻れる（事業体のメニューの「明細」は一覧へ進む。statements.test.tsx）", async () => {
+    mockApi(baseRoutes);
+    renderImport();
+    expect(await screen.findByRole("link", { name: "明細の一覧へ" })).toHaveAttribute(
       "href",
-      "/e/e1/statements/import",
+      "/e/e1/statements",
     );
   });
 });

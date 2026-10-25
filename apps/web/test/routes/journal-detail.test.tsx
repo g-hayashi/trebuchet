@@ -132,6 +132,8 @@ type Detail = {
   journal: ReturnType<typeof journal>;
   correctsJournal: ReturnType<typeof ref> | null;
   correctingJournals: ReturnType<typeof ref>[];
+  /** 006: 元の明細。省くと応答に含めない（001 の既存のテスト） */
+  statements?: { statementId: string; kind: "created" | "matched" }[];
 };
 
 function mockDetailApi(
@@ -450,6 +452,42 @@ describe("仕訳の詳細（US3）", () => {
 
       await screen.findByRole("heading", { name: "仕訳 No.1" });
       expect(screen.queryByText(/請求書|定期仕訳/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe("元の明細（006。FR-020。GET /journals/:id の statements）", () => {
+    it("承認で作った仕訳・結びつけた仕訳に、明細の一覧へのリンクを出す", async () => {
+      mockDetailApi({
+        journal: j1,
+        correctsJournal: null,
+        correctingJournals: [],
+        statements: [
+          { statementId: uuid(7001), kind: "created" },
+          { statementId: uuid(7002), kind: "matched" },
+        ],
+      });
+      renderDetail(j1.id);
+
+      const links = await screen.findAllByRole("link", { name: /元の明細/ });
+      expect(links.map((l) => l.getAttribute("href"))).toEqual([
+        `/e/e1/statements?statementId=${uuid(7001)}`,
+        `/e/e1/statements?statementId=${uuid(7002)}`,
+      ]);
+      expect(links[0]?.closest("li")).toHaveTextContent("登録した仕訳");
+      expect(links[1]?.closest("li")).toHaveTextContent("既存の仕訳に結びつけた明細");
+    });
+
+    it("結びついた明細がなければ（statements が空）何も出さない", async () => {
+      mockDetailApi({
+        journal: j1,
+        correctsJournal: null,
+        correctingJournals: [],
+        statements: [],
+      });
+      renderDetail(j1.id);
+
+      await screen.findByRole("heading", { name: "仕訳 No.1" });
+      expect(screen.queryByRole("link", { name: /元の明細/ })).not.toBeInTheDocument();
     });
   });
 

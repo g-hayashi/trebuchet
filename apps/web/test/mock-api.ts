@@ -69,6 +69,12 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 明細の取込（006 US1）。取込元の口座と取込の履歴は空
   "GET /statement-accounts": () => ok({ accounts: [] }),
   "GET /statements/imports": () => ok({ batches: [] }),
+  // 明細の一覧・しきい値の設定（US2）。一覧は空、設定は既定の値
+  "GET /statements": () => ok({ statements: [] }),
+  "GET /statement-settings": () =>
+    ok({
+      settings: { bulkThreshold: 80, externalThreshold: 60, updatedAt: "2026-10-26T00:00:00.000Z" },
+    }),
 };
 
 /** `:name` を 1 つのパスの区切りに当てはめて、事業体の下のパスの既定の応答を探す */

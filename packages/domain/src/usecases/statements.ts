@@ -7,6 +7,7 @@ import type {
   StatementImportCommitted,
   StatementImportPreview,
   StatementImportSource,
+  StatementLinkKind,
   StatementListQuery,
   StatementOrigin,
   StatementSettings,
@@ -18,8 +19,10 @@ import type { Clock, IdGenerator, StatementStore, StatementUnitOfWork } from "..
 import { normalizeContent } from "../statements/normalize.ts";
 import { type PastedRow, parseMfmePaste, type UnreadableRow } from "../statements/paste.ts";
 import {
+  contentGroup,
   type ExistingStatement,
   planStatementImport,
+  possibleDuplicatesOf,
   type StatementImportPlan,
 } from "../statements/plan.ts";
 import {
@@ -435,8 +438,15 @@ export function statementViewsInTx(
   const candidates = new Map(
     tx.statements.listStatementCandidates().map((c) => [c.statementId, c]),
   );
+  const states = loadStatementStates(tx);
+  // 重複の疑い（R3）の相手の候補: 口座と正規化した内容が同じ明細（取込の計画と同じ判定）
+  const sameContent = new Map<string, StatementRecord[]>();
+  for (const { record } of states) {
+    const key = contentGroup(accounts.get(record.statementAccountId)?.name ?? "", record.content);
+    sameContent.set(key, [...(sameContent.get(key) ?? []), record]);
+  }
   const views: StatementView[] = [];
-  for (const { record, status, activeLinks } of loadStatementStates(tx)) {
+  for (const { record, status, activeLinks } of states) {
     if (query.accountId !== undefined && record.statementAccountId !== query.accountId) continue;
     if (query.from !== undefined && record.date < query.from) continue;
     if (query.to !== undefined && record.date > query.to) continue;
@@ -456,6 +466,16 @@ export function statementViewsInTx(
       continue;
     }
     const candidate = candidates.get(record.id);
+    // 未処理の明細だけに出す（登録・除外した明細に出しても、利用者の判断に使えない）
+    const duplicateOf =
+      status === "unprocessed"
+        ? possibleDuplicatesOf(
+            record,
+            (sameContent.get(contentGroup(account.name, record.content)) ?? []).filter(
+              (r) => r.id !== record.id,
+            ),
+          ).map((r) => r.id)
+        : [];
     views.push({
       id: record.id,
       date: record.date,
@@ -467,10 +487,29 @@ export function statementViewsInTx(
       changed,
       candidate: candidate === undefined ? null : toCandidateView(candidate),
       links: activeLinks.map((l) => ({ journalId: l.journalId, kind: l.kind })),
+      ...(duplicateOf.length === 0 ? {} : { duplicateOf }),
     });
   }
   // 取り込んだ順の新しい方を先にして、日付で安定に並べる
   return views.reverse().sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/**
+ * 仕訳に結びついている明細（FR-020。001 の `GET /journals/:journalId` の `statements`）。
+ * 失効していない結びつきだけ。作成の順
+ */
+export function listJournalStatements(
+  deps: Pick<StatementDeps, "uow">,
+  journalId: string,
+): Result<{ statementId: string; kind: StatementLinkKind }[]> {
+  return deps.uow.run((tx) =>
+    ok(
+      tx.statements
+        .listStatementLinks()
+        .filter((l) => l.journalId === journalId && l.revokedAt === null)
+        .map((l) => ({ statementId: l.statementId, kind: l.kind })),
+    ),
+  );
 }
 
 // ---- 設定（§1.8、R12、FR-018・027） ----
