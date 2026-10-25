@@ -4,8 +4,8 @@ import { createEntity } from "../../src/usecases/create-entity.ts";
 import { commitFreeeImport, proposeFreeeOpening } from "../../src/usecases/import-freee.ts";
 import { replaceOpeningBalances } from "../../src/usecases/masters.ts";
 import {
-  FakeImportUnitOfWork,
   FixedClock,
+  fakeImportUnitOfWork,
   InMemoryLedgerRepository,
   InMemoryMasterRepository,
   InMemoryRegistry,
@@ -40,7 +40,7 @@ export function setup() {
     },
   ]);
   const ledger = new InMemoryLedgerRepository();
-  const uow = new FakeImportUnitOfWork(ledger, masters);
+  const uow = fakeImportUnitOfWork(ledger, masters);
   const reports = new InMemoryReportRepository(ledger, masters);
   const code = (c: string) => {
     const a = masters.state.accounts.find((x) => x.code === c);

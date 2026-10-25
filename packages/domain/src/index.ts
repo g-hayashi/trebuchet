@@ -31,7 +31,6 @@ export * from "./invoicing/draft.ts";
 export * from "./invoicing/due-date.ts";
 export * from "./invoicing/journal-drafts.ts";
 export * from "./invoicing/number.ts";
-export * from "./invoicing/rollback.ts";
 export * from "./invoicing/status.ts";
 export * from "./invoicing/tax.ts";
 export * from "./journal.ts";

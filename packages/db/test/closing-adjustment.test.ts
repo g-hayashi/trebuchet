@@ -7,7 +7,7 @@ import {
   saveHomeUseAllocation,
 } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DrizzleClosingStore, DrizzleClosingUnitOfWork } from "../src/closing-repository.ts";
+import { createClosingUnitOfWork, DrizzleClosingStore } from "../src/closing-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
@@ -19,7 +19,7 @@ let db: TenantDb;
 let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 let closing: DrizzleClosingStore;
-let uow: DrizzleClosingUnitOfWork;
+let uow: ReturnType<typeof createClosingUnitOfWork>;
 
 const ids = { next: () => randomUUIDv7() };
 const clock = { now: () => "2026-10-19T09:00:00.000Z" };
@@ -40,7 +40,7 @@ beforeEach(() => {
   masters = new DrizzleMasterRepository(db);
   ledger = new DrizzleLedgerRepository(db);
   closing = new DrizzleClosingStore(db);
-  uow = new DrizzleClosingUnitOfWork(db);
+  uow = createClosingUnitOfWork(db);
 });
 afterEach(() => tmp.cleanup());
 
@@ -74,7 +74,7 @@ function setup() {
   );
   if (!paid.ok) throw new Error(JSON.stringify(paid.error));
   const saved = saveHomeUseAllocation(
-    { masters, closing, ids, clock },
+    { uow, ids, clock },
     { fiscalYear: 2025, accountId: accountId("地代家賃"), businessRatio: 3000, basis: "床面積" },
   );
   if (!saved.ok) throw new Error(JSON.stringify(saved.error));

@@ -10,7 +10,7 @@ import {
 import { FiledDocumentInput, TaxReturnMemoInput } from "@trebuchet/schema";
 import { Hono } from "hono";
 import { closingSettingsDeps } from "../deps.ts";
-import { fail, orThrow } from "../errors.ts";
+import { fail } from "../errors.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 import { parseYear } from "./periods.ts";
@@ -41,33 +41,35 @@ export const taxReturnRoutes = new Hono<TenantEnv>()
     const year = parseYear(c.req.param("year"));
     if (!year.ok) return fail(c, year.error);
     const input = c.req.valid("json");
-    const memo = orThrow(
-      saveTaxReturnMemo(closingSettingsDeps(c.var.db), { fiscalYear: year.value, ...input }),
-    );
+    const result = saveTaxReturnMemo(closingSettingsDeps(c.var.db), {
+      fiscalYear: year.value,
+      ...input,
+    });
+    if (!result.ok) return fail(c, result.error);
+    const memo = result.value;
     return c.json({ memo: { ...memo, fileExists: fileExists(memo.filePath) } }, 201);
   })
   .put("/tax-return/:year/memos/:memoId", validate("json", TaxReturnMemoInput), (c) => {
     const year = parseYear(c.req.param("year"));
     if (!year.ok) return fail(c, year.error);
     const input = c.req.valid("json");
-    const memo = orThrow(
-      saveTaxReturnMemo(closingSettingsDeps(c.var.db), {
-        fiscalYear: year.value,
-        id: c.req.param("memoId"),
-        ...input,
-      }),
-    );
+    const result = saveTaxReturnMemo(closingSettingsDeps(c.var.db), {
+      fiscalYear: year.value,
+      id: c.req.param("memoId"),
+      ...input,
+    });
+    if (!result.ok) return fail(c, result.error);
+    const memo = result.value;
     return c.json({ memo: { ...memo, fileExists: fileExists(memo.filePath) } }, 200);
   })
   .delete("/tax-return/:year/memos/:memoId", (c) => {
     const year = parseYear(c.req.param("year"));
     if (!year.ok) return fail(c, year.error);
-    orThrow(
-      deleteTaxReturnMemo(closingSettingsDeps(c.var.db), {
-        fiscalYear: year.value,
-        id: c.req.param("memoId"),
-      }),
-    );
+    const result = deleteTaxReturnMemo(closingSettingsDeps(c.var.db), {
+      fiscalYear: year.value,
+      id: c.req.param("memoId"),
+    });
+    if (!result.ok) return fail(c, result.error);
     return c.body(null, 204);
   })
   .get("/tax-return/:year/documents", (c) => {
@@ -84,32 +86,34 @@ export const taxReturnRoutes = new Hono<TenantEnv>()
     const year = parseYear(c.req.param("year"));
     if (!year.ok) return fail(c, year.error);
     const input = c.req.valid("json");
-    const document = orThrow(
-      saveFiledDocument(closingSettingsDeps(c.var.db), { fiscalYear: year.value, ...input }),
-    );
+    const result = saveFiledDocument(closingSettingsDeps(c.var.db), {
+      fiscalYear: year.value,
+      ...input,
+    });
+    if (!result.ok) return fail(c, result.error);
+    const document = result.value;
     return c.json({ document: { ...document, fileExists: fileExists(document.filePath) } }, 201);
   })
   .put("/tax-return/:year/documents/:documentId", validate("json", FiledDocumentInput), (c) => {
     const year = parseYear(c.req.param("year"));
     if (!year.ok) return fail(c, year.error);
     const input = c.req.valid("json");
-    const document = orThrow(
-      saveFiledDocument(closingSettingsDeps(c.var.db), {
-        fiscalYear: year.value,
-        id: c.req.param("documentId"),
-        ...input,
-      }),
-    );
+    const result = saveFiledDocument(closingSettingsDeps(c.var.db), {
+      fiscalYear: year.value,
+      id: c.req.param("documentId"),
+      ...input,
+    });
+    if (!result.ok) return fail(c, result.error);
+    const document = result.value;
     return c.json({ document: { ...document, fileExists: fileExists(document.filePath) } }, 200);
   })
   .delete("/tax-return/:year/documents/:documentId", (c) => {
     const year = parseYear(c.req.param("year"));
     if (!year.ok) return fail(c, year.error);
-    orThrow(
-      deleteFiledDocument(closingSettingsDeps(c.var.db), {
-        fiscalYear: year.value,
-        id: c.req.param("documentId"),
-      }),
-    );
+    const result = deleteFiledDocument(closingSettingsDeps(c.var.db), {
+      fiscalYear: year.value,
+      id: c.req.param("documentId"),
+    });
+    if (!result.ok) return fail(c, result.error);
     return c.body(null, 204);
   });

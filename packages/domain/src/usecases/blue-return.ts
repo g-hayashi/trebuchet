@@ -66,13 +66,26 @@ import type { ReportDeps } from "./reports.ts";
 /** 決算書の参照の依存。帳簿は 001 の ReportDeps、決算の設定は ClosingStore から読む */
 export type BlueReturnDeps = ReportDeps & { closing: ClosingStore };
 
-/** 控除の回答の保存の依存 */
-export type DeductionAnswersDeps = {
-  masters: MasterRepository;
-  closing: ClosingStore;
-  ids: IdGenerator;
-  clock: Clock;
-};
+/** 決算の設定（控除の回答・按分・内訳・資産）の読み取りの依存 */
+export type ClosingReadDeps = { masters: MasterRepository; closing: ClosingStore };
+
+/**
+ * 決算の設定（控除の回答・メモ・按分・内訳・資産）の保存の依存。
+ * 保存と closing_audit_log の記録を UnitOfWork の 1 つのトランザクションで行う
+ */
+export type ClosingSettingsDeps = { uow: ClosingUnitOfWork; ids: IdGenerator; clock: Clock };
+
+/** UnitOfWork の中で保存の本体に渡す依存（同じトランザクションのマスタと ClosingStore） */
+type ClosingTxDeps = ClosingReadDeps & { ids: IdGenerator; clock: Clock };
+
+function inClosingTx<T>(
+  deps: ClosingSettingsDeps,
+  fn: (tx: ClosingTxDeps) => Result<T>,
+): Result<T> {
+  return deps.uow.run(({ masters, closing }) =>
+    fn({ masters, closing, ids: deps.ids, clock: deps.clock }),
+  );
+}
 
 /** 控除の回答と、そこから決まる上限額。回答がなければどちらも null（0 として計算しない） */
 export type DeductionAnswersView = {
@@ -167,6 +180,13 @@ export function saveClosingNote(
   deps: ClosingSettingsDeps,
   params: { fiscalYear: number; kind: ClosingNoteKind; body: string },
 ): Result<ClosingNote> {
+  return inClosingTx(deps, (tx) => saveClosingNoteIn(tx, params));
+}
+
+function saveClosingNoteIn(
+  deps: ClosingTxDeps,
+  params: { fiscalYear: number; kind: ClosingNoteKind; body: string },
+): Result<ClosingNote> {
   const period = resolveYear(deps.masters, params.fiscalYear);
   if (!period.ok) return period;
   const body = params.body.trim();
@@ -213,7 +233,7 @@ function viewOf(
 
 /** 年度の控除の要件の回答と上限額（GET /blue-return/:year/deduction-answers） */
 export function getDeductionAnswers(
-  deps: Pick<DeductionAnswersDeps, "masters" | "closing">,
+  deps: ClosingReadDeps,
   params: { fiscalYear: number },
 ): Result<DeductionAnswersView> {
   const period = resolveYear(deps.masters, params.fiscalYear);
@@ -228,7 +248,14 @@ export function getDeductionAnswers(
  * 以降は update。変更前・後の回答）を残す。締め済みの年度でも保存できる（回答は帳簿ではない）
  */
 export function saveDeductionAnswers(
-  deps: DeductionAnswersDeps,
+  deps: ClosingSettingsDeps,
+  params: { fiscalYear: number; answers: DeductionRequirementAnswers },
+): Result<DeductionAnswersView> {
+  return inClosingTx(deps, (tx) => saveDeductionAnswersIn(tx, params));
+}
+
+function saveDeductionAnswersIn(
+  deps: ClosingTxDeps,
   params: { fiscalYear: number; answers: DeductionRequirementAnswers },
 ): Result<DeductionAnswersView> {
   const period = resolveYear(deps.masters, params.fiscalYear);
@@ -261,14 +288,6 @@ export function saveDeductionAnswers(
 
 // ---- 家事按分・地代家賃の内訳（US2） ----
 
-/** 決算の設定（按分・内訳）の保存の依存 */
-export type ClosingSettingsDeps = {
-  masters: MasterRepository;
-  closing: ClosingStore;
-  ids: IdGenerator;
-  clock: Clock;
-};
-
 const sameKey = (
   a: Pick<HomeUseAllocation, "accountId" | "subAccountId">,
   b: Pick<HomeUseAllocation, "accountId" | "subAccountId">,
@@ -282,6 +301,13 @@ const sameKey = (
  */
 export function saveHomeUseAllocation(
   deps: ClosingSettingsDeps,
+  params: { fiscalYear: number } & HomeUseAllocationInput,
+): Result<HomeUseAllocation> {
+  return inClosingTx(deps, (tx) => saveHomeUseAllocationIn(tx, params));
+}
+
+function saveHomeUseAllocationIn(
+  deps: ClosingTxDeps,
   params: { fiscalYear: number } & HomeUseAllocationInput,
 ): Result<HomeUseAllocation> {
   const period = resolveYear(deps.masters, params.fiscalYear);
@@ -335,7 +361,7 @@ export function saveHomeUseAllocation(
  * 割合を変えたときの理由の入力を促すのに使う
  */
 export function listHomeUseAllocations(
-  deps: Pick<ClosingSettingsDeps, "masters" | "closing">,
+  deps: ClosingReadDeps,
   params: { fiscalYear: number },
 ): Result<{ allocations: HomeUseAllocation[]; previousYear: HomeUseAllocation[] }> {
   const period = resolveYear(deps.masters, params.fiscalYear);
@@ -348,7 +374,7 @@ export function listHomeUseAllocations(
 
 /** 年度の地代家賃の内訳（GET .../rent-details）。並び順は保存したとおり */
 export function getRentDetails(
-  deps: Pick<ClosingSettingsDeps, "masters" | "closing">,
+  deps: ClosingReadDeps,
   params: { fiscalYear: number },
 ): Result<RentDetail[]> {
   const period = resolveYear(deps.masters, params.fiscalYear);
@@ -379,6 +405,13 @@ function validateRentRow(row: RentDetailInput, rowIndex: number): Result<RentDet
  */
 export function saveRentDetails(
   deps: ClosingSettingsDeps,
+  params: { fiscalYear: number; rows: readonly RentDetailInput[] },
+): Result<RentDetail[]> {
+  return inClosingTx(deps, (tx) => saveRentDetailsIn(tx, params));
+}
+
+function saveRentDetailsIn(
+  deps: ClosingTxDeps,
   params: { fiscalYear: number; rows: readonly RentDetailInput[] },
 ): Result<RentDetail[]> {
   const period = resolveYear(deps.masters, params.fiscalYear);
@@ -425,7 +458,7 @@ export type FixedAssetWithDepreciation = FixedAsset & { depreciation: Depreciati
  * 並び順は ClosingStore の順。会計期間があるかどうかは問わない
  */
 export function listFixedAssets(
-  deps: Pick<ClosingSettingsDeps, "masters" | "closing">,
+  deps: ClosingReadDeps,
   params: { fiscalYear?: number },
 ): Result<FixedAssetWithDepreciation[]> {
   const individual = requireIndividual(deps.masters);
@@ -446,6 +479,13 @@ export function listFixedAssets(
  */
 export function saveFixedAsset(
   deps: ClosingSettingsDeps,
+  params: FixedAssetInput & { id?: string; reason?: string | null },
+): Result<FixedAsset> {
+  return inClosingTx(deps, (tx) => saveFixedAssetIn(tx, params));
+}
+
+function saveFixedAssetIn(
+  deps: ClosingTxDeps,
   params: FixedAssetInput & { id?: string; reason?: string | null },
 ): Result<FixedAsset> {
   const individual = requireIndividual(deps.masters);
@@ -503,6 +543,13 @@ export function saveFixedAsset(
  */
 export function disposeFixedAsset(
   deps: ClosingSettingsDeps,
+  params: { id: string; disposedOn: string; reason: string },
+): Result<FixedAsset> {
+  return inClosingTx(deps, (tx) => disposeFixedAssetIn(tx, params));
+}
+
+function disposeFixedAssetIn(
+  deps: ClosingTxDeps,
   params: { id: string; disposedOn: string; reason: string },
 ): Result<FixedAsset> {
   const individual = requireIndividual(deps.masters);
@@ -719,7 +766,7 @@ export function commitAdjustment(
   deps: CommitAdjustmentDeps,
   params: CommitAdjustmentParams,
 ): Result<CommittedAdjustment> {
-  return deps.uow.transaction((tx) => {
+  return deps.uow.run((tx) => {
     const period = resolveYear(tx.masters, params.fiscalYear);
     if (!period.ok) return period;
     if (period.value.status === "closed") {
@@ -761,7 +808,7 @@ export function commitAdjustment(
     }
 
     const created = createJournal(
-      { ledger: tx.journals, masters: tx.masters, ids: deps.ids, clock: deps.clock },
+      { ledger: tx.ledger, masters: tx.masters, ids: deps.ids, clock: deps.clock },
       proposal.journal,
     );
     if (!created.ok) return created;

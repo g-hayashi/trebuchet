@@ -24,22 +24,19 @@ import {
   type BackupStore,
   type Clock,
   type ClosingStore,
-  type ClosingUnitOfWork,
   type IdGenerator,
   type ImportStore,
-  type ImportUnitOfWork,
   type InvoicingStore,
-  type InvoicingUnitOfWork,
   type JournalReplacement,
-  type JournalRepository,
   type LedgerRepository,
   type MasterRepository,
   type NewJournal,
   type RecurringStore,
-  type RecurringUnitOfWork,
   type RegistryRepository,
   RepositoryConflictError,
   type SecretStore,
+  type TenantTx,
+  type TenantUnitOfWork,
 } from "../src/ports.ts";
 import type {
   Account,
@@ -65,6 +62,7 @@ import type {
   PaymentRecord,
   RecurringRunRecord,
   RentDetail,
+  Result,
   SubAccount,
   Tag,
   TaxCategory,
@@ -547,43 +545,70 @@ export class InMemoryImportStore implements ImportStore {
   }
 }
 
+/** 状態を `state` に持つフェイクのストア（UnitOfWork が複製して巻き戻す） */
+type Stateful = { state: unknown };
+
 /**
- * ImportUnitOfWork のフェイク。001 のフェイクのリポジトリと InMemoryImportStore を組み合わせ、
- * transaction が例外で終わると3つの状態をすべて元に戻す（INV-11）
+ * TenantUnitOfWork のフェイク（db の `drizzleUnitOfWork` と同じ性質）。`run` の前に帳簿・マスタ・
+ * ストアの状態を複製し、fn が `err` を返すか例外を投げると、すべてを元に戻す。
+ * 同じ UnitOfWork の `run` の中の `run` は例外（db では入れ子のトランザクションにならないため）
  */
-export class FakeImportUnitOfWork implements ImportUnitOfWork {
+export class FakeUnitOfWork<Stores extends Record<string, Stateful>>
+  implements TenantUnitOfWork<Stores>
+{
   readonly ledger: InMemoryLedgerRepository;
   readonly masters: InMemoryMasterRepository;
-  readonly imports: InMemoryImportStore;
+  readonly stores: Stores;
+  private running = false;
 
-  constructor(
-    ledger = new InMemoryLedgerRepository(),
-    masters = new InMemoryMasterRepository(),
-    imports?: InMemoryImportStore,
-  ) {
+  constructor(ledger: InMemoryLedgerRepository, masters: InMemoryMasterRepository, stores: Stores) {
     this.ledger = ledger;
     this.masters = masters;
-    this.imports = imports ?? new InMemoryImportStore(ledger);
+    this.stores = stores;
   }
 
-  transaction<T>(
-    fn: (tx: { ledger: LedgerRepository; masters: MasterRepository; imports: ImportStore }) => T,
-  ): T {
-    const snapshot = structuredClone({
-      ledger: this.ledger.state,
-      masters: this.masters.state,
-      imports: this.imports.state,
-    });
+  run<T>(fn: (tx: TenantTx<Stores>) => Result<T>): Result<T> {
+    if (this.running) throw new Error("UnitOfWork の run は入れ子にできません");
+    const targets: Stateful[] = [this.ledger, this.masters, ...Object.values(this.stores)];
+    const snapshot = targets.map((t) => structuredClone(t.state));
+    const restore = () => {
+      targets.forEach((t, i) => {
+        t.state = snapshot[i];
+      });
+    };
+    this.running = true;
     try {
-      return fn({ ledger: this.ledger, masters: this.masters, imports: this.imports });
+      const result = fn({ ledger: this.ledger, masters: this.masters, ...this.stores });
+      if (!result.ok) restore();
+      return result;
     } catch (e) {
-      this.ledger.state = snapshot.ledger;
-      this.masters.state = snapshot.masters;
-      this.imports.state = snapshot.imports;
+      restore();
       throw e;
+    } finally {
+      this.running = false;
     }
   }
 }
+
+/** FakeUnitOfWork に、ストアを名前のままのプロパティとして足したもの（`uow.invoicing` など） */
+export type FakeUnitOfWorkOf<Stores extends Record<string, Stateful>> = FakeUnitOfWork<Stores> &
+  Stores;
+
+export function fakeUnitOfWork<Stores extends Record<string, Stateful>>(
+  ledger: InMemoryLedgerRepository,
+  masters: InMemoryMasterRepository,
+  stores: Stores,
+): FakeUnitOfWorkOf<Stores> {
+  return Object.assign(new FakeUnitOfWork(ledger, masters, stores), stores);
+}
+
+/** ImportUnitOfWork のフェイク（INV-11） */
+export const fakeImportUnitOfWork = (
+  ledger = new InMemoryLedgerRepository(),
+  masters = new InMemoryMasterRepository(),
+  imports = new InMemoryImportStore(ledger),
+) => fakeUnitOfWork(ledger, masters, { imports });
+export type FakeImportUnitOfWork = ReturnType<typeof fakeImportUnitOfWork>;
 
 type ClosingState = {
   taxParameters: TaxParameter[];
@@ -743,47 +768,13 @@ export class InMemoryClosingStore implements ClosingStore {
   }
 }
 
-/**
- * ClosingUnitOfWork のフェイク。001 のフェイクのリポジトリと InMemoryClosingStore を組み合わせ、
- * transaction が例外で終わると3つの状態をすべて元に戻す（research R4）
- */
-export class FakeClosingUnitOfWork implements ClosingUnitOfWork {
-  readonly ledger: InMemoryLedgerRepository;
-  readonly masters: InMemoryMasterRepository;
-  readonly closing: InMemoryClosingStore;
-
-  constructor(
-    ledger = new InMemoryLedgerRepository(),
-    masters = new InMemoryMasterRepository(),
-    closing?: InMemoryClosingStore,
-  ) {
-    this.ledger = ledger;
-    this.masters = masters;
-    this.closing = closing ?? new InMemoryClosingStore(ledger);
-  }
-
-  transaction<T>(
-    fn: (tx: {
-      journals: JournalRepository;
-      masters: MasterRepository;
-      closing: ClosingStore;
-    }) => T,
-  ): T {
-    const snapshot = structuredClone({
-      ledger: this.ledger.state,
-      masters: this.masters.state,
-      closing: this.closing.state,
-    });
-    try {
-      return fn({ journals: this.ledger, masters: this.masters, closing: this.closing });
-    } catch (e) {
-      this.ledger.state = snapshot.ledger;
-      this.masters.state = snapshot.masters;
-      this.closing.state = snapshot.closing;
-      throw e;
-    }
-  }
-}
+/** ClosingUnitOfWork のフェイク（research R4） */
+export const fakeClosingUnitOfWork = (
+  ledger = new InMemoryLedgerRepository(),
+  masters = new InMemoryMasterRepository(),
+  closing = new InMemoryClosingStore(ledger),
+) => fakeUnitOfWork(ledger, masters, { closing });
+export type FakeClosingUnitOfWork = ReturnType<typeof fakeClosingUnitOfWork>;
 
 type InvoicingState = {
   origins: Record<string, JournalOrigin>;
@@ -1072,86 +1063,21 @@ export class InMemoryRecurringStore implements RecurringStore {
   }
 }
 
-/**
- * InvoicingUnitOfWork のフェイク。transaction が**例外**で終わると状態をすべて元に戻し、
- * `err` を返したときは確定する（drizzle のトランザクションと同じ。research R9）
- */
-export class FakeInvoicingUnitOfWork implements InvoicingUnitOfWork {
-  readonly ledger: InMemoryLedgerRepository;
-  readonly masters: InMemoryMasterRepository;
-  readonly invoicing: InMemoryInvoicingStore;
+/** InvoicingUnitOfWork のフェイク（R9） */
+export const fakeInvoicingUnitOfWork = (
+  ledger = new InMemoryLedgerRepository(),
+  masters = new InMemoryMasterRepository(),
+  invoicing = new InMemoryInvoicingStore(),
+) => fakeUnitOfWork(ledger, masters, { invoicing });
+export type FakeInvoicingUnitOfWork = ReturnType<typeof fakeInvoicingUnitOfWork>;
 
-  constructor(
-    ledger = new InMemoryLedgerRepository(),
-    masters = new InMemoryMasterRepository(),
-    invoicing = new InMemoryInvoicingStore(),
-  ) {
-    this.ledger = ledger;
-    this.masters = masters;
-    this.invoicing = invoicing;
-  }
-
-  transaction<T>(
-    fn: (tx: {
-      ledger: LedgerRepository;
-      masters: MasterRepository;
-      invoicing: InvoicingStore;
-    }) => T,
-  ): T {
-    const snapshot = structuredClone({
-      ledger: this.ledger.state,
-      masters: this.masters.state,
-      invoicing: this.invoicing.state,
-    });
-    try {
-      return fn({ ledger: this.ledger, masters: this.masters, invoicing: this.invoicing });
-    } catch (e) {
-      this.ledger.state = snapshot.ledger;
-      this.masters.state = snapshot.masters;
-      this.invoicing.state = snapshot.invoicing;
-      throw e;
-    }
-  }
-}
-
-/** RecurringUnitOfWork のフェイク。巻き戻しは FakeInvoicingUnitOfWork と同じ */
-export class FakeRecurringUnitOfWork implements RecurringUnitOfWork {
-  readonly ledger: InMemoryLedgerRepository;
-  readonly masters: InMemoryMasterRepository;
-  readonly recurring: InMemoryRecurringStore;
-
-  constructor(
-    ledger = new InMemoryLedgerRepository(),
-    masters = new InMemoryMasterRepository(),
-    recurring = new InMemoryRecurringStore(),
-  ) {
-    this.ledger = ledger;
-    this.masters = masters;
-    this.recurring = recurring;
-  }
-
-  transaction<T>(
-    fn: (tx: {
-      ledger: LedgerRepository;
-      masters: MasterRepository;
-      recurring: RecurringStore;
-    }) => T,
-  ): T {
-    const snapshot = structuredClone({
-      ledger: this.ledger.state,
-      masters: this.masters.state,
-      recurring: this.recurring.state,
-    });
-    try {
-      return fn({ ledger: this.ledger, masters: this.masters, recurring: this.recurring });
-    } catch (e) {
-      this.ledger.state = snapshot.ledger;
-      this.masters.state = snapshot.masters;
-      this.recurring.state = snapshot.recurring;
-      throw e;
-    }
-  }
-}
+/** RecurringUnitOfWork のフェイク */
+export const fakeRecurringUnitOfWork = (
+  ledger = new InMemoryLedgerRepository(),
+  masters = new InMemoryMasterRepository(),
+  recurring = new InMemoryRecurringStore(),
+) => fakeUnitOfWork(ledger, masters, { recurring });
+export type FakeRecurringUnitOfWork = ReturnType<typeof fakeRecurringUnitOfWork>;
 
 /** メモリ上の SecretStore（キーチェーンの代わり） */
 export class FakeSecretStore implements SecretStore {

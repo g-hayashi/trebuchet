@@ -1,9 +1,5 @@
-import type {
-  InvoicingStore,
-  InvoicingUnitOfWork,
-  LedgerRepository,
-  MasterRepository,
-} from "../src/ports.ts";
+import type { InvoicingStore, InvoicingUnitOfWork, TenantTx } from "../src/ports.ts";
+import type { Result } from "../src/types.ts";
 import type { FakeInvoicingUnitOfWork } from "./fakes.ts";
 
 /** 書き込みのメソッド（挿入・上書き・追記・置き換え・取消・更新・削除） */
@@ -11,8 +7,8 @@ const WRITE_METHOD = /^(insert|upsert|append|replace|void|mark|update|delete)/;
 
 /**
  * 障害の注入（005 INV-32）。UnitOfWork の中で `ledger`・`masters`・`invoicing` の書き込みを数え、
- * `failAt` 回目の書き込みの直前に例外を投げる（`transaction` の中の入れ子の `ledger.transaction` も数える）。
- * 例外は FakeInvoicingUnitOfWork が状態を巻き戻す。`writes` は直近の `transaction` の書き込みの回数
+ * `failAt` 回目の書き込みの直前に例外を投げる（`run` の中の入れ子の `ledger.transaction` も数える）。
+ * 例外は FakeUnitOfWork が状態を巻き戻す。`writes` は直近の `run` の書き込みの回数
  */
 export class FaultInjectingUnitOfWork implements InvoicingUnitOfWork {
   readonly inner: FakeInvoicingUnitOfWork;
@@ -24,15 +20,9 @@ export class FaultInjectingUnitOfWork implements InvoicingUnitOfWork {
     this.inner = inner;
   }
 
-  transaction<T>(
-    fn: (tx: {
-      ledger: LedgerRepository;
-      masters: MasterRepository;
-      invoicing: InvoicingStore;
-    }) => T,
-  ): T {
+  run<T>(fn: (tx: TenantTx<{ invoicing: InvoicingStore }>) => Result<T>): Result<T> {
     this.writes = 0;
-    return this.inner.transaction((tx) =>
+    return this.inner.run((tx) =>
       fn({
         ledger: this.wrap(tx.ledger),
         masters: this.wrap(tx.masters),

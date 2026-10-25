@@ -4,8 +4,8 @@ import type { InvoiceItemRecord, InvoiceRecord, Partner } from "../src/types.ts"
 import { createEntity } from "../src/usecases/create-entity.ts";
 import { createNextFiscalPeriod } from "../src/usecases/masters.ts";
 import {
-  FakeInvoicingUnitOfWork,
   FixedClock,
+  fakeInvoicingUnitOfWork,
   InMemoryInvoicingStore,
   InMemoryLedgerRepository,
   InMemoryMasterRepository,
@@ -23,7 +23,7 @@ export function setupInvoicing(options: { taxable?: boolean } = {}) {
   const ledger = new InMemoryLedgerRepository();
   const masters = new InMemoryMasterRepository();
   const invoicing = new InMemoryInvoicingStore();
-  const uow = new FakeInvoicingUnitOfWork(ledger, masters, invoicing);
+  const uow = fakeInvoicingUnitOfWork(ledger, masters, invoicing);
   const ids = new SequentialIds();
   const clock = new FixedClock(NOW);
   const created = createEntity(

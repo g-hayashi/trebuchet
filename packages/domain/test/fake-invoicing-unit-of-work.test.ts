@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { RollbackError, runInTransaction } from "../src/invoicing/rollback.ts";
 import type { NewJournal } from "../src/ports.ts";
 import { domainError, err, type InvoicingAuditEntry, ok } from "../src/types.ts";
-import { FakeInvoicingUnitOfWork, FakeRecurringUnitOfWork } from "./fakes.ts";
+import { fakeInvoicingUnitOfWork, fakeRecurringUnitOfWork } from "./fakes.ts";
 
 const AT = "2026-10-24T00:00:00.000Z";
 
@@ -56,11 +55,11 @@ const audit = (id: string): InvoicingAuditEntry => ({
   afterJson: "{}",
 });
 
-describe("FakeInvoicingUnitOfWork", () => {
+describe("fakeInvoicingUnitOfWork", () => {
   it("途中の例外で仕訳・マスタ・記録・参照がすべて残らない（R9）", () => {
-    const uow = new FakeInvoicingUnitOfWork();
+    const uow = fakeInvoicingUnitOfWork();
     expect(() =>
-      uow.transaction(({ ledger, masters, invoicing }) => {
+      uow.run(({ ledger, masters, invoicing }) => {
         masters.insertTag({ id: "tag-1", name: "出張" });
         ledger.insertJournal(journal("j-1", 1));
         invoicing.appendInvoicingAudit(audit("audit-1"));
@@ -78,20 +77,28 @@ describe("FakeInvoicingUnitOfWork", () => {
     expect(uow.invoicing.originOfJournal("j-1")).toBeNull();
   });
 
-  it("err を返したときは drizzle と同じく確定する（巻き戻らない）", () => {
-    const uow = new FakeInvoicingUnitOfWork();
-    const r = uow.transaction(({ ledger, invoicing }) => {
+  it("書き込みの後に err を返すと全部が巻き戻り、同じ err を返す（db の実装と同じ）", () => {
+    const uow = fakeInvoicingUnitOfWork();
+    const failure = domainError("VALIDATION", "中止", { field: "x" });
+    const r = uow.run(({ ledger, invoicing }) => {
       ledger.insertJournal(journal("j-1", 1));
       invoicing.appendInvoicingAudit(audit("audit-1"));
-      return err(domainError("VALIDATION", "検査の失敗"));
+      return err(failure);
     });
-    expect(r.ok).toBe(false);
-    expect(uow.ledger.journals.map((j) => j.id)).toEqual(["j-1"]);
-    expect(uow.invoicing.audits.map((a) => a.id)).toEqual(["audit-1"]);
+    expect(r).toEqual(err(failure));
+    expect(uow.ledger.journals).toEqual([]);
+    expect(uow.invoicing.audits).toEqual([]);
+
+    const committed = uow.run(({ ledger }) => {
+      ledger.insertJournal(journal("j-3", 1));
+      return ok("done");
+    });
+    expect(committed).toEqual({ ok: true, value: "done" });
+    expect(uow.ledger.journals.map((j) => j.id)).toEqual(["j-3"]);
   });
 
   it("originOfJournal は登録した起点を返し、ない仕訳は null", () => {
-    const uow = new FakeInvoicingUnitOfWork();
+    const uow = fakeInvoicingUnitOfWork();
     uow.invoicing.registerOrigin("j-1", {
       kind: "payment",
       invoiceId: "inv-1",
@@ -106,43 +113,13 @@ describe("FakeInvoicingUnitOfWork", () => {
     });
     expect(uow.invoicing.originOfJournal("j-2")).toBeNull();
   });
-
-  it("runInTransaction は RollbackError を巻き戻して err に直し、ほかの例外は投げ直す", () => {
-    const uow = new FakeInvoicingUnitOfWork();
-    const rolled = runInTransaction(uow, ({ ledger, invoicing }) => {
-      ledger.insertJournal(journal("j-1", 1));
-      invoicing.appendInvoicingAudit(audit("audit-1"));
-      throw new RollbackError(domainError("VALIDATION", "中止", { field: "x" }));
-    });
-    expect(rolled).toEqual({
-      ok: false,
-      error: { code: "VALIDATION", message: "中止", details: { field: "x" } },
-    });
-    expect(uow.ledger.journals).toEqual([]);
-    expect(uow.invoicing.audits).toEqual([]);
-
-    expect(() =>
-      runInTransaction(uow, ({ ledger }) => {
-        ledger.insertJournal(journal("j-2", 1));
-        throw new Error("想定外");
-      }),
-    ).toThrow("想定外");
-    expect(uow.ledger.journals).toEqual([]);
-
-    const committed = runInTransaction(uow, ({ ledger }) => {
-      ledger.insertJournal(journal("j-3", 1));
-      return ok("done");
-    });
-    expect(committed).toEqual({ ok: true, value: "done" });
-    expect(uow.ledger.journals.map((j) => j.id)).toEqual(["j-3"]);
-  });
 });
 
-describe("FakeRecurringUnitOfWork", () => {
-  it("途中の例外で仕訳・記録が残らず、err を返すと確定する", () => {
-    const uow = new FakeRecurringUnitOfWork();
+describe("fakeRecurringUnitOfWork", () => {
+  it("途中の例外でも err でも仕訳・記録が残らず、ok なら確定する", () => {
+    const uow = fakeRecurringUnitOfWork();
     expect(() =>
-      uow.transaction(({ ledger, recurring }) => {
+      uow.run(({ ledger, recurring }) => {
         ledger.insertJournal({ ...journal("j-1", 1), source: "recurring" });
         recurring.appendRecurringAudit({ ...audit("audit-1"), targetType: "recurring_run" });
         throw new Error("途中で失敗");
@@ -151,12 +128,21 @@ describe("FakeRecurringUnitOfWork", () => {
     expect(uow.ledger.journals).toEqual([]);
     expect(uow.recurring.audits).toEqual([]);
 
-    uow.transaction(({ ledger, recurring }) => {
+    const failed = uow.run(({ ledger, recurring }) => {
       ledger.insertJournal({ ...journal("j-1", 1), source: "recurring" });
       recurring.appendRecurringAudit(audit("audit-2"));
       return err(domainError("VALIDATION", "x"));
     });
+    expect(failed.ok).toBe(false);
+    expect(uow.ledger.journals).toEqual([]);
+    expect(uow.recurring.audits).toEqual([]);
+
+    uow.run(({ ledger, recurring }) => {
+      ledger.insertJournal({ ...journal("j-1", 1), source: "recurring" });
+      recurring.appendRecurringAudit(audit("audit-3"));
+      return ok(null);
+    });
     expect(uow.ledger.journals).toHaveLength(1);
-    expect(uow.recurring.audits.map((a) => a.id)).toEqual(["audit-2"]);
+    expect(uow.recurring.audits.map((a) => a.id)).toEqual(["audit-3"]);
   });
 });

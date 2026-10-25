@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ImportBatch } from "../src/import/types.ts";
 import type { NewJournal } from "../src/ports.ts";
-import { FakeImportUnitOfWork } from "./fakes.ts";
+import { ok } from "../src/types.ts";
+import { fakeImportUnitOfWork } from "./fakes.ts";
 
 const batch: ImportBatch = {
   id: "batch-1",
@@ -71,11 +72,11 @@ const ref = (journalId: string, freeeJournalId: string) => ({
   revokedAt: null,
 });
 
-describe("FakeImportUnitOfWork", () => {
+describe("fakeImportUnitOfWork", () => {
   it("例外で仕訳・マスタ・取込の記録をすべて元に戻す（INV-11）", () => {
-    const uow = new FakeImportUnitOfWork();
+    const uow = fakeImportUnitOfWork();
     expect(() =>
-      uow.transaction(({ ledger, masters, imports }) => {
+      uow.run(({ ledger, masters, imports }) => {
         masters.insertTag({ id: "tag-1", name: "出張" });
         ledger.insertJournal(journal("j-1", 1, "import_freee"));
         imports.upsertTaxMappings([{ sourceName: "対象外", taxCategory: "OUT_OF_SCOPE" }], "t");
@@ -92,24 +93,26 @@ describe("FakeImportUnitOfWork", () => {
   });
 
   it("insertBatch の失敗の注入でも全体が元に戻る", () => {
-    const uow = new FakeImportUnitOfWork();
+    const uow = fakeImportUnitOfWork();
     uow.imports.failOnInsertBatch = true;
     expect(() =>
-      uow.transaction(({ ledger, imports }) => {
+      uow.run(({ ledger, imports }) => {
         ledger.insertJournal(journal("j-1", 1, "import_freee"));
         imports.insertBatch(batch);
+        return ok(null);
       }),
     ).toThrow("insertBatch failed");
     expect(uow.ledger.journals).toEqual([]);
   });
 
   it("取り消されていない参照の freee の仕訳ID は一意。voidBatch の後は同じ ID を入れられる（INV-12）", () => {
-    const uow = new FakeImportUnitOfWork();
-    uow.transaction(({ ledger, imports }) => {
+    const uow = fakeImportUnitOfWork();
+    uow.run(({ ledger, imports }) => {
       ledger.insertJournal(journal("j-1", 1, "import_freee"));
       ledger.insertJournal(journal("j-2", 2, "import_freee"));
       imports.insertBatch(batch);
       imports.insertRefs([ref("j-1", "F-1")]);
+      return ok(null);
     });
     expect(() => uow.imports.insertRefs([ref("j-2", "F-1")])).toThrow(/UNIQUE/);
     uow.imports.voidBatch(batch.id, "誤り", "2026-10-20T00:00:00.000Z");
@@ -120,7 +123,7 @@ describe("FakeImportUnitOfWork", () => {
   });
 
   it("仕訳の source は既定で manual。manualJournalSignatures は手入力の有効な仕訳だけ", () => {
-    const uow = new FakeImportUnitOfWork();
+    const uow = fakeImportUnitOfWork();
     uow.ledger.insertJournal(journal("j-1", 1));
     uow.ledger.insertJournal(journal("j-2", 2, "import_freee"));
     expect(uow.ledger.journals.map((j) => j.source)).toEqual(["manual", "import_freee"]);

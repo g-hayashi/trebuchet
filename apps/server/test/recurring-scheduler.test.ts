@@ -1,5 +1,5 @@
 import { randomUUIDv7 } from "node:crypto";
-import { DrizzleLedgerRepository, DrizzleRecurringUnitOfWork, openTenant } from "@trebuchet/db";
+import { createRecurringUnitOfWork, DrizzleLedgerRepository, openTenant } from "@trebuchet/db";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { createRecurring, type IdGenerator, type RecurringUnitOfWork } from "@trebuchet/domain";
 import { JournalQuery, type RecurringInput } from "@trebuchet/schema";
@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 const uowOf = (entityId: string): RecurringUnitOfWork =>
-  new DrizzleRecurringUnitOfWork(openTenant(entityId));
+  createRecurringUnitOfWork(openTenant(entityId));
 
 const accountIdsOf = async (entityId: string) => {
   const res = await ctx.e.accounts.$get({ param: { entityId } });
@@ -114,7 +114,7 @@ describe("startRecurringScheduler", () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const broken: RecurringUnitOfWork = {
-      transaction: () => {
+      run: () => {
         throw new Error("secret-detail: database is locked");
       },
     };

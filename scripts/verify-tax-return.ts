@@ -51,8 +51,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  createClosingUnitOfWork,
   DrizzleClosingStore,
-  DrizzleClosingUnitOfWork,
 } from "../packages/db/src/closing-repository.ts";
 import { DrizzleImportStore } from "../packages/db/src/import-repository.ts";
 import { openTenant } from "../packages/db/src/tenant-store.ts";
@@ -260,7 +260,8 @@ function registerClosing(context: ImportContext, input: ClosingInput, year: numb
   const closing = new DrizzleClosingStore(db);
   const imports = new DrizzleImportStore(db);
   const { masters, ids, clock } = context;
-  const settings = { masters, closing, ids, clock };
+  const uow = createClosingUnitOfWork(db);
+  const settings = { uow, ids, clock };
   const accounts = masters.listAccounts();
   const accountByCode = (code: string, where: string) => {
     const found = accounts.filter((a) => a.code === code);
@@ -329,7 +330,6 @@ function registerClosing(context: ImportContext, input: ClosingInput, year: numb
 
   // 案を1件ずつ登録し、そのたびに案を作り直す（登録で他の案の金額が変わっても、金額の不一致にならない）
   const blueDeps = { masters, reports: context.reports, closing };
-  const uow = new DrizzleClosingUnitOfWork(db);
   let adjustments = 0;
   const limit = input.homeUse.length + input.assets.length + 1;
   for (;;) {

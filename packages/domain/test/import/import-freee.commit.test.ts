@@ -10,8 +10,8 @@ import {
   saveImportMappings,
 } from "../../src/usecases/import-freee.ts";
 import {
-  FakeImportUnitOfWork,
   FixedClock,
+  fakeImportUnitOfWork,
   InMemoryLedgerRepository,
   InMemoryMasterRepository,
   InMemoryRegistry,
@@ -49,7 +49,7 @@ function setup() {
     },
   ]);
   const ledger = new InMemoryLedgerRepository();
-  const uow = new FakeImportUnitOfWork(ledger, masters);
+  const uow = fakeImportUnitOfWork(ledger, masters);
   const code = (c: string) => {
     const a = masters.state.accounts.find((x) => x.code === c);
     if (a === undefined) throw new Error(`科目がない: ${c}`);

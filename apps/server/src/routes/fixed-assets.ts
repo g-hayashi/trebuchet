@@ -7,7 +7,7 @@ import {
 } from "@trebuchet/schema";
 import { Hono } from "hono";
 import { closingSettingsDeps } from "../deps.ts";
-import { fail, orThrow } from "../errors.ts";
+import { fail } from "../errors.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 
@@ -22,26 +22,25 @@ export const fixedAssetRoutes = new Hono<TenantEnv>()
     return c.json({ assets: result.value }, 200);
   })
   .post("/fixed-assets", validate("json", FixedAssetInput), (c) => {
-    const input = c.req.valid("json");
-    // 資産の保存と履歴を1つのトランザクションにする
-    const asset = c.var.db.transaction((tx) =>
-      orThrow(saveFixedAsset(closingSettingsDeps(tx), input)),
-    );
-    return c.json({ asset }, 201);
+    const result = saveFixedAsset(closingSettingsDeps(c.var.db), c.req.valid("json"));
+    if (!result.ok) return fail(c, result.error);
+    return c.json({ asset: result.value }, 201);
   })
   .put("/fixed-assets/:assetId", validate("json", FixedAssetUpdateInput), (c) => {
     const id = c.req.param("assetId");
     const { reason, ...fields } = c.req.valid("json");
-    const asset = c.var.db.transaction((tx) =>
-      orThrow(saveFixedAsset(closingSettingsDeps(tx), { ...fields, id, reason: reason ?? null })),
-    );
-    return c.json({ asset }, 200);
+    const result = saveFixedAsset(closingSettingsDeps(c.var.db), {
+      ...fields,
+      id,
+      reason: reason ?? null,
+    });
+    if (!result.ok) return fail(c, result.error);
+    return c.json({ asset: result.value }, 200);
   })
   .post("/fixed-assets/:assetId/dispose", validate("json", FixedAssetDisposeInput), (c) => {
     const id = c.req.param("assetId");
     const { disposedOn, reason } = c.req.valid("json");
-    const asset = c.var.db.transaction((tx) =>
-      orThrow(disposeFixedAsset(closingSettingsDeps(tx), { id, disposedOn, reason })),
-    );
-    return c.json({ asset }, 200);
+    const result = disposeFixedAsset(closingSettingsDeps(c.var.db), { id, disposedOn, reason });
+    if (!result.ok) return fail(c, result.error);
+    return c.json({ asset: result.value }, 200);
   });

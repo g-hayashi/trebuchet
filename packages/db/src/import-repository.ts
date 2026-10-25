@@ -6,8 +6,6 @@ import type {
   ImportUnitOfWork,
   Journal,
   JournalSignature,
-  LedgerRepository,
-  MasterRepository,
   TaxCategoryCode,
   TaxMapping,
 } from "@trebuchet/domain";
@@ -15,7 +13,6 @@ import type { RunResult } from "better-sqlite3";
 import { and, asc, between, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { DrizzleLedgerRepository } from "./ledger-repository.ts";
-import { DrizzleMasterRepository } from "./master-repository.ts";
 import type * as tenantSchema from "./schema/tenant.ts";
 import {
   importAccountMappings,
@@ -25,6 +22,7 @@ import {
   journalLines,
   journals,
 } from "./schema/tenant.ts";
+import { drizzleUnitOfWork } from "./unit-of-work.ts";
 
 /** テナントの DB、またはそのトランザクション */
 type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
@@ -234,26 +232,6 @@ export class DrizzleImportStore implements ImportStore {
   }
 }
 
-/**
- * ImportUnitOfWork の実装。同じ接続（のトランザクション）の上に、仕訳・マスタ・取込の記録の
- * リポジトリを作って渡す。fn が例外を投げると全体をロールバックする（research R10, INV-11）
- */
-export class DrizzleImportUnitOfWork implements ImportUnitOfWork {
-  private readonly db: TenantConn;
-
-  constructor(db: TenantConn) {
-    this.db = db;
-  }
-
-  transaction<T>(
-    fn: (tx: { ledger: LedgerRepository; masters: MasterRepository; imports: ImportStore }) => T,
-  ): T {
-    return this.db.transaction((tx) =>
-      fn({
-        ledger: new DrizzleLedgerRepository(tx),
-        masters: new DrizzleMasterRepository(tx),
-        imports: new DrizzleImportStore(tx),
-      }),
-    );
-  }
-}
+/** ImportUnitOfWork の実装。仕訳・マスタ・取込の記録を同じトランザクションで扱う（research R10, INV-11） */
+export const createImportUnitOfWork = (db: TenantConn): ImportUnitOfWork =>
+  drizzleUnitOfWork(db, (tx) => ({ imports: new DrizzleImportStore(tx) }));

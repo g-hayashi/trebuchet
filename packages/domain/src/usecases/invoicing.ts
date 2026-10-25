@@ -34,7 +34,6 @@ import {
   reversalDraft,
 } from "../invoicing/journal-drafts.ts";
 import { formatInvoiceNo } from "../invoicing/number.ts";
-import { runInTransaction } from "../invoicing/rollback.ts";
 import { invoiceStatus } from "../invoicing/status.ts";
 import { defaultSalesTaxCategory, effectiveTaxDisplay, itemTaxRate } from "../invoicing/tax.ts";
 import { checkPeriod } from "../journal.ts";
@@ -91,7 +90,7 @@ export function isIssuerComplete(settings: InvoiceSettings | null): {
 export function getInvoiceSettings(
   deps: Pick<InvoicingSettingsDeps, "uow">,
 ): Result<InvoiceSettingsView> {
-  return deps.uow.transaction(({ invoicing }) =>
+  return deps.uow.run(({ invoicing }) =>
     ok({
       settings: invoicing.getInvoiceSettings(),
       minimumNextSeq: (invoicing.maxInvoiceSeq() ?? 0) + 1,
@@ -107,7 +106,7 @@ export function saveInvoiceSettings(
   deps: InvoicingSettingsDeps,
   input: InvoiceSettingsInput,
 ): Result<InvoiceSettings> {
-  return deps.uow.transaction(({ invoicing }) => {
+  return deps.uow.run(({ invoicing }) => {
     const minimum = (invoicing.maxInvoiceSeq() ?? 0) + 1;
     if (input.nextSeq < minimum) {
       return err(
@@ -150,7 +149,7 @@ export function saveInvoiceSettings(
 export function listBillingTerms(
   deps: Pick<InvoicingSettingsDeps, "uow">,
 ): Result<BillingTermsView[]> {
-  return deps.uow.transaction(({ invoicing, masters }) => {
+  return deps.uow.run(({ invoicing, masters }) => {
     const partners = new Map(masters.listPartners().map((p) => [p.id, p]));
     const rows: BillingTermsView[] = [];
     for (const terms of invoicing.listBillingTerms()) {
@@ -183,7 +182,7 @@ export function saveBillingTerms(
 ): Result<BillingTerms> {
   const mismatch = amountMismatch(input);
   if (mismatch !== null) return err(mismatch);
-  return deps.uow.transaction(({ invoicing, masters }) => {
+  return deps.uow.run(({ invoicing, masters }) => {
     if (!masters.listPartners().some((p) => p.id === partnerId)) {
       return err(
         domainError("VALIDATION", "取引先が見つかりません", {
@@ -225,7 +224,7 @@ export function saveBillingTerms(
  * 外したことは `void` の記録（変更前の内容つき）に残す（`invoicing_audit_log` に削除の操作がないため）
  */
 export function deleteBillingTerms(deps: InvoicingSettingsDeps, partnerId: string): Result<null> {
-  return deps.uow.transaction(({ invoicing }) => {
+  return deps.uow.run(({ invoicing }) => {
     const before = invoicing.getBillingTerms(partnerId);
     if (before === null) return ok(null);
     invoicing.deleteBillingTerms(partnerId);
@@ -277,7 +276,7 @@ export function getWorkHours(
   deps: Pick<InvoicingDeps, "uow">,
   month: string,
 ): Result<WorkHoursEntry[]> {
-  return deps.uow.transaction(({ invoicing, masters }) =>
+  return deps.uow.run(({ invoicing, masters }) =>
     ok(workHoursEntries(invoicing, masters.listPartners(), month)),
   );
 }
@@ -291,7 +290,7 @@ export function saveWorkHours(
   month: string,
   input: WorkHoursInput,
 ): Result<WorkHoursEntry[]> {
-  return deps.uow.transaction(({ invoicing, masters }) => {
+  return deps.uow.run(({ invoicing, masters }) => {
     const partners = masters.listPartners();
     const allowed = hourlyPartners(partners, invoicing.listBillingTerms());
     for (const entry of input.entries) {
@@ -353,7 +352,7 @@ export function draftInvoices(
   request: InvoiceDraftRequest,
   today: string,
 ): Result<InvoiceDraftResponse> {
-  return deps.uow.transaction(({ invoicing, masters }) => {
+  return deps.uow.run(({ invoicing, masters }) => {
     const partners = masters.listPartners();
     const terms = new Map(invoicing.listBillingTerms().map((t) => [t.partnerId, t]));
 
@@ -421,14 +420,14 @@ export type IssuedInvoice = { invoice: InvoiceDetail; journal: Journal };
  * `source = invoice`）→ 通し番号を +1 → 請求書 → 明細 → 記録、の順に 1 トランザクションで書く（R9）。
  * 通し番号は検査の段階で読む（番号を仕訳の摘要に使うため）が、書くのは仕訳の後。
  * 仕訳の `err`（`PERIOD_CLOSED`・`OUT_OF_PERIOD`・`TAX_SETTING_GAP`・`TAX_METHOD_UNSUPPORTED` など）は
- * そのまま返す（仕訳の関数は検査の後に書くので、何も残らない）。仕訳より後の失敗は例外で全体を巻き戻す
+ * そのまま返す。`err` と例外は UnitOfWork が全体を巻き戻す
  */
 export function issueInvoice(
   deps: InvoicingDeps,
   input: InvoiceInput,
   today: string,
 ): Result<IssuedInvoice> {
-  return runInTransaction(deps.uow, ({ ledger, masters, invoicing }) => {
+  return deps.uow.run(({ ledger, masters, invoicing }) => {
     // (1) 読み取りと検査
     const settings = invoicing.getInvoiceSettings();
     const issuerCheck = isIssuerComplete(settings);
@@ -549,7 +548,7 @@ export function issueInvoice(
     if (!posted.ok) return posted;
     const journal = posted.value.journal;
 
-    // (3) 以降の書き込みの失敗は例外で全体を巻き戻す
+    // (3) 以降の書き込み（失敗は err・例外とも UnitOfWork が全体を巻き戻す）
     const now = deps.clock.now();
     invoicing.upsertInvoiceSettings({ ...settings, nextSeq: seq + 1, updatedAt: now });
     const invoice: InvoiceRecord = {
@@ -618,7 +617,7 @@ export function voidInvoice(
   const reason = checkReason(input.reason);
   if (!reason.ok) return reason;
 
-  return runInTransaction(deps.uow, ({ ledger, masters, invoicing }) => {
+  return deps.uow.run(({ ledger, masters, invoicing }) => {
     // (1) 読み取りと検査
     const invoice = invoicing.getInvoice(invoiceId);
     if (invoice === null) return err(invoiceNotFound(invoiceId));
@@ -657,7 +656,7 @@ export function voidInvoice(
     if (!undone.ok) return undone;
     const { journal, voidJournalId } = undone.value;
 
-    // (3) 以降の書き込みの失敗は例外で全体を巻き戻す
+    // (3) 以降の書き込み（失敗は err・例外とも UnitOfWork が全体を巻き戻す）
     const now = deps.clock.now();
     invoicing.markInvoiceVoided(invoiceId, {
       voidedAt: now,
@@ -738,7 +737,7 @@ export function recordPayment(
   input: PaymentInput,
   today: string,
 ): Result<PaymentResult> {
-  return runInTransaction(deps.uow, ({ ledger, masters, invoicing }) => {
+  return deps.uow.run(({ ledger, masters, invoicing }) => {
     // (1) 読み取りと検査
     const invoice = invoicing.getInvoice(invoiceId);
     if (invoice === null) return err(invoiceNotFound(invoiceId));
@@ -801,7 +800,7 @@ export function recordPayment(
     if (!posted.ok) return posted;
     const journal = posted.value.journal;
 
-    // (3) 以降の書き込みの失敗は例外で全体を巻き戻す
+    // (3) 以降の書き込み（失敗は err・例外とも UnitOfWork が全体を巻き戻す）
     const now = deps.clock.now();
     const payment: PaymentRecord = {
       id: deps.ids.next(),
@@ -857,7 +856,7 @@ export function voidPayment(
   const reason = checkReason(input.reason);
   if (!reason.ok) return reason;
 
-  return runInTransaction(deps.uow, ({ ledger, masters, invoicing }) => {
+  return deps.uow.run(({ ledger, masters, invoicing }) => {
     // (1) 読み取りと検査
     const invoice = invoicing.getInvoice(invoiceId);
     if (invoice === null) return err(invoiceNotFound(invoiceId));
@@ -895,7 +894,7 @@ export function voidPayment(
     if (!undone.ok) return undone;
     const { journal, voidJournalId } = undone.value;
 
-    // (3) 以降の書き込みの失敗は例外で全体を巻き戻す
+    // (3) 以降の書き込み（失敗は err・例外とも UnitOfWork が全体を巻き戻す）
     const now = deps.clock.now();
     invoicing.markPaymentVoided(paymentId, {
       voidedAt: now,
@@ -948,7 +947,7 @@ export function listInvoices(
   },
   today: string,
 ): Result<InvoiceListResponse> {
-  return deps.uow.transaction(({ invoicing, masters }) => {
+  return deps.uow.run(({ invoicing, masters }) => {
     const { status, ...filter } = query;
     const all = invoicing
       .listInvoices(filter)
@@ -992,7 +991,7 @@ export function getInvoiceDetail(
   invoiceId: string,
   today: string,
 ): Result<InvoiceDetail> {
-  return deps.uow.transaction(({ invoicing }) => {
+  return deps.uow.run(({ invoicing }) => {
     const invoice = invoicing.getInvoice(invoiceId);
     if (invoice === null) return err(invoiceNotFound(invoiceId));
     return ok(
@@ -1014,7 +1013,7 @@ export function getJournalOrigin(
   deps: Pick<InvoicingDeps, "uow">,
   journalId: string,
 ): Result<JournalOrigin | null> {
-  return deps.uow.transaction(({ ledger, invoicing }) => {
+  return deps.uow.run(({ ledger, invoicing }) => {
     if (ledger.getJournal(journalId) === undefined) {
       return err(domainError("JOURNAL_NOT_FOUND", "仕訳が見つかりません", { journalId }));
     }

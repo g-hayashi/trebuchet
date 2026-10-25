@@ -141,10 +141,8 @@ export function previewFreeeImport(
 ): Result<FreeeImportPreview> {
   const file = readJournalFile(input.bytes);
   if (!file.ok) return file;
-  return ok(
-    deps.uow.transaction((tx) =>
-      withFile(buildPlan(tx, file.value, input.options), file.value, input),
-    ),
+  return deps.uow.run((tx) =>
+    ok(withFile(buildPlan(tx, file.value, input.options), file.value, input)),
   );
 }
 
@@ -181,7 +179,7 @@ export function commitFreeeImport(
   const file = readJournalFile(input.bytes);
   if (!file.ok) return file;
 
-  return deps.uow.transaction((tx): Result<FreeeImportResult> => {
+  return deps.uow.run((tx): Result<FreeeImportResult> => {
     const plan = buildPlan(tx, file.value, input.options);
     const preview = withFile(plan, file.value, input);
     if (!preview.ready) {
@@ -417,7 +415,7 @@ export function saveImportMappings(
   deps: { uow: ImportUnitOfWork; clock: Clock },
   input: ImportMappingsInput,
 ): Result<SavedImportMappings> {
-  return deps.uow.transaction((tx): Result<SavedImportMappings> => {
+  return deps.uow.run((tx): Result<SavedImportMappings> => {
     const accounts = validateAccountRows(input.accounts ?? [], tx.masters);
     if (!accounts.ok) return accounts;
     const taxes = validateTaxRows(input.taxes ?? [], tx.masters);
@@ -477,7 +475,7 @@ export function proposeFreeeOpening(
   const ledger = readLedgerFile(input.bytes);
   if (!ledger.ok) return ledger;
 
-  return deps.uow.transaction((tx) => {
+  return deps.uow.run((tx) => {
     const periods = tx.masters.listFiscalPeriods();
     const period = periods.find((p) => p.fiscalYear === input.fiscalYear);
     if (period === undefined) {
@@ -548,7 +546,7 @@ export function reconcileFreee(
     journalFile = file.value;
   }
 
-  return deps.uow.transaction((tx) => {
+  return deps.uow.run((tx) => {
     const periods = tx.masters.listFiscalPeriods();
     const period = periods.find((p) => p.fiscalYear === input.fiscalYear);
     if (period === undefined) {
@@ -614,7 +612,7 @@ export function voidImportBatch(
   const reason = checkReason(input.reason);
   if (!reason.ok) return reason;
 
-  return deps.uow.transaction((tx): Result<VoidImportBatchResult> => {
+  return deps.uow.run((tx): Result<VoidImportBatchResult> => {
     const batch = tx.imports.getBatch(input.batchId);
     if (batch === undefined) {
       return err(

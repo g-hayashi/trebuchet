@@ -21,7 +21,7 @@ import {
   freeeModelArb,
   toFreeeJournalCsv,
 } from "../../domain/test/freee-arbitraries.ts";
-import { DrizzleImportStore, DrizzleImportUnitOfWork } from "../src/import-repository.ts";
+import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
@@ -136,7 +136,7 @@ function scenarioArb(): fc.Arbitrary<Scenario> {
     );
 }
 
-const uow = () => new DrizzleImportUnitOfWork(db);
+const uow = () => createImportUnitOfWork(db);
 const unwrap = <T>(r: Result<T>): T => {
   if (!r.ok) throw new Error(JSON.stringify(r.error));
   return r.value;

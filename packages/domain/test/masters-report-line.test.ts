@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createEntity } from "../src/usecases/create-entity.ts";
-import { type MasterDeps, setAccountReportLine } from "../src/usecases/masters.ts";
+import { type MasterDeps, setAccountReportLine, updateAccount } from "../src/usecases/masters.ts";
 import {
   FixedClock,
+  fakeClosingUnitOfWork,
   InMemoryClosingStore,
   InMemoryLedgerRepository,
   InMemoryMasterRepository,
@@ -92,6 +93,51 @@ describe("setAccountReportLine（R12a、FR-006）", () => {
 
   it("科目がなければ ACCOUNT_NOT_FOUND", () => {
     const r = setAccountReportLine(deps, "no-such-account", 17);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("ACCOUNT_NOT_FOUND");
+  });
+});
+
+describe("updateAccount（PATCH /accounts/:accountId）", () => {
+  const uowDeps = () => ({
+    uow: fakeClosingUnitOfWork(new InMemoryLedgerRepository(), repo, closing),
+    ids: deps.ids,
+    clock: deps.clock,
+  });
+
+  it("名称・使用停止・欄を 1 回で変え、audit_log と closing_audit_log に残す", () => {
+    const supplies = account("消耗品費");
+    const r = updateAccount(uowDeps(), supplies.id, {
+      name: "事務用品費",
+      isActive: false,
+      reportLine: 31,
+    });
+    expect(r.ok).toBe(true);
+    expect(repo.getAccount(supplies.id)).toMatchObject({
+      name: "事務用品費",
+      isActive: false,
+      reportLine: 31,
+    });
+    expect(repo.audits.map((a) => a.action).slice(-2)).toEqual(["rename", "deactivate"]);
+    expect(closing.audits).toHaveLength(1);
+  });
+
+  it("後の項目が失敗すると、先に変えた名称・使用停止も記録も残らない", () => {
+    const supplies = account("消耗品費");
+    const masters = structuredClone(repo.state);
+    const r = updateAccount(uowDeps(), supplies.id, {
+      name: "事務用品費",
+      isActive: false,
+      reportLine: 99,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("REPORT_LINE_INVALID");
+    expect(repo.state).toEqual(masters);
+    expect(closing.audits).toHaveLength(0);
+  });
+
+  it("科目がなければ ACCOUNT_NOT_FOUND", () => {
+    const r = updateAccount(uowDeps(), "no-such-account", { name: "x" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("ACCOUNT_NOT_FOUND");
   });

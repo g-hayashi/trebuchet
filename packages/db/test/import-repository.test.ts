@@ -3,12 +3,14 @@ import {
   createEntity,
   type ImportBatch,
   type ImportRef,
+  type ImportUnitOfWork,
   type JournalDraft,
   type NewJournal,
+  ok,
   validateJournal,
 } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DrizzleImportStore, DrizzleImportUnitOfWork } from "../src/import-repository.ts";
+import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
@@ -20,7 +22,7 @@ let db: TenantDb;
 let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 let store: DrizzleImportStore;
-let uow: DrizzleImportUnitOfWork;
+let uow: ImportUnitOfWork;
 
 const ids = { next: () => randomUUIDv7() };
 const clock = { now: () => "2026-10-19T09:00:00.000Z" };
@@ -42,7 +44,7 @@ beforeEach(() => {
   masters = new DrizzleMasterRepository(db);
   ledger = new DrizzleLedgerRepository(db);
   store = new DrizzleImportStore(db);
-  uow = new DrizzleImportUnitOfWork(db);
+  uow = createImportUnitOfWork(db);
 });
 afterEach(() => tmp.cleanup());
 
@@ -121,15 +123,17 @@ const refOf = (journalId: string, batchId: string, freeeJournalId: string, freee
 
 /** 取込の仕訳を登録し、取込の回と参照を作る */
 function importJournals(entries: { freeeId: string; date: string }[], batch = batchOf()) {
-  return uow.transaction(({ ledger: l, imports }) => {
+  const result = uow.run(({ ledger: l, imports }) => {
     imports.insertBatch(batch);
     const refs = entries.map((e) => {
       const journal = l.insertJournal(newJournal(sale(e.date), l.nextJournalNo(), "import_freee"));
       return refOf(journal.id, batch.id, e.freeeId, e.date);
     });
     imports.insertRefs(refs);
-    return { batch, refs };
+    return ok({ batch, refs });
   });
+  if (!result.ok) throw new Error(JSON.stringify(result.error));
+  return result.value;
 }
 
 const count = (table: string) =>
@@ -150,11 +154,11 @@ const TABLES = [
 ] as const;
 const counts = () => Object.fromEntries(TABLES.map((t) => [t, count(t)]));
 
-describe("DrizzleImportUnitOfWork（INV-11）", () => {
+describe("createImportUnitOfWork（INV-11）", () => {
   it("トランザクションの中で補助科目・取引先・タグ・仕訳・監査ログ・取込の記録を作ってから例外を投げると、どれも残らない", () => {
     const before = counts();
     expect(() =>
-      uow.transaction(({ ledger: l, masters: m, imports }) => {
+      uow.run(({ ledger: l, masters: m, imports }) => {
         const card = accountId("未払金");
         const sub = { id: randomUUIDv7(), accountId: card, name: "JALカード", isActive: true };
         m.insertSubAccount(sub);

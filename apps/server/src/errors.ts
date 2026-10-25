@@ -1,4 +1,4 @@
-import type { DomainError, Result } from "@trebuchet/domain";
+import type { DomainError } from "@trebuchet/domain";
 import { RepositoryConflictError } from "@trebuchet/domain";
 import type { ErrorCode, ErrorDetails, ErrorResponse } from "@trebuchet/schema";
 import type { Context, ErrorHandler } from "hono";
@@ -97,12 +97,6 @@ export class DomainException extends Error {
     this.name = "DomainException";
     this.error = error;
   }
-}
-
-/** トランザクションの中で Result の失敗を例外にし、ロールバックさせる（onError が fail と同じ形にする） */
-export function orThrow<T>(result: Result<T>): T {
-  if (!result.ok) throw new DomainException(result.error);
-  return result.value;
 }
 
 type IssueLike = { path: readonly PropertyKey[]; message: string };

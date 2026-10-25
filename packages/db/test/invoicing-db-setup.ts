@@ -1,7 +1,7 @@
 import { randomUUIDv7 } from "node:crypto";
 import { createEntity, createJournal, type InvoiceRecord, type Partner } from "@trebuchet/domain";
 import type { BillingTerms, InvoiceSettings } from "@trebuchet/schema";
-import { DrizzleInvoicingStore, DrizzleInvoicingUnitOfWork } from "../src/invoicing-repository.ts";
+import { createInvoicingUnitOfWork, DrizzleInvoicingStore } from "../src/invoicing-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
@@ -39,7 +39,7 @@ export function setupInvoicingDb(options: { taxable?: boolean } = {}) {
     ]);
   }
   const store = new DrizzleInvoicingStore(db);
-  const uow = new DrizzleInvoicingUnitOfWork(db);
+  const uow = createInvoicingUnitOfWork(db);
   const ledger = new DrizzleLedgerRepository(db);
 
   const accountId = (name: string) => {

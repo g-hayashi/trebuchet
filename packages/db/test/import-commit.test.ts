@@ -15,7 +15,7 @@ import {
   EXPECTED_OPENING_PROPOSAL,
   FIXTURE_FILES,
 } from "../../domain/test/fixtures/freee/expected.ts";
-import { DrizzleImportStore, DrizzleImportUnitOfWork } from "../src/import-repository.ts";
+import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
@@ -99,27 +99,23 @@ function tableCounts(): Record<string, number> {
 
 /** 仕訳の登録の failAt 件目で例外を投げる ImportUnitOfWork（同じ接続の1つのトランザクション） */
 function failingUow(failAt: number): ImportUnitOfWork {
+  const inner = createImportUnitOfWork(db);
   return {
-    transaction: (fn) =>
-      db.transaction((tx) => {
-        const txLedger = new DrizzleLedgerRepository(tx);
-        const insert = txLedger.insertJournal.bind(txLedger);
+    run: (fn) =>
+      inner.run((tx) => {
+        const insert = tx.ledger.insertJournal.bind(tx.ledger);
         let calls = 0;
-        txLedger.insertJournal = (journal) => {
+        tx.ledger.insertJournal = (journal) => {
           calls += 1;
           if (calls === failAt) throw new Error(`injected failure at journal ${failAt}`);
           return insert(journal);
         };
-        return fn({
-          ledger: txLedger,
-          masters: new DrizzleMasterRepository(tx),
-          imports: new DrizzleImportStore(tx),
-        });
+        return fn(tx);
       }),
   };
 }
 
-const commitDeps = (uow: ImportUnitOfWork = new DrizzleImportUnitOfWork(db)) => ({
+const commitDeps = (uow: ImportUnitOfWork = createImportUnitOfWork(db)) => ({
   uow,
   ids,
   clock,
@@ -131,7 +127,7 @@ function trialBalance() {
   return result.value;
 }
 
-describe("commitFreeeImport（DrizzleImportUnitOfWork）", () => {
+describe("commitFreeeImport（createImportUnitOfWork）", () => {
   it.each([1, Math.ceil(COUNT_NEW / 2), COUNT_NEW])(
     "INV-11 / SC-006: 仕訳の登録の %i 件目で例外が起きると、何も残らない",
     (failAt) => {
@@ -164,7 +160,7 @@ describe("commitFreeeImport（DrizzleImportUnitOfWork）", () => {
     const counts = tableCounts();
     const balance = trialBalance();
 
-    const preview = previewFreeeImport({ uow: new DrizzleImportUnitOfWork(db) }, input());
+    const preview = previewFreeeImport({ uow: createImportUnitOfWork(db) }, input());
     if (!preview.ok) throw new Error(JSON.stringify(preview.error));
     expect(preview.value.counts).toMatchObject({ new: 0, already: COUNT_NEW });
     expect(preview.value.ready).toBe(false);

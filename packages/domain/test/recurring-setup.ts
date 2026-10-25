@@ -1,6 +1,6 @@
 import type { RecurringInput } from "@trebuchet/schema";
 import type { Result } from "../src/types.ts";
-import { FakeRecurringUnitOfWork, InMemoryRecurringStore } from "./fakes.ts";
+import { fakeRecurringUnitOfWork, InMemoryRecurringStore } from "./fakes.ts";
 import { setupInvoicing } from "./invoicing-setup.ts";
 
 /**
@@ -10,7 +10,7 @@ import { setupInvoicing } from "./invoicing-setup.ts";
 export function setupRecurring(options: { taxable?: boolean } = {}) {
   const t = setupInvoicing({ taxable: options.taxable ?? true });
   const recurring = new InMemoryRecurringStore();
-  const uow = new FakeRecurringUnitOfWork(t.ledger, t.masters, recurring);
+  const uow = fakeRecurringUnitOfWork(t.ledger, t.masters, recurring);
   const deps = { uow, ids: t.ids, clock: t.clock };
   const partner = t.addPartner();
   const inactivePartner = t.addPartner({ isActive: false });

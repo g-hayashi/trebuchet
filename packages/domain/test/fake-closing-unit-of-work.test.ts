@@ -6,7 +6,8 @@ import type {
   FixedAsset,
   HomeUseAllocation,
 } from "../src/types.ts";
-import { FakeClosingUnitOfWork } from "./fakes.ts";
+import { ok } from "../src/types.ts";
+import { fakeClosingUnitOfWork } from "./fakes.ts";
 
 const AT = "2026-10-19T00:00:00.000Z";
 
@@ -96,15 +97,15 @@ const audit: ClosingAuditEntry = {
   afterJson: "{}",
 };
 
-describe("FakeClosingUnitOfWork", () => {
+describe("fakeClosingUnitOfWork", () => {
   it("途中の例外で仕訳も参照も残らない（R4。仕訳・按分・資産・参照・履歴・マスタをすべて戻す）", () => {
-    const uow = new FakeClosingUnitOfWork();
+    const uow = fakeClosingUnitOfWork();
     expect(() =>
-      uow.transaction(({ journals, masters, closing }) => {
+      uow.run(({ ledger, masters, closing }) => {
         masters.insertTag({ id: "tag-1", name: "出張" });
         closing.upsertHomeUseAllocation(allocation);
         closing.upsertFixedAsset(asset);
-        journals.insertJournal(journal("j-1", 1));
+        ledger.insertJournal(journal("j-1", 1));
         closing.insertAdjustmentRef(ref);
         closing.appendClosingAudit(audit);
         closing.replaceRentDetails(2025, [
@@ -131,11 +132,12 @@ describe("FakeClosingUnitOfWork", () => {
   });
 
   it("例外がなければ仕訳と参照が残る。fiscalYear で絞り込める", () => {
-    const uow = new FakeClosingUnitOfWork();
-    uow.transaction(({ journals, closing }) => {
-      journals.insertJournal(journal("j-1", 1));
+    const uow = fakeClosingUnitOfWork();
+    uow.run(({ ledger, closing }) => {
+      ledger.insertJournal(journal("j-1", 1));
       closing.insertAdjustmentRef(ref);
       closing.upsertHomeUseAllocation(allocation);
+      return ok(null);
     });
     expect(uow.ledger.journals.map((j) => j.id)).toEqual(["j-1"]);
     expect(uow.closing.listAdjustmentRefs(2025)).toEqual([ref]);
@@ -144,7 +146,7 @@ describe("FakeClosingUnitOfWork", () => {
   });
 
   it("参照の仕訳 ID は一意で、存在しない仕訳への参照は拒否する（FK）", () => {
-    const uow = new FakeClosingUnitOfWork();
+    const uow = fakeClosingUnitOfWork();
     expect(() => uow.closing.insertAdjustmentRef(ref)).toThrow(/FOREIGN KEY/);
     uow.ledger.insertJournal(journal("j-1", 1));
     uow.closing.insertAdjustmentRef(ref);
@@ -152,7 +154,7 @@ describe("FakeClosingUnitOfWork", () => {
   });
 
   it("upsert は id（回答・メモは年度と種別）で置き換え、削除できるものは削除できる", () => {
-    const uow = new FakeClosingUnitOfWork();
+    const uow = fakeClosingUnitOfWork();
     const c = uow.closing;
     c.upsertHomeUseAllocation(allocation);
     c.upsertHomeUseAllocation({ ...allocation, businessRatio: 5000 });
@@ -215,7 +217,7 @@ describe("FakeClosingUnitOfWork", () => {
   });
 
   it("listTaxParameters は初期の値を返し、listFixedAssets は取得日の順", () => {
-    const uow = new FakeClosingUnitOfWork();
+    const uow = fakeClosingUnitOfWork();
     expect(uow.closing.listTaxParameters()).toEqual([]);
     uow.closing.upsertFixedAsset({ ...asset, id: "b", acquiredOn: "2025-06-01" });
     uow.closing.upsertFixedAsset({ ...asset, id: "a", acquiredOn: "2025-01-01" });

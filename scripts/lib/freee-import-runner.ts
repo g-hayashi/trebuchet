@@ -10,7 +10,7 @@
 import { createHash, randomUUIDv7 } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { DrizzleImportUnitOfWork } from "../../packages/db/src/import-repository.ts";
+import { createImportUnitOfWork } from "../../packages/db/src/import-repository.ts";
 import { DrizzleLedgerRepository } from "../../packages/db/src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../../packages/db/src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../../packages/db/src/registry-repository.ts";
@@ -23,6 +23,7 @@ import {
   LEDGER_COLUMN_NAMES,
   LEDGER_COLUMNS,
 } from "../../packages/domain/src/import/freee/columns.ts";
+import type { ImportUnitOfWork } from "../../packages/domain/src/ports.ts";
 import type { Result } from "../../packages/domain/src/types.ts";
 import { createEntity } from "../../packages/domain/src/usecases/create-entity.ts";
 import {
@@ -250,7 +251,7 @@ export type ImportContext = {
   entityId: string;
   period: { fiscalYear: number; startDate: string; endDate: string };
   masters: DrizzleMasterRepository;
-  uow: DrizzleImportUnitOfWork;
+  uow: ImportUnitOfWork;
   reports: DrizzleLedgerRepository;
   ids: { next: () => string };
   clock: { now: () => string };
@@ -303,7 +304,7 @@ export function runFreeeImport(args: ImportArgs, options: ImportOptions): Import
   const db = openTenant(entityId);
   const masters = new DrizzleMasterRepository(db);
   const masterDeps = { repo: masters, ids, clock };
-  const uow = new DrizzleImportUnitOfWork(db);
+  const uow = createImportUnitOfWork(db);
   const reports = new DrizzleLedgerRepository(db);
 
   // 会計期間がなければ翌年度を順に作る（前年度を締める必要はない）

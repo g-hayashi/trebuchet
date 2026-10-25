@@ -11,8 +11,8 @@
  */
 import { createHash, randomUUIDv7 } from "node:crypto";
 import {
+  createImportUnitOfWork,
   DrizzleImportStore,
-  DrizzleImportUnitOfWork,
 } from "../packages/db/src/import-repository.ts";
 import { DrizzleMasterRepository } from "../packages/db/src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../packages/db/src/registry-repository.ts";
@@ -164,7 +164,7 @@ try {
     `仕訳帳 ${JOURNALS} 仕訳（CSV ${rowCount} 行, 仕訳の行 平均 ${(legCount / JOURNALS).toFixed(1)}, ${bytes.length} バイト）を生成`,
   );
 
-  const uow = new DrizzleImportUnitOfWork(db);
+  const uow = createImportUnitOfWork(db);
   const input = { bytes, fileName: "bench-journal.csv", sha256, options: {} };
 
   const preview = timed(() => previewFreeeImport({ uow }, input));

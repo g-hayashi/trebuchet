@@ -12,7 +12,7 @@ import {
   EXPECTED_JOURNAL_V2,
   FIXTURE_FILES,
 } from "../../domain/test/fixtures/freee/expected.ts";
-import { DrizzleImportStore, DrizzleImportUnitOfWork } from "../src/import-repository.ts";
+import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
@@ -37,7 +37,7 @@ function inputOf(fileName: string, countNew: number): FreeeCommitInput {
   return { bytes, fileName, sha256, options: {}, expected: { fileSha256: sha256, countNew } };
 }
 
-const deps = () => ({ uow: new DrizzleImportUnitOfWork(db), ids, clock });
+const deps = () => ({ uow: createImportUnitOfWork(db), ids, clock });
 
 beforeEach(() => {
   tmp = useTempDataDir("import-incremental");
@@ -73,7 +73,7 @@ function refOf(freeeJournalId: string) {
   return found;
 }
 
-describe("差分の取込（v1 → v2。DrizzleImportUnitOfWork）", () => {
+describe("差分の取込（v1 → v2。createImportUnitOfWork）", () => {
   it("2回目は追加分だけを登録し、変更・削除された仕訳の帳簿は変わらない。警告の数を取込の回に残す", () => {
     const v1Count = EXPECTED_JOURNAL.journalCount - EXPECTED_JOURNAL.priorYearClosingIds.length;
     const first = commitFreeeImport(deps(), inputOf(FIXTURE_FILES.journal, v1Count));

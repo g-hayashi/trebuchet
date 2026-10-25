@@ -1,6 +1,12 @@
 import { addDays, oneYearEnd } from "../dates.ts";
 import { type OpeningBalanceDraft, validateOpeningBalances } from "../opening.ts";
-import type { Clock, ClosingStore, IdGenerator, MasterRepository } from "../ports.ts";
+import type {
+  Clock,
+  ClosingStore,
+  ClosingUnitOfWork,
+  IdGenerator,
+  MasterRepository,
+} from "../ports.ts";
 import { NORMAL_SIDE, SECTION_SORT_BASE } from "../seed/accounts.individual.ts";
 import { type TaxSettingDraft, validateTaxSettings } from "../tax-settings.ts";
 import {
@@ -294,6 +300,39 @@ export function setAccountReportLine(
       afterJson: JSON.stringify({ reportLine }),
     });
     return ok(updated);
+  });
+}
+
+/** 科目の変更（PATCH /accounts/:accountId）。指定した項目だけを変える */
+export type AccountUpdate = {
+  name?: string | undefined;
+  isActive?: boolean | undefined;
+  reportLine?: number | null | undefined;
+};
+
+/**
+ * 科目の名称・使用停止・決算書の欄を、指定された順（名称 → 使用停止 → 欄）に変える。
+ * どれかが失敗すれば、全部を取り消してその err を返す。欄の変更の履歴は ClosingStore に残すので、
+ * マスタと決算の記録を同じトランザクションで扱う決算の UnitOfWork を使う
+ */
+export function updateAccount(
+  deps: { uow: ClosingUnitOfWork; ids: IdGenerator; clock: Clock },
+  accountId: string,
+  patch: AccountUpdate,
+): Result<Account> {
+  return deps.uow.run(({ masters, closing }) => {
+    const txDeps = { repo: masters, closing, ids: deps.ids, clock: deps.clock };
+    const account = masters.getAccount(accountId);
+    if (account === undefined) return accountNotFound(accountId);
+    let current: Result<Account> = ok(account);
+    if (patch.name !== undefined) current = renameAccount(txDeps, accountId, patch.name);
+    if (current.ok && patch.isActive !== undefined) {
+      current = setAccountActive(txDeps, accountId, patch.isActive);
+    }
+    if (current.ok && patch.reportLine !== undefined) {
+      current = setAccountReportLine(txDeps, accountId, patch.reportLine);
+    }
+    return current;
   });
 }
 

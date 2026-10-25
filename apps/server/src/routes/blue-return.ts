@@ -21,13 +21,8 @@ import {
   RentDetailsPut,
 } from "@trebuchet/schema";
 import { Hono } from "hono";
-import {
-  blueReturnDeps,
-  closingSettingsDeps,
-  commitAdjustmentDeps,
-  deductionAnswersDeps,
-} from "../deps.ts";
-import { fail, orThrow } from "../errors.ts";
+import { blueReturnDeps, closingSettingsDeps, commitAdjustmentDeps } from "../deps.ts";
+import { fail } from "../errors.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 import { parseYear } from "./periods.ts";
@@ -56,7 +51,7 @@ export const blueReturnRoutes = new Hono<TenantEnv>()
   .get("/blue-return/:year/deduction-answers", (c) => {
     const year = parseYear(c.req.param("year"));
     if (!year.ok) return fail(c, year.error);
-    const result = getDeductionAnswers(deductionAnswersDeps(c.var.db), { fiscalYear: year.value });
+    const result = getDeductionAnswers(closingSettingsDeps(c.var.db), { fiscalYear: year.value });
     if (!result.ok) return fail(c, result.error);
     return c.json(result.value, 200);
   })
@@ -64,11 +59,12 @@ export const blueReturnRoutes = new Hono<TenantEnv>()
     const year = parseYear(c.req.param("year"));
     if (!year.ok) return fail(c, year.error);
     const answers = c.req.valid("json");
-    // 回答の保存と履歴を1つのトランザクションにする
-    const view = c.var.db.transaction((tx) =>
-      orThrow(saveDeductionAnswers(deductionAnswersDeps(tx), { fiscalYear: year.value, answers })),
-    );
-    return c.json(view, 200);
+    const result = saveDeductionAnswers(closingSettingsDeps(c.var.db), {
+      fiscalYear: year.value,
+      answers,
+    });
+    if (!result.ok) return fail(c, result.error);
+    return c.json(result.value, 200);
   })
   // 決算のメモ（特別な事情・期首と前期末の差の説明。FR-027, FR-030）。締め済みでも保存できる
   .put(
@@ -80,11 +76,13 @@ export const blueReturnRoutes = new Hono<TenantEnv>()
       if (!year.ok) return fail(c, year.error);
       const { kind } = c.req.valid("param");
       const { body } = c.req.valid("json");
-      // メモの保存と履歴を1つのトランザクションにする
-      const note = c.var.db.transaction((tx) =>
-        orThrow(saveClosingNote(closingSettingsDeps(tx), { fiscalYear: year.value, kind, body })),
-      );
-      return c.json({ note }, 200);
+      const result = saveClosingNote(closingSettingsDeps(c.var.db), {
+        fiscalYear: year.value,
+        kind,
+        body,
+      });
+      if (!result.ok) return fail(c, result.error);
+      return c.json({ note: result.value }, 200);
     },
   )
   // ---- 家事按分・地代家賃の内訳・決算整理の仕訳の案（US2） ----
@@ -101,11 +99,12 @@ export const blueReturnRoutes = new Hono<TenantEnv>()
     const year = parseYear(c.req.param("year"));
     if (!year.ok) return fail(c, year.error);
     const input = c.req.valid("json");
-    // 登録の保存と履歴を1つのトランザクションにする
-    const allocation = c.var.db.transaction((tx) =>
-      orThrow(saveHomeUseAllocation(closingSettingsDeps(tx), { fiscalYear: year.value, ...input })),
-    );
-    return c.json({ allocation }, 200);
+    const result = saveHomeUseAllocation(closingSettingsDeps(c.var.db), {
+      fiscalYear: year.value,
+      ...input,
+    });
+    if (!result.ok) return fail(c, result.error);
+    return c.json({ allocation: result.value }, 200);
   })
   .get("/blue-return/:year/rent-details", (c) => {
     const year = parseYear(c.req.param("year"));
@@ -118,10 +117,9 @@ export const blueReturnRoutes = new Hono<TenantEnv>()
     const year = parseYear(c.req.param("year"));
     if (!year.ok) return fail(c, year.error);
     const { rows } = c.req.valid("json");
-    const saved = c.var.db.transaction((tx) =>
-      orThrow(saveRentDetails(closingSettingsDeps(tx), { fiscalYear: year.value, rows })),
-    );
-    return c.json({ rows: saved }, 200);
+    const result = saveRentDetails(closingSettingsDeps(c.var.db), { fiscalYear: year.value, rows });
+    if (!result.ok) return fail(c, result.error);
+    return c.json({ rows: result.value }, 200);
   })
   .get("/blue-return/:year/adjustments", (c) => {
     const year = parseYear(c.req.param("year"));

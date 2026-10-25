@@ -52,6 +52,7 @@ apps/server ──→ packages/schema
 全機能（001〜）の `tasks.md` に共通のルール。各 `tasks.md` の「全タスク共通のルール」は、これに従うことと、その機能に固有の規則だけを書く。
 
 - **テストを先に書く（TDD）**（Constitution V）。失敗するテストを確認してから実装する。
+- **複数回書くユースケースは `TenantUnitOfWork` の中で書く**（`packages/domain/src/ports.ts`。db の実装は `drizzleUnitOfWork`、domain のテストの偽物は `FakeUnitOfWork`）。`uow.run(fn)` の fn が `err` を返すか例外を投げれば、fn の中の書き込みはすべて巻き戻る（書く順序で原子性を守る必要はない）。ユースケースが自分で UnitOfWork を使い、ルートで `db.transaction` を張らない。UnitOfWork を受け取るユースケースを、別の `run` の中から呼ばない（入れ子のトランザクションにならない）。001 の `ledger.transaction`・`repo.transaction`（リポジトリ 1 つ）は `err` では巻き戻らないので、検査を書き込みより先に済ませる。
 - **不変条件**は `specs/INVARIANTS.md`（INV-1〜39 の索引。正本は各 `data-model.md` §4）。対応するテストは fast-check の性質テストで書く。`fc.assert(fc.property(...))` を直接呼ぶ（`@fast-check/vitest` は使わない。001/R6）。
 - **web のテストはコンポーネントテスト**（Testing Library + jsdom。`apps/web/test/render-route.tsx`、`mock-api.ts`、置き場所は `apps/web/test/routes/`）。テストのためだけに node 専用のロジックを別ファイルに切り出さない。新しい API を呼ぶ画面を足したら `mock-api.ts` に既定の応答を足し、既存の web のテストが落ちないことを確かめる。ルートを足したら `pnpm --filter @trebuchet/web build` で `routeTree.gen.ts` を再生成してから typecheck する。
 - **server のテスト**は `apps/server/test/helpers.ts` の `createTestSession`・`testHeaders`（と `createTestEntity`）を使い、`app.request()` で呼ぶ。サンドボックスではローカルのポートを開けないので、server を起動する手順（dev サーバー、E2E）は利用者の端末で行う。
@@ -136,11 +137,11 @@ apps/server ──→ packages/schema
 
 ## 請求と定期仕訳（005）
 
-仕様: `specs/005-recurring-invoicing/`。請求・入金と仕訳の結びつき、書く順序、取消の規則: [ADR 0008](docs/adr/0008-invoice-journal-linkage.md)。
+仕様: `specs/005-recurring-invoicing/`。請求・入金と仕訳の結びつき、トランザクション、取消の規則: [ADR 0008](docs/adr/0008-invoice-journal-linkage.md)。
 
 | 層 | 場所 |
 |---|---|
-| 業務ルール（請求の金額と税、請求番号、支払期限、状態、仕訳の案、`RollbackError`、定期仕訳の予定日と登録する回の選び方） | `packages/domain/src/invoicing/`（`amounts.ts`、`tax.ts`、`number.ts`、`due-date.ts`、`status.ts`、`draft.ts`、`detail.ts`、`journal-drafts.ts`、`rollback.ts`）、`packages/domain/src/recurring/`（`schedule.ts`、`due.ts`） |
+| 業務ルール（請求の金額と税、請求番号、支払期限、状態、仕訳の案、定期仕訳の予定日と登録する回の選び方） | `packages/domain/src/invoicing/`（`amounts.ts`、`tax.ts`、`number.ts`、`due-date.ts`、`status.ts`、`draft.ts`、`detail.ts`、`journal-drafts.ts`）、`packages/domain/src/recurring/`（`schedule.ts`、`due.ts`） |
 | ユースケース | `packages/domain/src/usecases/invoicing.ts`、`recurring.ts` |
 | 永続化（設定・条件・工数・請求書・消し込み・定期仕訳・操作の記録） | `packages/db/src/invoicing-repository.ts`、`recurring-repository.ts` |
 | HTTP | `apps/server/src/routes/invoicing.ts`、`recurring.ts` |
@@ -148,7 +149,7 @@ apps/server ──→ packages/schema
 | 画面 | `apps/web/src/features/invoicing/`、`features/recurring/`、`apps/web/src/routes/e/$entityId/` の `invoice-settings.tsx`・`work-hours.tsx`・`invoices/`・`recurring/` |
 | E2E | `apps/web/e2e/invoicing.spec.ts`（対象月・発行日・入金日は固定の日付で、実行日に依存しない） |
 
-- **書く順序を守る**（005/R9、ADR 0008）。drizzle のトランザクションは `err` を返しても確定する。(1) 読み取りと検査をすべて先に行い違反は `err`、(2) 最初の書き込みを 001 の `createJournal` / `voidJournal` にして、その `err` はそのまま返す、(3) 以降の失敗・ドメインの判断での中止は `RollbackError` を投げて全体を巻き戻し、ユースケースの外側で `err` に直す。
+- **発行・入金・取消は 1 つの `InvoicingUnitOfWork` の中で書く**（ADR 0008）。複数回書くユースケースの一般の規則（「開発の進め方」）のとおり、`err` を返せば仕訳も請求の記録も巻き戻る。
 - **請求書・入金の仕訳は `JOURNAL_LINKED` で守る**（005/R13）。`source` が `invoice` / `payment` の仕訳は、001 の通常の訂正・取消を 409 で拒否する。請求・入金の取消だけが `{ linked: true }` で仕訳を取り消す。`recurring` の仕訳は通常どおり訂正・取消できる。消し込みのある請求書は取消せない（`INVOICE_HAS_PAYMENTS`）。
 - **請求書は発行時の写しを持つ**。写しの列と明細は DB のトリガーで更新を止め、取消で書けるのは取消の列だけ。物理削除しない。
 - **「今日」は `today: string`（`YYYY-MM-DD`）で domain に渡す**。server は `todayOf(clock)` で作る（005/R22）。ルートは `invoicingRoutes({ clock })`・`recurringRoutes({ clock })`。server のテストは偽の時計を渡し、時刻を日付の境目から離す。

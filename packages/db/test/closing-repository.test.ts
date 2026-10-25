@@ -3,6 +3,7 @@ import {
   type AdjustmentRef,
   type ClosingAuditEntry,
   type ClosingNote,
+  type ClosingUnitOfWork,
   createEntity,
   type DeductionAnswers,
   type FiledDocument,
@@ -10,13 +11,14 @@ import {
   type HomeUseAllocation,
   type JournalDraft,
   type NewJournal,
+  ok,
   type RentDetail,
   TAX_PARAMETERS,
   type TaxReturnMemo,
   validateJournal,
 } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DrizzleClosingStore, DrizzleClosingUnitOfWork } from "../src/closing-repository.ts";
+import { createClosingUnitOfWork, DrizzleClosingStore } from "../src/closing-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
@@ -28,7 +30,7 @@ let db: TenantDb;
 let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 let store: DrizzleClosingStore;
-let uow: DrizzleClosingUnitOfWork;
+let uow: ClosingUnitOfWork;
 
 const ids = { next: () => randomUUIDv7() };
 const clock = { now: () => "2026-10-19T09:00:00.000Z" };
@@ -50,7 +52,7 @@ beforeEach(() => {
   masters = new DrizzleMasterRepository(db);
   ledger = new DrizzleLedgerRepository(db);
   store = new DrizzleClosingStore(db);
-  uow = new DrizzleClosingUnitOfWork(db);
+  uow = createClosingUnitOfWork(db);
 });
 afterEach(() => tmp.cleanup());
 
@@ -303,10 +305,10 @@ describe("DrizzleClosingStore（T008）", () => {
   });
 });
 
-describe("DrizzleClosingUnitOfWork（T008、research R4）", () => {
-  it("transaction の中で、仕訳・マスタ・決算の記録を同じ接続で読み書きできる", () => {
+describe("createClosingUnitOfWork（T008、research R4）", () => {
+  it("run の中で、仕訳・マスタ・決算の記録を同じ接続で読み書きできる", () => {
     const allocation = allocationOf();
-    uow.transaction(({ journals, masters: m, closing }) => {
+    uow.run(({ ledger: journals, masters: m, closing }) => {
       closing.upsertHomeUseAllocation(allocation);
       const journal = journals.insertJournal(newJournal(adjustment(), journals.nextJournalNo()));
       closing.insertAdjustmentRef({
@@ -318,17 +320,18 @@ describe("DrizzleClosingUnitOfWork（T008、research R4）", () => {
       });
       expect(m.listAccounts().length).toBeGreaterThan(0);
       expect(closing.listAdjustmentRefs(2025)).toHaveLength(1);
+      return ok(null);
     });
     expect(count("journals")).toBe(1);
     expect(count("adjustment_journal_refs")).toBe(1);
     expect(store.listHomeUseAllocations(2025)).toEqual([allocation]);
   });
 
-  it("transaction の中の例外で、仕訳と adjustment_journal_refs が両方とも残らない", () => {
+  it("run の中の例外で、仕訳と adjustment_journal_refs が両方とも残らない", () => {
     const allocation = allocationOf();
     store.upsertHomeUseAllocation(allocation);
     expect(() =>
-      uow.transaction(({ journals, closing }) => {
+      uow.run(({ ledger: journals, closing }) => {
         const journal = journals.insertJournal(newJournal(adjustment(), journals.nextJournalNo()));
         closing.insertAdjustmentRef({
           journalId: journal.id,

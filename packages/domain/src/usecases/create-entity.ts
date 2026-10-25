@@ -120,3 +120,25 @@ export function createEntity(
   });
   return ok(profile);
 }
+
+/**
+ * 事業体の名前を変える（PATCH /entities/:entityId）。テナントのプロファイルと registry の両方を変える。
+ * registry とテナントは別の DB のため、registry の更新をテナントのトランザクションの最後に行う。
+ * registry の更新が例外で失敗すれば、プロファイルの変更も巻き戻る
+ */
+export function renameEntity(
+  deps: { tenant: MasterRepository; registry: RegistryRepository },
+  entityId: string,
+  name: string,
+): Result<EntityProfile> {
+  return deps.tenant.transaction((tx) => {
+    const profile = tx.getProfile();
+    if (profile === undefined) {
+      return err(domainError("ENTITY_NOT_FOUND", "事業体が見つかりません"));
+    }
+    const updated = { ...profile, name };
+    tx.saveProfile(updated);
+    deps.registry.renameEntity(entityId, name);
+    return ok(updated);
+  });
+}

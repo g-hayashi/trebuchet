@@ -10,7 +10,7 @@ import {
 } from "@trebuchet/domain";
 import type { BillingTermsInput, InvoiceSettingsInput } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DrizzleInvoicingStore, DrizzleInvoicingUnitOfWork } from "../src/invoicing-repository.ts";
+import { createInvoicingUnitOfWork, DrizzleInvoicingStore } from "../src/invoicing-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
@@ -24,7 +24,7 @@ let tmp: TempDataDir;
 let db: TenantDb;
 let masters: DrizzleMasterRepository;
 let deps: {
-  uow: DrizzleInvoicingUnitOfWork;
+  uow: ReturnType<typeof createInvoicingUnitOfWork>;
   ids: { next(): string };
   clock: { now(): string };
 };
@@ -47,7 +47,7 @@ beforeEach(() => {
   if (!created.ok) throw new Error(created.error.message);
   db = openTenant(created.value.id);
   masters = new DrizzleMasterRepository(db);
-  deps = { uow: new DrizzleInvoicingUnitOfWork(db), ids, clock };
+  deps = { uow: createInvoicingUnitOfWork(db), ids, clock };
 });
 afterEach(() => tmp.cleanup());
 

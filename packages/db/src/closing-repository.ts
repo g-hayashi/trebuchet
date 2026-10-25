@@ -8,8 +8,6 @@ import type {
   FiledDocument,
   FixedAsset,
   HomeUseAllocation,
-  JournalRepository,
-  MasterRepository,
   RentDetail,
   TaxParameter,
   TaxReturnMemo,
@@ -17,8 +15,6 @@ import type {
 import type { RunResult } from "better-sqlite3";
 import { asc, eq, sql } from "drizzle-orm";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
-import { DrizzleLedgerRepository } from "./ledger-repository.ts";
-import { DrizzleMasterRepository } from "./master-repository.ts";
 import type * as tenantSchema from "./schema/tenant.ts";
 import {
   adjustmentJournalRefs,
@@ -32,6 +28,7 @@ import {
   taxParameters,
   taxReturnMemos,
 } from "./schema/tenant.ts";
+import { drizzleUnitOfWork } from "./unit-of-work.ts";
 
 /** テナントの DB、またはそのトランザクション */
 type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
@@ -223,30 +220,6 @@ export class DrizzleClosingStore implements ClosingStore {
   }
 }
 
-/**
- * ClosingUnitOfWork の実装。同じ接続（のトランザクション）の上に、仕訳・マスタ・決算の記録の
- * リポジトリを作って渡す。fn が例外を投げると全体をロールバックする（research R4）
- */
-export class DrizzleClosingUnitOfWork implements ClosingUnitOfWork {
-  private readonly db: TenantConn;
-
-  constructor(db: TenantConn) {
-    this.db = db;
-  }
-
-  transaction<T>(
-    fn: (tx: {
-      journals: JournalRepository;
-      masters: MasterRepository;
-      closing: ClosingStore;
-    }) => T,
-  ): T {
-    return this.db.transaction((tx) =>
-      fn({
-        journals: new DrizzleLedgerRepository(tx),
-        masters: new DrizzleMasterRepository(tx),
-        closing: new DrizzleClosingStore(tx),
-      }),
-    );
-  }
-}
+/** ClosingUnitOfWork の実装。仕訳・マスタ・決算の記録を同じトランザクションで扱う（research R4） */
+export const createClosingUnitOfWork = (db: TenantConn): ClosingUnitOfWork =>
+  drizzleUnitOfWork(db, (tx) => ({ closing: new DrizzleClosingStore(tx) }));

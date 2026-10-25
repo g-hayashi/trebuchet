@@ -10,8 +10,8 @@ import {
   replaceOpeningBalances,
 } from "../../src/usecases/masters.ts";
 import {
-  FakeImportUnitOfWork,
   FixedClock,
+  fakeImportUnitOfWork,
   InMemoryLedgerRepository,
   InMemoryMasterRepository,
   InMemoryRegistry,
@@ -43,7 +43,7 @@ function setup(firstFiscalYear = 2025) {
     },
   ]);
   const ledger = new InMemoryLedgerRepository();
-  const uow = new FakeImportUnitOfWork(ledger, masters);
+  const uow = fakeImportUnitOfWork(ledger, masters);
   const reports = new InMemoryReportRepository(ledger, masters);
   const code = (c: string) => {
     const a = masters.state.accounts.find((x) => x.code === c);
