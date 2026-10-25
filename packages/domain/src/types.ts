@@ -2,6 +2,7 @@ import type {
   AccountCategory,
   AccountingMethod,
   AdjustmentKind,
+  CandidateMethod,
   ClosingNoteKind,
   DepreciationMethod,
   EntityKind,
@@ -12,8 +13,10 @@ import type {
   InvoiceTaxDisplay,
   JournalSource,
   PaymentView,
+  Purpose,
   ReportSection,
   Side,
+  StatementLinkKind,
   TaxCategoryCode,
   TaxpayerStatus,
   TaxReturnMemoKind,
@@ -518,6 +521,35 @@ export type StatementRecord = {
   excludedAt: string | null;
   excludedReason: string | null;
   createdAt: string;
+};
+
+/**
+ * 明細の候補（`statement_candidates` の 1 行。006 data-model §1.4）。明細ごとに高々 1 件で、作り直しで置き換える。
+ * `none` は purpose・confidence・draftJson が null。`match` の draftJson は `{ journalId, lineId }`、
+ * ほかは仕訳の案（`JournalDraft` の JSON）
+ */
+export type StatementCandidateRecord = {
+  statementId: string;
+  method: CandidateMethod;
+  purpose: Purpose | null;
+  confidence: number | null;
+  reason: string;
+  draftJson: string | null;
+  ruleId: string | null;
+  model: string | null;
+  createdAt: string;
+};
+
+/** 明細と仕訳の行の結びつき（`statement_links` の 1 行。006 data-model §1.5）。`revokedAt` が null のものが有効 */
+export type StatementLinkRecord = {
+  id: string;
+  statementId: string;
+  journalId: string;
+  journalLineId: string;
+  kind: StatementLinkKind;
+  createdAt: string;
+  revokedAt: string | null;
+  revokedReason: string | null;
 };
 
 /**

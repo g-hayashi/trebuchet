@@ -3,10 +3,15 @@ import type {
   StatementAccountInput,
   StatementAccountSaved,
   StatementBatch,
+  StatementChange,
   StatementImportCommitted,
   StatementImportPreview,
   StatementImportSource,
+  StatementListQuery,
   StatementOrigin,
+  StatementSettings,
+  StatementSettingsInput,
+  StatementView,
 } from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
 import type { Clock, IdGenerator, StatementStore, StatementUnitOfWork } from "../ports.ts";
@@ -25,8 +30,13 @@ import {
   type StatementRecord,
   validationError,
 } from "../types.ts";
+import {
+  buildCandidatesInTx,
+  loadStatementStates,
+  toCandidateView,
+} from "./statement-candidates.ts";
 
-// 明細の取込（006 US1。R4・R14・R18、FR-002〜007）
+// 明細の取込（006 US1。R4・R14・R18、FR-002〜007）と候補・設定（US2。R8、§1.4・§1.8）
 
 type StatementDeps = { uow: StatementUnitOfWork; ids: IdGenerator; clock: Clock };
 
@@ -48,7 +58,8 @@ const sameMapping = (a: StatementAccount, b: StatementAccount): boolean =>
 /**
  * 取込元の口座（MF ME の保有金融機関）の用途・種類・科目を名前で保存する（なければ追加、あれば更新）。
  * `private` は科目を持たず、ほかは科目が必須。変更は監査に残す（R18）。変更がなければ何も書かない。
- * 未処理の候補の作り直し（`rebuilt`）は US2（T014）で足す。今は 0
+ * 対応が変わったときは、その口座の未処理の明細の候補（と、振替の対の相手の候補）を作り直す（R8）。
+ * 作り直した候補の数が `rebuilt`（まだ候補のない明細は作らない）
  */
 export function saveStatementAccount(
   deps: StatementDeps,
@@ -122,7 +133,26 @@ export function saveStatementAccount(
         at: now,
       }),
     );
-    return ok({ account, rebuilt: 0 });
+
+    // 候補のある未処理の明細のうち、この口座のもの（と、振替の対として作った候補）を作り直す
+    const states = loadStatementStates(tx);
+    const candidates = new Map(
+      tx.statements.listStatementCandidates().map((c) => [c.statementId, c]),
+    );
+    const targetIds = new Set(
+      states
+        .filter(
+          ({ record, status }) =>
+            status === "unprocessed" &&
+            candidates.has(record.id) &&
+            (record.statementAccountId === account.id ||
+              candidates.get(record.id)?.method === "transfer"),
+        )
+        .map(({ record }) => record.id),
+    );
+    const rebuilt = buildCandidatesInTx(deps, tx, states, targetIds, true);
+    if (!rebuilt.ok) return rebuilt;
+    return ok({ account, rebuilt: rebuilt.value.built });
   });
 }
 
@@ -338,4 +368,165 @@ export function commitStatementImport(
 /** 取込の回の一覧（新しい順） */
 export function listStatementBatches(deps: Pick<StatementDeps, "uow">): Result<StatementBatch[]> {
   return deps.uow.run((tx) => ok(tx.statements.listStatementBatches()));
+}
+
+// ---- 候補（US2。§1.4、R8） ----
+
+export type CandidatesBuilt = { built: number; needsAi: string[] };
+
+/**
+ * 候補を作る（R8、FR-013）。`statementIds` を省略すると未処理すべて。未処理でない明細は対象にならない
+ * （知らない ID は `STATEMENT_NOT_FOUND`。何も書かない）。順序は 既存の仕訳 → 振替の対 → none（ルールの段は US3）。
+ * 0 円は候補を作らない。`built` は書いた候補の数（none を含む）、`needsAi` は AI に回す明細の ID。
+ * AI の候補は、前の段で作れないとき残す。`options.rebuild` なら作り直す
+ */
+export function buildCandidates(
+  deps: StatementDeps,
+  statementIds?: readonly string[],
+  options: { rebuild?: boolean } = {},
+): Result<CandidatesBuilt> {
+  return deps.uow.run((tx) => {
+    const states = loadStatementStates(tx);
+    let targetIds: Set<string>;
+    if (statementIds === undefined) {
+      targetIds = new Set(states.map((s) => s.record.id));
+    } else {
+      const known = new Set(states.map((s) => s.record.id));
+      const unknown = statementIds.find((id) => !known.has(id));
+      if (unknown !== undefined) {
+        return err(
+          domainError("STATEMENT_NOT_FOUND", "明細が見つかりません", { statementId: unknown }),
+        );
+      }
+      targetIds = new Set(statementIds);
+    }
+    return buildCandidatesInTx(deps, tx, states, targetIds, options.rebuild === true);
+  });
+}
+
+const contentOf = (record: StatementRecord, accountName: string): StatementChange["before"] => ({
+  accountName,
+  date: record.date,
+  amount: record.amount,
+  content: record.content,
+  categoryMajor: record.categoryMajor,
+  categoryMinor: record.categoryMinor,
+  memo: record.memo,
+});
+
+/**
+ * 明細の一覧（`StatementView`。FR-012）。日付の新しい順（同じ日付は新しい取込が先）。
+ * 状態は結びつき・除外・仕訳から導く（`statementStatus`）。`changed` は `changed_json` があり未確認のときだけ。
+ * `links` は有効な結びつき。絞り込みは `status`（`changed` は変更ありの印）・`accountId`（取込元の口座）・`from`・`to`
+ */
+export function listStatements(
+  deps: Pick<StatementDeps, "uow">,
+  query: StatementListQuery = {},
+): Result<StatementView[]> {
+  return deps.uow.run((tx) => {
+    const accounts = new Map(tx.statements.listStatementAccounts().map((a) => [a.id, a]));
+    const candidates = new Map(
+      tx.statements.listStatementCandidates().map((c) => [c.statementId, c]),
+    );
+    const views: StatementView[] = [];
+    for (const { record, status, activeLinks } of loadStatementStates(tx)) {
+      if (query.accountId !== undefined && record.statementAccountId !== query.accountId) continue;
+      if (query.from !== undefined && record.date < query.from) continue;
+      if (query.to !== undefined && record.date > query.to) continue;
+      const account = accounts.get(record.statementAccountId) as StatementAccount;
+      const changed =
+        record.changedJson !== null && record.changedAckAt === null
+          ? {
+              before: contentOf(record, account.name),
+              after: JSON.parse(record.changedJson) as StatementChange["after"],
+            }
+          : null;
+      if (
+        query.status === "changed"
+          ? changed === null
+          : query.status !== undefined && query.status !== status
+      ) {
+        continue;
+      }
+      const candidate = candidates.get(record.id);
+      views.push({
+        id: record.id,
+        date: record.date,
+        amount: record.amount,
+        content: record.content,
+        accountName: account.name,
+        usage: account.usage,
+        status,
+        changed,
+        candidate: candidate === undefined ? null : toCandidateView(candidate),
+        links: activeLinks.map((l) => ({ journalId: l.journalId, kind: l.kind })),
+      });
+    }
+    // 取り込んだ順の新しい方を先にして、日付で安定に並べる
+    return ok(views.reverse().sort((a, b) => b.date.localeCompare(a.date)));
+  });
+}
+
+// ---- 設定（§1.8、R12、FR-018・027） ----
+
+/** しきい値の既定（まとめて承認 80、外部へ送る 60） */
+export const DEFAULT_STATEMENT_SETTINGS = { bulkThreshold: 80, externalThreshold: 60 } as const;
+
+const isPercent = (n: number) => Number.isInteger(n) && n >= 0 && n <= 100;
+
+/** しきい値の設定。保存がなければ既定（`updatedAt` は今の時刻）。読むだけで書かない */
+export function getStatementSettings(
+  deps: Pick<StatementDeps, "uow" | "clock">,
+): Result<StatementSettings> {
+  return deps.uow.run((tx) =>
+    ok(
+      tx.statements.getStatementSettings() ?? {
+        ...DEFAULT_STATEMENT_SETTINGS,
+        updatedAt: deps.clock.now(),
+      },
+    ),
+  );
+}
+
+/**
+ * しきい値を保存する。どちらも 0〜100 の整数（範囲外は `VALIDATION`）。変更を監査に残す（最初は create、
+ * 次から update）。変更がなければ書かない
+ */
+export function saveStatementSettings(
+  deps: StatementDeps,
+  input: StatementSettingsInput,
+): Result<StatementSettings> {
+  for (const field of ["bulkThreshold", "externalThreshold"] as const) {
+    if (!isPercent(input[field])) {
+      return err(validationError("しきい値は 0〜100 の整数にしてください", { field }));
+    }
+  }
+  return deps.uow.run((tx) => {
+    const previous = tx.statements.getStatementSettings();
+    if (
+      previous !== undefined &&
+      previous.bulkThreshold === input.bulkThreshold &&
+      previous.externalThreshold === input.externalThreshold
+    ) {
+      return ok(previous);
+    }
+    const now = deps.clock.now();
+    const settings: StatementSettings = {
+      bulkThreshold: input.bulkThreshold,
+      externalThreshold: input.externalThreshold,
+      updatedAt: now,
+    };
+    tx.statements.saveStatementSettings(settings);
+    tx.statements.appendStatementAudit(
+      auditEntry(deps, {
+        targetType: "statement_settings",
+        targetId: "statement_settings",
+        action: previous === undefined ? "create" : "update",
+        before: previous,
+        after: settings,
+        at: now,
+      }),
+    );
+    return ok(settings);
+  });
 }

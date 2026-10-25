@@ -5,6 +5,7 @@ import type {
   Recurring,
   StatementAccount,
   StatementBatch,
+  StatementSettings,
 } from "@trebuchet/schema";
 import type {
   AppSettingKey,
@@ -54,6 +55,8 @@ import type {
   RentDetail,
   Result,
   StatementAuditEntry,
+  StatementCandidateRecord,
+  StatementLinkRecord,
   StatementRecord,
   SubAccount,
   Tag,
@@ -370,6 +373,24 @@ export interface StatementStore {
   listStatements(): StatementRecord[];
   /** `changed_json` を書き、`changed_ack_at` を NULL に戻す（FR-005）。明細がなければ例外 */
   markStatementChanged(id: string, changedJson: string): void;
+
+  // ---- 候補（US2。§1.4） ----
+  /** 明細ごとに高々 1 件。並びは問わない */
+  listStatementCandidates(): StatementCandidateRecord[];
+  /** `statementId` の候補があれば置き換え、なければ追加する。形（`none` は purpose・confidence・draft が null）は CHECK */
+  upsertStatementCandidate(candidate: StatementCandidateRecord): void;
+  deleteStatementCandidate(statementId: string): void;
+
+  // ---- 結びつき（US2。§1.5。書き込みは承認・取消のタスク（T015）が使う） ----
+  /** 失効したものを含む全件（作成の順） */
+  listStatementLinks(): StatementLinkRecord[];
+  /** 有効な結びつきの重複（明細ごと・仕訳の行ごと）は一意制約の違反で例外（INV-43） */
+  insertStatementLink(link: StatementLinkRecord): void;
+
+  // ---- 設定（US2。§1.8） ----
+  /** 保存がなければ undefined */
+  getStatementSettings(): StatementSettings | undefined;
+  saveStatementSettings(settings: StatementSettings): void;
 }
 
 /** 明細の取込・承認で、仕訳・マスタ・明細の記録を1つのトランザクションで扱う（INV-47。data-model §6） */

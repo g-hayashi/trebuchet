@@ -1,8 +1,10 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  addDays,
   addMonths,
   dateInMonth,
+  daysBetween,
   daysInMonth,
   monthAtIndex,
   monthEnd,
@@ -11,6 +13,24 @@ import {
 } from "../src/dates.ts";
 
 // R8、INV-35 の予定日、US3 Acceptance 1・3
+
+describe("daysBetween（006 R6・R7 の日付の差）", () => {
+  it("後の日付から前の日付を引いた日数（月・年をまたいでもよい）", () => {
+    expect(daysBetween("2026-05-10", "2026-05-17")).toBe(7);
+    expect(daysBetween("2026-05-17", "2026-05-10")).toBe(-7);
+    expect(daysBetween("2026-02-27", "2026-03-02")).toBe(3);
+    expect(daysBetween("2025-12-31", "2026-01-01")).toBe(1);
+    expect(daysBetween("2026-05-10", "2026-05-10")).toBe(0);
+  });
+
+  it("addDays の逆（性質）", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: -4000, max: 4000 }), (n) => {
+        expect(daysBetween("2026-06-15", addDays("2026-06-15", n))).toBe(n);
+      }),
+    );
+  });
+});
 
 describe("dateInMonth", () => {
   it("その月の指定の日（Acceptance 1）", () => {

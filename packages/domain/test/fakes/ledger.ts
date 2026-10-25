@@ -114,8 +114,31 @@ export class InMemoryLedgerRepository implements LedgerRepository {
       .map((j) => structuredClone(j));
   }
 
-  findJournals(_query: JournalQuery): Page<Journal> {
-    throw new Error("検索はフェイクでは扱わない（packages/db のテストで確認する）");
+  /**
+   * 日付の範囲（dateFrom・dateTo）・取消済みを含めるか・cursor・limit だけを扱う（db の実装と同じ並びと cursor）。
+   * 金額・取引先・科目・タグ・全文の検索はフェイクでは扱わない（packages/db のテストで確認する）
+   */
+  findJournals(query: JournalQuery): Page<Journal> {
+    const { dateFrom, dateTo, includeVoided, cursor, limit, ...unsupported } = query;
+    if (Object.values(unsupported).some((v) => v !== undefined)) {
+      throw new Error("この検索はフェイクでは扱わない（packages/db のテストで確認する）");
+    }
+    const max = limit ?? 50;
+    let rows = this.state.journals
+      .filter((j) => includeVoided === true || j.status === "active")
+      .filter((j) => dateFrom === undefined || j.date >= dateFrom)
+      .filter((j) => dateTo === undefined || j.date <= dateTo)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.journalNo - a.journalNo);
+    if (cursor !== undefined) {
+      const [date = "", no = "0"] = cursor.split("_");
+      rows = rows.filter((j) => j.date < date || (j.date === date && j.journalNo < Number(no)));
+    }
+    const page = rows.slice(0, max);
+    const last = page.at(-1);
+    return {
+      items: structuredClone(page),
+      nextCursor: rows.length > max && last !== undefined ? `${last.date}_${last.journalNo}` : null,
+    };
   }
 
   private lockForUpdate(id: string, expectedVersion: number): Journal {

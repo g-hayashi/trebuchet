@@ -1,4 +1,4 @@
-import type { StatementAccount, StatementBatch } from "@trebuchet/schema";
+import type { StatementAccount, StatementBatch, StatementSettings } from "@trebuchet/schema";
 import type {
   StatementStore,
   SuggestionContext,
@@ -10,6 +10,8 @@ import {
   err,
   type Result,
   type StatementAuditEntry,
+  type StatementCandidateRecord,
+  type StatementLinkRecord,
   type StatementRecord,
 } from "../../src/types.ts";
 import { InMemoryLedgerRepository } from "./ledger.ts";
@@ -21,6 +23,9 @@ type StatementState = {
   accounts: StatementAccount[];
   batches: StatementBatch[];
   statements: StatementRecord[];
+  candidates: StatementCandidateRecord[];
+  links: StatementLinkRecord[];
+  settings: StatementSettings | undefined;
 };
 
 /**
@@ -28,7 +33,15 @@ type StatementState = {
  * DB の制約（口座名・`stable_key`・`external_id` の一意、回・口座の存在）も確かめる
  */
 export class InMemoryStatementStore implements StatementStore {
-  state: StatementState = { audits: [], accounts: [], batches: [], statements: [] };
+  state: StatementState = {
+    audits: [],
+    accounts: [],
+    batches: [],
+    statements: [],
+    candidates: [],
+    links: [],
+    settings: undefined,
+  };
   /** true なら insertStatements で、1 行目を書いた後に例外を投げる（ロールバックの確認用） */
   failOnInsertStatements = false;
 
@@ -100,6 +113,57 @@ export class InMemoryStatementStore implements StatementStore {
     if (target === undefined) throw new Error(`statement not found: ${id}`);
     target.changedJson = changedJson;
     target.changedAckAt = null;
+  }
+
+  listStatementCandidates(): StatementCandidateRecord[] {
+    return structuredClone(this.state.candidates);
+  }
+
+  upsertStatementCandidate(candidate: StatementCandidateRecord): void {
+    if (!this.state.statements.some((s) => s.id === candidate.statementId)) {
+      throw new Error("FOREIGN KEY constraint failed: statement_candidates.statement_id");
+    }
+    const none = candidate.method === "none";
+    const shapeOk = none
+      ? candidate.purpose === null && candidate.confidence === null && candidate.draftJson === null
+      : candidate.purpose !== null && candidate.confidence !== null;
+    if (!shapeOk) throw new Error("CHECK constraint failed: statement_candidates_shape");
+    const copy = structuredClone(candidate);
+    const index = this.state.candidates.findIndex((c) => c.statementId === candidate.statementId);
+    if (index < 0) this.state.candidates.push(copy);
+    else this.state.candidates[index] = copy;
+  }
+
+  deleteStatementCandidate(statementId: string): void {
+    this.state.candidates = this.state.candidates.filter((c) => c.statementId !== statementId);
+  }
+
+  listStatementLinks(): StatementLinkRecord[] {
+    return structuredClone(this.state.links);
+  }
+
+  insertStatementLink(link: StatementLinkRecord): void {
+    if (!this.state.statements.some((s) => s.id === link.statementId)) {
+      throw new Error("FOREIGN KEY constraint failed: statement_links.statement_id");
+    }
+    if (link.revokedAt === null) {
+      const active = this.state.links.filter((l) => l.revokedAt === null);
+      if (active.some((l) => l.statementId === link.statementId)) {
+        throw new Error("UNIQUE constraint failed: statement_links.statement_id");
+      }
+      if (active.some((l) => l.journalLineId === link.journalLineId)) {
+        throw new Error("UNIQUE constraint failed: statement_links.journal_line_id");
+      }
+    }
+    this.state.links.push(structuredClone(link));
+  }
+
+  getStatementSettings(): StatementSettings | undefined {
+    return structuredClone(this.state.settings);
+  }
+
+  saveStatementSettings(settings: StatementSettings): void {
+    this.state.settings = structuredClone(settings);
   }
 }
 

@@ -108,6 +108,22 @@ export function formatMfmePaste(rows: readonly PastedRow[], options: { header?: 
   return `${lines.join("\n")}\n`;
 }
 
+/** 口座の用途（INV-42 の性質テスト） */
+export const usageArb: fc.Arbitrary<"business" | "mixed" | "private"> = fc.constantFrom(
+  "business",
+  "mixed",
+  "private",
+);
+
+/** 判定（事業・私用） */
+export const purposeArb: fc.Arbitrary<"business" | "private"> = fc.constantFrom(
+  "business",
+  "private",
+);
+
+/** 仕訳の金額（1 円以上、1e12 未満の整数）。符号は呼び出し側で付ける */
+export const absAmountArb: fc.Arbitrary<number> = fc.integer({ min: 1, max: 999_999_999_999 });
+
 /** 配列の並びを入れ替える（fast-check の `shuffle` 相当を、性質テストの入力として使う） */
 export const permutationOf = <T>(items: readonly T[]): fc.Arbitrary<T[]> =>
   fc.shuffledSubarray([...items], { minLength: items.length, maxLength: items.length });

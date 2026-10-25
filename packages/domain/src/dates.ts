@@ -26,6 +26,11 @@ export function addDays(date: string, days: number): string {
   return fromUtcMs(toUtcMs(date) + days * DAY_MS);
 }
 
+/** `to` から `from` を引いた日数（`to` が後なら正）。どちらも実在する日付 */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((toUtcMs(to) - toUtcMs(from)) / DAY_MS);
+}
+
 /** 年度の開始日（年と開始月から） */
 export function fiscalYearStart(fiscalYear: number, startMonth: number): string {
   return `${pad(fiscalYear, 4)}-${pad(startMonth)}-01`;

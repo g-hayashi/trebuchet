@@ -1,16 +1,21 @@
 import type {
   StatementAuditEntry,
+  StatementCandidateRecord,
+  StatementLinkRecord,
   StatementRecord,
   StatementStore,
   StatementUnitOfWork,
 } from "@trebuchet/domain";
-import type { StatementAccount, StatementBatch } from "@trebuchet/schema";
+import type { StatementAccount, StatementBatch, StatementSettings } from "@trebuchet/schema";
 import { asc, desc, eq } from "drizzle-orm";
 import { insertionOrder, type TenantConn } from "./internal.ts";
 import {
   statementAccounts,
   statementAuditLog,
   statementBatches,
+  statementCandidates,
+  statementLinks,
+  statementSettings,
   statements,
 } from "./schema/tenant.ts";
 import { drizzleUnitOfWork } from "./unit-of-work.ts";
@@ -29,7 +34,7 @@ const toRow = (record: StatementRecord): StatementRow => ({
 
 /**
  * StatementStore の Drizzle（better-sqlite3）による実装。メソッドはすべて同期。
- * 候補・結びつき・ルールなどのメソッドは各ストーリーの db のタスクで足す
+ * ルールなどのメソッドは各ストーリーの db のタスクで足す
  */
 export class DrizzleStatementStore implements StatementStore {
   private readonly db: TenantConn;
@@ -82,6 +87,52 @@ export class DrizzleStatementStore implements StatementStore {
       .where(eq(statements.id, id))
       .run();
     if (result.changes === 0) throw new Error(`statement not found: ${id}`);
+  }
+
+  listStatementCandidates(): StatementCandidateRecord[] {
+    return this.db.select().from(statementCandidates).orderBy(insertionOrder).all();
+  }
+
+  upsertStatementCandidate(candidate: StatementCandidateRecord): void {
+    const { statementId: _statementId, ...changes } = candidate;
+    this.db
+      .insert(statementCandidates)
+      .values(candidate)
+      .onConflictDoUpdate({ target: statementCandidates.statementId, set: changes })
+      .run();
+  }
+
+  deleteStatementCandidate(statementId: string): void {
+    this.db
+      .delete(statementCandidates)
+      .where(eq(statementCandidates.statementId, statementId))
+      .run();
+  }
+
+  listStatementLinks(): StatementLinkRecord[] {
+    return this.db.select().from(statementLinks).orderBy(insertionOrder).all();
+  }
+
+  insertStatementLink(link: StatementLinkRecord): void {
+    this.db.insert(statementLinks).values(link).run();
+  }
+
+  getStatementSettings(): StatementSettings | undefined {
+    const row = this.db.select().from(statementSettings).where(eq(statementSettings.id, 1)).get();
+    if (row === undefined) return undefined;
+    return {
+      bulkThreshold: row.bulkThreshold,
+      externalThreshold: row.externalThreshold,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  saveStatementSettings(settings: StatementSettings): void {
+    this.db
+      .insert(statementSettings)
+      .values({ id: 1, ...settings })
+      .onConflictDoUpdate({ target: statementSettings.id, set: settings })
+      .run();
   }
 }
 
