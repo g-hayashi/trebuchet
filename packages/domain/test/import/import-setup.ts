@@ -1,7 +1,7 @@
 import type { PlanImportInput } from "../../src/import/freee/plan.ts";
 import type { FreeeJournal, GroupedFreeeJournals } from "../../src/import/freee/read.ts";
 import { groupFreeeJournals, readFreeeFile } from "../../src/import/freee/read.ts";
-import type { AccountMapping, ImportRef, TaxMapping } from "../../src/import/types.ts";
+import type { ImportRef } from "../../src/import/types.ts";
 import { INDIVIDUAL_ACCOUNTS } from "../../src/seed/accounts.individual.ts";
 import { TAX_CATEGORIES } from "../../src/seed/tax-categories.ts";
 import { TAX_RATES } from "../../src/seed/tax-rates.ts";
@@ -28,7 +28,7 @@ export const withInactive = (codes: readonly string[]): Account[] =>
 export const PERIOD_2025: FiscalPeriod = makeFiscalPeriod(2025);
 
 /** 課税（一般）・税込。税額を INV-10 で計算する */
-export const TAXABLE: TaxSettingDraft[] = [
+const TAXABLE: TaxSettingDraft[] = [
   { effectiveFrom: "2019-01-01", taxpayerStatus: "general", accountingMethod: "tax_included" },
 ];
 
@@ -105,9 +105,6 @@ export function ref(freeeJournalId: string, overrides: Partial<ImportRef> = {}):
     ...overrides,
   };
 }
-
-export const savedAccount = (m: AccountMapping): AccountMapping => m;
-export const savedTax = (m: TaxMapping): TaxMapping => m;
 
 export const sub = (id: string, code: string, name: string, isActive = true): SubAccount => ({
   id,

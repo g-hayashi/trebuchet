@@ -1,3 +1,4 @@
+import { MASTER_NAME_MAX, TAG_NAME_MAX } from "@trebuchet/schema";
 import { type AuditInput, auditEntry } from "../audit.ts";
 import { addDays, oneYearEnd } from "../dates.ts";
 import { type OpeningBalanceDraft, validateOpeningBalances } from "../opening.ts";
@@ -38,13 +39,10 @@ export type MasterDeps = {
   clock: Clock;
 };
 
-const NAME_MAX = 100;
-const TAG_NAME_MAX = 50;
-
 function validName(
   raw: string,
   field: string,
-  max = NAME_MAX,
+  max = MASTER_NAME_MAX,
 ): { ok: true; value: string } | { ok: false; error: DomainError } {
   const name = raw.trim();
   if (name.length === 0 || name.length > max) {

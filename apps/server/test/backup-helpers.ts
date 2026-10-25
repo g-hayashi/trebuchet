@@ -9,9 +9,9 @@ import {
   openRegistry,
 } from "@trebuchet/db";
 import type { TempDataDir } from "@trebuchet/db/testing";
-import type { Clock } from "@trebuchet/domain";
 import { type BackupRunner, createBackupRunner } from "../src/lib/backup-run.ts";
 import { BACKUP_PASSPHRASE_KEY, createMemorySecretStore } from "../src/lib/keychain.ts";
+import { makeClock } from "./helpers.ts";
 
 /** 鍵導出を軽くする（本物の Argon2id は 64 MiB × 3 回で遅い）。`breakAfter` 回目以降は別の鍵を返す */
 export function fastCrypto(state: { calls: number; breakAfter?: number } = { calls: 0 }): {
@@ -30,18 +30,10 @@ export function fastCrypto(state: { calls: number; breakAfter?: number } = { cal
   };
 }
 
-export function mutableClock(start = "2026-10-20T09:00:00.000Z") {
-  let ms = Date.parse(start);
-  const clock: Clock = { now: () => new Date(ms).toISOString() };
-  return {
-    clock,
-    advance: (d: number) => {
-      ms += d;
-    },
-    set: (iso: string) => {
-      ms = Date.parse(iso);
-    },
-  };
+/** `makeClock`（helpers.ts）を、バックアップのテストが使う `{ clock, advance, set }` の形にしたもの */
+function mutableClock() {
+  const clock = makeClock();
+  return { clock, advance: clock.advance, set: clock.set };
 }
 
 export const HOUR = 60 * 60 * 1000;

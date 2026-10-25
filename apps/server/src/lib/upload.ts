@@ -1,10 +1,9 @@
-import { createHash } from "node:crypto";
 import type { Context, MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { DomainException, fail, type IssueLike, validationError } from "../errors.ts";
 
 /** 取込のファイルの上限（contracts/http-api.md、research R11） */
-export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 /** multipart の境界・ヘッダと、`options` などの他のフィールドのための余裕 */
 const MULTIPART_ALLOWANCE_BYTES = 64 * 1024;
@@ -76,11 +75,6 @@ export async function readOptionalUpload(
   }
   if (file.size > maxFileBytes) throw new DomainException(fileTooLarge(maxFileBytes));
   return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
-}
-
-/** バイト列の SHA-256（小文字16進64文字。schema の Sha256） */
-export function sha256Hex(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
 }
 
 /** Zod のスキーマの safeParse（server は zod に直接依存しないため、形で受け取る） */

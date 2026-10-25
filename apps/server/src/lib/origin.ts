@@ -9,14 +9,18 @@ import { LOCAL_RP_ID } from "@trebuchet/domain";
 export type RemoteSettings = { enabled: boolean; host: string | null };
 export type GetRemoteSettings = () => Promise<RemoteSettings>;
 
-export const REMOTE_DISABLED: RemoteSettings = { enabled: false, host: null };
+const REMOTE_DISABLED: RemoteSettings = { enabled: false, host: null };
 export const getRemoteSettingsDisabled: GetRemoteSettings = async () => REMOTE_DISABLED;
+
+/** 開発の画面（Vite の proxy 経由）の Host とオリジン。テストと bench が要求に付ける値もこれ */
+export const DEV_WEB_HOST = "localhost:5173";
+export const DEV_WEB_ORIGIN = `http://${DEV_WEB_HOST}`;
 
 /**
  * ローカルの Host（Vite の proxy 経由と server への直接）。
  * `127.0.0.1:8787` はヘルスチェックと E2E の server の起動確認だけに使う（RP ID は持たない）
  */
-const LOCAL_RP_HOSTS: readonly string[] = ["localhost:5173", "localhost:8787"];
+const LOCAL_RP_HOSTS: readonly string[] = [DEV_WEB_HOST, "localhost:8787"];
 const LOCAL_HOSTS: readonly string[] = [...LOCAL_RP_HOSTS, "127.0.0.1:8787"];
 
 /**

@@ -15,6 +15,7 @@ import {
   monthFromIndex,
   toRecurring,
 } from "./recurring-arbitraries.ts";
+import { MONTH_START_NOW } from "./test-dates.ts";
 
 // INV-35 の純関数の部分（R17）: post と blocked は互いに素で doneMonths と重ならず、
 // 予定日はすべて今日以前、post ∪ blocked ∪ doneMonths が対象の月をすべて覆う
@@ -29,7 +30,7 @@ const parts = {
   activePartnerId: activePartner.id,
   inactivePartnerId: inactivePartner.id,
 };
-const NOW = "2026-10-01T00:00:00.000Z";
+const NOW = MONTH_START_NOW;
 
 function ctxOf(spec: CtxSpec): RecurringContext {
   return {

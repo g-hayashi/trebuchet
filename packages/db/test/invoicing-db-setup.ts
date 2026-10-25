@@ -1,13 +1,11 @@
 import { randomUUIDv7 } from "node:crypto";
-import { createEntity, createJournal, type InvoiceRecord, type Partner } from "@trebuchet/domain";
+import { createJournal, type InvoiceRecord, type Partner } from "@trebuchet/domain";
 import type { BillingTerms, InvoiceSettings } from "@trebuchet/schema";
 import { createInvoicingUnitOfWork, DrizzleInvoicingStore } from "../src/invoicing-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant } from "../src/tenant-store.ts";
-
-export const NOW = "2026-10-31T09:00:00.000Z";
+import { openTenant } from "../src/tenant-store.ts";
+import { accountIdOf, createTestEntity, NOW } from "../src/testing.ts";
 
 /**
  * 005 の db のテストの準備（呼ぶ前に `useTempDataDir` を使うこと）。
@@ -16,17 +14,7 @@ export const NOW = "2026-10-31T09:00:00.000Z";
 export function setupInvoicingDb(options: { taxable?: boolean } = {}) {
   const ids = { next: () => randomUUIDv7() };
   const clock = { now: () => NOW };
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  const db = openTenant(created.value.id);
+  const db = openTenant(createTestEntity({ ids }).id);
   const masters = new DrizzleMasterRepository(db);
   if (options.taxable === true) {
     masters.replaceTaxSettings([
@@ -42,11 +30,7 @@ export function setupInvoicingDb(options: { taxable?: boolean } = {}) {
   const uow = createInvoicingUnitOfWork(db);
   const ledger = new DrizzleLedgerRepository(db);
 
-  const accountId = (name: string) => {
-    const a = masters.listAccounts().find((x) => x.name === name);
-    if (a === undefined) throw new Error(`科目がない: ${name}`);
-    return a.id;
-  };
+  const accountId = (name: string) => accountIdOf(masters, name);
   const addPartner = (name: string, over: Partial<Partner> = {}): Partner => {
     const partner: Partner = {
       id: randomUUIDv7(),

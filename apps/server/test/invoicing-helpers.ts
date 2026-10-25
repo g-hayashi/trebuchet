@@ -1,17 +1,28 @@
 import { testClient } from "hono/testing";
 import { createApp } from "../src/app.ts";
-import { createTestEntity, createTestSession, TEST_HOST, TEST_ORIGIN } from "./helpers.ts";
+import {
+  accountLookup,
+  createTestEntity,
+  createTestSession,
+  TEST_HOST,
+  TEST_ORIGIN,
+} from "./helpers.ts";
+
+export { okBody } from "./helpers.ts";
 
 /**
- * 請求書（005）の server のテストの共通部品。偽の時計（`now`）で `createApp({ clock })` を作り、
- * その時刻のセッションで呼ぶ。時刻は UTC と JST の 0 時から離す（CI の `TZ` に依存させない）
+ * 請求書（005）の server のテストの共通部品（`helpers.ts` を拡張する）。偽の時計（`now`）で
+ * `createApp({ clock })` を作り、その時刻のセッションで呼ぶ。時刻は UTC と JST の 0 時から離す（CI の `TZ` に依存させない）
  */
 
-/** UTC 03:00 = JST 12:00（同じ暦日）。今日は 2026-10-31 */
-export const NOW = "2026-10-31T03:00:00.000Z";
+/**
+ * 日付の境目（UTC・JST の 0 時）から離した時刻。UTC 03:00 = JST 12:00（同じ暦日）で、今日は 2026-10-31。
+ * domain・db のテストの `NOW`（`packages/domain/test/test-dates.ts`）とは別の値
+ */
+const SAFE_NOW = "2026-10-31T03:00:00.000Z";
 export const TODAY = "2026-10-31";
 
-export async function createInvoicingTestContext(now = NOW) {
+export async function createInvoicingTestContext(now = SAFE_NOW) {
   const entityId = await createTestEntity();
   const session = await createTestSession({ now });
   const client = testClient(createApp({ clock: { now: () => now } }), undefined, undefined, {
@@ -20,14 +31,7 @@ export async function createInvoicingTestContext(now = NOW) {
   const e = client.api.entities[":entityId"];
   const param = { entityId };
 
-  const accounts = await e.accounts.$get({ param });
-  if (accounts.status !== 200) throw new Error(`accounts failed: ${accounts.status}`);
-  const accountIds = new Map((await accounts.json()).accounts.map((a) => [a.name, a.id]));
-  const accountId = (name: string) => {
-    const id = accountIds.get(name);
-    if (id === undefined) throw new Error(`科目がない: ${name}`);
-    return id;
-  };
+  const accountId = await accountLookup(entityId);
 
   const addPartner = async (name: string, honorific: "様" | "御中" | null = "御中") => {
     const res = await e.partners.$post({ param, json: { name, honorific } });
@@ -88,9 +92,3 @@ export async function createInvoicingTestContext(now = NOW) {
 }
 
 export type InvoicingTestContext = Awaited<ReturnType<typeof createInvoicingTestContext>>;
-
-/** エラーの応答（{ error }）を除いた成功のボディの型にする */
-export const okBody = async <R extends { json(): Promise<unknown> }>(
-  res: R,
-): Promise<Exclude<Awaited<ReturnType<R["json"]>>, { error: unknown }>> =>
-  (await res.json()) as Exclude<Awaited<ReturnType<R["json"]>>, { error: unknown }>;

@@ -1,6 +1,5 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
-  createEntity,
   createJournal,
   domainError,
   err,
@@ -21,9 +20,13 @@ import { createInvoicingUnitOfWork } from "../src/invoicing-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { createRecurringUnitOfWork } from "../src/recurring-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { openTenant, type TenantDb } from "../src/tenant-store.ts";
+import {
+  accountIdOf as accountId,
+  createTestEntity,
+  type TempDataDir,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 // TenantUnitOfWork の Drizzle 実装（drizzleUnitOfWork）。fn が ok を返せば確定し、
 // err を返すか例外を投げれば fn の中の書き込み（入れ子の ledger.transaction を含む）がすべて残らない
@@ -37,17 +40,7 @@ const NOW = clock.now();
 
 beforeEach(() => {
   tmp = useTempDataDir("unit-of-work");
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  db = openTenant(created.value.id);
+  db = openTenant(createTestEntity().id);
 });
 afterEach(() => tmp.cleanup());
 
@@ -68,12 +61,6 @@ const counts = () =>
       (db.$client.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n,
     ]),
   );
-
-const accountId = (masters: MasterRepository, name: string) => {
-  const a = masters.listAccounts().find((x) => x.name === name);
-  if (a === undefined) throw new Error(`科目がない: ${name}`);
-  return a.id;
-};
 
 const draft = (masters: MasterRepository, amount = 1_000): JournalDraft => ({
   date: "2026-10-31",

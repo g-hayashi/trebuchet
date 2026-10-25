@@ -7,7 +7,7 @@ import { itemAmount } from "../src/invoicing/amounts.ts";
  * 取引先は 3 件（添字 0〜2）、会計期間は 2025・2026 年度（どちらも open）
  */
 
-export const PARTNER_COUNT = 3;
+const PARTNER_COUNT = 3;
 
 const TAX_CATEGORIES = ["SALES_10", "SALES_8R", "OUT_OF_SCOPE"] as const;
 type SalesTaxCategory = (typeof TAX_CATEGORIES)[number];
@@ -26,7 +26,7 @@ export type ItemSpec = {
   taxCategory?: SalesTaxCategory | undefined;
 };
 
-export const arbItemSpec: fc.Arbitrary<ItemSpec> = fc.oneof(
+const arbItemSpec: fc.Arbitrary<ItemSpec> = fc.oneof(
   fc.record({
     name: arbName,
     quantityHalves: fc.integer({ min: 1, max: 400 }),
@@ -97,7 +97,7 @@ export type Op =
   | { kind: "issue"; spec: IssueSpec }
   | { kind: "void"; target: number; reason: string };
 
-export const arbOp: fc.Arbitrary<Op> = fc.oneof(
+const arbOp: fc.Arbitrary<Op> = fc.oneof(
   { weight: 3, arbitrary: arbIssueSpec.map((spec): Op => ({ kind: "issue", spec })) },
   {
     weight: 1,
@@ -118,7 +118,7 @@ export const arbOps = fc.array(arbOp, { minLength: 1, maxLength: 10 });
  * `mode`: `full` = 残額ちょうど、`partial` = 残額の `pct`%（1 円以上）、`fee` = `partial` の額で
  * 差額を手数料として扱う、`over` = 残額を `extra` 円超える額
  */
-export type PayOp = {
+type PayOp = {
   kind: "pay";
   target: number;
   mode: "full" | "partial" | "fee" | "over";
@@ -131,11 +131,11 @@ export type PayOp = {
 };
 
 /** 消し込みの取消。`target` はそれまでに登録した消し込みの何番目か（剰余で選ぶ。取消済みも選びうる） */
-export type VoidPayOp = { kind: "voidPayment"; target: number; reason: string };
+type VoidPayOp = { kind: "voidPayment"; target: number; reason: string };
 
 export type LedgerOp = Op | PayOp | VoidPayOp;
 
-export const arbPayOp: fc.Arbitrary<PayOp> = fc.record({
+const arbPayOp: fc.Arbitrary<PayOp> = fc.record({
   kind: fc.constant("pay" as const),
   target: fc.nat(100),
   mode: fc.constantFrom(
@@ -152,14 +152,14 @@ export const arbPayOp: fc.Arbitrary<PayOp> = fc.record({
   day: fc.integer({ min: 1, max: 28 }),
 });
 
-export const arbVoidPayOp: fc.Arbitrary<VoidPayOp> = fc.record({
+const arbVoidPayOp: fc.Arbitrary<VoidPayOp> = fc.record({
   kind: fc.constant("voidPayment" as const),
   target: fc.nat(100),
   reason: fc.constantFrom("誤り", "二重入力", "取り直し"),
 });
 
 /** 発行・取消・消し込み・消し込みの取消の列（INV-32・33・34）。消し込みの取消を請求書の取消より多めにする */
-export const arbLedgerOp: fc.Arbitrary<LedgerOp> = fc.oneof(
+const arbLedgerOp: fc.Arbitrary<LedgerOp> = fc.oneof(
   { weight: 4, arbitrary: arbIssueSpec.map((spec): LedgerOp => ({ kind: "issue", spec })) },
   {
     weight: 1,
@@ -204,7 +204,7 @@ export type Change =
 
 const arbText = fc.string({ minLength: 1, maxLength: 12 }).filter((s) => s.trim().length > 0);
 
-export const arbChange: fc.Arbitrary<Change> = fc.oneof(
+const arbChange: fc.Arbitrary<Change> = fc.oneof(
   fc.record({
     kind: fc.constant("settings" as const),
     issuerName: arbText,

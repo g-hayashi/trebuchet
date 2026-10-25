@@ -1,6 +1,5 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
-  createEntity,
   createJournal,
   domainError,
   err,
@@ -16,9 +15,8 @@ import { createInvoicingUnitOfWork, DrizzleInvoicingStore } from "../src/invoici
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { createRecurringUnitOfWork, DrizzleRecurringStore } from "../src/recurring-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { openTenant, type TenantDb } from "../src/tenant-store.ts";
+import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 // 005 R9・R23。UnitOfWork の巻き戻し、originOfJournal の往復、記録の追記を実 DB で確かめる
 
@@ -33,17 +31,7 @@ const NOW = clock.now();
 
 beforeEach(() => {
   tmp = useTempDataDir("invoicing-uow");
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  db = openTenant(created.value.id);
+  db = openTenant(createTestEntity().id);
   masters = new DrizzleMasterRepository(db);
   ledger = new DrizzleLedgerRepository(db);
 });
@@ -53,11 +41,7 @@ const run = (sqlText: string, params: unknown[] = []) => db.$client.prepare(sqlT
 const count = (table: string) =>
   (db.$client.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
 
-const accountId = (name: string) => {
-  const a = masters.listAccounts().find((x) => x.name === name);
-  if (a === undefined) throw new Error(`科目がない: ${name}`);
-  return a.id;
-};
+const accountId = (name: string) => accountIdOf(masters, name);
 
 const draft = (amount = 110_000): JournalDraft => ({
   date: "2026-10-31",

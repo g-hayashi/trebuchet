@@ -19,11 +19,11 @@ import {
 } from "../fakes.ts";
 import { EXPECTED_JOURNAL, FIXTURE_FILES } from "../fixtures/freee/expected.ts";
 import { readFixture } from "../fixtures/freee/load.ts";
+import { accountIdOfCode } from "../ledger-setup.ts";
+import { NOW, SHA } from "./import-usecase-setup.ts";
 
-const SHA = "a".repeat(64);
 const OTHER_SHA = "b".repeat(64);
 const FILE_NAME = "journal-2025.csv";
-const NOW = "2026-10-19T00:00:00.000Z";
 
 function setup() {
   const masters = new InMemoryMasterRepository();
@@ -50,11 +50,7 @@ function setup() {
   ]);
   const ledger = new InMemoryLedgerRepository();
   const uow = fakeImportUnitOfWork(ledger, masters);
-  const code = (c: string) => {
-    const a = masters.state.accounts.find((x) => x.code === c);
-    if (a === undefined) throw new Error(`科目がない: ${c}`);
-    return a.id;
-  };
+  const code = (c: string) => accountIdOfCode(masters, c);
   return { uow, masters, ledger, ids, clock: new FixedClock(NOW), code };
 }
 

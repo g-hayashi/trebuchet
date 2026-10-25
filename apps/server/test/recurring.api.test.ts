@@ -7,7 +7,7 @@ import {
   okBody,
 } from "./invoicing-helpers.ts";
 
-// 005 US3: contracts/http-api.md §5。今日は 2026-10-31（偽の時計。invoicing-helpers の NOW）
+// 005 US3: contracts/http-api.md §5。今日は 2026-10-31（偽の時計。invoicing-helpers の SAFE_NOW）
 
 let tmp: TempDataDir;
 let ctx: InvoicingTestContext;

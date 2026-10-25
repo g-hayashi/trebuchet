@@ -1,7 +1,6 @@
 import { randomUUIDv7 } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
-  createEntity,
   type EntityKind,
   type FiscalPeriod,
   type Journal,
@@ -19,9 +18,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant, tenantFile } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { openTenant, tenantFile } from "../src/tenant-store.ts";
+import { createTestEntity, NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 type Tenant = {
   entityId: string;
@@ -38,25 +36,15 @@ let tmp: TempDataDir;
 let a: Tenant;
 let b: Tenant;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-31T09:00:00.000Z" };
+const clock = { now: () => NOW };
 
 function setupTenant(name: string, kind: EntityKind): Tenant {
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name, kind, fiscalStartMonth: 1, firstFiscalYear: 2026 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  const db = openTenant(created.value.id);
+  const entity = createTestEntity({ name, kind });
+  const db = openTenant(entity.id);
   const masters = new DrizzleMasterRepository(db);
   const period = masters.listFiscalPeriods()[0];
   if (period === undefined) throw new Error("会計期間がない");
-  return { entityId: created.value.id, masters, ledger: new DrizzleLedgerRepository(db), period };
+  return { entityId: entity.id, masters, ledger: new DrizzleLedgerRepository(db), period };
 }
 
 beforeEach(() => {

@@ -18,7 +18,7 @@ export type SecurityExec = (
 ) => Promise<{ code: number; stdout: string }>;
 
 /** 既定の実行関数。引数にはパスフレーズを載せない（ps に出るため）。標準入力だけで渡す */
-export const execSecurity: SecurityExec = (args, input) =>
+const execSecurity: SecurityExec = (args, input) =>
   new Promise((resolve, reject) => {
     const child = spawn(SECURITY, args, { stdio: ["pipe", "pipe", "ignore"], timeout: TIMEOUT_MS });
     const chunks: Buffer[] = [];

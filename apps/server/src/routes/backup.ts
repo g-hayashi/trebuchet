@@ -38,7 +38,7 @@ export type BackupRouteDeps = {
 };
 
 /** 検査に送れるバックアップのファイルの上限（research R13） */
-export const MAX_INSPECT_BYTES = 200 * 1024 * 1024;
+const MAX_INSPECT_BYTES = 200 * 1024 * 1024;
 
 const DEFAULT_RUN_LIMIT = 50;
 const MAX_RUN_LIMIT = 200;

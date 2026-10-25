@@ -22,6 +22,9 @@ const MIGRATIONS = {
 
 const DEFAULT_DATA_DIR = fileURLToPath(new URL("../../../data", import.meta.url));
 
+/** 一時ファイルの置き場所（リポジトリ直下の .tmp/）。/tmp や os.tmpdir() は使わない */
+export const TMP_ROOT = fileURLToPath(new URL("../../../.tmp/", import.meta.url));
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class InvalidEntityIdError extends Error {

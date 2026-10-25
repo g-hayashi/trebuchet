@@ -4,10 +4,9 @@ import { reversalDraft } from "../../src/invoicing/journal-drafts.ts";
 import type { Journal } from "../../src/types.ts";
 import { issueInvoice, voidInvoice } from "../../src/usecases/invoicing.ts";
 import { setupInvoicing } from "../invoicing-setup.ts";
+import { TODAY } from "../test-dates.ts";
 
 // 005 US1: 請求書の取消（R12、§3、FR-014、H:§3.7）
-
-const TODAY = "2026-10-31";
 
 function ready() {
   const t = setupInvoicing({ taxable: true });

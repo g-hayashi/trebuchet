@@ -21,12 +21,13 @@ import {
   toRecurring,
 } from "./recurring-arbitraries.ts";
 import { setupRecurring } from "./recurring-setup.ts";
+import { MONTH_START_NOW } from "./test-dates.ts";
 
 // INV-35: 任意の定期仕訳の定義の集合と、起動の日の列（同じ日の重複、停止・再開・変更・締め・締めの解除・取消を挟む）で
 // postDueRecurring を繰り返しても、各（定期仕訳, 月）の posted は高々 1 件、最後の判定の後は active の定義の
 // 対象の月がすべて posted・skipped・blocked のどれか 1 つ、仕訳の日付は dateInMonth、取り消しても再登録されない
 
-const NOW = "2026-10-01T00:00:00.000Z";
+const NOW = MONTH_START_NOW;
 
 const addDays = (date: string, days: number): string => {
   const d = new Date(`${date}T00:00:00Z`);

@@ -1,6 +1,5 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
-  createEntity,
   type ImportBatch,
   type ImportRef,
   type ImportUnitOfWork,
@@ -13,9 +12,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { openTenant, type TenantDb } from "../src/tenant-store.ts";
+import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 let tmp: TempDataDir;
 let db: TenantDb;
@@ -24,23 +22,12 @@ let ledger: DrizzleLedgerRepository;
 let store: DrizzleImportStore;
 let uow: ImportUnitOfWork;
 
-const ids = { next: () => randomUUIDv7() };
 const clock = { now: () => "2026-10-19T09:00:00.000Z" };
 const SHA = "0123456789abcdef".repeat(4);
 
 beforeEach(() => {
   tmp = useTempDataDir("import-repo");
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2025 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  db = openTenant(created.value.id);
+  db = openTenant(createTestEntity({ firstFiscalYear: 2025 }).id);
   masters = new DrizzleMasterRepository(db);
   ledger = new DrizzleLedgerRepository(db);
   store = new DrizzleImportStore(db);
@@ -48,11 +35,7 @@ beforeEach(() => {
 });
 afterEach(() => tmp.cleanup());
 
-const accountId = (name: string) => {
-  const a = masters.listAccounts().find((x) => x.name === name);
-  if (a === undefined) throw new Error(`科目がない: ${name}`);
-  return a.id;
-};
+const accountId = (name: string) => accountIdOf(masters, name);
 
 const context = () => ({
   accounts: masters.listAccounts(),

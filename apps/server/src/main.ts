@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import { closeAll } from "@trebuchet/db";
+import { closeAll, TMP_ROOT } from "@trebuchet/db";
 import { app } from "./app.ts";
 import {
   authStore,
@@ -11,7 +11,6 @@ import {
   openRecurringUnitOfWork,
   secretStore,
 } from "./deps.ts";
-import { TMP_ROOT } from "./lib/paths.ts";
 import { startBackgroundServices } from "./lib/startup.ts";
 
 // R13: 認証を入れるまではループバックだけで待ち受ける

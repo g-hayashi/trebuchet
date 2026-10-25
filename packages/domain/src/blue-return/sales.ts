@@ -3,7 +3,7 @@ import { formatSignedAmount } from "../reports/warnings.ts";
 import type { Account, FiscalPeriod, PostedLine } from "../types.ts";
 
 /** 雑収入の科目コード（初期セットの雑収入）。売上高と同じ区分（PL_SALES）にあるので、コードで分ける */
-export const MISC_INCOME_ACCOUNT_CODE = "4020";
+const MISC_INCOME_ACCOUNT_CODE = "4020";
 
 type Monthly = BlueReturn["page2"]["monthly"];
 type SalesPartners = BlueReturn["page3"]["salesPartners"];

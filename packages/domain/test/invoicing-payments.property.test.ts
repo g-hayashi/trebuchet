@@ -12,10 +12,10 @@ import {
 import { FaultInjectingUnitOfWork, snapshotOf } from "./fault-injection.ts";
 import { arbLedgerOps, type LedgerOp, toInvoiceInput } from "./invoicing-arbitraries.ts";
 import { setupScenario } from "./invoicing-setup.ts";
+import { TODAY } from "./test-dates.ts";
 
 // 005 US2: 消し込みの不変条件（INV-32 の消し込み・取消、INV-33、INV-34）
 
-const TODAY = "2026-10-31";
 const pad = (n: number) => String(n).padStart(2, "0");
 
 type Scenario = ReturnType<typeof setupScenario>;

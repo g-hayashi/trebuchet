@@ -2,7 +2,6 @@ import { createHash, randomUUIDv7 } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   commitFreeeImport,
-  createEntity,
   getTrialBalance,
   type ImportUnitOfWork,
   previewFreeeImport,
@@ -18,9 +17,8 @@ import {
 import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { openTenant, type TenantDb } from "../src/tenant-store.ts";
+import { createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 // T024: 取込の確定の統合テスト（テンポラリの SQLite。INV-11、INV-12、SC-005、SC-006）
 
@@ -52,17 +50,7 @@ const input = () => ({
 
 beforeEach(() => {
   tmp = useTempDataDir("import-commit");
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2025 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  db = openTenant(created.value.id);
+  db = openTenant(createTestEntity({ firstFiscalYear: 2025 }).id);
   masters = new DrizzleMasterRepository(db);
   ledger = new DrizzleLedgerRepository(db);
   masters.replaceTaxSettings([

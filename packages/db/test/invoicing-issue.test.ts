@@ -1,7 +1,7 @@
 import { getInvoiceDetail, getJournalOrigin, issueInvoice, voidInvoice } from "@trebuchet/domain";
 import type { InvoiceInput } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { type TempDataDir, TODAY, useTempDataDir } from "../src/testing.ts";
 import { setupInvoicingDb } from "./invoicing-db-setup.ts";
 
 // 005 US1: 発行の実 DB での往復と、障害の注入（INV-32）。
@@ -10,8 +10,6 @@ import { setupInvoicingDb } from "./invoicing-db-setup.ts";
 let tmp: TempDataDir;
 let t: ReturnType<typeof setupInvoicingDb>;
 let partnerId: string;
-
-const TODAY = "2026-10-31";
 
 beforeEach(() => {
   tmp = useTempDataDir("invoicing-issue");

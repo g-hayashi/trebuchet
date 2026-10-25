@@ -9,7 +9,7 @@ import fc from "fast-check";
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** `YYYY-MM` を作る */
-export const monthOf = (year: number, month: number) => `${year}-${pad(month)}`;
+const monthOf = (year: number, month: number) => `${year}-${pad(month)}`;
 
 /** 月の通し番号（年 × 12 + 月 - 1）を `YYYY-MM` にする */
 export const monthFromIndex = (index: number) => monthOf(Math.floor(index / 12), (index % 12) + 1);
@@ -17,10 +17,10 @@ export const indexOfMonth = (month: string) =>
   Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1;
 
 /** 1〜28 または 31（末日） */
-export const arbDay = fc.oneof(fc.integer({ min: 1, max: 28 }), fc.constant(31));
+const arbDay = fc.oneof(fc.integer({ min: 1, max: 28 }), fc.constant(31));
 
 /** 2024-10 〜 2027-03 の月 */
-export const arbMonth = fc
+const arbMonth = fc
   .integer({ min: indexOfMonth("2024-10"), max: indexOfMonth("2027-03") })
   .map(monthFromIndex);
 
@@ -54,7 +54,7 @@ export const arbDefSpec: fc.Arbitrary<DefSpec> = fc.record({
 });
 
 /** 操作の列で作る定義: 期間の中の開始月・使用中の取引先（登録の経路を通りやすくする） */
-export const arbLiveDefSpec: fc.Arbitrary<DefSpec> = fc.record({
+const arbLiveDefSpec: fc.Arbitrary<DefSpec> = fc.record({
   dayOfMonth: arbDay,
   startMonth: fc
     .integer({ min: indexOfMonth("2025-01"), max: indexOfMonth("2026-09") })
@@ -149,7 +149,7 @@ export type RecurringOp =
 
 const arbYear = fc.constantFrom(2025 as const, 2026 as const);
 
-export const arbRecurringOp: fc.Arbitrary<RecurringOp> = fc.oneof(
+const arbRecurringOp: fc.Arbitrary<RecurringOp> = fc.oneof(
   {
     weight: 6,
     arbitrary: fc.record({

@@ -5,10 +5,9 @@ import { effectiveTaxDisplay } from "../../src/invoicing/tax.ts";
 import { loadContext } from "../../src/usecases/create-journal.ts";
 import { draftInvoices, getWorkHours, saveWorkHours } from "../../src/usecases/invoicing.ts";
 import { invoiceRecord, setupInvoicing } from "../invoicing-setup.ts";
+import { TODAY } from "../test-dates.ts";
 
 // 005 US1: 工数と請求書の案（R3・R7・R8・R10、FR-005・006・016、H:§3.1〜§3.3）
-
-const TODAY = "2026-10-31";
 
 const hourly = (over: Partial<BillingTerms> = {}): BillingTerms => ({
   partnerId: "p-1",

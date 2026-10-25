@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { listInvoices } from "../../src/usecases/invoicing.ts";
 import { invoiceRecord, setupInvoicing } from "../invoicing-setup.ts";
+import { TODAY } from "../test-dates.ts";
 
 // 005 US1: 請求書の一覧の基本形（R14、FR-022 の一部、H:§3.5 の基本形）
-
-const TODAY = "2026-10-31";
 
 function seeded() {
   const t = setupInvoicing();

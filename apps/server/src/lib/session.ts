@@ -9,7 +9,7 @@ import { expectedOriginFor, type RemoteSettings } from "./origin.ts";
 export const SESSION_COOKIE = "trebuchet_session";
 
 /** 32 バイトの乱数を base64url にしたトークン（43 文字） */
-export function newSessionToken(): string {
+function newSessionToken(): string {
   return randomBytes(32).toString("base64url");
 }
 

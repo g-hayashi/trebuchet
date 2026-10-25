@@ -47,7 +47,7 @@ export type BackupRunnerDeps = {
   crypto?: CryptoOptions;
 };
 
-export type StartedBackup = { runId: string; done: Promise<BackupRun> };
+type StartedBackup = { runId: string; done: Promise<BackupRun> };
 
 export type BackupRunner = {
   isRunning(): boolean;

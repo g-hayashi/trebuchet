@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.ts";
 import { SESSION_COOKIE } from "../src/lib/session.ts";
 import type { CredentialRef, WebAuthnVerifier } from "../src/lib/webauthn.ts";
-import { createTestSession, TEST_HOST, TEST_ORIGIN } from "./helpers.ts";
+import { createTestSession, makeClock, TEST_HOST, TEST_ORIGIN } from "./helpers.ts";
 
 // T008: 認証のルート（登録・サインイン・回復・パスキー・セッション・記録）。
 // WebAuthn の検証は偽物に差し替える（本物の認証器の応答は作らない）
@@ -22,16 +22,6 @@ afterEach(() => {
 const REMOTE_HOST = "mac.tail1234.ts.net";
 const REMOTE_ORIGIN = `https://${REMOTE_HOST}`;
 const store = () => new DrizzleAuthStore(openRegistry());
-
-function makeClock() {
-  let ms = Date.parse("2026-10-20T00:00:00.000Z");
-  return {
-    now: () => new Date(ms).toISOString(),
-    advance: (d: number) => {
-      ms += d;
-    },
-  };
-}
 
 /**
  * 偽の WebAuthnVerifier。応答は `{ challenge, credId, fail? }`。
@@ -94,7 +84,7 @@ type CallOpts = {
 };
 
 function setup() {
-  const clock = makeClock();
+  const clock = makeClock("2026-10-20T00:00:00.000Z");
   const { verifier, seen } = fakeVerifier();
   const app = createApp({
     clock,

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import type { ImportBatch, ImportBatchJournal } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { app, type ErrorBody } from "./helpers.ts";
+import { app, errorOf, json } from "./helpers.ts";
 
 // T056: 取込の取消の API（contracts/http-api.md の 002）
 
@@ -42,15 +42,6 @@ const sendJson = (method: "POST" | "PUT", path: string, body: unknown) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-
-const errorOf = async (res: Response) => ((await res.json()) as ErrorBody).error;
-
-async function json<T>(res: Response, status: number): Promise<T> {
-  if (res.status !== status) {
-    throw new Error(`expected ${status} but got ${res.status}: ${await res.text()}`);
-  }
-  return (await res.json()) as T;
-}
 
 async function commit(): Promise<ImportBatch> {
   const form = new FormData();

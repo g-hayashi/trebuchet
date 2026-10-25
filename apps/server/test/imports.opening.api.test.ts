@@ -6,7 +6,7 @@ import {
   EXPECTED_BOOK_ACCOUNTS,
   EXPECTED_OPENING_PROPOSAL,
 } from "../../../packages/domain/test/fixtures/freee/expected.ts";
-import { app, type ErrorBody } from "./helpers.ts";
+import { app, errorOf } from "./helpers.ts";
 
 // T038: 期首残高の案の API（contracts/http-api.md の「期首残高（総勘定元帳）」）
 
@@ -61,8 +61,6 @@ const sendJson = (method: "POST" | "PUT", path: string, body: unknown) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-
-const errorOf = async (res: Response) => ((await res.json()) as ErrorBody).error;
 
 async function json<T>(res: Response, status: number): Promise<T> {
   if (res.status !== status) {

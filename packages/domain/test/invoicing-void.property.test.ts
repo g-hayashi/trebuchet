@@ -5,10 +5,9 @@ import { issueInvoice, voidInvoice } from "../src/usecases/invoicing.ts";
 import { FaultInjectingUnitOfWork, snapshotOf } from "./fault-injection.ts";
 import { arbOps, toInvoiceInput } from "./invoicing-arbitraries.ts";
 import { setupScenario } from "./invoicing-setup.ts";
+import { TODAY } from "./test-dates.ts";
 
 // 005 US1: 取消の不変条件（INV-31 の取消した番号の再利用なし、INV-32 の取消）
-
-const TODAY = "2026-10-31";
 
 describe("INV-32（取消）: 取消は全部か無か", () => {
   it("任意の発行・取消の列の任意の段階で失敗させても、請求書の取消の列と仕訳の取消（または訂正仕訳）の片方だけが残らない", () => {

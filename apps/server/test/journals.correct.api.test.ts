@@ -3,11 +3,11 @@ import { DrizzleLedgerRepository, DrizzleMasterRepository, openTenant } from "@t
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { createJournal, type JournalSource } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { client, createTestEntity, errorOf } from "./helpers.ts";
+import { accountLookup, client, createTestEntity, errorOf } from "./helpers.ts";
 
 let tmp: TempDataDir;
 let entityId: string;
-let accountIds: Map<string, string>;
+let acc: (name: string) => string;
 
 const e = client.api.entities[":entityId"];
 const param = () => ({ entityId });
@@ -16,17 +16,9 @@ const journalParam = (journalId: string) => ({ param: { entityId, journalId } })
 beforeEach(async () => {
   tmp = useTempDataDir("server-journals-correct");
   entityId = await createTestEntity();
-  const res = await e.accounts.$get({ param: param() });
-  if (res.status !== 200) throw new Error(String(res.status));
-  accountIds = new Map((await res.json()).accounts.map((a) => [a.name, a.id]));
+  acc = await accountLookup(entityId);
 });
 afterEach(() => tmp.cleanup());
-
-const acc = (name: string) => {
-  const id = accountIds.get(name);
-  if (id === undefined) throw new Error(`科目がない: ${name}`);
-  return id;
-};
 
 type Line = {
   side: "debit" | "credit";

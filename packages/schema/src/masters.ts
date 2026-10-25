@@ -10,7 +10,11 @@ import {
   Yen,
 } from "./primitives.ts";
 
-const Name = z.string().trim().min(1, "名称を入力してください").max(100);
+/** 勘定科目・補助科目・取引先の名称の上限、タグ名の上限 */
+export const MASTER_NAME_MAX = 100;
+export const TAG_NAME_MAX = 50;
+
+const Name = z.string().trim().min(1, "名称を入力してください").max(MASTER_NAME_MAX);
 
 export const AccountCreate = z.object({
   name: Name,
@@ -43,7 +47,7 @@ export const PartnerInput = z.object({
 });
 export type PartnerInput = z.infer<typeof PartnerInput>;
 
-export const TagCreate = z.object({ name: z.string().trim().min(1).max(50) });
+export const TagCreate = z.object({ name: z.string().trim().min(1).max(TAG_NAME_MAX) });
 export type TagCreate = z.infer<typeof TagCreate>;
 
 export const TaxSettingInput = z.object({

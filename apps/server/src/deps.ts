@@ -17,6 +17,7 @@ import {
   openRegistry,
   openTenant,
   type TenantDb,
+  TMP_ROOT,
 } from "@trebuchet/db";
 import type {
   AuthStore,
@@ -42,7 +43,6 @@ import type {
 } from "@trebuchet/domain";
 import { type BackupRunner, createBackupRunner } from "./lib/backup-run.ts";
 import { createKeychainSecretStore, createMemorySecretStore } from "./lib/keychain.ts";
-import { TMP_ROOT } from "./lib/paths.ts";
 
 /** R8: 主キーは UUIDv7 */
 export const ids: IdGenerator = { next: () => randomUUIDv7() };
