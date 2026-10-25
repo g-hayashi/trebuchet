@@ -19,12 +19,16 @@ import { Route as EEntityIdInvoiceSettingsRouteImport } from './routes/e/$entity
 import { Route as EEntityIdPartnersRouteImport } from './routes/e/$entityId/partners'
 import { Route as EEntityIdTagsRouteImport } from './routes/e/$entityId/tags'
 import { Route as EEntityIdTaxSettingsRouteImport } from './routes/e/$entityId/tax-settings'
+import { Route as EEntityIdWorkHoursRouteImport } from './routes/e/$entityId/work-hours'
 import { Route as EEntityIdBlueReturnIndexRouteImport } from './routes/e/$entityId/blue-return/index'
 import { Route as EEntityIdFixedAssetsIndexRouteImport } from './routes/e/$entityId/fixed-assets/index'
 import { Route as EEntityIdImportsIndexRouteImport } from './routes/e/$entityId/imports/index'
 import { Route as EEntityIdImportsBatchIdRouteImport } from './routes/e/$entityId/imports/$batchId'
 import { Route as EEntityIdImportsNewRouteImport } from './routes/e/$entityId/imports/new'
 import { Route as EEntityIdImportsReconcileRouteImport } from './routes/e/$entityId/imports/reconcile'
+import { Route as EEntityIdInvoicesIndexRouteImport } from './routes/e/$entityId/invoices/index'
+import { Route as EEntityIdInvoicesInvoiceIdRouteImport } from './routes/e/$entityId/invoices/$invoiceId'
+import { Route as EEntityIdInvoicesNewRouteImport } from './routes/e/$entityId/invoices/new'
 import { Route as EEntityIdJournalsIndexRouteImport } from './routes/e/$entityId/journals/index'
 import { Route as EEntityIdJournalsJournalIdRouteImport } from './routes/e/$entityId/journals/$journalId'
 import { Route as EEntityIdJournalsNewRouteImport } from './routes/e/$entityId/journals/new'
@@ -39,6 +43,7 @@ import { Route as EEntityIdTaxReturnYearRouteImport } from './routes/e/$entityId
 import { Route as EEntityIdBlueReturnYearIndexRouteImport } from './routes/e/$entityId/blue-return/$year/index'
 import { Route as EEntityIdBlueReturnYearDeductionRouteImport } from './routes/e/$entityId/blue-return/$year/deduction'
 import { Route as EEntityIdBlueReturnYearHomeUseRouteImport } from './routes/e/$entityId/blue-return/$year/home-use'
+import { Route as EEntityIdInvoicesInvoiceIdPrintRouteImport } from './routes/e/$entityId/invoices/$invoiceId_.print'
 import { Route as EEntityIdPeriodsYearOpeningBalancesRouteImport } from './routes/e/$entityId/periods/$year/opening-balances'
 
 const IndexRoute = IndexRouteImport.update({
@@ -92,6 +97,11 @@ const EEntityIdTaxSettingsRoute = EEntityIdTaxSettingsRouteImport.update({
   path: '/tax-settings',
   getParentRoute: () => EEntityIdRouteRoute,
 } as any)
+const EEntityIdWorkHoursRoute = EEntityIdWorkHoursRouteImport.update({
+  id: '/work-hours',
+  path: '/work-hours',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
 const EEntityIdBlueReturnIndexRoute =
   EEntityIdBlueReturnIndexRouteImport.update({
     id: '/blue-return/',
@@ -125,6 +135,22 @@ const EEntityIdImportsReconcileRoute =
     path: '/imports/reconcile',
     getParentRoute: () => EEntityIdRouteRoute,
   } as any)
+const EEntityIdInvoicesIndexRoute = EEntityIdInvoicesIndexRouteImport.update({
+  id: '/invoices/',
+  path: '/invoices/',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdInvoicesInvoiceIdRoute =
+  EEntityIdInvoicesInvoiceIdRouteImport.update({
+    id: '/invoices/$invoiceId',
+    path: '/invoices/$invoiceId',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
+const EEntityIdInvoicesNewRoute = EEntityIdInvoicesNewRouteImport.update({
+  id: '/invoices/new',
+  path: '/invoices/new',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
 const EEntityIdJournalsIndexRoute = EEntityIdJournalsIndexRouteImport.update({
   id: '/journals/',
   path: '/journals/',
@@ -204,6 +230,12 @@ const EEntityIdBlueReturnYearHomeUseRoute =
     path: '/blue-return/$year/home-use',
     getParentRoute: () => EEntityIdRouteRoute,
   } as any)
+const EEntityIdInvoicesInvoiceIdPrintRoute =
+  EEntityIdInvoicesInvoiceIdPrintRouteImport.update({
+    id: '/invoices/$invoiceId_/print',
+    path: '/invoices/$invoiceId/print',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
 const EEntityIdPeriodsYearOpeningBalancesRoute =
   EEntityIdPeriodsYearOpeningBalancesRouteImport.update({
     id: '/periods/$year/opening-balances',
@@ -221,10 +253,13 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
+  '/e/$entityId/work-hours': typeof EEntityIdWorkHoursRoute
   '/e/$entityId/': typeof EEntityIdIndexRoute
   '/e/$entityId/imports/$batchId': typeof EEntityIdImportsBatchIdRoute
   '/e/$entityId/imports/new': typeof EEntityIdImportsNewRoute
   '/e/$entityId/imports/reconcile': typeof EEntityIdImportsReconcileRoute
+  '/e/$entityId/invoices/$invoiceId': typeof EEntityIdInvoicesInvoiceIdRoute
+  '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -236,11 +271,13 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/blue-return/': typeof EEntityIdBlueReturnIndexRoute
   '/e/$entityId/fixed-assets/': typeof EEntityIdFixedAssetsIndexRoute
   '/e/$entityId/imports/': typeof EEntityIdImportsIndexRoute
+  '/e/$entityId/invoices/': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals/': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/blue-return/$year/deduction': typeof EEntityIdBlueReturnYearDeductionRoute
   '/e/$entityId/blue-return/$year/home-use': typeof EEntityIdBlueReturnYearHomeUseRoute
+  '/e/$entityId/invoices/$invoiceId/print': typeof EEntityIdInvoicesInvoiceIdPrintRoute
   '/e/$entityId/periods/$year/opening-balances': typeof EEntityIdPeriodsYearOpeningBalancesRoute
   '/e/$entityId/blue-return/$year/': typeof EEntityIdBlueReturnYearIndexRoute
 }
@@ -253,10 +290,13 @@ export interface FileRoutesByTo {
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
+  '/e/$entityId/work-hours': typeof EEntityIdWorkHoursRoute
   '/e/$entityId': typeof EEntityIdIndexRoute
   '/e/$entityId/imports/$batchId': typeof EEntityIdImportsBatchIdRoute
   '/e/$entityId/imports/new': typeof EEntityIdImportsNewRoute
   '/e/$entityId/imports/reconcile': typeof EEntityIdImportsReconcileRoute
+  '/e/$entityId/invoices/$invoiceId': typeof EEntityIdInvoicesInvoiceIdRoute
+  '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -268,11 +308,13 @@ export interface FileRoutesByTo {
   '/e/$entityId/blue-return': typeof EEntityIdBlueReturnIndexRoute
   '/e/$entityId/fixed-assets': typeof EEntityIdFixedAssetsIndexRoute
   '/e/$entityId/imports': typeof EEntityIdImportsIndexRoute
+  '/e/$entityId/invoices': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods': typeof EEntityIdPeriodsIndexRoute
   '/e/$entityId/reports': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/blue-return/$year/deduction': typeof EEntityIdBlueReturnYearDeductionRoute
   '/e/$entityId/blue-return/$year/home-use': typeof EEntityIdBlueReturnYearHomeUseRoute
+  '/e/$entityId/invoices/$invoiceId/print': typeof EEntityIdInvoicesInvoiceIdPrintRoute
   '/e/$entityId/periods/$year/opening-balances': typeof EEntityIdPeriodsYearOpeningBalancesRoute
   '/e/$entityId/blue-return/$year': typeof EEntityIdBlueReturnYearIndexRoute
 }
@@ -287,10 +329,13 @@ export interface FileRoutesById {
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
+  '/e/$entityId/work-hours': typeof EEntityIdWorkHoursRoute
   '/e/$entityId/': typeof EEntityIdIndexRoute
   '/e/$entityId/imports/$batchId': typeof EEntityIdImportsBatchIdRoute
   '/e/$entityId/imports/new': typeof EEntityIdImportsNewRoute
   '/e/$entityId/imports/reconcile': typeof EEntityIdImportsReconcileRoute
+  '/e/$entityId/invoices/$invoiceId': typeof EEntityIdInvoicesInvoiceIdRoute
+  '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -302,11 +347,13 @@ export interface FileRoutesById {
   '/e/$entityId/blue-return/': typeof EEntityIdBlueReturnIndexRoute
   '/e/$entityId/fixed-assets/': typeof EEntityIdFixedAssetsIndexRoute
   '/e/$entityId/imports/': typeof EEntityIdImportsIndexRoute
+  '/e/$entityId/invoices/': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals/': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/blue-return/$year/deduction': typeof EEntityIdBlueReturnYearDeductionRoute
   '/e/$entityId/blue-return/$year/home-use': typeof EEntityIdBlueReturnYearHomeUseRoute
+  '/e/$entityId/invoices/$invoiceId_/print': typeof EEntityIdInvoicesInvoiceIdPrintRoute
   '/e/$entityId/periods/$year/opening-balances': typeof EEntityIdPeriodsYearOpeningBalancesRoute
   '/e/$entityId/blue-return/$year/': typeof EEntityIdBlueReturnYearIndexRoute
 }
@@ -322,10 +369,13 @@ export interface FileRouteTypes {
     | '/e/$entityId/partners'
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
+    | '/e/$entityId/work-hours'
     | '/e/$entityId/'
     | '/e/$entityId/imports/$batchId'
     | '/e/$entityId/imports/new'
     | '/e/$entityId/imports/reconcile'
+    | '/e/$entityId/invoices/$invoiceId'
+    | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -337,11 +387,13 @@ export interface FileRouteTypes {
     | '/e/$entityId/blue-return/'
     | '/e/$entityId/fixed-assets/'
     | '/e/$entityId/imports/'
+    | '/e/$entityId/invoices/'
     | '/e/$entityId/journals/'
     | '/e/$entityId/periods/'
     | '/e/$entityId/reports/'
     | '/e/$entityId/blue-return/$year/deduction'
     | '/e/$entityId/blue-return/$year/home-use'
+    | '/e/$entityId/invoices/$invoiceId/print'
     | '/e/$entityId/periods/$year/opening-balances'
     | '/e/$entityId/blue-return/$year/'
   fileRoutesByTo: FileRoutesByTo
@@ -354,10 +406,13 @@ export interface FileRouteTypes {
     | '/e/$entityId/partners'
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
+    | '/e/$entityId/work-hours'
     | '/e/$entityId'
     | '/e/$entityId/imports/$batchId'
     | '/e/$entityId/imports/new'
     | '/e/$entityId/imports/reconcile'
+    | '/e/$entityId/invoices/$invoiceId'
+    | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -369,11 +424,13 @@ export interface FileRouteTypes {
     | '/e/$entityId/blue-return'
     | '/e/$entityId/fixed-assets'
     | '/e/$entityId/imports'
+    | '/e/$entityId/invoices'
     | '/e/$entityId/journals'
     | '/e/$entityId/periods'
     | '/e/$entityId/reports'
     | '/e/$entityId/blue-return/$year/deduction'
     | '/e/$entityId/blue-return/$year/home-use'
+    | '/e/$entityId/invoices/$invoiceId/print'
     | '/e/$entityId/periods/$year/opening-balances'
     | '/e/$entityId/blue-return/$year'
   id:
@@ -387,10 +444,13 @@ export interface FileRouteTypes {
     | '/e/$entityId/partners'
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
+    | '/e/$entityId/work-hours'
     | '/e/$entityId/'
     | '/e/$entityId/imports/$batchId'
     | '/e/$entityId/imports/new'
     | '/e/$entityId/imports/reconcile'
+    | '/e/$entityId/invoices/$invoiceId'
+    | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -402,11 +462,13 @@ export interface FileRouteTypes {
     | '/e/$entityId/blue-return/'
     | '/e/$entityId/fixed-assets/'
     | '/e/$entityId/imports/'
+    | '/e/$entityId/invoices/'
     | '/e/$entityId/journals/'
     | '/e/$entityId/periods/'
     | '/e/$entityId/reports/'
     | '/e/$entityId/blue-return/$year/deduction'
     | '/e/$entityId/blue-return/$year/home-use'
+    | '/e/$entityId/invoices/$invoiceId_/print'
     | '/e/$entityId/periods/$year/opening-balances'
     | '/e/$entityId/blue-return/$year/'
   fileRoutesById: FileRoutesById
@@ -490,6 +552,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EEntityIdTaxSettingsRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
+    '/e/$entityId/work-hours': {
+      id: '/e/$entityId/work-hours'
+      path: '/work-hours'
+      fullPath: '/e/$entityId/work-hours'
+      preLoaderRoute: typeof EEntityIdWorkHoursRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
     '/e/$entityId/blue-return/': {
       id: '/e/$entityId/blue-return/'
       path: '/blue-return'
@@ -530,6 +599,27 @@ declare module '@tanstack/react-router' {
       path: '/imports/reconcile'
       fullPath: '/e/$entityId/imports/reconcile'
       preLoaderRoute: typeof EEntityIdImportsReconcileRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/invoices/': {
+      id: '/e/$entityId/invoices/'
+      path: '/invoices'
+      fullPath: '/e/$entityId/invoices/'
+      preLoaderRoute: typeof EEntityIdInvoicesIndexRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/invoices/$invoiceId': {
+      id: '/e/$entityId/invoices/$invoiceId'
+      path: '/invoices/$invoiceId'
+      fullPath: '/e/$entityId/invoices/$invoiceId'
+      preLoaderRoute: typeof EEntityIdInvoicesInvoiceIdRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/invoices/new': {
+      id: '/e/$entityId/invoices/new'
+      path: '/invoices/new'
+      fullPath: '/e/$entityId/invoices/new'
+      preLoaderRoute: typeof EEntityIdInvoicesNewRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
     '/e/$entityId/journals/': {
@@ -630,6 +720,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EEntityIdBlueReturnYearHomeUseRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
+    '/e/$entityId/invoices/$invoiceId_/print': {
+      id: '/e/$entityId/invoices/$invoiceId_/print'
+      path: '/invoices/$invoiceId/print'
+      fullPath: '/e/$entityId/invoices/$invoiceId/print'
+      preLoaderRoute: typeof EEntityIdInvoicesInvoiceIdPrintRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
     '/e/$entityId/periods/$year/opening-balances': {
       id: '/e/$entityId/periods/$year/opening-balances'
       path: '/periods/$year/opening-balances'
@@ -646,10 +743,13 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdPartnersRoute: typeof EEntityIdPartnersRoute
   EEntityIdTagsRoute: typeof EEntityIdTagsRoute
   EEntityIdTaxSettingsRoute: typeof EEntityIdTaxSettingsRoute
+  EEntityIdWorkHoursRoute: typeof EEntityIdWorkHoursRoute
   EEntityIdIndexRoute: typeof EEntityIdIndexRoute
   EEntityIdImportsBatchIdRoute: typeof EEntityIdImportsBatchIdRoute
   EEntityIdImportsNewRoute: typeof EEntityIdImportsNewRoute
   EEntityIdImportsReconcileRoute: typeof EEntityIdImportsReconcileRoute
+  EEntityIdInvoicesInvoiceIdRoute: typeof EEntityIdInvoicesInvoiceIdRoute
+  EEntityIdInvoicesNewRoute: typeof EEntityIdInvoicesNewRoute
   EEntityIdJournalsJournalIdRoute: typeof EEntityIdJournalsJournalIdRoute
   EEntityIdJournalsNewRoute: typeof EEntityIdJournalsNewRoute
   EEntityIdReportsBalanceSheetRoute: typeof EEntityIdReportsBalanceSheetRoute
@@ -661,11 +761,13 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdBlueReturnIndexRoute: typeof EEntityIdBlueReturnIndexRoute
   EEntityIdFixedAssetsIndexRoute: typeof EEntityIdFixedAssetsIndexRoute
   EEntityIdImportsIndexRoute: typeof EEntityIdImportsIndexRoute
+  EEntityIdInvoicesIndexRoute: typeof EEntityIdInvoicesIndexRoute
   EEntityIdJournalsIndexRoute: typeof EEntityIdJournalsIndexRoute
   EEntityIdPeriodsIndexRoute: typeof EEntityIdPeriodsIndexRoute
   EEntityIdReportsIndexRoute: typeof EEntityIdReportsIndexRoute
   EEntityIdBlueReturnYearDeductionRoute: typeof EEntityIdBlueReturnYearDeductionRoute
   EEntityIdBlueReturnYearHomeUseRoute: typeof EEntityIdBlueReturnYearHomeUseRoute
+  EEntityIdInvoicesInvoiceIdPrintRoute: typeof EEntityIdInvoicesInvoiceIdPrintRoute
   EEntityIdPeriodsYearOpeningBalancesRoute: typeof EEntityIdPeriodsYearOpeningBalancesRoute
   EEntityIdBlueReturnYearIndexRoute: typeof EEntityIdBlueReturnYearIndexRoute
 }
@@ -676,10 +778,13 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdPartnersRoute: EEntityIdPartnersRoute,
   EEntityIdTagsRoute: EEntityIdTagsRoute,
   EEntityIdTaxSettingsRoute: EEntityIdTaxSettingsRoute,
+  EEntityIdWorkHoursRoute: EEntityIdWorkHoursRoute,
   EEntityIdIndexRoute: EEntityIdIndexRoute,
   EEntityIdImportsBatchIdRoute: EEntityIdImportsBatchIdRoute,
   EEntityIdImportsNewRoute: EEntityIdImportsNewRoute,
   EEntityIdImportsReconcileRoute: EEntityIdImportsReconcileRoute,
+  EEntityIdInvoicesInvoiceIdRoute: EEntityIdInvoicesInvoiceIdRoute,
+  EEntityIdInvoicesNewRoute: EEntityIdInvoicesNewRoute,
   EEntityIdJournalsJournalIdRoute: EEntityIdJournalsJournalIdRoute,
   EEntityIdJournalsNewRoute: EEntityIdJournalsNewRoute,
   EEntityIdReportsBalanceSheetRoute: EEntityIdReportsBalanceSheetRoute,
@@ -691,11 +796,13 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdBlueReturnIndexRoute: EEntityIdBlueReturnIndexRoute,
   EEntityIdFixedAssetsIndexRoute: EEntityIdFixedAssetsIndexRoute,
   EEntityIdImportsIndexRoute: EEntityIdImportsIndexRoute,
+  EEntityIdInvoicesIndexRoute: EEntityIdInvoicesIndexRoute,
   EEntityIdJournalsIndexRoute: EEntityIdJournalsIndexRoute,
   EEntityIdPeriodsIndexRoute: EEntityIdPeriodsIndexRoute,
   EEntityIdReportsIndexRoute: EEntityIdReportsIndexRoute,
   EEntityIdBlueReturnYearDeductionRoute: EEntityIdBlueReturnYearDeductionRoute,
   EEntityIdBlueReturnYearHomeUseRoute: EEntityIdBlueReturnYearHomeUseRoute,
+  EEntityIdInvoicesInvoiceIdPrintRoute: EEntityIdInvoicesInvoiceIdPrintRoute,
   EEntityIdPeriodsYearOpeningBalancesRoute:
     EEntityIdPeriodsYearOpeningBalancesRoute,
   EEntityIdBlueReturnYearIndexRoute: EEntityIdBlueReturnYearIndexRoute,

@@ -1,0 +1,32 @@
+/* 請求書の印刷（005 research R2）。A4 縦 1 枚。画面では用紙のような枠で見せ、印刷では画面の要素を隠す */
+.invoice-print .invoice-sheet {
+  max-width: 190mm;
+  margin: 0 auto;
+  padding: 12mm;
+  border: 1px solid var(--color-border, #ddd);
+  background: #fff;
+  color: #000;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  /* 請求書の画面が開いているときだけ、ヘッダー・ナビ・知らせと操作を隠す */
+  body:has(.invoice-print) header,
+  body:has(.invoice-print) nav,
+  body:has(.invoice-print) [aria-label="バックアップの知らせ"],
+  .invoice-print .no-print {
+    display: none;
+  }
+
+  .invoice-print .invoice-sheet {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    break-inside: avoid-page;
+  }
+}

@@ -1,0 +1,102 @@
+import type { InvoiceDetail } from "@trebuchet/schema";
+import { formatYen } from "@/lib/format";
+import { quantityOf, recipientOf } from "./display";
+import "./print.css";
+
+/**
+ * 印刷用の請求書（A4 縦 1 枚。FR-011・012）。発行時に写した値（`issuer`・明細）だけを使い、
+ * 屋号と登録番号は設定されているときだけ、税率ごとの内訳は `tax_display = separate` のときだけ出す
+ */
+export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
+  const { issuer } = invoice;
+  const showBreakdown = invoice.taxDisplay === "separate" && invoice.taxBreakdown.length > 0;
+  return (
+    <article
+      aria-label={`請求書 ${invoice.invoiceNo}`}
+      className="invoice-sheet grid gap-6 text-sm"
+    >
+      <h2 className="text-center text-2xl font-semibold tracking-widest">請求書</h2>
+
+      <div className="flex justify-between gap-6">
+        <div className="grid content-start gap-1">
+          <p className="border-b pb-1 text-lg">{recipientOf(invoice)}</p>
+          <p>下記のとおりご請求申し上げます。</p>
+        </div>
+        <div className="grid content-start gap-1 text-right">
+          <p>{`請求番号 ${invoice.invoiceNo}`}</p>
+          <p>{`発行日 ${invoice.issueDate}`}</p>
+        </div>
+      </div>
+
+      <div className="flex items-end justify-between gap-6">
+        <div className="grid gap-1">
+          <p className="text-lg font-semibold">{`ご請求金額 ${formatYen(invoice.total)} 円`}</p>
+          <p>{`支払期限 ${invoice.dueDate}`}</p>
+        </div>
+        <div className="grid gap-0.5 text-right">
+          {issuer.tradeName !== null && <p>{issuer.tradeName}</p>}
+          <p>{issuer.issuerName}</p>
+          <p>{issuer.address}</p>
+          <p>{issuer.contact}</p>
+          {issuer.registrationNumber !== null && <p>{`登録番号 ${issuer.registrationNumber}`}</p>}
+        </div>
+      </div>
+
+      <table aria-label="明細" className="w-full border-collapse">
+        <thead>
+          <tr className="border-y">
+            <th className="py-1 text-left font-medium">品名</th>
+            <th className="py-1 text-right font-medium">数量</th>
+            <th className="py-1 text-right font-medium">単価</th>
+            <th className="py-1 text-right font-medium">金額</th>
+          </tr>
+        </thead>
+        <tbody>
+          {invoice.items.map((item) => (
+            <tr key={item.lineNo} className="border-b">
+              <td className="py-1">{item.name}</td>
+              <td className="py-1 text-right tabular-nums">{quantityOf(item)}</td>
+              <td className="py-1 text-right tabular-nums">
+                {item.unitPrice === null ? "" : formatYen(item.unitPrice)}
+              </td>
+              <td className="py-1 text-right tabular-nums">{formatYen(item.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="grid justify-items-end gap-2">
+        {showBreakdown && (
+          <table aria-label="消費税の内訳" className="border-collapse text-right tabular-nums">
+            <thead>
+              <tr className="border-b">
+                <th className="px-3 py-1 text-left font-medium">税率</th>
+                <th className="px-3 py-1 font-medium">税抜</th>
+                <th className="px-3 py-1 font-medium">消費税</th>
+                <th className="px-3 py-1 font-medium">税込</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoice.taxBreakdown.map((b) => (
+                <tr key={b.rate}>
+                  <td className="px-3 py-1 text-left">{`${b.rate}%`}</td>
+                  <td className="px-3 py-1">{formatYen(b.exclusive)}</td>
+                  <td className="px-3 py-1">{formatYen(b.tax)}</td>
+                  <td className="px-3 py-1">{formatYen(b.inclusive)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="text-base font-semibold tabular-nums">{`合計 ${formatYen(invoice.total)} 円${
+          invoice.taxDisplay === "inclusive_only" ? "（税込）" : ""
+        }`}</p>
+      </div>
+
+      <div className="grid gap-1">
+        <p className="font-medium">お振込先</p>
+        <p className="whitespace-pre-line">{issuer.bankAccount}</p>
+      </div>
+    </article>
+  );
+}

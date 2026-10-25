@@ -19,7 +19,7 @@ type NavTo =
   | "/e/$entityId/fixed-assets"
   | "/e/$entityId/tax-return/$year"
   | "/e/$entityId/imports"
-  | "/e/$entityId/invoice-settings";
+  | "/e/$entityId/invoices";
 
 /** 事業体ごとの画面の共通レイアウト。ナビの項目は各画面を追加するときに足す（US1〜US5） */
 const NAV: { label: string; to: NavTo }[] = [
@@ -35,8 +35,8 @@ const NAV: { label: string; to: NavTo }[] = [
   { label: "固定資産台帳", to: "/e/$entityId/fixed-assets" },
   { label: "申告の控え", to: "/e/$entityId/tax-return/$year" },
   { label: "取込", to: "/e/$entityId/imports" },
-  // 請求書の一覧などの画面（US1・US2）ができるまでは、設定の画面に入る
-  { label: "請求", to: "/e/$entityId/invoice-settings" },
+  // 請求書の一覧から、工数・請求書の作成・設定へ進む
+  { label: "請求", to: "/e/$entityId/invoices" },
 ];
 
 function EntityLayout() {

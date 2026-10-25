@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { JournalOrigin } from "@/features/invoicing/JournalOrigin";
 import { JournalForm } from "@/features/journals/JournalForm";
 import { ApiError, api, unwrap } from "@/lib/api";
 import { formatDateTime, formatYen } from "@/lib/format";
@@ -175,6 +176,7 @@ function JournalDetailPage() {
       {detail.data && journal && !loading && !error && (
         <>
           <References entityId={entityId} detail={detail.data} />
+          <JournalOrigin entityId={entityId} journalId={journalId} />
           {closedFiscalYear !== undefined && journal.status === "active" && (
             <div className="grid gap-2 rounded-md border border-amber-500/60 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               <p>

@@ -56,7 +56,23 @@ const DEFAULT_ROUTES: Record<string, Handler> = {
 const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   "GET /invoice-settings": () => ok({ settings: null, minimumNextSeq: 1 }),
   "GET /billing-terms": () => ok({ terms: [] }),
+  // 工数・請求書の一覧（US1）。仕訳の詳細は出所を読む（`:id` は 1 つのパスの区切り）
+  "GET /work-hours": () => ok({ entries: [] }),
+  "GET /invoices": () => ok({ invoices: [], outstandingByPartner: [] }),
+  "GET /journals/:id/origin": () => ok({ origin: null }),
 };
+
+/** `:name` を 1 つのパスの区切りに当てはめて、事業体の下のパスの既定の応答を探す */
+function defaultEntityHandler(method: string, entityPath: string): Handler | undefined {
+  const exact = DEFAULT_ENTITY_ROUTES[`${method} ${entityPath}`];
+  if (exact) return exact;
+  for (const [key, handler] of Object.entries(DEFAULT_ENTITY_ROUTES)) {
+    if (!key.includes(":")) continue;
+    const pattern = new RegExp(`^${key.replace(/:[A-Za-z]+/g, "[^/]+")}$`);
+    if (pattern.test(`${method} ${entityPath}`)) return handler;
+  }
+  return undefined;
+}
 
 /**
  * fetch を差し替え、"GET /api/..." の形のキーで応答を返す。受けた呼び出しを順に記録して返す。
@@ -83,7 +99,7 @@ export function mockApi(given: Record<string, Handler>): ApiCall[] {
       calls.push(call);
       const entityPath = url.pathname.replace(/^\/api\/entities\/[^/]+/, "");
       const handler =
-        routes[`${method} ${url.pathname}`] ?? DEFAULT_ENTITY_ROUTES[`${method} ${entityPath}`];
+        routes[`${method} ${url.pathname}`] ?? defaultEntityHandler(method, entityPath);
       const reply = handler
         ? await handler(call)
         : ok({ message: `${method} ${url.pathname} は未定義です` }, 500);
