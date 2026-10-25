@@ -103,9 +103,9 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
     await expect(page.getByRole("heading", { name: `請求書 ${invoiceNo}` })).toBeVisible();
     await expect(page.getByText("取引先A 様", { exact: true })).toBeVisible();
     await expect(page.getByText("未入金", { exact: true })).toBeVisible();
-    await expect(page.getByText("支払期限 2026-10-31")).toBeVisible();
-    await expect(page.getByText("合計 202,500 円")).toBeVisible();
-    await expect(page.getByText("残額 202,500 円")).toBeVisible();
+    await expect(page.getByText("支払期限 2026-10-31", { exact: true })).toBeVisible();
+    await expect(page.getByText("合計 202,500 円", { exact: true })).toBeVisible();
+    await expect(page.getByText("残額 202,500 円", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "売上の仕訳を開く" })).toBeVisible();
   });
 
@@ -131,7 +131,7 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
     await form.getByRole("button", { name: "消し込む" }).click();
 
     await expect(page.getByText("入金済み", { exact: true })).toBeVisible();
-    await expect(page.getByText("残額 0 円")).toBeVisible();
+    await expect(page.getByText("残額 0 円", { exact: true })).toBeVisible();
     const payments = page.getByRole("table", { name: "消し込みの一覧" });
     await expect(payments.getByRole("row", { name: new RegExp(RECEIVED_ON) })).toContainText(
       "有効",
