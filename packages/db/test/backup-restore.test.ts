@@ -184,6 +184,15 @@ function seedDest(): { id: string; name: string } {
       "/folder-of-this-machine",
       "2026-10-30T00:00:00.000Z",
     );
+    // 006: AI の接続の設定も端末の値（バックアップの元の値ではない）
+    db.prepare("DELETE FROM ai_settings").run();
+    db.prepare(
+      "INSERT INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, updated_at) VALUES (1, 0, 1, ?, ?, ?)",
+    ).run(
+      "https://ai-of-this-machine.example.com",
+      "model-of-this-machine",
+      "2026-10-30T00:00:00.000Z",
+    );
     return made;
   });
   if (e === undefined) throw new Error("seed 失敗");
@@ -303,6 +312,23 @@ describe("restoreBackup: 既存の帳簿がある場所への復元", () => {
         { key: "mac_id", value: "mac-of-this-machine" },
       ]);
       expect(registry.prepare("SELECT count(*) AS n FROM passkeys").get()).toEqual({ n: 0 });
+      // ai_settings も app_settings と同じく、元の Mac の値のまま引き継ぐ
+      expect(
+        registry
+          .prepare(
+            "SELECT id, local_enabled, external_enabled, external_base_url, external_model, updated_at FROM ai_settings",
+          )
+          .all(),
+      ).toEqual([
+        {
+          id: 1,
+          local_enabled: 0,
+          external_enabled: 1,
+          external_base_url: "https://ai-of-this-machine.example.com",
+          external_model: "model-of-this-machine",
+          updated_at: "2026-10-30T00:00:00.000Z",
+        },
+      ]);
     } finally {
       registry.close();
     }

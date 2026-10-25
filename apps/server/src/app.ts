@@ -2,17 +2,21 @@ import type { CryptoOptions } from "@trebuchet/db";
 import type { AuthStore, BackupStore, Clock, SecretStore } from "@trebuchet/domain";
 import { Hono } from "hono";
 import {
+  aiSettingsStore,
   authStore,
   backupRunner,
   backupStore,
   clock as defaultClock,
+  fmServer,
   type RouteOptions,
   type SuggestionProviders,
   secretStore,
 } from "./deps.ts";
 import { onError } from "./errors.ts";
+import { type AiRuntime, type AiSettingsStore, createAiRuntime } from "./lib/ai-runtime.ts";
 import type { BackupRunner } from "./lib/backup-run.ts";
 import { ChallengeStore } from "./lib/challenges.ts";
+import type { FmServer } from "./lib/fm-server.ts";
 import { createJobStore, type JobStore, type MfmeFetcher } from "./lib/jobs.ts";
 import { playwrightFetcher } from "./lib/mfme/fetcher.ts";
 import { type GetRemoteSettings, getRemoteSettingsDisabled } from "./lib/origin.ts";
@@ -43,7 +47,11 @@ import { type TenantEnv, tenant } from "./tenant.ts";
  * `createApp` の中で組み立てる（005 R22）。全ルートに同じ clock が渡る
  */
 function tenantRoutes(
-  options: RouteOptions & { suggestion?: SuggestionProviders; mfme: MfmeOptions },
+  options: RouteOptions & {
+    suggestion?: SuggestionProviders;
+    mfme: MfmeOptions;
+    ai: AiRuntime;
+  },
 ) {
   return new Hono<TenantEnv>()
     .use(tenant)
@@ -66,8 +74,15 @@ export type AppOptions = {
   getRemoteSettings?: GetRemoteSettings;
   store?: () => AuthStore;
   clock?: Clock;
-  /** AI の推定（006）。既定は「使えない」。実物は T025 で main が渡す */
+  /** AI の推定の差し替え（006）。省略すると `ai` の設定から作った端末内・外部の実物を使う */
   suggestion?: SuggestionProviders;
+  /** AI の依存（006 R10・R12）。既定は deps.ts の実物（fetch、キーチェーン、registry の ai_settings、`fm serve`） */
+  ai?: {
+    fetch?: typeof fetch;
+    secrets?: SecretStore;
+    settings?: () => AiSettingsStore;
+    fm?: FmServer;
+  };
   /** MF ME の取得（006 US4）。既定は Playwright の取得器と、このアプリ専用のジョブの置き場 */
   mfme?: { fetcher?: MfmeFetcher; jobs?: JobStore };
   /** WebAuthn の検証。既定は @simplewebauthn/server。ルートのテストは偽物を渡す */
@@ -96,6 +111,12 @@ export function createApp(options: AppOptions = {}) {
     fetcher: options.mfme?.fetcher ?? playwrightFetcher,
     jobs: options.mfme?.jobs ?? createJobStore(),
   };
+  const ai = createAiRuntime({
+    fetch: options.ai?.fetch ?? ((...args) => globalThis.fetch(...args)),
+    secrets: options.ai?.secrets ?? secretStore,
+    settings: options.ai?.settings ?? aiSettingsStore,
+    fm: options.ai?.fm ?? fmServer,
+  });
   const app = new Hono<GuardEnv>()
     .basePath("/api")
     .use(hostCheck(getRemoteSettings))
@@ -125,13 +146,14 @@ export function createApp(options: AppOptions = {}) {
         ...(options.backup?.crypto === undefined ? {} : { crypto: options.backup.crypto }),
       }),
     )
-    .route("/settings", aiSettingsRoutes({ clock }))
+    .route("/settings", aiSettingsRoutes({ clock, ai }))
     .route("/entities", entitiesRoutes({ clock }))
     .route(
       "/entities/:entityId",
       tenantRoutes({
         clock,
         mfme,
+        ai,
         ...(options.suggestion === undefined ? {} : { suggestion: options.suggestion }),
       }),
     );

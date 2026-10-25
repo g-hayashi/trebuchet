@@ -1,5 +1,5 @@
 import { randomUUIDv7 } from "node:crypto";
-import { openTenant } from "@trebuchet/db";
+import { DEFAULT_AI_SETTINGS, openTenant } from "@trebuchet/db";
 import {
   createTestEntity as createDbEntity,
   type TempDataDir,
@@ -16,6 +16,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.ts";
 import { statementDeps, unavailableSuggestionProvider } from "../src/deps.ts";
+import { createAiRuntime } from "../src/lib/ai-runtime.ts";
+import { createMemorySecretStore } from "../src/lib/keychain.ts";
 import { aiSettingsRoutes } from "../src/routes/ai-settings.ts";
 import { statementRoutes } from "../src/routes/statements.ts";
 
@@ -87,9 +89,15 @@ describe("statementDeps", () => {
 });
 
 describe("ルートの登録", () => {
-  it("statementRoutes・aiSettingsRoutes が組み立てられ、createApp に登録される（空のルート）", () => {
-    expect(statementRoutes({ clock })).toBeDefined();
-    expect(aiSettingsRoutes({ clock })).toBeDefined();
+  it("statementRoutes・aiSettingsRoutes が組み立てられ、createApp に登録される", () => {
+    const ai = createAiRuntime({
+      fetch,
+      secrets: createMemorySecretStore(),
+      settings: () => ({ get: () => ({ ...DEFAULT_AI_SETTINGS }), save: () => {} }),
+      fm: { available: async () => false, ensureStarted: async () => undefined, stop: () => {} },
+    });
+    expect(statementRoutes({ clock, ai })).toBeDefined();
+    expect(aiSettingsRoutes({ clock, ai })).toBeDefined();
     expect(createApp({ clock })).toBeDefined();
   });
 });

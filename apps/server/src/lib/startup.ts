@@ -1,5 +1,6 @@
 import { removeStaleSnapshots } from "@trebuchet/db";
 import { type BackupSchedulerDeps, startBackupScheduler } from "./backup-scheduler.ts";
+import type { FmServer } from "./fm-server.ts";
 import { type RecurringSchedulerDeps, startRecurringScheduler } from "./recurring-scheduler.ts";
 
 export type BackgroundServices = {
@@ -18,6 +19,8 @@ export function startBackgroundServices(
   deps: BackupSchedulerDeps & {
     tmpRoot: string;
     recurring: Omit<RecurringSchedulerDeps, "clock">;
+    /** 端末内の AI（`fm serve`。006 R10）。終了時に止める。起動は最初の推定のとき */
+    fm?: Pick<FmServer, "stop">;
   },
 ): BackgroundServices {
   const removedSnapshots = removeStaleSnapshots(deps.tmpRoot);
@@ -30,6 +33,7 @@ export function startBackgroundServices(
     stop: () => {
       backup.stop();
       recurring.stop();
+      deps.fm?.stop();
     },
   };
 }

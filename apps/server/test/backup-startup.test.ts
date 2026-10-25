@@ -89,6 +89,14 @@ describe("startBackgroundServices", () => {
     log.mockRestore();
   });
 
+  it("止めるとき、渡された fm serve（端末内の AI。006 R10）も止める", () => {
+    const fm = { stop: vi.fn() };
+    const services = startBackgroundServices({ ...deps({ start: vi.fn() }), fm });
+    expect(fm.stop).not.toHaveBeenCalled();
+    services.stop();
+    expect(fm.stop).toHaveBeenCalledTimes(1);
+  });
+
   it("未設定なら実行しない", async () => {
     const start = vi.fn();
     const services = startBackgroundServices(deps({ start }));

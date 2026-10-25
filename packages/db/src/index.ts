@@ -1,3 +1,4 @@
+export * from "./ai-settings-repository.ts";
 export * from "./auth-hash.ts";
 export * from "./auth-repository.ts";
 export * from "./backup/index.ts";

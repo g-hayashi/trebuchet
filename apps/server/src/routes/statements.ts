@@ -10,6 +10,7 @@ import {
   err,
   excludeStatement,
   getStatementSettings,
+  inferWithAi,
   listRules,
   listStatementAccounts,
   listStatementBatches,
@@ -36,6 +37,7 @@ import {
   ExcludeInput,
   InferenceRuleListQuery,
   InferenceRuleUpdateInput,
+  InferInput,
   MfmeFetchInput,
   SeedRulesInput,
   StatementAccountInput,
@@ -49,6 +51,7 @@ import {
 import { Hono } from "hono";
 import { type RouteOptions, type SuggestionProviders, statementDeps } from "../deps.ts";
 import { fail, respond, validationError } from "../errors.ts";
+import { type AiRuntime, LOCAL_AI_MODEL } from "../lib/ai-runtime.ts";
 import { createJobStore, type JobStore, type MfmeFetcher } from "../lib/jobs.ts";
 import { playwrightFetcher } from "../lib/mfme/fetcher.ts";
 import type { TenantEnv } from "../tenant.ts";
@@ -91,14 +94,16 @@ function fetchedRows(
 
 /**
  * `/api/entities/:entityId` の下の明細の取込と AI 仕訳（006。contracts/http-api.md §2〜§6）。
- * このファイルのルートはストーリーごとに足す。AI の実物（`suggestion`）は US5（T025）で差す
+ * AI の推定（§4.3）は `ai`（設定・キーチェーン・fm から作った端末内・外部の実物）で呼ぶ。`suggestion` を渡すと差し替える
  */
 export function statementRoutes({
   clock,
   suggestion,
+  ai,
   mfme = { fetcher: playwrightFetcher, jobs: createJobStore() },
-}: RouteOptions & { suggestion?: SuggestionProviders; mfme?: MfmeOptions }) {
-  const deps = (db: TenantEnv["Variables"]["db"]) => statementDeps(db, clock, suggestion);
+}: RouteOptions & { suggestion?: SuggestionProviders; mfme?: MfmeOptions; ai: AiRuntime }) {
+  const providers = suggestion ?? ai.providers;
+  const deps = (db: TenantEnv["Variables"]["db"]) => statementDeps(db, clock, providers);
 
   return (
     new Hono<TenantEnv>()
@@ -184,6 +189,20 @@ export function statementRoutes({
       .post("/statements/candidates", validate("json", BuildCandidatesInput), (c) => {
         const result = buildCandidates(deps(c.var.db), c.req.valid("json").statementIds);
         return respond(c, result, (built) => c.json(built, 200));
+      })
+      .post("/statements/infer", validate("json", InferInput), async (c) => {
+        const settings = ai.settings().get();
+        const result = await inferWithAi(
+          {
+            ...deps(c.var.db),
+            local: providers.local,
+            external: providers.external,
+            externalEnabled: settings.externalEnabled,
+            models: { local: LOCAL_AI_MODEL, external: settings.externalModel ?? "external" },
+          },
+          c.req.valid("json").statementIds,
+        );
+        return respond(c, result, (inferred) => c.json(inferred, 200));
       })
       .post("/statements/approve-bulk", validate("json", ApproveBulkInput), (c) => {
         const result = approveBulk(deps(c.var.db), c.req.valid("json"));
