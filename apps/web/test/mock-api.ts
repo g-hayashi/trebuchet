@@ -69,6 +69,9 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 明細の取込（006 US1）。取込元の口座と取込の履歴は空
   "GET /statement-accounts": () => ok({ accounts: [] }),
   "GET /statements/imports": () => ok({ batches: [] }),
+  // MF ME からの取得（US4）。開始はジョブの ID を返し、状態は完了（取込の画面は開始するまで読まない）
+  "POST /statements/mfme/fetch": () => ok({ jobId: "00000000-0000-4000-8000-0000000000aa" }, 202),
+  "GET /jobs/:jobId": () => ok({ status: "done" }),
   // 明細の一覧・しきい値の設定（US2）。一覧は空、設定は既定の値
   "GET /statements": () => ok({ statements: [] }),
   // 推定のルール（US3）。一覧は空

@@ -40,6 +40,8 @@
 | 3.5 | GET | `/jobs/:jobId` | — | 200 `{ status: "waiting_login" \| "running" \| "done" \| "failed", progress?, error?: { code, message, failedAccounts? } }` / 404 `JOB_NOT_FOUND` | FR-010 |
 
 - 3.4 の取得の結果（行）は server のメモリにだけ置き、3.1・3.2 の `jobId` で使う。パスワード・クッキーは保存しない（FR-009）
+- ジョブは事業体に結びつく（別の事業体からは 404 `JOB_NOT_FOUND`）。`done` でないジョブを 3.1・3.2 に使うと 400 `VALIDATION`。完了したジョブは新しい 5 件まで残す
+- 3.5 の `error.code`（HTTP のエラーコードではなく、ジョブの失敗の理由）: `MFME_DOM_CHANGED`（画面の形が違う・読めない行がある。何も加えない）、`MFME_FETCH_FAILED`（想定外の例外。元のメッセージはページの内容が混じりうるので出さない）、ほかに時間切れ・ウィンドウを閉じたときの理由は `apps/server/src/lib/mfme/fetcher.ts`
 
 ## 4. 明細と候補（US2）
 

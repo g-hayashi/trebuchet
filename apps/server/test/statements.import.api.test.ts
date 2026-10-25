@@ -140,20 +140,25 @@ describe("取込のプレビュー（§3.1）", () => {
     expect((await errorOf(res)).details).toMatchObject({ missingColumns: ["金額（円）"] });
   });
 
-  it("入力の形が違えば 400 VALIDATION。自動取得（mfme_fetch）は US4 まで 400 VALIDATION", async () => {
+  it("入力の形が違えば 400 VALIDATION。知らない取得のジョブ（mfme_fetch）は 404 JOB_NOT_FOUND", async () => {
     const empty = await imports().preview.$post({
       param: ctx.param,
       json: { source: { kind: "paste", text: "", year: 2026 } },
     });
     expect(empty.status).toBe(400);
+    const badJob = await imports().preview.$post({
+      param: ctx.param,
+      json: { source: { kind: "mfme_fetch", jobId: "" } },
+    });
+    expect(badJob.status).toBe(400);
     const fetched = await imports().preview.$post({
       param: ctx.param,
       json: {
         source: { kind: "mfme_fetch", jobId: "00000000-0000-7000-8000-000000000001" },
       },
     });
-    expect(fetched.status).toBe(400);
-    expect((await errorOf(fetched)).code).toBe("VALIDATION");
+    expect(fetched.status).toBe(404);
+    expect((await errorOf(fetched)).code).toBe("JOB_NOT_FOUND");
   });
 });
 

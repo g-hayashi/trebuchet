@@ -32,8 +32,15 @@ export const statementKeys = {
     ["entities", entityId, "statements", "rules", "history", ruleId] as const,
 };
 
-/** 貼り付けの取込元（自動取得は US4 で足す） */
+/** 貼り付けの取込元 */
 export type PasteSource = Extract<StatementImportSource, { kind: "paste" }>;
+/** MF ME からの自動取得の取込元（ジョブの ID。取得した行は server のメモリにある） */
+export type FetchSource = Extract<StatementImportSource, { kind: "mfme_fetch" }>;
+/** プレビュー・確定に渡す取込元（貼り付けか自動取得） */
+export type ImportSource = PasteSource | FetchSource;
+
+/** 取得のジョブの状態を取り直す間隔（ミリ秒） */
+export const JOB_POLL_MS = 1000;
 
 /** 取込元の口座の一覧（§2.1） */
 export const statementAccountsQuery = (entityId: string) =>
@@ -60,7 +67,7 @@ export const putStatementAccount = async (
   unwrap(await entityApi["statement-accounts"][":name"].$put({ param: { entityId, name }, json }));
 
 /** プレビュー（§3.1。POST だが何も保存しない） */
-export const postImportPreview = async (entityId: string, source: PasteSource) =>
+export const postImportPreview = async (entityId: string, source: ImportSource) =>
   unwrap(
     await entityApi.statements.imports.preview.$post({ param: { entityId }, json: { source } }),
   );
@@ -68,12 +75,30 @@ export const postImportPreview = async (entityId: string, source: PasteSource) =
 /** 確定（§3.2）。プレビューが返したハッシュと新規の件数を添える */
 export const postImportCommit = async (
   entityId: string,
-  source: PasteSource,
+  source: ImportSource,
   expected: { inputSha256: string; countNew: number },
 ) =>
   unwrap(
     await entityApi.statements.imports.$post({ param: { entityId }, json: { source, expected } }),
   );
+
+/** MF ME からの取得を始める（§3.4）。server が見えるブラウザを開く。202 `{ jobId }` */
+export const postMfmeFetch = async (entityId: string, json: { from: string; to: string }) =>
+  unwrap(await entityApi.statements.mfme.fetch.$post({ param: { entityId }, json }));
+
+/** 取得のジョブの状態（§3.5）。終わる（done・failed）まで取り直す */
+export const jobQuery = (entityId: string, jobId: string) =>
+  queryOptions({
+    queryKey: ["entities", entityId, "jobs", jobId] as const,
+    queryFn: async () =>
+      unwrap(await entityApi.jobs[":jobId"].$get({ param: { entityId, jobId } })),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "waiting_login" || status === "running" ? JOB_POLL_MS : false;
+    },
+    // 404（server の再起動で消えた）を再試行しない
+    retry: false,
+  });
 
 // ---- 明細と候補（§4） ----
 

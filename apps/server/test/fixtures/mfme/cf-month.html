@@ -1,0 +1,50 @@
+<!doctype html>
+<!--
+  MF ME「入出金」の月の画面を模した合成の HTML（006 T022）。実画面の DOM は未解析なので、
+  構造は暫定（セレクターは apps/server/src/lib/mfme/dom.ts の SELECTORS）。実在の店名・口座名は書かない
+-->
+<html lang="ja">
+  <body>
+    <h1>入出金</h1>
+    <table id="cf-detail-table">
+      <thead>
+        <tr>
+          <th></th><th>日付</th><th>内容</th><th>金額（円）</th><th>保有金融機関</th>
+          <th>大項目</th><th>中項目</th><th>メモ</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="transaction_list" data-transaction-id="tx-0001">
+          <td class="calc"><input type="checkbox" /></td>
+          <td class="date"><span>05/10(日)</span></td>
+          <td class="content"><div><span>ショップ001</span></div></td>
+          <td class="amount"><span class="offset">-1,200</span></td>
+          <td class="note"><div>サンプル銀行</div></td>
+          <td class="lctg">食費</td>
+          <td class="mctg">食料品</td>
+          <td class="memo"></td>
+        </tr>
+        <tr class="transaction_list" data-transaction-id="tx-0002">
+          <td class="calc"><input type="checkbox" /></td>
+          <td class="date"><span>05/11(月)</span></td>
+          <td class="content"><div><span>売上入金</span></div></td>
+          <td class="amount"><span class="offset">3,000</span></td>
+          <td class="note"><div>サンプル銀行</div></td>
+          <td class="lctg">収入</td>
+          <td class="mctg">事業収入</td>
+          <td class="memo">メモあり</td>
+        </tr>
+        <tr class="transaction_list transfer" data-transaction-id="tx-0003">
+          <td class="calc"><input type="checkbox" /></td>
+          <td class="date"><span>05/12(火)</span></td>
+          <td class="content"><div><span>カード引落</span></div></td>
+          <td class="amount"><span class="offset">-5,000</span></td>
+          <td class="note"><div>サンプルカード</div></td>
+          <td class="lctg">未分類</td>
+          <td class="mctg">未分類</td>
+          <td class="memo"></td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>

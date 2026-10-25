@@ -100,8 +100,8 @@ description: "Task list for 006-mfme-ai-journal"
 
 **Independent Test**: 合成の HTML から読んだ行が同じ件数・金額でプレビューに出る。失敗で何も加わらず、理由と貼り付けの案内が出る
 
-- [ ] T021 [US4] テスト先行でジョブと取得の入口（R13・R14、H:§3.4・§3.5）。`apps/server/src/lib/jobs.ts`（in-memory、同時に1つ、`waiting_login`・`running`・`done`・`failed`、2つ目は `JOB_RUNNING`）、取得器のインターフェース `MfmeFetcher`（`fetch(range, onStatus): Promise<PastedRow[]>`）、§3.4・§3.5 のルート、§3.1・§3.2 の `source.kind = "mfme_fetch"`（ジョブの行を使う。なければ `JOB_NOT_FOUND`）。テスト `apps/server/test/statements.fetch.api.test.ts`（偽の取得器: 成功 → プレビュー、失敗 → 明細 0 件と `failedAccounts`）
-- [ ] T022 [US4] テスト先行で Playwright の取得器（R13、FR-008〜010）。`apps/server/src/lib/mfme/fetcher.ts`（`chromium.launch({ headless: false })`、`browser.newContext()`（保存しない）、ログインの完了を最大 5 分待つ、月ごとに入出金の画面、閉じたら `failed`、終わったら必ず閉じる）、`dom.ts`（行の読み取りとセレクター。**実画面の DOM は未解析なので暫定**。1か所に置く。T032 で仕上げる）。合成の `apps/server/test/fixtures/mfme/cf-month.html`。テスト `apps/server/test/mfme-dom.test.ts`（`page.setContent`、`describe.skipIf`）、`mfme-fetcher.test.ts`（偽の `launch` で、`browser.newContext()`（永続でない文脈）を使い、`launchPersistentContext` やユーザーデータの場所を使わないこと）。web の `features/statements/MfmeFetch`（期間、状態の表示、失敗で貼り付けへの案内）とテスト
+- [X] T021 [US4] テスト先行でジョブと取得の入口（R13・R14、H:§3.4・§3.5）。`apps/server/src/lib/jobs.ts`（in-memory、同時に1つ、`waiting_login`・`running`・`done`・`failed`、2つ目は `JOB_RUNNING`）、取得器のインターフェース `MfmeFetcher`（`fetch(range, onStatus): Promise<PastedRow[]>`）、§3.4・§3.5 のルート、§3.1・§3.2 の `source.kind = "mfme_fetch"`（ジョブの行を使う。なければ `JOB_NOT_FOUND`）。テスト `apps/server/test/statements.fetch.api.test.ts`（偽の取得器: 成功 → プレビュー、失敗 → 明細 0 件と `failedAccounts`）
+- [X] T022 [US4] テスト先行で Playwright の取得器（R13、FR-008〜010）。`apps/server/src/lib/mfme/fetcher.ts`（`chromium.launch({ headless: false })`、`browser.newContext()`（保存しない）、ログインの完了を最大 5 分待つ、月ごとに入出金の画面、閉じたら `failed`、終わったら必ず閉じる）、`dom.ts`（行の読み取りとセレクター。**実画面の DOM は未解析なので暫定**。1か所に置く。T032 で仕上げる）。合成の `apps/server/test/fixtures/mfme/cf-month.html`。テスト `apps/server/test/mfme-dom.test.ts`（`page.setContent`、`describe.skipIf`）、`mfme-fetcher.test.ts`（偽の `launch` で、`browser.newContext()`（永続でない文脈）を使い、`launchPersistentContext` やユーザーデータの場所を使わないこと）。web の `features/statements/MfmeFetch`（期間、状態の表示、失敗で貼り付けへの案内）とテスト
 
 ---
 
