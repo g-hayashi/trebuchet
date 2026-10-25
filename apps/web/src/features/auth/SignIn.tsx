@@ -1,15 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { queryKeys } from "@/lib/queries";
-import { signIn } from "./api";
+import { authKeys, signIn } from "./api";
 
 /** パスキーでのサインイン（FR-003）。成功したら状態を取り直し、AuthGate が帳簿の画面に切り替える */
 export function SignIn({ onUseRecovery }: { onUseRecovery: () => void }) {
   const queryClient = useQueryClient();
   const signInMutation = useMutation({
     mutationFn: signIn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.authStatus }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: authKeys.status }),
   });
 
   return (

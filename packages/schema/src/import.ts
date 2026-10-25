@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ErrorDetails } from "./errors.ts";
 import { JournalStatus } from "./journals.ts";
+import { MASTER_NAME_MAX } from "./masters.ts";
 import { DateString, Id, Side, TaxCategoryCode, Yen } from "./primitives.ts";
 
 // 002-freee-import（contracts/http-api.md、data-model.md）
@@ -119,7 +120,7 @@ export const AccountMapping = z
     accountId: Id,
     subAccountId: Id.optional(),
     /** 補助科目がまだないとき、取込で作る名前 */
-    subAccountName: z.string().trim().min(1).max(100).optional(),
+    subAccountName: z.string().trim().min(1).max(MASTER_NAME_MAX).optional(),
   })
   .refine(notBothSubAccount, NOT_BOTH_SUB_ACCOUNT);
 export type AccountMapping = z.infer<typeof AccountMapping>;

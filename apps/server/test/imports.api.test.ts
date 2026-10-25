@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import type { ImportBatch, ImportBatchJournal, ImportPreview } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { app, type ErrorBody } from "./helpers.ts";
+import { app, createTestEntity, errorOf, json } from "./helpers.ts";
 
 // T025: 取込の API（contracts/http-api.md の 002）
 
@@ -20,24 +20,9 @@ const SHA = createHash("sha256").update(JOURNAL).digest("hex");
 const COUNT_NEW = 14;
 const CLOSING_ID = "900000011";
 
-async function createEntity(firstFiscalYear: number): Promise<string> {
-  const res = await app.request("/api/entities", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      name: "個人事業",
-      kind: "individual",
-      fiscalStartMonth: 1,
-      firstFiscalYear,
-    }),
-  });
-  if (res.status !== 201) throw new Error(`entity create failed: ${res.status}`);
-  return ((await res.json()) as { entity: { id: string } }).entity.id;
-}
-
 beforeEach(async () => {
   tmp = useTempDataDir("server-imports");
-  entityId = await createEntity(2025);
+  entityId = await createTestEntity("個人事業", 2025);
 });
 afterEach(() => tmp.cleanup());
 
@@ -78,15 +63,6 @@ const putMappings = (body: unknown) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-
-const errorOf = async (res: Response) => ((await res.json()) as ErrorBody).error;
-
-async function json<T>(res: Response, status: number): Promise<T> {
-  if (res.status !== status) {
-    throw new Error(`expected ${status} but got ${res.status}: ${await res.text()}`);
-  }
-  return (await res.json()) as T;
-}
 
 /** 帳簿の状態（仕訳・取込の回・マスタ・対応表） */
 async function books() {
@@ -161,7 +137,7 @@ describe("POST /imports/freee/preview", () => {
   });
 
   it("会計期間がない日付は OUT_OF_PERIOD と案内の message を返す", async () => {
-    const other = await createEntity(2026);
+    const other = await createTestEntity("個人事業", 2026);
     const body = await json<{ preview: ImportPreview }>(await preview({}, other), 200);
     const item = body.preview.items.find((i) => i.reason === "OUT_OF_PERIOD") as
       | (ImportPreview["items"][number] & { message?: string })

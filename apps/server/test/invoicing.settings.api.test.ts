@@ -2,7 +2,7 @@ import { randomUUIDv7 } from "node:crypto";
 import { openTenant } from "@trebuchet/db";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { client, createTestEntity, errorOf } from "./helpers.ts";
+import { client, createTestEntity, errorOf, okBody } from "./helpers.ts";
 
 // 005 US4: contracts/http-api.md §2.1〜§2.5
 
@@ -17,12 +17,6 @@ beforeEach(async () => {
   entityId = await createTestEntity();
 });
 afterEach(() => tmp.cleanup());
-
-/** エラーの応答（{ error }）を除いた成功のボディの型にする */
-const okBody = async <R extends { json(): Promise<unknown> }>(
-  res: R,
-): Promise<Exclude<Awaited<ReturnType<R["json"]>>, { error: unknown }>> =>
-  (await res.json()) as Exclude<Awaited<ReturnType<R["json"]>>, { error: unknown }>;
 
 const settingsBody = (over: Record<string, unknown> = {}) => ({
   issuerName: "山田 太郎",

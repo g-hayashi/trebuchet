@@ -8,9 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SaveNotice } from "@/components/ui/save-notice";
 import { ApiError } from "@/lib/api";
-import { formatYen, parseYenInput } from "@/lib/format";
-import { queryKeys } from "@/lib/queries";
-import { type InvoiceDraftView, invoiceKeys, postInvoice } from "./api";
+import { formatYen, parseHalfStep, parseWholeYen, parseYenInput } from "@/lib/format";
+import { invalidateLedger } from "@/lib/queries";
+import { type InvoiceDraftView, postInvoice } from "./api";
 
 type Row = {
   key: number;
@@ -22,27 +22,17 @@ type Row = {
   taxCategory: InvoiceItemInput["taxCategory"];
 };
 
-/** 0.5 の倍数の正の数。そうでなければ undefined（空欄も undefined） */
-const parseQuantity = (raw: string) => {
-  const text = raw.trim();
-  if (text === "") return undefined;
-  const n = Number(text);
-  return Number.isFinite(n) && n > 0 && Number.isInteger(n * 2) ? n : undefined;
-};
+/** 0.5 の倍数の正の数。そうでなければ null（空欄も null） */
+const parseQuantity = (raw: string) => parseHalfStep(raw, { min: 0.5 });
 
-/** 正の整数（円）。そうでなければ undefined */
-const parsePositiveYen = (raw: string) => {
-  const n = parseYenInput(raw);
-  return n !== undefined && Number.isInteger(n) && n > 0 ? n : undefined;
-};
+/** 正の整数（円）。そうでなければ null */
+const parsePositiveYen = (raw: string) => parseWholeYen(raw, { min: 1 });
 
 /** 数量と単価が両方そろった行の金額は `itemAmountOf`（server と同じ式）で決まる */
 const computedAmount = (row: Row) => {
   const quantity = parseQuantity(row.quantity);
   const unitPrice = parsePositiveYen(row.unitPrice);
-  return quantity !== undefined && unitPrice !== undefined
-    ? itemAmountOf(quantity, unitPrice)
-    : undefined;
+  return quantity !== null && unitPrice !== null ? itemAmountOf(quantity, unitPrice) : undefined;
 };
 
 /** 行の金額（計算の行は式の値、それ以外は入力の値。不正は 0） */
@@ -71,19 +61,19 @@ function buildItems(rows: Row[]): Built {
     const name = row.name.trim();
     if (name === "") return { error: `${line}の品名を入力してください` };
     const quantity = parseQuantity(row.quantity);
-    if (row.quantity.trim() !== "" && quantity === undefined)
+    if (row.quantity.trim() !== "" && quantity === null)
       return { error: `${line}の数量は 0.5 単位の正の数で入力してください` };
     const unitPrice = parsePositiveYen(row.unitPrice);
-    if (row.unitPrice.trim() !== "" && unitPrice === undefined)
+    if (row.unitPrice.trim() !== "" && unitPrice === null)
       return { error: `${line}の単価は正の整数で入力してください` };
     const amount = amountOf(row);
     if (!Number.isInteger(amount) || amount <= 0)
       return { error: `${line}の金額は正の整数で入力してください` };
     items.push({
       name,
-      ...(quantity === undefined ? {} : { quantity }),
+      ...(quantity === null ? {} : { quantity }),
       ...(row.unit.trim() === "" ? {} : { unit: row.unit.trim() }),
-      ...(unitPrice === undefined ? {} : { unitPrice }),
+      ...(unitPrice === null ? {} : { unitPrice }),
       amount,
       ...(row.taxCategory === undefined ? {} : { taxCategory: row.taxCategory }),
     });
@@ -130,13 +120,7 @@ export function InvoiceDraftEditor({
     onError: (e) => {
       if (isCode(e, "INVOICE_DUPLICATE_MONTH")) setDuplicateSeen(true);
     },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: invoiceKeys.invoices(entityId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.journals(entityId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.reports(entityId) }),
-      ]);
-    },
+    onSuccess: () => invalidateLedger(queryClient, entityId),
   });
 
   const duplicate =

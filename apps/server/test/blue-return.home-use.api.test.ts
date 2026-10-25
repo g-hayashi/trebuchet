@@ -1,11 +1,18 @@
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { BlueReturn } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { client, createTestEntity, errorOf } from "./helpers.ts";
+import {
+  accountLookup,
+  client,
+  createTestEntity,
+  errorOf,
+  okBody,
+  postSimpleJournal,
+} from "./helpers.ts";
 
 let tmp: TempDataDir;
 let entityId: string;
-let accountIds: Map<string, string>;
+let acc: (name: string) => string;
 
 const e = client.api.entities[":entityId"];
 const br = () => e["blue-return"][":year"];
@@ -14,32 +21,12 @@ const param = (year = "2026") => ({ entityId, year });
 beforeEach(async () => {
   tmp = useTempDataDir("server-blue-return-home-use");
   entityId = await createTestEntity();
-  const res = await e.accounts.$get({ param: { entityId } });
-  if (res.status !== 200) throw new Error(String(res.status));
-  accountIds = new Map((await res.json()).accounts.map((a) => [a.name, a.id]));
+  acc = await accountLookup(entityId);
 });
 afterEach(() => tmp.cleanup());
 
-const acc = (name: string) => {
-  const id = accountIds.get(name);
-  if (id === undefined) throw new Error(`科目がない: ${name}`);
-  return id;
-};
-
-async function simple(debit: string, credit: string, amount: number, date: string) {
-  const res = await e.journals.$post({
-    param: { entityId },
-    json: {
-      date,
-      lines: [
-        { side: "debit", accountId: acc(debit), amount },
-        { side: "credit", accountId: acc(credit), amount },
-      ],
-    },
-  });
-  if (res.status !== 201) throw new Error(`create failed: ${res.status}`);
-  return (await res.json()).journal;
-}
+const simple = (debit: string, credit: string, amount: number, date: string) =>
+  postSimpleJournal(entityId, acc, debit, credit, amount, date);
 
 const allocationBody = (over: Record<string, unknown> = {}) => ({
   accountId: acc("地代家賃"),
@@ -53,12 +40,6 @@ const putAllocation = (over: Record<string, unknown> = {}, year = "2026") =>
     param: param(year),
     json: allocationBody(over) as Parameters<ReturnType<typeof br>["home-use"]["$put"]>[0]["json"],
   });
-
-/** 成功の応答のボディ（エラーの形を除いた型）。状態は各テストで確かめる */
-const okBody = async <R extends { json(): Promise<unknown> }>(
-  res: R,
-): Promise<Exclude<Awaited<ReturnType<R["json"]>>, { error: unknown }>> =>
-  (await res.json()) as Exclude<Awaited<ReturnType<R["json"]>>, { error: unknown }>;
 
 const warningsOf = async (code: string) => {
   const res = await br().$get({ param: param() });

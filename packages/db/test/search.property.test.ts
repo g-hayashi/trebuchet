@@ -1,6 +1,5 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
-  createEntity,
   type FiscalPeriod,
   type Journal,
   type JournalDraft,
@@ -13,9 +12,8 @@ import { balancedLinesArb, dateInPeriodArb, fc } from "@trebuchet/domain/testing
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { openTenant } from "../src/tenant-store.ts";
+import { createTestEntity, NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 let tmp: TempDataDir;
 let masters: DrizzleMasterRepository;
@@ -25,22 +23,11 @@ let accountIds: string[];
 let partnerIds: string[];
 let tagIds: string[];
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-31T09:00:00.000Z" };
+const clock = { now: () => NOW };
 
 beforeEach(() => {
   tmp = useTempDataDir("search");
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  const db = openTenant(created.value.id);
+  const db = openTenant(createTestEntity().id);
   masters = new DrizzleMasterRepository(db);
   ledger = new DrizzleLedgerRepository(db);
   const first = masters.listFiscalPeriods()[0];

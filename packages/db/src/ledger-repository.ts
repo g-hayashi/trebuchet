@@ -11,12 +11,11 @@ import {
   type PostedLine,
   type ReportRepository,
   RepositoryConflictError,
-  type TaxCategoryCode,
+  type Result,
 } from "@trebuchet/domain";
-import type { RunResult } from "better-sqlite3";
 import { and, asc, between, desc, eq, inArray, max, type SQL, sql } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
-import type * as tenantSchema from "./schema/tenant.ts";
+import { asTaxCategory, rowidOf, type TenantConn } from "./internal.ts";
+import { inTransaction } from "./rollback.ts";
 import {
   accounts,
   auditLog,
@@ -28,9 +27,6 @@ import {
   partners,
   subAccounts,
 } from "./schema/tenant.ts";
-
-/** テナントの DB、またはそのトランザクション */
-type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
 
 type JournalRow = typeof journals.$inferSelect;
 
@@ -47,9 +43,9 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
     this.db = db;
   }
 
-  /** SQLite のトランザクション（入れ子は SAVEPOINT）。例外でロールバックする */
-  transaction<T>(fn: (tx: LedgerRepository) => T): T {
-    return this.db.transaction((tx) => fn(new DrizzleLedgerRepository(tx)));
+  /** SQLite のトランザクション（入れ子は SAVEPOINT）。`err` か例外でロールバックする */
+  transaction<T>(fn: (tx: LedgerRepository) => Result<T>): Result<T> {
+    return inTransaction(this.db, (tx) => fn(new DrizzleLedgerRepository(tx)));
   }
 
   appendAudit(entry: AuditEntry): void {
@@ -126,7 +122,7 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
       .select()
       .from(auditLog)
       .where(and(eq(auditLog.targetType, "journal"), eq(auditLog.targetId, id)))
-      .orderBy(sql`${auditLog}.rowid`)
+      .orderBy(rowidOf(auditLog))
       .all();
   }
 
@@ -205,7 +201,7 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
       .from(journalLineTags)
       .innerJoin(journalLines, eq(journalLines.id, journalLineTags.journalLineId))
       .where(inArray(journalLines.journalId, ids))
-      .orderBy(sql`${journalLineTags}.rowid`)
+      .orderBy(rowidOf(journalLineTags))
       .all();
 
     const tagsByLine = new Map<string, string[]>();
@@ -219,8 +215,7 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
       const list = linesByJournal.get(journalId) ?? [];
       list.push({
         ...line,
-        // tax_category は tax_categories への外部キーで、値は TaxCategoryCode に限られる
-        taxCategory: line.taxCategory as TaxCategoryCode,
+        taxCategory: asTaxCategory(line.taxCategory),
         tagIds: tagsByLine.get(line.id) ?? [],
       });
       linesByJournal.set(journalId, list);
@@ -258,7 +253,7 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
       .where(and(eq(journals.status, "active"), between(journals.date, from, to)))
       .orderBy(asc(journals.date), asc(journals.journalNo), asc(journalLines.lineNo))
       .all()
-      .map((row) => ({ ...row, taxCategory: row.taxCategory as TaxCategoryCode }));
+      .map((row) => ({ ...row, taxCategory: asTaxCategory(row.taxCategory) }));
   }
 
   /** 会計年度の期首残高。年度がなければ空 */

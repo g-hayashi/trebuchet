@@ -1,3 +1,4 @@
+import { auditEntry } from "../audit.ts";
 import { checkPeriod, combineErrors, type JournalContext, validateJournal } from "../journal.ts";
 import type { Clock, IdGenerator, JournalRepository, MasterRepository } from "../ports.ts";
 import {
@@ -146,16 +147,15 @@ export function createJournal(
       createdAt: now,
       lines,
     });
-    tx.appendAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "journal",
-      targetId: journal.id,
-      action: "create",
-      reason: null,
-      beforeJson: null,
-      afterJson: JSON.stringify(journal),
-    });
+    tx.appendAudit(
+      auditEntry(deps, {
+        targetType: "journal",
+        targetId: journal.id,
+        action: "create",
+        after: journal,
+        at: now,
+      }),
+    );
     return ok({ journal, warnings });
   });
 }

@@ -5,6 +5,8 @@ import { useCallback, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
+import { accountsQuery } from "@/features/accounts/api";
+import { entityKeys, taxCategoriesQuery } from "@/features/entities/api";
 import { commitImport, importPreviewQuery } from "@/features/imports/api";
 import { FilePicker } from "@/features/imports/FilePicker";
 import { FreeeChangesPanel } from "@/features/imports/FreeeChangesPanel";
@@ -18,7 +20,6 @@ import { type ItemSelection, PlanItemsTable } from "@/features/imports/PlanItems
 import { PreviewSummary } from "@/features/imports/PreviewSummary";
 import { YearSelector } from "@/features/imports/YearSelector";
 import { ApiError } from "@/lib/api";
-import { accountsQuery, queryKeys, taxCategoriesQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/imports/new")({
   component: NewImportPage,
@@ -71,7 +72,7 @@ function NewImportPage() {
       }),
     onSuccess: async ({ batch }) => {
       setResult(batch);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.entity(entityId) });
+      await queryClient.invalidateQueries({ queryKey: entityKeys.entity(entityId) });
     },
     onError: (error) => {
       // 確定の前に帳簿が変わった。サーバーが作り直したプレビューに差し替える

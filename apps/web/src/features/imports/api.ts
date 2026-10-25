@@ -11,11 +11,20 @@ import type {
   ReconciliationResult,
   VoidImportInput,
 } from "@trebuchet/schema";
+import { entityKeys } from "@/features/entities/api";
 import { unwrap } from "@/lib/api";
-import { queryKeys } from "@/lib/queries";
 import { untypedEndpoint, uploadForm } from "./upload";
 
 // 取込の API（contracts/http-api.md の 002）。サーバーのルートの型に頼らず、応答の型は schema の型で指定する
+
+/** クエリのキー。プレビューは帳簿を変えないが、ファイルと指定ごとに作り直す */
+export const importKeys = {
+  all: (entityId: string) => ["entities", entityId, "imports"] as const,
+  batch: (entityId: string, batchId: string) => ["entities", entityId, "imports", batchId] as const,
+  preview: (entityId: string, fileKey: number, options: object) =>
+    ["entities", entityId, "import-preview", fileKey, options] as const,
+  mappings: (entityId: string) => ["entities", entityId, "import-mappings"] as const,
+};
 
 type GetEndpoint = { $get(): Promise<Response> };
 type PutEndpoint = { $put(args: { json: unknown }): Promise<Response> };
@@ -25,7 +34,7 @@ const entityPath = (entityId: string) => `/api/entities/${encodeURIComponent(ent
 
 export const importsQuery = (entityId: string) =>
   queryOptions({
-    queryKey: queryKeys.imports(entityId),
+    queryKey: importKeys.all(entityId),
     queryFn: async (): Promise<ImportBatch[]> => {
       const body: { batches: ImportBatch[] } = await unwrap(
         await untypedEndpoint<GetEndpoint>(`${entityPath(entityId)}/imports`).$get(),
@@ -38,7 +47,7 @@ export type ImportBatchDetail = { batch: ImportBatch; journals: ImportBatchJourn
 
 export const importBatchQuery = (entityId: string, batchId: string) =>
   queryOptions({
-    queryKey: queryKeys.importBatch(entityId, batchId),
+    queryKey: importKeys.batch(entityId, batchId),
     queryFn: async (): Promise<ImportBatchDetail> =>
       unwrap(
         await untypedEndpoint<GetEndpoint>(
@@ -55,7 +64,7 @@ export const importPreviewQuery = (
   options: ImportOptions,
 ) =>
   queryOptions({
-    queryKey: queryKeys.importPreview(entityId, fileKey, options),
+    queryKey: importKeys.preview(entityId, fileKey, options),
     queryFn: async (): Promise<ImportPreview> => {
       if (!file) throw new Error("ファイルが選ばれていません");
       const body: { preview: ImportPreview } = await uploadForm(
@@ -125,7 +134,7 @@ export const reconcileFreeeQuery = (
   journal?: File | undefined,
 ) =>
   queryOptions({
-    queryKey: [...queryKeys.entity(entityId), "reconcile-freee", year, fileKey] as const,
+    queryKey: [...entityKeys.entity(entityId), "reconcile-freee", year, fileKey] as const,
     queryFn: async (): Promise<ReconciliationResult> => {
       if (!file || !year) throw new Error("年度とファイルが選ばれていません");
       return uploadForm(

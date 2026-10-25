@@ -1,24 +1,16 @@
 import { randomUUID } from "node:crypto";
 import type {
   InvoicingAuditEntry,
-  LedgerRepository,
-  MasterRepository,
   RecurringRunRecord,
   RecurringStore,
   RecurringUnitOfWork,
 } from "@trebuchet/domain";
-import type { Recurring, TaxCategoryCode } from "@trebuchet/schema";
-import type { RunResult } from "better-sqlite3";
+import type { Recurring } from "@trebuchet/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import { asTaxCategory, type TenantConn } from "./internal.ts";
 import { appendInvoicingAuditRow } from "./invoicing-repository.ts";
-import { DrizzleLedgerRepository } from "./ledger-repository.ts";
-import { DrizzleMasterRepository } from "./master-repository.ts";
-import type * as tenantSchema from "./schema/tenant.ts";
 import { recurringJournalLines, recurringJournals, recurringRuns } from "./schema/tenant.ts";
-
-/** テナントの DB、またはそのトランザクション */
-type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
+import { drizzleUnitOfWork } from "./unit-of-work.ts";
 
 /** 行の ID はテナントの DB の中だけで使う（ドメインの `Recurring` は行の ID を持たない） */
 const toLineRows = (def: Recurring): (typeof recurringJournalLines.$inferInsert)[] =>
@@ -53,8 +45,7 @@ export class DrizzleRecurringStore implements RecurringStore {
         .filter((l) => l.recurringId === row.id)
         .map(({ id: _id, recurringId: _recurringId, ...line }) => ({
           ...line,
-          // tax_category は FK で 001 の税区分に結びついている（列の型は text）
-          taxCategory: line.taxCategory as TaxCategoryCode | null,
+          taxCategory: asTaxCategory(line.taxCategory),
         })),
     }));
   }
@@ -125,30 +116,6 @@ export class DrizzleRecurringStore implements RecurringStore {
   }
 }
 
-/**
- * RecurringUnitOfWork の Drizzle 実装。同じ接続・トランザクションで仕訳・マスタ・定期仕訳の記録を扱う。
- * `transaction` は例外で巻き戻すが、`err` を返しても確定する（R9）
- */
-export class DrizzleRecurringUnitOfWork implements RecurringUnitOfWork {
-  private readonly db: TenantConn;
-
-  constructor(db: TenantConn) {
-    this.db = db;
-  }
-
-  transaction<T>(
-    fn: (tx: {
-      ledger: LedgerRepository;
-      masters: MasterRepository;
-      recurring: RecurringStore;
-    }) => T,
-  ): T {
-    return this.db.transaction((tx) =>
-      fn({
-        ledger: new DrizzleLedgerRepository(tx),
-        masters: new DrizzleMasterRepository(tx),
-        recurring: new DrizzleRecurringStore(tx),
-      }),
-    );
-  }
-}
+/** RecurringUnitOfWork の実装。仕訳・マスタ・定期仕訳の記録を同じトランザクションで扱う（R9） */
+export const createRecurringUnitOfWork = (db: TenantConn): RecurringUnitOfWork =>
+  drizzleUnitOfWork(db, (tx) => ({ recurring: new DrizzleRecurringStore(tx) }));

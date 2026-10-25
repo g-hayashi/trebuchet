@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { reconcileFreeeQuery } from "@/features/imports/api";
 import { FilePicker } from "@/features/imports/FilePicker";
 import { ReconcileTable } from "@/features/imports/ReconcileTable";
-import { fiscalPeriodsQuery } from "@/lib/queries";
+import { fiscalPeriodsQuery } from "@/features/periods/api";
 
 export const Route = createFileRoute("/e/$entityId/imports/reconcile")({
   component: ReconcilePage,

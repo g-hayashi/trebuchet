@@ -1,16 +1,16 @@
 import type { RecurringInput } from "@trebuchet/schema";
 import type { Result } from "../src/types.ts";
-import { FakeRecurringUnitOfWork, InMemoryRecurringStore } from "./fakes.ts";
-import { setupInvoicing } from "./invoicing-setup.ts";
+import { fakeRecurringUnitOfWork, InMemoryRecurringStore } from "./fakes.ts";
+import { setupBase } from "./ledger-setup.ts";
 
 /**
- * 定期仕訳（005 US3）のドメインのテストの準備: `setupInvoicing` の会計期間（2025・2026 年度、open）に、
+ * 定期仕訳（005 US3）のドメインのテストの準備: `setupBase` の会計期間（2025・2026 年度、open）に、
  * RecurringUnitOfWork と取引先 2 件（使用中・使用停止）を足す。税設定は 2025-01-01 から課税事業者（税込経理）
  */
 export function setupRecurring(options: { taxable?: boolean } = {}) {
-  const t = setupInvoicing({ taxable: options.taxable ?? true });
+  const t = setupBase({ taxable: options.taxable ?? true });
   const recurring = new InMemoryRecurringStore();
-  const uow = new FakeRecurringUnitOfWork(t.ledger, t.masters, recurring);
+  const uow = fakeRecurringUnitOfWork(t.ledger, t.masters, recurring);
   const deps = { uow, ids: t.ids, clock: t.clock };
   const partner = t.addPartner();
   const inactivePartner = t.addPartner({ isActive: false });

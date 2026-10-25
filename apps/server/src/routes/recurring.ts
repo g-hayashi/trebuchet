@@ -1,6 +1,5 @@
 import {
   acknowledgeRuns,
-  type Clock,
   createRecurring,
   getRecurringDetail,
   listRecurring,
@@ -21,8 +20,8 @@ import {
   SkipRunInput,
 } from "@trebuchet/schema";
 import { Hono } from "hono";
-import { recurringDeps } from "../deps.ts";
-import { fail } from "../errors.ts";
+import { type RouteOptions, recurringDeps } from "../deps.ts";
+import { respond } from "../errors.ts";
 import { todayOf } from "../lib/today.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
@@ -31,12 +30,8 @@ import { validate } from "../validator.ts";
  * `/api/entities/:entityId` の下の定期仕訳（005 US3。H:§5）。
  * `clock` は更新日時と「今日」（`todayOf`。R22）の元になる
  */
-export function recurringRoutes(options: { clock: Clock }) {
-  const { clock } = options;
-  const deps = (db: TenantEnv["Variables"]["db"]) => {
-    const { uow, ids } = recurringDeps(db);
-    return { uow, ids, clock };
-  };
+export function recurringRoutes({ clock }: RouteOptions) {
+  const deps = (db: TenantEnv["Variables"]["db"]) => recurringDeps(db, clock);
 
   /**
    * 保存・再開の直後に、その事業体の判定を走らせる（R18）。応答の `posted` は、この定義で登録された仕訳。
@@ -58,32 +53,29 @@ export function recurringRoutes(options: { clock: Clock }) {
       // 5.1
       .get("/recurring-journals", (c) => {
         const result = listRecurring(deps(c.var.db), todayOf(clock));
-        if (!result.ok) return fail(c, result.error);
-        return c.json({ recurring: result.value }, 200);
+        return respond(c, result, (recurring) => c.json({ recurring }, 200));
       })
       // 5.2
       .post("/recurring-journals", validate("json", RecurringInput), (c) => {
         const result = createRecurring(deps(c.var.db), c.req.valid("json"), todayOf(clock));
-        if (!result.ok) return fail(c, result.error);
-        const posted = postDue(c.var.db, result.value.id);
-        return c.json({ recurring: result.value, posted }, 201);
+        return respond(c, result, (recurring) => {
+          const posted = postDue(c.var.db, recurring.id);
+          return c.json({ recurring, posted }, 201);
+        });
       })
       // 5.8・5.9 は `/:id` より先に登録する（Hono のルートの順）
       .get("/recurring-journals/status", (c) => {
         const result = recurringStatus(deps(c.var.db), todayOf(clock));
-        if (!result.ok) return fail(c, result.error);
-        return c.json(result.value, 200);
+        return respond(c, result, (status) => c.json(status, 200));
       })
       .post("/recurring-journals/acknowledge", validate("json", AcknowledgeInput), (c) => {
         const result = acknowledgeRuns(deps(c.var.db), c.req.valid("json").runIds);
-        if (!result.ok) return fail(c, result.error);
-        return c.body(null, 204);
+        return respond(c, result, () => c.body(null, 204));
       })
       // 5.3
       .get("/recurring-journals/:id", (c) => {
         const result = getRecurringDetail(deps(c.var.db), c.req.param("id"), todayOf(clock));
-        if (!result.ok) return fail(c, result.error);
-        return c.json(result.value, 200);
+        return respond(c, result, (detail) => c.json(detail, 200));
       })
       // 5.4
       .put("/recurring-journals/:id", validate("json", RecurringUpdate), (c) => {
@@ -93,15 +85,15 @@ export function recurringRoutes(options: { clock: Clock }) {
           c.req.valid("json"),
           todayOf(clock),
         );
-        if (!result.ok) return fail(c, result.error);
-        const posted = postDue(c.var.db, result.value.id);
-        return c.json({ recurring: result.value, posted }, 200);
+        return respond(c, result, (recurring) => {
+          const posted = postDue(c.var.db, recurring.id);
+          return c.json({ recurring, posted }, 200);
+        });
       })
       // 5.5
       .post("/recurring-journals/:id/pause", validate("json", PauseInput), (c) => {
         const result = pauseRecurring(deps(c.var.db), c.req.param("id"), c.req.valid("json"));
-        if (!result.ok) return fail(c, result.error);
-        return c.json({ recurring: result.value }, 200);
+        return respond(c, result, (recurring) => c.json({ recurring }, 200));
       })
       // 5.6
       .post("/recurring-journals/:id/resume", validate("json", ResumeInput), (c) => {
@@ -111,9 +103,10 @@ export function recurringRoutes(options: { clock: Clock }) {
           c.req.valid("json"),
           todayOf(clock),
         );
-        if (!result.ok) return fail(c, result.error);
-        const posted = postDue(c.var.db, result.value.id);
-        return c.json({ recurring: result.value, posted }, 200);
+        return respond(c, result, (recurring) => {
+          const posted = postDue(c.var.db, recurring.id);
+          return c.json({ recurring, posted }, 200);
+        });
       })
       // 5.7
       .post("/recurring-journals/:id/runs/:month/skip", validate("json", SkipRunInput), (c) => {
@@ -124,8 +117,7 @@ export function recurringRoutes(options: { clock: Clock }) {
           c.req.valid("json"),
           todayOf(clock),
         );
-        if (!result.ok) return fail(c, result.error);
-        return c.json({ run: result.value }, 200);
+        return respond(c, result, (run) => c.json({ run }, 200));
       })
   );
 }

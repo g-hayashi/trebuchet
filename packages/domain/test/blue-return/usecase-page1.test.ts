@@ -7,7 +7,7 @@ import {
 } from "../../src/usecases/blue-return.ts";
 import { addAccount, setAccountReportLine } from "../../src/usecases/masters.ts";
 import { voidJournal } from "../../src/usecases/void-journal.ts";
-import { InMemoryClosingStore } from "../fakes.ts";
+import { fakeClosingUnitOfWork, InMemoryClosingStore } from "../fakes.ts";
 import { setupLedger } from "../ledger-fixture.ts";
 import { InMemoryReportRepository } from "../reports/fake-report-repository.ts";
 
@@ -23,6 +23,7 @@ let fx: ReturnType<typeof setupLedger>;
 let closing: InMemoryClosingStore;
 
 const deps = () => ({
+  uow: fakeClosingUnitOfWork(fx.ledger, fx.masters, closing),
   masters: fx.masters,
   reports: new InMemoryReportRepository(fx.ledger, fx.masters),
   closing,

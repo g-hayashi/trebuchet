@@ -2,8 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { ApiError } from "@/lib/api";
-import { queryKeys } from "@/lib/queries";
-import { registerFirstPasskey } from "./api";
+import { authKeys, registerFirstPasskey } from "./api";
 
 const LOCAL_RP_ID = "localhost";
 
@@ -22,7 +21,7 @@ export function RegisterPasskey({
     onError: (error) => {
       // すでに登録されていたなら、状態を取り直してサインインの画面に進む
       if (error instanceof ApiError && error.code === "ALREADY_REGISTERED") {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.authStatus });
+        void queryClient.invalidateQueries({ queryKey: authKeys.status });
       }
     },
   });

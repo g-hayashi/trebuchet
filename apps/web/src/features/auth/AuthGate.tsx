@@ -3,8 +3,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { UNAUTHENTICATED_EVENT } from "@/lib/api";
-import { queryKeys } from "@/lib/queries";
-import { authStatusQuery, regenerateRecoveryCode } from "./api";
+import { authKeys, authStatusQuery, regenerateRecoveryCode } from "./api";
 import { Recovery } from "./Recovery";
 import { RecoveryCodePanel } from "./RecoveryCodePanel";
 import { RegisterPasskey } from "./RegisterPasskey";
@@ -34,14 +33,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onUnauthenticated = () =>
-      void queryClient.invalidateQueries({ queryKey: queryKeys.authStatus });
+      void queryClient.invalidateQueries({ queryKey: authKeys.status });
     window.addEventListener(UNAUTHENTICATED_EVENT, onUnauthenticated);
     return () => window.removeEventListener(UNAUTHENTICATED_EVENT, onUnauthenticated);
   }, [queryClient]);
 
   const acknowledged = async () => {
     // 状態を取り直してから切り替える（古い状態のまま登録の画面に戻らないように）
-    await queryClient.invalidateQueries({ queryKey: queryKeys.authStatus });
+    await queryClient.invalidateQueries({ queryKey: authKeys.status });
     setIssuedCode(null);
   };
 

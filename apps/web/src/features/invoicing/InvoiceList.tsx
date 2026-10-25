@@ -12,8 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { partnersQuery } from "@/features/masters/api";
 import { formatYen } from "@/lib/format";
-import { partnersQuery } from "@/lib/queries";
 import { type InvoiceFilters, invoiceListQuery } from "./api";
 import { INVOICE_LIST_STATUS_LABELS, INVOICE_LIST_STATUSES, INVOICE_STATUS_LABELS } from "./status";
 

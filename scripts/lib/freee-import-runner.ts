@@ -7,15 +7,19 @@
  *
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む。
  */
-import { createHash, randomUUIDv7 } from "node:crypto";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { DrizzleImportUnitOfWork } from "../../packages/db/src/import-repository.ts";
+import { createImportUnitOfWork } from "../../packages/db/src/import-repository.ts";
 import { DrizzleLedgerRepository } from "../../packages/db/src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../../packages/db/src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../../packages/db/src/registry-repository.ts";
-import { closeAll, openRegistry, openTenant } from "../../packages/db/src/tenant-store.ts";
-import { TMP_ROOT } from "../../packages/db/src/testing.ts";
+import {
+  closeAll,
+  openRegistry,
+  openTenant,
+  TMP_ROOT,
+} from "../../packages/db/src/tenant-store.ts";
 import { decodeText, parseCsv } from "../../packages/domain/src/import/csv.ts";
 import {
   JOURNAL_COLUMN_NAMES,
@@ -23,8 +27,8 @@ import {
   LEDGER_COLUMN_NAMES,
   LEDGER_COLUMNS,
 } from "../../packages/domain/src/import/freee/columns.ts";
+import type { ImportUnitOfWork } from "../../packages/domain/src/ports.ts";
 import type { Result } from "../../packages/domain/src/types.ts";
-import { createEntity } from "../../packages/domain/src/usecases/create-entity.ts";
 import {
   commitFreeeImport,
   previewFreeeImport,
@@ -39,6 +43,7 @@ import {
 import { getBalanceSheet, getProfitAndLoss } from "../../packages/domain/src/usecases/reports.ts";
 import { ImportMappingsPut } from "../../packages/schema/src/import.ts";
 import type { StatementSection } from "../../packages/schema/src/reports.ts";
+import { benchClock, benchIds, createBenchEntity } from "./bench-common.ts";
 
 const HEADER_SEARCH_ROWS = 5;
 const MEMO_COLUMNS = [JOURNAL_COLUMNS.debit.memo, JOURNAL_COLUMNS.credit.memo];
@@ -55,7 +60,7 @@ export const KINDS = {
   ledger: { label: "総勘定元帳", columns: LEDGER_COLUMN_NAMES, memoColumns: [] },
 } satisfies Record<string, FileKind>;
 
-export const DATA_DIR = `${TMP_ROOT}verify-freee`;
+const DATA_DIR = `${TMP_ROOT}verify-freee`;
 
 /** 使い方の誤りと処理の失敗。`usage` が true のときは使い方の誤り（呼び出し側は使い方を出して終了コード 2 にする） */
 export class StopError extends Error {
@@ -172,16 +177,16 @@ function describeOpeningRows(rows: readonly string[][], header: readonly string[
 }
 
 const AMOUNT = new Intl.NumberFormat("ja-JP");
-export const yen = (n: number) => AMOUNT.format(n);
+const yen = (n: number) => AMOUNT.format(n);
 
-export function unwrap<T>(result: Result<T>, label: string): T {
+function unwrap<T>(result: Result<T>, label: string): T {
   if (result.ok) return result.value;
   const { code, message, details } = result.error;
   const extra = details === undefined ? "" : ` ${JSON.stringify(details)}`;
   throw new StopError(`${label}に失敗しました: ${code} ${message}${extra}`);
 }
 
-export function countBy<T>(items: readonly T[], key: (item: T) => string): string {
+function countBy<T>(items: readonly T[], key: (item: T) => string): string {
   const counts = new Map<string, number>();
   for (const item of items) counts.set(key(item), (counts.get(key(item)) ?? 0) + 1);
   return counts.size === 0 ? "なし" : [...counts].map(([k, n]) => `${k} ×${n}`).join(", ");
@@ -250,7 +255,7 @@ export type ImportContext = {
   entityId: string;
   period: { fiscalYear: number; startDate: string; endDate: string };
   masters: DrizzleMasterRepository;
-  uow: DrizzleImportUnitOfWork;
+  uow: ImportUnitOfWork;
   reports: DrizzleLedgerRepository;
   ids: { next: () => string };
   clock: { now: () => string };
@@ -282,28 +287,22 @@ export function runFreeeImport(args: ImportArgs, options: ImportOptions): Import
   mkdirSync(DATA_DIR, { recursive: true });
   process.env.TREBUCHET_DATA_DIR = DATA_DIR;
 
-  const ids = { next: () => randomUUIDv7() };
-  const clock = { now: () => new Date().toISOString() };
-  const registry = new DrizzleRegistryRepository(openRegistry());
-  let entityId = registry.listEntities()[0]?.id;
+  const ids = benchIds;
+  const clock = benchClock;
+  let entityId = new DrizzleRegistryRepository(openRegistry()).listEntities()[0]?.id;
   if (reuse) {
     if (entityId === undefined) throw new StopError("再利用できる事業体がありません");
   } else {
-    const created = createEntity(
-      {
-        registry,
-        openTenant: (id) => new DrizzleMasterRepository(openTenant(id)),
-        ids,
-        clock,
-      },
-      { name: "freee 照合", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: args.year },
-    );
-    entityId = unwrap(created, "事業体の作成").id;
+    try {
+      entityId = createBenchEntity({ name: "freee 照合", firstFiscalYear: args.year }).id;
+    } catch (error) {
+      throw new StopError(`事業体の作成に失敗しました: ${(error as Error).message}`);
+    }
   }
   const db = openTenant(entityId);
   const masters = new DrizzleMasterRepository(db);
   const masterDeps = { repo: masters, ids, clock };
-  const uow = new DrizzleImportUnitOfWork(db);
+  const uow = createImportUnitOfWork(db);
   const reports = new DrizzleLedgerRepository(db);
 
   // 会計期間がなければ翌年度を順に作る（前年度を締める必要はない）

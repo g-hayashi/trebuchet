@@ -4,6 +4,8 @@
 
 **Input**: Feature specification from `specs/004-auth-backup/spec.md`
 
+> **US4（Tailscale によるリモートの利用）は保留（2026-10-24）**。この文書の Tailscale・ペアリング・静的配信・`pnpm start` に関する記述は未実装の設計である。
+
 ## Summary
 
 パスキー（WebAuthn）で、アプリの画面と API のすべてを守る。対象は Mac のローカル（`http://localhost`）と Tailscale の HTTPS（`https://<name>.ts.net`）。登録時の回復コード、8時間で失効するセッション、Host と Origin の検査、追記のみの認証の記録を持つ（research R1〜R7）。Tailscale の名前のパスキーは、localhost でサインインして発行する一度だけのペアリングのトークンで登録する（R17）。バックアップは、全事業体の SQLite を `VACUUM INTO` で一貫して写し、Argon2id と AES-256-GCM で暗号化した1つのファイルにする（R8〜R11）。そのファイルを Google Drive の同期フォルダに書き、読み戻して検証する。自動のバックアップは1日1回で、変更がなければ取らない。世代は毎日30日分と月ごと7年を残す。パスフレーズは macOS のキーチェーンに保管する（R12）。復元は、server を止めて実行するコマンドで、全部か無かで行う（R13）。リモートのために、server がビルド済みの web も配信する（R3）。

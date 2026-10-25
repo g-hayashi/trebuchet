@@ -1,12 +1,12 @@
 import { randomUUIDv7 } from "node:crypto";
-import { createEntity, type EntityKind, type NewJournal, validateJournal } from "@trebuchet/domain";
+import { type EntityKind, type NewJournal, ok, validateJournal } from "@trebuchet/domain";
 import { balancedLinesArb, dateInPeriodArb, fc } from "@trebuchet/domain/testing";
 import type Database from "better-sqlite3";
 import { DrizzleClosingStore } from "../src/closing-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
 import { openRegistry, openTenant } from "../src/tenant-store.ts";
+import { createTestEntity, NOW } from "../src/testing.ts";
 
 /** 合成の事業体 1 件の指定。seed と journals から仕訳を決定的に作る */
 export type EntitySpec = {
@@ -20,8 +20,7 @@ export type EntitySpec = {
 
 export type SeededEntity = { id: string; name: string };
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-31T09:00:00.000Z" };
+const clock = { now: () => NOW };
 
 /** 事業体を作り、仕訳と決算の表（closing_notes）の行を入れる */
 export function seedEntities(specs: EntitySpec[]): SeededEntity[] {
@@ -29,17 +28,7 @@ export function seedEntities(specs: EntitySpec[]): SeededEntity[] {
 }
 
 function seedEntity(spec: EntitySpec): SeededEntity {
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: spec.name, kind: spec.kind, fiscalStartMonth: 1, firstFiscalYear: 2026 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  const entityId = created.value.id;
+  const entityId = createTestEntity({ name: spec.name, kind: spec.kind }).id;
   addJournals(entityId, spec.journals, spec.seed, spec.memo);
   new DrizzleClosingStore(openTenant(entityId)).upsertClosingNote({
     fiscalYear: 2026,
@@ -85,6 +74,7 @@ export function addJournals(entityId: string, count: number, seed: number, memo 
       };
       tx.insertJournal(journal);
     }
+    return ok(null);
   });
 }
 

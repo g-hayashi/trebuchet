@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-24
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "定期仕訳、工数・請求書（FR-04、05）と MF ME の明細取込、AI 仕訳、証憑（FR-06〜08） と、主要機能を作っていこう。"（利用者の判断で2つに分ける。この機能は docs/requirements.md の開発フェーズ2「日常業務」の FR-04・FR-05。フェーズ3「自動化」の FR-06〜08 は次の機能 006 で扱う）
 

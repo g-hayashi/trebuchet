@@ -11,8 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
-import { queryKeys } from "@/lib/queries";
-import { revokeSession, sessionsQuery } from "./api";
+import { authKeys, revokeSession, sessionsQuery } from "./api";
 
 /** サインイン中のセッション（FR-013）。現在のセッションに印を付け、他のセッションを失効できる */
 export function SessionList() {
@@ -21,8 +20,8 @@ export function SessionList() {
   const revoke = useMutation({
     mutationFn: revokeSession,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.authSessions });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.authEvents });
+      await queryClient.invalidateQueries({ queryKey: authKeys.sessions });
+      await queryClient.invalidateQueries({ queryKey: authKeys.events });
     },
   });
 

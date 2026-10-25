@@ -1,3 +1,4 @@
+import { JOURNAL_SOURCES } from "@trebuchet/schema";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import type { JournalSource } from "../src/types.ts";
@@ -6,7 +7,7 @@ import { createJournal } from "../src/usecases/create-journal.ts";
 import { voidJournal } from "../src/usecases/void-journal.ts";
 import { setupLedger } from "./ledger-fixture.ts";
 
-const SOURCES: JournalSource[] = ["manual", "import_freee", "invoice", "payment", "recurring"];
+const SOURCES = JOURNAL_SOURCES;
 const LINKED: JournalSource[] = ["invoice", "payment"];
 const isLinked = (s: JournalSource) => LINKED.includes(s);
 

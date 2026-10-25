@@ -16,9 +16,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api, unwrap } from "@/lib/api";
+import {
+  type Account,
+  accountKeys,
+  postSubAccount,
+  subAccountsQuery,
+} from "@/features/accounts/api";
 import { formatSignedYen, formatYen } from "@/lib/format";
-import { type Account, queryKeys, subAccountsQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import { WARNING_LABELS } from "./labels";
 import { type AccountEdits, MappingEditor } from "./MappingEditor";
@@ -270,16 +274,10 @@ function MissingSubAccountItem({
   const queryClient = useQueryClient();
   const { sourceName, accountId, subAccountName } = missing;
   const create = useMutation({
-    mutationFn: async () =>
-      unwrap(
-        await api.api.entities[":entityId"].accounts[":accountId"]["sub-accounts"].$post({
-          param: { entityId, accountId },
-          json: { name: subAccountName },
-        }),
-      ),
+    mutationFn: () => postSubAccount(entityId, accountId, { name: subAccountName }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.subAccounts(entityId, accountId),
+        queryKey: accountKeys.subAccounts(entityId, accountId),
       });
       onResolved();
     },

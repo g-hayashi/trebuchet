@@ -14,10 +14,9 @@ import {
 } from "../../src/usecases/invoicing.ts";
 import { voidJournal } from "../../src/usecases/void-journal.ts";
 import { setupInvoicing } from "../invoicing-setup.ts";
+import { TODAY } from "../test-dates.ts";
 
 // 005 US2: 入金の消し込みの書き込みと取消、期限切れの判定（R12・R14、§1.6・§3、FR-017〜021、H:§4）
-
-const TODAY = "2026-10-31";
 
 function ready() {
   const t = setupInvoicing({ taxable: true });

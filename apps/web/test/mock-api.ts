@@ -32,7 +32,7 @@ export const DEFAULT_AUTH_STATUS = {
 };
 
 /** バックアップの状態（004）の既定の応答。設定済みで、知らせなし */
-export const DEFAULT_BACKUP_STATUS = {
+const DEFAULT_BACKUP_STATUS = {
   configured: true,
   folder: "/Users/me/backup",
   lastSuccess: null,

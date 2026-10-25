@@ -1,7 +1,7 @@
 import type { BlockedReason, Recurring } from "@trebuchet/schema";
+import { dateInMonth, monthAtIndex, monthIndex, monthOfDate } from "../dates.ts";
 import { checkPeriod, type JournalContext, validateJournal } from "../journal.ts";
 import type { JournalDraft, LineDraft, Partner } from "../types.ts";
-import { monthAtIndex, monthIndex, scheduledDate } from "./schedule.ts";
 
 /** 回の計画に使うマスタ。001 の検証の文脈に、取引先の使用停止の情報を足す（`validateJournal` は見ない） */
 export type RecurringContext = Omit<JournalContext, "partners"> & {
@@ -40,7 +40,7 @@ export function recurringJournalDraft(
   month: string,
 ): JournalDraft {
   return {
-    date: scheduledDate(month, def.dayOfMonth),
+    date: dateInMonth(month, def.dayOfMonth),
     ...(def.memo === null ? {} : { memo: def.memo }),
     lines: recurringLineDrafts(def.lines),
   };
@@ -98,11 +98,11 @@ export function planRecurringRuns(input: {
   if (def.status === "paused") return plan;
 
   const done = new Set(input.doneMonths);
-  const todayIndex = monthIndex(today.slice(0, 7));
+  const todayIndex = monthIndex(monthOfDate(today));
   const last = def.endMonth === null ? todayIndex : Math.min(monthIndex(def.endMonth), todayIndex);
   for (let i = monthIndex(def.startMonth); i <= last; i++) {
     const month = monthAtIndex(i);
-    const date = scheduledDate(month, def.dayOfMonth);
+    const date = dateInMonth(month, def.dayOfMonth);
     if (date > today || done.has(month)) continue;
     const draft = recurringJournalDraft(def, month);
     const blocked = blockedReason(draft, ctx);

@@ -1,7 +1,6 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
   commitFreeeImport,
-  createEntity,
   createJournal,
   type FiscalPeriod,
   getBalanceSheet,
@@ -21,12 +20,11 @@ import {
   freeeModelArb,
   toFreeeJournalCsv,
 } from "../../domain/test/freee-arbitraries.ts";
-import { DrizzleImportStore, DrizzleImportUnitOfWork } from "../src/import-repository.ts";
+import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { openTenant, type TenantDb } from "../src/tenant-store.ts";
+import { createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 // T055: 取込の取消の性質テスト（INV-15 / SC-007）
 
@@ -45,17 +43,7 @@ const REASONS = ["  取り込むファイルを間違えた  ", "やり直す", 
 
 beforeEach(() => {
   tmp = useTempDataDir("import-void");
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2025 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  db = openTenant(created.value.id);
+  db = openTenant(createTestEntity({ firstFiscalYear: 2025 }).id);
   masters = new DrizzleMasterRepository(db);
   ledger = new DrizzleLedgerRepository(db);
   masters.replaceTaxSettings([
@@ -136,7 +124,7 @@ function scenarioArb(): fc.Arbitrary<Scenario> {
     );
 }
 
-const uow = () => new DrizzleImportUnitOfWork(db);
+const uow = () => createImportUnitOfWork(db);
 const unwrap = <T>(r: Result<T>): T => {
   if (!r.ok) throw new Error(JSON.stringify(r.error));
   return r.value;

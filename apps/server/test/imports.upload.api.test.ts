@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { app, createTestEntity, type ErrorBody } from "./helpers.ts";
+import { app, createTestEntity, errorOf } from "./helpers.ts";
 
 let tmp: TempDataDir;
 let entityId: string;
@@ -28,8 +28,6 @@ const formWith = (file: File | string | undefined) => {
   if (file !== undefined) form.append("file", file);
   return form;
 };
-
-const errorOf = async (res: Response) => ((await res.json()) as ErrorBody).error;
 
 describe("POST /imports/freee/preview のアップロード（T016）", () => {
   it("5 MB を超えるファイルは 413 FILE_TOO_LARGE", async () => {

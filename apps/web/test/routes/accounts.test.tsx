@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Account, SubAccount } from "@/lib/queries";
+import type { Account, SubAccount } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/accounts";
 import { apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";

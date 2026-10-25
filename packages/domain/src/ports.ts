@@ -45,6 +45,7 @@ import type {
   PostedLine,
   RecurringRunRecord,
   RentDetail,
+  Result,
   SubAccount,
   Tag,
   TaxCategory,
@@ -89,7 +90,11 @@ export interface AuditLog {
 
 /** 仕訳の登録と参照（packages/db が実装）。メソッドはすべて同期 */
 export interface JournalRepository extends AuditLog {
-  transaction<T>(fn: (tx: JournalRepository) => T): T;
+  /**
+   * fn を 1 つのトランザクションで実行する（入れ子は SAVEPOINT）。fn が `err` を返すか例外を投げると、
+   * fn の中の書き込みをすべて巻き戻し、同じ `err` を返す・同じ例外を投げ直す（TenantUnitOfWork と同じ）
+   */
+  transaction<T>(fn: (tx: JournalRepository) => Result<T>): Result<T>;
   /** 次の仕訳番号（INV-8）。同じトランザクションの中で insertJournal する */
   nextJournalNo(): number;
   /** 仕訳番号が最大の仕訳（取消済みを含む） */
@@ -103,7 +108,7 @@ export interface JournalRepository extends AuditLog {
 
 /** 仕訳の訂正・取消・履歴・検索（US3） */
 export interface LedgerRepository extends JournalRepository {
-  transaction<T>(fn: (tx: LedgerRepository) => T): T;
+  transaction<T>(fn: (tx: LedgerRepository) => Result<T>): Result<T>;
   /**
    * 日付・メモ・訂正元と行・タグを全件置き換え、version を +1 する。
    * version が一致しなければ RepositoryConflictError
@@ -133,7 +138,8 @@ export interface ReportRepository {
 
 /** マスタの読み書き（packages/db が実装） */
 export interface MasterRepository extends AuditLog {
-  transaction<T>(fn: (tx: MasterRepository) => T): T;
+  /** JournalRepository.transaction と同じ（`err` か例外で巻き戻す） */
+  transaction<T>(fn: (tx: MasterRepository) => Result<T>): Result<T>;
 
   getProfile(): EntityProfile | undefined;
   saveProfile(profile: EntityProfile): void;
@@ -205,13 +211,28 @@ export interface ImportStore {
   manualJournalSignatures(from: string, to: string): JournalSignature[];
 }
 
-/** 取込の確定・取消で、仕訳・マスタ・取込の記録を1つのトランザクションで扱う（research R10, INV-11） */
-export interface ImportUnitOfWork {
-  /** fn が例外を投げると、fn の中の書き込みをすべて元に戻す */
-  transaction<T>(
-    fn: (tx: { ledger: LedgerRepository; masters: MasterRepository; imports: ImportStore }) => T,
-  ): T;
+/** UnitOfWork の `run` の中で使う、同じトランザクションの帳簿・マスタと、機能ごとのストア */
+export type TenantTx<Extra extends object> = {
+  ledger: LedgerRepository;
+  masters: MasterRepository;
+} & Extra;
+
+/**
+ * 1 つの事業体の DB に対するトランザクション（Unit of Work）。複数回書くユースケースは、この中で書く。
+ * packages/db が実装する（`drizzleUnitOfWork`）。テストのフェイクは `FakeUnitOfWork`
+ */
+export interface TenantUnitOfWork<Extra extends object> {
+  /**
+   * fn を 1 つのトランザクションで実行する。fn が `ok` を返せば確定する。
+   * fn が `err` を返すと fn の中の書き込みをすべて巻き戻し、同じ `err` を返す。
+   * fn が例外を投げると巻き戻し、同じ例外を投げ直す。
+   * 同じ UnitOfWork の `run` の中で `run` を呼ばない（入れ子のトランザクションにはならない）
+   */
+  run<T>(fn: (tx: TenantTx<Extra>) => Result<T>): Result<T>;
 }
+
+/** 取込の確定・取消で、仕訳・マスタ・取込の記録を1つのトランザクションで扱う（research R10, INV-11） */
+export type ImportUnitOfWork = TenantUnitOfWork<{ imports: ImportStore }>;
 
 /** 決算処理と確定申告の設定（003-tax-return。packages/db が実装）。メソッドはすべて同期 */
 export interface ClosingStore {
@@ -237,17 +258,8 @@ export interface ClosingStore {
   appendClosingAudit(entry: ClosingAuditEntry): void;
 }
 
-/** 決算整理の仕訳の登録で、仕訳・マスタ・決算の記録を1つのトランザクションで扱う（research R4） */
-export interface ClosingUnitOfWork {
-  /** fn が例外を投げると、fn の中の書き込みをすべて元に戻す */
-  transaction<T>(
-    fn: (tx: {
-      journals: JournalRepository;
-      masters: MasterRepository;
-      closing: ClosingStore;
-    }) => T,
-  ): T;
-}
+/** 決算整理の仕訳の登録・決算の設定の保存で、仕訳・マスタ・決算の記録を1つのトランザクションで扱う（research R4） */
+export type ClosingUnitOfWork = TenantUnitOfWork<{ closing: ClosingStore }>;
 
 /**
  * 請求書（005 US1・US4）の永続化。メソッドは各ストーリーの db のタスクで、ポートと実装を同時に足す。
@@ -302,16 +314,7 @@ export interface InvoicingStore {
 }
 
 /** 請求書の発行・入金・取消で、仕訳・マスタ・請求の記録を1つのトランザクションで扱う（R9） */
-export interface InvoicingUnitOfWork {
-  /** fn が例外を投げると、fn の中の書き込みをすべて元に戻す。`err` を返しても確定する（R9） */
-  transaction<T>(
-    fn: (tx: {
-      ledger: LedgerRepository;
-      masters: MasterRepository;
-      invoicing: InvoicingStore;
-    }) => T,
-  ): T;
-}
+export type InvoicingUnitOfWork = TenantUnitOfWork<{ invoicing: InvoicingStore }>;
 
 /** 定期仕訳（005 US3）の永続化。メソッドはすべて同期。操作の記録は `invoicing_audit_log`（R23） */
 export interface RecurringStore {
@@ -332,16 +335,7 @@ export interface RecurringStore {
 }
 
 /** 定期仕訳の登録で、仕訳・マスタ・定期仕訳の記録を1つのトランザクションで扱う（R9） */
-export interface RecurringUnitOfWork {
-  /** fn が例外を投げると、fn の中の書き込みをすべて元に戻す。`err` を返しても確定する（R9） */
-  transaction<T>(
-    fn: (tx: {
-      ledger: LedgerRepository;
-      masters: MasterRepository;
-      recurring: RecurringStore;
-    }) => T,
-  ): T;
-}
+export type RecurringUnitOfWork = TenantUnitOfWork<{ recurring: RecurringStore }>;
 
 /** 事業体の一覧（data/registry.sqlite） */
 export interface RegistryRepository {

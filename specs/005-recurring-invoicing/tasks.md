@@ -21,16 +21,12 @@ description: "Task list for 005-recurring-invoicing"
 
 ## 全タスク共通のルール
 
-- 004 の tasks.md の「全タスク共通のルール」を引き継ぐ（依存の向き、整数の金額、`IdGenerator`・`Clock`、テストの一時ファイルは `.tmp/` と `useTempDataDir`、相対 import に `.ts`、enum・parameter properties・namespace を使わない、型だけの import は `import type`、実データ `work/`・`data/` を読まない・書かない、部下は担当のプロジェクトのテストだけを実行し整形は触ったファイルだけ、ファイルの変更は Edit / Write、Conventional Commits）
-- 開発中は利用者がいないため、既存データの移行・旧版との互換は考慮しない。帳簿の不変条件（Constitution I）は守る
+- **[AGENTS.md](../../AGENTS.md) の「開発の進め方」「請求と定期仕訳（005）」「データと一時ファイル」に従う**（共通の規約、実データを扱わない規則、web・server のテスト、エラーコードや共有の型を変えるときの grep、開発中は旧版との互換を考えない）。以下はこの機能に固有の規則
 - **金額・工数は整数**。工数は半時間の整数（`half_hours`）、明細の数量は `quantity_halves`。明細の金額 = `Math.floor(quantityHalves * unitPrice / 2)`。別記の税額は 001 の `computeInclusiveTax`（INV-10 の式）を税率ごとに1回（R7）。浮動小数で金額を計算しない
 - **書く順序（R9）**: drizzle のトランザクションは `err` を返しても確定する。ユースケースは (1) 読み取りと検査をすべて先に行い違反は `err`、(2) 最初の書き込みを 001 の `createJournal` / `voidJournal` にし、その `err` はそのまま返す、(3) 以降の書き込みの失敗・ドメインの判断での中止は `RollbackError`（`DomainError` を持つ例外）を投げて全体を巻き戻し、ユースケースの外側で `err` に直す
 - **「今日」はドメインに `today: string`（`YYYY-MM-DD`）で渡す**。server は `todayOf(clock)`（R22）で作る。`Date.now()`・`new Date()` を domain・ルートで直接呼ばない
-- **エラーコード・共有の型（`JournalSource`、schema の型）・`createJournal` の引数を変えるタスクでは、同じ値を参照するテストと実装を `grep -rn <値> packages apps scripts` で探し、担当外のプロジェクトも含めて直す**
-- server のテストは `apps/server/test/helpers.ts` の `createTestSession`・`testHeaders`（と `createTestEntity`）を使う（全ルートが要サインイン。004 の INV-29 の `auth-coverage.test.ts` が新しいルートも自動で検査する）。日付に依存するテストは偽の時計を `createApp({ clock })` で渡し、時刻を日付の境目（UTC と JST の 0 時）から離す
-- web のテストは Testing Library ＋ jsdom（`apps/web/test/render-route.tsx`、`apps/web/test/mock-api.ts`、置き場所は `apps/web/test/routes/`）。**新しい API を呼ぶ画面を足したら `mock-api.ts` に既定の応答を足し、既存の web のテストが落ちないことを確かめる**。ルートを足したら `pnpm --filter @trebuchet/web build` で `routeTree.gen.ts` を再生成してから typecheck する
-- マイグレーションは `pnpm --filter @trebuchet/db exec drizzle-kit generate --name invoicing --config drizzle.tenant.config.ts` の後に、新しい表の `);` を `) STRICT;` に置き換える。トリガーは `--custom --name invoicing_integrity`（AGENTS.md）
-- サンドボックスではローカルのポートを開けない。部下は `app.request()` とメモリ上のテストだけで確かめ、server を起動しない
+- 型を変えるときの grep の対象に `JournalSource` と `createJournal` の引数を含める。日付に依存する server のテストは偽の時計を `createApp({ clock })` で渡し、時刻を日付の境目（UTC と JST の 0 時）から離す。004 の INV-29 の `auth-coverage.test.ts` が新しいルートも自動で検査する
+- マイグレーションは `pnpm --filter @trebuchet/db exec drizzle-kit generate --name invoicing --config drizzle.tenant.config.ts`、トリガーは `--custom --name invoicing_integrity`
 
 ---
 
@@ -133,7 +129,7 @@ description: "Task list for 005-recurring-invoicing"
 ## Phase 7: Polish & Cross-Cutting Concerns
 
 - [X] T024 文書を更新する: `AGENTS.md` に「請求と定期仕訳（005）」の節（層の表: `packages/domain/src/invoicing/`・`recurring/`、`usecases/invoicing.ts`・`recurring.ts`、`packages/db/src/invoicing-repository.ts`・`recurring-repository.ts`、`apps/server/src/routes/invoicing.ts`・`recurring.ts`・`lib/today.ts`・`lib/recurring-scheduler.ts`、`apps/web/src/features/invoicing/`・`recurring/` と routes。規約: 書く順序〔R9〕、請求・入金の仕訳は `JOURNAL_LINKED` で守る〔R13〕、「今日」は `todayOf`〔R22〕、科目のコード〔R10〕）、`docs/adr/0008-invoice-journal-linkage.md`（請求・入金と仕訳の結びつけ方: 1トランザクション、写し、通常の訂正・取消の禁止、取消の規則。書式は `docs/adr/0001-sqlite-driver.md`）
-- [ ] T025 **（メイン・利用者）** quickstart.md の §2・§3 を利用者の端末で手動確認する（`TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart-005" pnpm dev`。server の起動は利用者、ブラウザの操作は implementer に playwright の MCP の `browser_snapshot` で行わせる。PDF の体裁〔SC-005〕と時間〔SC-001〕は利用者が確かめる）。画面の文言と手順を quickstart.md に合わせて直す。結果の数値はリポジトリに書かない
+- [ ] T025 **（メイン・利用者）**（2026-10-25: 手動確認は保留。利用者が実際に使い始めるときに確かめる）quickstart.md の §2・§3 を利用者の端末で手動確認する（`TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart-005" pnpm dev`。server の起動は利用者、ブラウザの操作は implementer に playwright の MCP の `browser_snapshot` で行わせる。PDF の体裁〔SC-005〕と時間〔SC-001〕は利用者が確かめる）。画面の文言と手順を quickstart.md に合わせて直す。結果の数値はリポジトリに書かない
 - [X] T026 `apps/web/e2e/invoicing.spec.ts` を書く（発行者の設定 → 条件 → 工数 → 発行 → 印刷用の画面の title → 消し込み → 状態が「入金済み」。004 の `apps/web/e2e/helpers/` の登録とサインインの手順を使い、データは `.tmp/`）。実行は利用者の端末（`pnpm --filter @trebuchet/web e2e`）
 - [X] T027 **（メイン）** 全体の検証: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`。E2E は利用者の端末で。bench は追加しない（plan の Performance Goals: 件数が小さい）
 

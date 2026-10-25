@@ -4,17 +4,16 @@
  * 出典: 国税庁 令和7年分 青色申告決算書（一般用）
  * https://www.nta.go.jp/taxes/shiraberu/shinkoku/yoshiki/01/shinkokusho/pdf/r07/10.pdf
  */
+import type { FormLineKind } from "@trebuchet/schema";
 
 /**
- * 1ページの欄の種類。
+ * 1ページの欄の種類は schema の `FormLineKind`（正本）。
  * - account: 科目の reportLine から金額を集める欄
  * - optional: 科目名を書く空欄（任意欄）
  * - computed: 他の欄から計算する欄
  * - unused: この機能では扱わない欄
  */
-export type FormLineKind = "account" | "optional" | "computed" | "unused";
-
-export type FormLine = {
+type FormLine = {
   no: number;
   label: string;
   kind: FormLineKind;
@@ -28,9 +27,9 @@ export type BsSide = "asset" | "liability_equity";
  * - blank: 空欄の行（科目名つきで出す）
  * - income: 青色申告特別控除前の所得金額（計算）
  */
-export type BsRowKind = "account" | "blank" | "income";
+type BsRowKind = "account" | "blank" | "income";
 
-export type BsRow = {
+type BsRow = {
   label: string;
   side: BsSide;
   kind: BsRowKind;

@@ -5,36 +5,29 @@ import {
   hashRecoveryCode,
   normalizeRecoveryCode,
 } from "../src/lib/recovery-code.ts";
+import { makeClock } from "./helpers.ts";
 
 // T008: challenge の保持（5分・最大100件・単回）と回復コードの形
 
-function makeClock() {
-  let ms = Date.parse("2026-10-20T00:00:00.000Z");
-  return {
-    now: () => new Date(ms).toISOString(),
-    advance: (d: number) => {
-      ms += d;
-    },
-  };
-}
+const START = "2026-10-20T00:00:00.000Z";
 
 describe("ChallengeStore", () => {
   it("同じ用途で 1 回だけ取り出せる", () => {
-    const store = new ChallengeStore(makeClock());
+    const store = new ChallengeStore(makeClock(START));
     store.issue("register", "a");
     expect(store.consume("register", "a")).toBe(true);
     expect(store.consume("register", "a")).toBe(false);
   });
 
   it("用途の不一致は false で、そのまま破棄される", () => {
-    const store = new ChallengeStore(makeClock());
+    const store = new ChallengeStore(makeClock(START));
     store.issue("register", "a");
     expect(store.consume("sign-in", "a")).toBe(false);
     expect(store.consume("register", "a")).toBe(false);
   });
 
   it("5 分で期限が切れる", () => {
-    const clock = makeClock();
+    const clock = makeClock(START);
     const store = new ChallengeStore(clock);
     store.issue("register", "a");
     store.issue("register", "b");
@@ -45,7 +38,7 @@ describe("ChallengeStore", () => {
   });
 
   it("100 件を超えたら古いものから捨てる", () => {
-    const store = new ChallengeStore(makeClock());
+    const store = new ChallengeStore(makeClock(START));
     for (let i = 0; i < CHALLENGE_MAX + 1; i++) store.issue("register", `c${i}`);
     expect(store.size).toBe(CHALLENGE_MAX);
     expect(store.consume("register", "c0")).toBe(false);

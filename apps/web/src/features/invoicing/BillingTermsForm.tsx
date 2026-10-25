@@ -6,8 +6,8 @@ import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SaveNotice } from "@/components/ui/save-notice";
-import { parseYenInput } from "@/lib/format";
-import { type Partner, queryKeys } from "@/lib/queries";
+import { masterKeys, type Partner } from "@/features/masters/api";
+import { parseWholeYen } from "@/lib/format";
 import {
   type BillingTermsRow,
   deleteBillingTerms,
@@ -56,14 +56,14 @@ function toInput(
   values: Values,
 ): { input: BillingTermsInput; errors?: undefined } | { input?: undefined; errors: Errors } {
   const errors: Errors = {};
-  const amount = parseYenInput(values.amount);
+  const amount = parseWholeYen(values.amount, { min: 1 });
   const label = values.billingType === "hourly" ? "単価" : "月額";
-  if (amount === undefined || !Number.isInteger(amount) || amount < 1 || amount >= YEN_LIMIT) {
+  if (amount === null || amount >= YEN_LIMIT) {
     errors.amount = `${label}は 1 円以上の整数で入力してください`;
   }
   const defaultItemName = values.defaultItemName.trim();
   if (defaultItemName === "") errors.defaultItemName = "既定の品名を入力してください";
-  if (errors.amount || errors.defaultItemName || amount === undefined) return { errors };
+  if (errors.amount || errors.defaultItemName || amount === null) return { errors };
 
   const billingName = values.billingName.trim();
   const parsed = BillingTermsInput.safeParse({
@@ -103,7 +103,7 @@ export function BillingTermsForm({
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: invoicingKeys.billingTerms(entityId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.partners(entityId) }),
+      queryClient.invalidateQueries({ queryKey: masterKeys.partners(entityId) }),
     ]);
 
   const save = useMutation({

@@ -4,8 +4,6 @@ import type {
   InvoicingAuditEntry,
   InvoicingStore,
   InvoicingUnitOfWork,
-  LedgerRepository,
-  MasterRepository,
   PaymentRecord,
   WorkHoursRow,
 } from "@trebuchet/domain";
@@ -15,12 +13,8 @@ import type {
   InvoiceSettings,
   JournalOrigin,
 } from "@trebuchet/schema";
-import type { RunResult } from "better-sqlite3";
-import { and, asc, desc, eq, isNull, max, or, sql } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
-import { DrizzleLedgerRepository } from "./ledger-repository.ts";
-import { DrizzleMasterRepository } from "./master-repository.ts";
-import type * as tenantSchema from "./schema/tenant.ts";
+import { and, asc, desc, eq, isNull, max, or } from "drizzle-orm";
+import { rowidOf, type TenantConn } from "./internal.ts";
 import {
   invoiceItems,
   invoicePayments,
@@ -32,9 +26,7 @@ import {
   recurringRuns,
   workHours,
 } from "./schema/tenant.ts";
-
-/** テナントの DB、またはそのトランザクション */
-type TenantConn = BaseSQLiteDatabase<"sync", RunResult, typeof tenantSchema>;
+import { drizzleUnitOfWork } from "./unit-of-work.ts";
 
 /** `invoices` の行を請求書の写しにする（`issuer_json` を読み戻す） */
 function toInvoiceRecord(row: typeof invoices.$inferSelect): InvoiceRecord {
@@ -235,7 +227,7 @@ export class DrizzleInvoicingStore implements InvoicingStore {
       .select()
       .from(invoicePayments)
       .where(eq(invoicePayments.invoiceId, invoiceId))
-      .orderBy(asc(invoicePayments.createdAt), sql`${invoicePayments}.rowid ASC`)
+      .orderBy(asc(invoicePayments.createdAt), asc(rowidOf(invoicePayments)))
       .all();
   }
 
@@ -294,31 +286,6 @@ export class DrizzleInvoicingStore implements InvoicingStore {
   }
 }
 
-/**
- * InvoicingUnitOfWork の Drizzle 実装（003 の DrizzleClosingUnitOfWork と同じ形）。
- * 同じ接続・トランザクションで仕訳・マスタ・請求の記録を扱う。
- * `transaction` は例外で巻き戻すが、`err` を返しても確定する（R9）
- */
-export class DrizzleInvoicingUnitOfWork implements InvoicingUnitOfWork {
-  private readonly db: TenantConn;
-
-  constructor(db: TenantConn) {
-    this.db = db;
-  }
-
-  transaction<T>(
-    fn: (tx: {
-      ledger: LedgerRepository;
-      masters: MasterRepository;
-      invoicing: InvoicingStore;
-    }) => T,
-  ): T {
-    return this.db.transaction((tx) =>
-      fn({
-        ledger: new DrizzleLedgerRepository(tx),
-        masters: new DrizzleMasterRepository(tx),
-        invoicing: new DrizzleInvoicingStore(tx),
-      }),
-    );
-  }
-}
+/** InvoicingUnitOfWork の実装。仕訳・マスタ・請求の記録を同じトランザクションで扱う（R9） */
+export const createInvoicingUnitOfWork = (db: TenantConn): InvoicingUnitOfWork =>
+  drizzleUnitOfWork(db, (tx) => ({ invoicing: new DrizzleInvoicingStore(tx) }));

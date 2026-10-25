@@ -1,10 +1,11 @@
 import { randomUUIDv7 } from "node:crypto";
-import { DrizzleLedgerRepository, DrizzleRecurringUnitOfWork, openTenant } from "@trebuchet/db";
+import { createRecurringUnitOfWork, DrizzleLedgerRepository, openTenant } from "@trebuchet/db";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { createRecurring, type IdGenerator, type RecurringUnitOfWork } from "@trebuchet/domain";
 import { JournalQuery, type RecurringInput } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startRecurringScheduler } from "../src/lib/recurring-scheduler.ts";
+import { accountLookup } from "./helpers.ts";
 import { createInvoicingTestContext, type InvoicingTestContext } from "./invoicing-helpers.ts";
 
 // 005 US3 T022: 判定の起動（R18）。偽の時計で 2026-10-26 に tick し、毎月 25 日・開始 8 月の定義が 3 件登録される
@@ -28,18 +29,11 @@ afterEach(() => {
 });
 
 const uowOf = (entityId: string): RecurringUnitOfWork =>
-  new DrizzleRecurringUnitOfWork(openTenant(entityId));
+  createRecurringUnitOfWork(openTenant(entityId));
 
 const accountIdsOf = async (entityId: string) => {
-  const res = await ctx.e.accounts.$get({ param: { entityId } });
-  if (res.status !== 200) throw new Error(`accounts failed: ${res.status}`);
-  const map = new Map((await res.json()).accounts.map((a) => [a.name, a.id]));
-  const get = (name: string) => {
-    const id = map.get(name);
-    if (id === undefined) throw new Error(`科目がない: ${name}`);
-    return id;
-  };
-  return { rent: get("地代家賃"), bank: get("普通預金") };
+  const accountId = await accountLookup(entityId);
+  return { rent: accountId("地代家賃"), bank: accountId("普通預金") };
 };
 
 /** 今日が 2026-08-01 のときに定義を保存する（その時点では登録される回がない）。登録は scheduler に任せる */
@@ -114,7 +108,7 @@ describe("startRecurringScheduler", () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const broken: RecurringUnitOfWork = {
-      transaction: () => {
+      run: () => {
         throw new Error("secret-detail: database is locked");
       },
     };

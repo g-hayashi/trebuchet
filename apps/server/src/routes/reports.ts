@@ -17,7 +17,7 @@ import {
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { reportDeps } from "../deps.ts";
-import { fail } from "../errors.ts";
+import { respond } from "../errors.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 
@@ -37,37 +37,37 @@ export const reportRoutes = new Hono<TenantEnv>()
   .get("/reports/journal-book", validate("query", JournalBookQuery), (c) => {
     const { format, ...range } = c.req.valid("query");
     const result = getJournalBook(reportDeps(c.var.db), range);
-    if (!result.ok) return fail(c, result.error);
-    if (format === "csv") return csv(c, result.value, `${range.from}_${range.to}`);
-    return c.json(result.value, 200);
+    return respond(c, result, (report) =>
+      format === "csv" ? csv(c, report, `${range.from}_${range.to}`) : c.json(report, 200),
+    );
   })
   .get("/reports/general-ledger", validate("query", GeneralLedgerQuery), (c) => {
     const { format, ...params } = c.req.valid("query");
     const result = getGeneralLedger(reportDeps(c.var.db), params);
-    if (!result.ok) return fail(c, result.error);
-    if (format === "csv") {
-      return csv(c, result.value, `${result.value.account.code}_${params.from}_${params.to}`);
-    }
-    return c.json(result.value, 200);
+    return respond(c, result, (report) =>
+      format === "csv"
+        ? csv(c, report, `${report.account.code}_${params.from}_${params.to}`)
+        : c.json(report, 200),
+    );
   })
   .get("/reports/trial-balance", validate("query", TrialBalanceQuery), (c) => {
     const { format, ...range } = c.req.valid("query");
     const result = getTrialBalance(reportDeps(c.var.db), range);
-    if (!result.ok) return fail(c, result.error);
-    if (format === "csv") return csv(c, result.value, `${range.from}_${range.to}`);
-    return c.json(result.value, 200);
+    return respond(c, result, (report) =>
+      format === "csv" ? csv(c, report, `${range.from}_${range.to}`) : c.json(report, 200),
+    );
   })
   .get("/reports/profit-and-loss", validate("query", ProfitAndLossQuery), (c) => {
     const { format, ...params } = c.req.valid("query");
     const result = getProfitAndLoss(reportDeps(c.var.db), params);
-    if (!result.ok) return fail(c, result.error);
-    if (format === "csv") return csv(c, result.value, `${params.from}_${params.to}`);
-    return c.json(result.value, 200);
+    return respond(c, result, (report) =>
+      format === "csv" ? csv(c, report, `${params.from}_${params.to}`) : c.json(report, 200),
+    );
   })
   .get("/reports/balance-sheet", validate("query", BalanceSheetQuery), (c) => {
     const { format, ...params } = c.req.valid("query");
     const result = getBalanceSheet(reportDeps(c.var.db), params);
-    if (!result.ok) return fail(c, result.error);
-    if (format === "csv") return csv(c, result.value, params.asOf);
-    return c.json(result.value, 200);
+    return respond(c, result, (report) =>
+      format === "csv" ? csv(c, report, params.asOf) : c.json(report, 200),
+    );
   });

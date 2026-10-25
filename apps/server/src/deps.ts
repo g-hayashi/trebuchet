@@ -1,29 +1,32 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
+  createClosingUnitOfWork,
+  createImportUnitOfWork,
+  createInvoicingUnitOfWork,
+  createRecurringUnitOfWork,
   DrizzleAuthStore,
   DrizzleBackupStore,
   DrizzleClosingStore,
-  DrizzleClosingUnitOfWork,
   DrizzleImportStore,
-  DrizzleImportUnitOfWork,
   DrizzleInvoicingStore,
-  DrizzleInvoicingUnitOfWork,
   DrizzleLedgerRepository,
   DrizzleMasterRepository,
   DrizzleRecurringStore,
-  DrizzleRecurringUnitOfWork,
   DrizzleRegistryRepository,
   dataDir,
   openRegistry,
   openTenant,
   type TenantDb,
+  TMP_ROOT,
 } from "@trebuchet/db";
 import type {
   AuthStore,
   BackupStore,
   Clock,
+  ClosingReadDeps,
   ClosingSettingsDeps,
   ClosingStore,
+  ClosingUnitOfWork,
   CommitAdjustmentDeps,
   IdGenerator,
   ImportStore,
@@ -32,20 +35,26 @@ import type {
   InvoicingUnitOfWork,
   LedgerDeps,
   MasterDeps,
-  MasterRepository,
   RecurringStore,
   RecurringUnitOfWork,
   ReportDeps,
   SecretStore,
+  TaxReturnRecordDeps,
 } from "@trebuchet/domain";
 import { type BackupRunner, createBackupRunner } from "./lib/backup-run.ts";
 import { createKeychainSecretStore, createMemorySecretStore } from "./lib/keychain.ts";
-import { TMP_ROOT } from "./lib/paths.ts";
 
 /** R8: 主キーは UUIDv7 */
 export const ids: IdGenerator = { next: () => randomUUIDv7() };
 
+/**
+ * 既定の時計。`createApp({ clock })` と main・バックアップの実行が既定値として使う。
+ * ルートは `routes(options: RouteOptions)` で受け取った clock を使い、これを直接参照しない（005 R22）
+ */
 export const clock: Clock = { now: () => new Date().toISOString() };
+
+/** ルートの組み立てに渡す依存。`createApp` が全ルートに同じ clock を渡す */
+export type RouteOptions = { clock: Clock };
 
 export const registryRepository = () => new DrizzleRegistryRepository(openRegistry());
 
@@ -74,51 +83,54 @@ export const backupRunner: BackupRunner = createBackupRunner({
 });
 
 /** リクエストの事業体の DB（c.var.db）に対するマスタのユースケースの依存 */
-export function masterDeps(db: TenantDb): MasterDeps {
+export function masterDeps(db: TenantDb, clock: Clock): MasterDeps {
   return { repo: new DrizzleMasterRepository(db), ids, clock };
 }
 
-/** テナントの DB、またはそのトランザクション */
-type TenantConn = ConstructorParameters<typeof DrizzleMasterRepository>[0];
-
-/** 決算処理と確定申告の設定（003）の ClosingStore */
-export const closingStore = (db: TenantConn): ClosingStore => new DrizzleClosingStore(db);
-
 /**
- * マスタと ClosingStore を同じ接続（トランザクションを渡せばそのトランザクション）で扱う依存。
- * 科目の欄番号の変更（setAccountReportLine）のように、マスタと決算の履歴を同時に書くときに使う
+ * 決算の UnitOfWork（マスタと ClosingStore を同じトランザクションで扱う）を使うユースケースの依存。
+ * 科目の変更（updateAccount。欄番号の変更の履歴を ClosingStore に残す）が使う
  */
-export function masterClosingDeps(db: TenantConn): MasterDeps & { closing: ClosingStore } {
-  return { repo: new DrizzleMasterRepository(db), closing: closingStore(db), ids, clock };
+export function accountUpdateDeps(
+  db: TenantDb,
+  clock: Clock,
+): {
+  uow: ClosingUnitOfWork;
+  ids: IdGenerator;
+  clock: Clock;
+} {
+  return { uow: createClosingUnitOfWork(db), ids, clock };
 }
 
 /** リクエストの事業体の DB に対する決算書の参照（getBlueReturn）の依存 */
 export function blueReturnDeps(db: TenantDb): ReportDeps & { closing: ClosingStore } {
-  return { ...reportDeps(db), closing: closingStore(db) };
+  return { ...reportDeps(db), closing: new DrizzleClosingStore(db) };
 }
 
-/** 控除の回答（getDeductionAnswers・saveDeductionAnswers）の依存。トランザクションを渡せる */
-export function deductionAnswersDeps(db: TenantConn): {
-  masters: MasterRepository;
-  closing: ClosingStore;
-  ids: IdGenerator;
-  clock: Clock;
-} {
-  return { masters: new DrizzleMasterRepository(db), closing: closingStore(db), ids, clock };
-}
-
-/** 家事按分・地代家賃の内訳（list・save 系）の依存。トランザクションを渡せる */
-export function closingSettingsDeps(db: TenantConn): ClosingSettingsDeps {
-  return { masters: new DrizzleMasterRepository(db), closing: closingStore(db), ids, clock };
+/**
+ * 決算の設定（控除の回答・メモ・按分・内訳・資産・控え）の依存。読み取りは masters・closing、
+ * 保存は uow（保存と履歴を 1 つのトランザクションで書く）を使う
+ */
+export function closingSettingsDeps(
+  db: TenantDb,
+  clock: Clock,
+): ClosingSettingsDeps & ClosingReadDeps & TaxReturnRecordDeps {
+  return {
+    uow: createClosingUnitOfWork(db),
+    masters: new DrizzleMasterRepository(db),
+    closing: new DrizzleClosingStore(db),
+    ids,
+    clock,
+  };
 }
 
 /**
  * 決算整理の仕訳の案の確定（commitAdjustment）の依存。案の作り直しに使う帳簿の読み取りは、
  * トランザクションと同じ接続（c.var.db）から読む（取込の期首残高の案と同じ形）
  */
-export function commitAdjustmentDeps(db: TenantDb): CommitAdjustmentDeps {
+export function commitAdjustmentDeps(db: TenantDb, clock: Clock): CommitAdjustmentDeps {
   return {
-    uow: new DrizzleClosingUnitOfWork(db),
+    uow: createClosingUnitOfWork(db),
     reports: new DrizzleLedgerRepository(db),
     ids,
     clock,
@@ -126,7 +138,7 @@ export function commitAdjustmentDeps(db: TenantDb): CommitAdjustmentDeps {
 }
 
 /** リクエストの事業体の DB に対する仕訳のユースケース（登録・訂正・取消・参照）の依存 */
-export function journalDeps(db: TenantDb): LedgerDeps {
+export function journalDeps(db: TenantDb, clock: Clock): LedgerDeps {
   return {
     ledger: new DrizzleLedgerRepository(db),
     masters: new DrizzleMasterRepository(db),
@@ -142,31 +154,40 @@ export function reportDeps(db: TenantDb): ReportDeps {
 
 /**
  * 請求書（005）のユースケースの依存。仕訳・マスタ・請求の記録を1つのトランザクションで扱う（R9）。
- * `clock` はルートが `invoicingRoutes({ clock })` で受け取るので、ここには含めない（R22）。
  * `invoicing` はトランザクションの外の読み取り（`originOfJournal` など）に使う
  */
-export function invoicingDeps(db: TenantDb): {
+export function invoicingDeps(
+  db: TenantDb,
+  clock: Clock,
+): {
   uow: InvoicingUnitOfWork;
   invoicing: InvoicingStore;
   ids: IdGenerator;
+  clock: Clock;
 } {
   return {
-    uow: new DrizzleInvoicingUnitOfWork(db),
+    uow: createInvoicingUnitOfWork(db),
     invoicing: new DrizzleInvoicingStore(db),
     ids,
+    clock,
   };
 }
 
-/** 定期仕訳（005）のユースケースの依存。`clock` はルートから渡す（R22） */
-export function recurringDeps(db: TenantDb): {
+/** 定期仕訳（005）のユースケースの依存 */
+export function recurringDeps(
+  db: TenantDb,
+  clock: Clock,
+): {
   uow: RecurringUnitOfWork;
   recurring: RecurringStore;
   ids: IdGenerator;
+  clock: Clock;
 } {
   return {
-    uow: new DrizzleRecurringUnitOfWork(db),
+    uow: createRecurringUnitOfWork(db),
     recurring: new DrizzleRecurringStore(db),
     ids,
+    clock,
   };
 }
 
@@ -178,20 +199,23 @@ export const entityIds = (): string[] =>
 
 /** 定期仕訳の自動登録（スケジューラー）が使う、事業体ごとの UnitOfWork */
 export const openRecurringUnitOfWork = (entityId: string): RecurringUnitOfWork =>
-  new DrizzleRecurringUnitOfWork(openTenant(entityId));
+  createRecurringUnitOfWork(openTenant(entityId));
 
 /**
  * リクエストの事業体の DB に対する取込のユースケースの依存。
  * 仕訳・マスタ・取込の記録を1つのトランザクションで扱う（research R10）
  */
-export function importDeps(db: TenantDb): {
+export function importDeps(
+  db: TenantDb,
+  clock: Clock,
+): {
   uow: ImportUnitOfWork;
   imports: ImportStore;
   ids: IdGenerator;
   clock: Clock;
 } {
   return {
-    uow: new DrizzleImportUnitOfWork(db),
+    uow: createImportUnitOfWork(db),
     imports: new DrizzleImportStore(db),
     ids,
     clock,

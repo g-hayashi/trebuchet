@@ -1,12 +1,17 @@
-import type {
-  AdjustmentProposal,
-  BlueReturn,
-  FiledDocumentInput,
-  FixedAssetInput,
-  HomeUseAllocationInput,
-  RentDetailInput,
-  TaxReturnMemoInput,
+import {
+  type AdjustmentProposal,
+  type BlueReturn,
+  CLOSING_NOTE_MAX,
+  type FiledDocumentInput,
+  type FixedAssetInput,
+  type HomeUseAllocationInput,
+  type RentDetailInput,
+  TAX_RETURN_LABEL_MAX,
+  TAX_RETURN_MEMO_MAX,
+  type TaxReturnMemoInput,
+  YEN_LIMIT,
 } from "@trebuchet/schema";
+import { auditEntry } from "../audit.ts";
 import type { PriorPeriod } from "../blue-return/balance-sheet.ts";
 import { buildBlueReturn } from "../blue-return/build.ts";
 import {
@@ -50,9 +55,11 @@ import {
   type HomeUseAllocation,
   type Journal,
   ok,
+  periodNotFound,
   type RentDetail,
   type Result,
   type TaxReturnMemo,
+  validation,
 } from "../types.ts";
 import { createJournal } from "./create-journal.ts";
 import type { ReportDeps } from "./reports.ts";
@@ -60,13 +67,26 @@ import type { ReportDeps } from "./reports.ts";
 /** 決算書の参照の依存。帳簿は 001 の ReportDeps、決算の設定は ClosingStore から読む */
 export type BlueReturnDeps = ReportDeps & { closing: ClosingStore };
 
-/** 控除の回答の保存の依存 */
-export type DeductionAnswersDeps = {
-  masters: MasterRepository;
-  closing: ClosingStore;
-  ids: IdGenerator;
-  clock: Clock;
-};
+/** 決算の設定（控除の回答・按分・内訳・資産）の読み取りの依存 */
+export type ClosingReadDeps = { masters: MasterRepository; closing: ClosingStore };
+
+/**
+ * 決算の設定（控除の回答・メモ・按分・内訳・資産）の保存の依存。
+ * 保存と closing_audit_log の記録を UnitOfWork の 1 つのトランザクションで行う
+ */
+export type ClosingSettingsDeps = { uow: ClosingUnitOfWork; ids: IdGenerator; clock: Clock };
+
+/** UnitOfWork の中で保存の本体に渡す依存（同じトランザクションのマスタと ClosingStore） */
+type ClosingTxDeps = ClosingReadDeps & { ids: IdGenerator; clock: Clock };
+
+function inClosingTx<T>(
+  deps: ClosingSettingsDeps,
+  fn: (tx: ClosingTxDeps) => Result<T>,
+): Result<T> {
+  return deps.uow.run(({ masters, closing }) =>
+    fn({ masters, closing, ids: deps.ids, clock: deps.clock }),
+  );
+}
 
 /** 控除の回答と、そこから決まる上限額。回答がなければどちらも null（0 として計算しない） */
 export type DeductionAnswersView = {
@@ -98,9 +118,7 @@ function resolveYear(masters: MasterRepository, fiscalYear: number): Result<Fisc
   const individual = requireIndividual(masters);
   if (!individual.ok) return individual;
   const period = masters.getFiscalPeriodByYear(fiscalYear);
-  return period === undefined
-    ? err(domainError("VALIDATION", "会計期間が見つかりません", { fiscalYear }))
-    : ok(period);
+  return period === undefined ? err(periodNotFound(fiscalYear)) : ok(period);
 }
 
 /**
@@ -154,9 +172,6 @@ export function getBlueReturn(
   );
 }
 
-/** 決算のメモの長さの上限（schema の ClosingNoteInput と同じ） */
-const CLOSING_NOTE_MAX = 5000;
-
 /**
  * 決算のメモ（特殊事情・期首と前期末の差の説明）を年度・種類ごとに保存する（FR-027、FR-030）。
  * 本文は前後の空白を除く。closing_audit_log に closing_note（対象は `年度:種類`。初回は create、
@@ -164,6 +179,13 @@ const CLOSING_NOTE_MAX = 5000;
  */
 export function saveClosingNote(
   deps: ClosingSettingsDeps,
+  params: { fiscalYear: number; kind: ClosingNoteKind; body: string },
+): Result<ClosingNote> {
+  return inClosingTx(deps, (tx) => saveClosingNoteIn(tx, params));
+}
+
+function saveClosingNoteIn(
+  deps: ClosingTxDeps,
   params: { fiscalYear: number; kind: ClosingNoteKind; body: string },
 ): Result<ClosingNote> {
   const period = resolveYear(deps.masters, params.fiscalYear);
@@ -187,16 +209,16 @@ export function saveClosingNote(
     updatedAt: now,
   };
   deps.closing.upsertClosingNote(saved);
-  deps.closing.appendClosingAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "closing_note",
-    targetId: `${params.fiscalYear}:${params.kind}`,
-    action: before === undefined ? "create" : "update",
-    reason: null,
-    beforeJson: before === undefined ? null : JSON.stringify(before),
-    afterJson: JSON.stringify(saved),
-  });
+  deps.closing.appendClosingAudit(
+    auditEntry(deps, {
+      targetType: "closing_note",
+      targetId: `${params.fiscalYear}:${params.kind}`,
+      action: before === undefined ? "create" : "update",
+      before,
+      after: saved,
+      at: now,
+    }),
+  );
   return ok(saved);
 }
 
@@ -212,7 +234,7 @@ function viewOf(
 
 /** 年度の控除の要件の回答と上限額（GET /blue-return/:year/deduction-answers） */
 export function getDeductionAnswers(
-  deps: Pick<DeductionAnswersDeps, "masters" | "closing">,
+  deps: ClosingReadDeps,
   params: { fiscalYear: number },
 ): Result<DeductionAnswersView> {
   const period = resolveYear(deps.masters, params.fiscalYear);
@@ -227,7 +249,14 @@ export function getDeductionAnswers(
  * 以降は update。変更前・後の回答）を残す。締め済みの年度でも保存できる（回答は帳簿ではない）
  */
 export function saveDeductionAnswers(
-  deps: DeductionAnswersDeps,
+  deps: ClosingSettingsDeps,
+  params: { fiscalYear: number; answers: DeductionRequirementAnswers },
+): Result<DeductionAnswersView> {
+  return inClosingTx(deps, (tx) => saveDeductionAnswersIn(tx, params));
+}
+
+function saveDeductionAnswersIn(
+  deps: ClosingTxDeps,
   params: { fiscalYear: number; answers: DeductionRequirementAnswers },
 ): Result<DeductionAnswersView> {
   const period = resolveYear(deps.masters, params.fiscalYear);
@@ -245,28 +274,20 @@ export function saveDeductionAnswers(
     updatedAt: now,
   };
   deps.closing.upsertDeductionAnswers(saved);
-  deps.closing.appendClosingAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "blue_deduction_answer",
-    targetId: String(params.fiscalYear),
-    action: before === undefined ? "create" : "update",
-    reason: null,
-    beforeJson: before === undefined ? null : JSON.stringify(before),
-    afterJson: JSON.stringify(saved),
-  });
+  deps.closing.appendClosingAudit(
+    auditEntry(deps, {
+      targetType: "blue_deduction_answer",
+      targetId: String(params.fiscalYear),
+      action: before === undefined ? "create" : "update",
+      before,
+      after: saved,
+      at: now,
+    }),
+  );
   return ok(viewOf(saved, period.value, deps.closing));
 }
 
 // ---- 家事按分・地代家賃の内訳（US2） ----
-
-/** 決算の設定（按分・内訳）の保存の依存 */
-export type ClosingSettingsDeps = {
-  masters: MasterRepository;
-  closing: ClosingStore;
-  ids: IdGenerator;
-  clock: Clock;
-};
 
 const sameKey = (
   a: Pick<HomeUseAllocation, "accountId" | "subAccountId">,
@@ -281,6 +302,13 @@ const sameKey = (
  */
 export function saveHomeUseAllocation(
   deps: ClosingSettingsDeps,
+  params: { fiscalYear: number } & HomeUseAllocationInput,
+): Result<HomeUseAllocation> {
+  return inClosingTx(deps, (tx) => saveHomeUseAllocationIn(tx, params));
+}
+
+function saveHomeUseAllocationIn(
+  deps: ClosingTxDeps,
   params: { fiscalYear: number } & HomeUseAllocationInput,
 ): Result<HomeUseAllocation> {
   const period = resolveYear(deps.masters, params.fiscalYear);
@@ -316,16 +344,17 @@ export function saveHomeUseAllocation(
     updatedAt: now,
   };
   deps.closing.upsertHomeUseAllocation(saved);
-  deps.closing.appendClosingAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "home_use_allocation",
-    targetId: saved.id,
-    action: before === undefined ? "create" : "update",
-    reason: saved.changeReason,
-    beforeJson: before === undefined ? null : JSON.stringify(before),
-    afterJson: JSON.stringify(saved),
-  });
+  deps.closing.appendClosingAudit(
+    auditEntry(deps, {
+      targetType: "home_use_allocation",
+      targetId: saved.id,
+      action: before === undefined ? "create" : "update",
+      reason: saved.changeReason,
+      before,
+      after: saved,
+      at: now,
+    }),
+  );
   return ok(saved);
 }
 
@@ -334,7 +363,7 @@ export function saveHomeUseAllocation(
  * 割合を変えたときの理由の入力を促すのに使う
  */
 export function listHomeUseAllocations(
-  deps: Pick<ClosingSettingsDeps, "masters" | "closing">,
+  deps: ClosingReadDeps,
   params: { fiscalYear: number },
 ): Result<{ allocations: HomeUseAllocation[]; previousYear: HomeUseAllocation[] }> {
   const period = resolveYear(deps.masters, params.fiscalYear);
@@ -347,15 +376,13 @@ export function listHomeUseAllocations(
 
 /** 年度の地代家賃の内訳（GET .../rent-details）。並び順は保存したとおり */
 export function getRentDetails(
-  deps: Pick<ClosingSettingsDeps, "masters" | "closing">,
+  deps: ClosingReadDeps,
   params: { fiscalYear: number },
 ): Result<RentDetail[]> {
   const period = resolveYear(deps.masters, params.fiscalYear);
   if (!period.ok) return period;
   return ok(deps.closing.listRentDetails(params.fiscalYear));
 }
-
-const YEN_LIMIT = 1_000_000_000_000;
 
 function validateRentRow(row: RentDetailInput, rowIndex: number): Result<RentDetailInput> {
   const fail = (field: string, message: string) =>
@@ -382,6 +409,13 @@ export function saveRentDetails(
   deps: ClosingSettingsDeps,
   params: { fiscalYear: number; rows: readonly RentDetailInput[] },
 ): Result<RentDetail[]> {
+  return inClosingTx(deps, (tx) => saveRentDetailsIn(tx, params));
+}
+
+function saveRentDetailsIn(
+  deps: ClosingTxDeps,
+  params: { fiscalYear: number; rows: readonly RentDetailInput[] },
+): Result<RentDetail[]> {
   const period = resolveYear(deps.masters, params.fiscalYear);
   if (!period.ok) return period;
   const valid: RentDetailInput[] = [];
@@ -402,16 +436,15 @@ export function saveRentDetails(
   }));
   deps.closing.replaceRentDetails(params.fiscalYear, rows);
   if (before.length > 0 || rows.length > 0) {
-    deps.closing.appendClosingAudit({
-      id: deps.ids.next(),
-      occurredAt: deps.clock.now(),
-      targetType: "rent_detail",
-      targetId: String(params.fiscalYear),
-      action: before.length === 0 ? "create" : rows.length === 0 ? "delete" : "update",
-      reason: null,
-      beforeJson: before.length === 0 ? null : JSON.stringify(before),
-      afterJson: rows.length === 0 ? null : JSON.stringify(rows),
-    });
+    deps.closing.appendClosingAudit(
+      auditEntry(deps, {
+        targetType: "rent_detail",
+        targetId: String(params.fiscalYear),
+        action: before.length === 0 ? "create" : rows.length === 0 ? "delete" : "update",
+        before: before.length === 0 ? null : before,
+        after: rows.length === 0 ? null : rows,
+      }),
+    );
   }
   return ok(rows);
 }
@@ -426,7 +459,7 @@ export type FixedAssetWithDepreciation = FixedAsset & { depreciation: Depreciati
  * 並び順は ClosingStore の順。会計期間があるかどうかは問わない
  */
 export function listFixedAssets(
-  deps: Pick<ClosingSettingsDeps, "masters" | "closing">,
+  deps: ClosingReadDeps,
   params: { fiscalYear?: number },
 ): Result<FixedAssetWithDepreciation[]> {
   const individual = requireIndividual(deps.masters);
@@ -447,6 +480,13 @@ export function listFixedAssets(
  */
 export function saveFixedAsset(
   deps: ClosingSettingsDeps,
+  params: FixedAssetInput & { id?: string; reason?: string | null },
+): Result<FixedAsset> {
+  return inClosingTx(deps, (tx) => saveFixedAssetIn(tx, params));
+}
+
+function saveFixedAssetIn(
+  deps: ClosingTxDeps,
   params: FixedAssetInput & { id?: string; reason?: string | null },
 ): Result<FixedAsset> {
   const individual = requireIndividual(deps.masters);
@@ -485,16 +525,17 @@ export function saveFixedAsset(
     updatedAt: now,
   };
   deps.closing.upsertFixedAsset(saved);
-  deps.closing.appendClosingAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "fixed_asset",
-    targetId: saved.id,
-    action: before === undefined ? "create" : "update",
-    reason: params.reason?.trim() || null,
-    beforeJson: before === undefined ? null : JSON.stringify(before),
-    afterJson: JSON.stringify(saved),
-  });
+  deps.closing.appendClosingAudit(
+    auditEntry(deps, {
+      targetType: "fixed_asset",
+      targetId: saved.id,
+      action: before === undefined ? "create" : "update",
+      reason: params.reason?.trim() || null,
+      before,
+      after: saved,
+      at: now,
+    }),
+  );
   return ok(saved);
 }
 
@@ -504,6 +545,13 @@ export function saveFixedAsset(
  */
 export function disposeFixedAsset(
   deps: ClosingSettingsDeps,
+  params: { id: string; disposedOn: string; reason: string },
+): Result<FixedAsset> {
+  return inClosingTx(deps, (tx) => disposeFixedAssetIn(tx, params));
+}
+
+function disposeFixedAssetIn(
+  deps: ClosingTxDeps,
   params: { id: string; disposedOn: string; reason: string },
 ): Result<FixedAsset> {
   const individual = requireIndividual(deps.masters);
@@ -533,16 +581,17 @@ export function disposeFixedAsset(
   const now = deps.clock.now();
   const saved: FixedAsset = { ...before, disposedOn: params.disposedOn, updatedAt: now };
   deps.closing.upsertFixedAsset(saved);
-  deps.closing.appendClosingAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "fixed_asset",
-    targetId: saved.id,
-    action: "dispose",
-    reason: params.reason.trim() || null,
-    beforeJson: JSON.stringify(before),
-    afterJson: JSON.stringify(saved),
-  });
+  deps.closing.appendClosingAudit(
+    auditEntry(deps, {
+      targetType: "fixed_asset",
+      targetId: saved.id,
+      action: "dispose",
+      reason: params.reason.trim() || null,
+      before,
+      after: saved,
+      at: now,
+    }),
+  );
   return ok(saved);
 }
 
@@ -720,7 +769,7 @@ export function commitAdjustment(
   deps: CommitAdjustmentDeps,
   params: CommitAdjustmentParams,
 ): Result<CommittedAdjustment> {
-  return deps.uow.transaction((tx) => {
+  return deps.uow.run((tx) => {
     const period = resolveYear(tx.masters, params.fiscalYear);
     if (!period.ok) return period;
     if (period.value.status === "closed") {
@@ -762,7 +811,7 @@ export function commitAdjustment(
     }
 
     const created = createJournal(
-      { ledger: tx.journals, masters: tx.masters, ids: deps.ids, clock: deps.clock },
+      { ledger: tx.ledger, masters: tx.masters, ids: deps.ids, clock: deps.clock },
       proposal.journal,
     );
     if (!created.ok) return created;
@@ -787,11 +836,7 @@ export type TaxReturnRecordDeps = {
   ids: IdGenerator;
 };
 
-const MEMO_MAX = 1000;
-const LABEL_MAX = 200;
-
-const invalid = (field: string, message: string): Result<never> =>
-  err(domainError("VALIDATION", message, { field }));
+const invalid = (field: string, message: string): Result<never> => validation(message, { field });
 
 /** ファイルの場所（R13）。相対パスはサーバーの作業ディレクトリに依存するため拒否する。中身は読まない */
 function checkFilePath(value: string | null | undefined, required: boolean): Result<string | null> {
@@ -805,8 +850,8 @@ function checkFilePath(value: string | null | undefined, required: boolean): Res
 }
 
 const checkMemoText = (value: string | null | undefined): Result<string | null> =>
-  value != null && value.length > MEMO_MAX
-    ? invalid("memo", `メモは ${MEMO_MAX} 文字以内で入力してください`)
+  value != null && value.length > TAX_RETURN_MEMO_MAX
+    ? invalid("memo", `メモは ${TAX_RETURN_MEMO_MAX} 文字以内で入力してください`)
     : ok(value ?? null);
 
 /** 事業所得以外の控えの一覧（FR-033）。ファイルの有無はサーバーが付ける（R13） */
@@ -839,8 +884,8 @@ export function saveTaxReturnMemo(
   if (params.kind === "other" && label === null) {
     return invalid("label", "「その他」のときは項目名を入力してください");
   }
-  if (label !== null && label.length > LABEL_MAX) {
-    return invalid("label", `項目名は ${LABEL_MAX} 文字以内で入力してください`);
+  if (label !== null && label.length > TAX_RETURN_LABEL_MAX) {
+    return invalid("label", `項目名は ${TAX_RETURN_LABEL_MAX} 文字以内で入力してください`);
   }
   const amount = params.amount ?? null;
   if (amount !== null && (!Number.isInteger(amount) || amount < 0)) {

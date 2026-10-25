@@ -1,0 +1,182 @@
+import type { ClosingStore } from "../../src/ports.ts";
+import type {
+  AdjustmentRef,
+  ClosingAuditEntry,
+  ClosingNote,
+  DeductionAnswers,
+  FiledDocument,
+  FixedAsset,
+  HomeUseAllocation,
+  RentDetail,
+  TaxParameter,
+  TaxReturnMemo,
+} from "../../src/types.ts";
+import { InMemoryLedgerRepository } from "./ledger.ts";
+import { InMemoryMasterRepository } from "./master.ts";
+import { fakeUnitOfWork } from "./unit-of-work.ts";
+
+type ClosingState = {
+  taxParameters: TaxParameter[];
+  homeUseAllocations: HomeUseAllocation[];
+  rentDetails: RentDetail[];
+  fixedAssets: FixedAsset[];
+  adjustmentRefs: AdjustmentRef[];
+  deductionAnswers: DeductionAnswers[];
+  closingNotes: ClosingNote[];
+  taxReturnMemos: TaxReturnMemo[];
+  filedDocuments: FiledDocument[];
+  audits: ClosingAuditEntry[];
+};
+
+const emptyClosingState = (): ClosingState => ({
+  taxParameters: [],
+  homeUseAllocations: [],
+  rentDetails: [],
+  fixedAssets: [],
+  adjustmentRefs: [],
+  deductionAnswers: [],
+  closingNotes: [],
+  taxReturnMemos: [],
+  filedDocuments: [],
+  audits: [],
+});
+
+/** id で置き換える（なければ追加する） */
+function upsertById<T extends { id: string }>(rows: T[], row: T): T[] {
+  return [...rows.filter((r) => r.id !== row.id), structuredClone(row)];
+}
+
+/**
+ * ClosingStore のフェイク。仕訳は InMemoryLedgerRepository から読む。
+ * DB の制約（参照先の仕訳の存在、参照の仕訳 ID の一意、按分の登録の一意）も確かめる
+ */
+export class InMemoryClosingStore implements ClosingStore {
+  state: ClosingState = emptyClosingState();
+  private readonly ledger: InMemoryLedgerRepository;
+
+  constructor(ledger: InMemoryLedgerRepository) {
+    this.ledger = ledger;
+  }
+
+  get audits(): ClosingAuditEntry[] {
+    return this.state.audits;
+  }
+  /** テストが税制の値を差し込む */
+  set taxParameters(rows: TaxParameter[]) {
+    this.state.taxParameters = structuredClone(rows);
+  }
+
+  listTaxParameters(): TaxParameter[] {
+    return structuredClone(this.state.taxParameters);
+  }
+
+  listHomeUseAllocations(fiscalYear: number): HomeUseAllocation[] {
+    return structuredClone(
+      this.state.homeUseAllocations.filter((a) => a.fiscalYear === fiscalYear),
+    );
+  }
+  upsertHomeUseAllocation(row: HomeUseAllocation): void {
+    const clash = this.state.homeUseAllocations.some(
+      (a) =>
+        a.id !== row.id &&
+        a.fiscalYear === row.fiscalYear &&
+        a.accountId === row.accountId &&
+        a.subAccountId === row.subAccountId,
+    );
+    if (clash) throw new Error("UNIQUE constraint failed: home_use_allocations");
+    this.state.homeUseAllocations = upsertById(this.state.homeUseAllocations, row);
+  }
+
+  listRentDetails(fiscalYear: number): RentDetail[] {
+    return structuredClone(
+      this.state.rentDetails
+        .filter((r) => r.fiscalYear === fiscalYear)
+        .sort((a, b) => a.sortOrder - b.sortOrder),
+    );
+  }
+  replaceRentDetails(fiscalYear: number, rows: RentDetail[]): void {
+    this.state.rentDetails = [
+      ...this.state.rentDetails.filter((r) => r.fiscalYear !== fiscalYear),
+      ...structuredClone(rows),
+    ];
+  }
+
+  listFixedAssets(): FixedAsset[] {
+    return structuredClone(
+      [...this.state.fixedAssets].sort(
+        (a, b) => a.acquiredOn.localeCompare(b.acquiredOn) || a.id.localeCompare(b.id),
+      ),
+    );
+  }
+  upsertFixedAsset(row: FixedAsset): void {
+    this.state.fixedAssets = upsertById(this.state.fixedAssets, row);
+  }
+
+  listAdjustmentRefs(fiscalYear: number): AdjustmentRef[] {
+    return structuredClone(this.state.adjustmentRefs.filter((r) => r.fiscalYear === fiscalYear));
+  }
+  insertAdjustmentRef(ref: AdjustmentRef): void {
+    if (!this.ledger.journals.some((j) => j.id === ref.journalId)) {
+      throw new Error("FOREIGN KEY constraint failed: adjustment_journal_refs.journal_id");
+    }
+    if (this.state.adjustmentRefs.some((r) => r.journalId === ref.journalId)) {
+      throw new Error("UNIQUE constraint failed: adjustment_journal_refs.journal_id");
+    }
+    this.state.adjustmentRefs.push({ ...ref });
+  }
+
+  getDeductionAnswers(fiscalYear: number): DeductionAnswers | undefined {
+    const found = this.state.deductionAnswers.find((a) => a.fiscalYear === fiscalYear);
+    return found === undefined ? undefined : { ...found };
+  }
+  upsertDeductionAnswers(row: DeductionAnswers): void {
+    this.state.deductionAnswers = [
+      ...this.state.deductionAnswers.filter((a) => a.fiscalYear !== row.fiscalYear),
+      { ...row },
+    ];
+  }
+
+  listClosingNotes(fiscalYear: number): ClosingNote[] {
+    return structuredClone(this.state.closingNotes.filter((n) => n.fiscalYear === fiscalYear));
+  }
+  upsertClosingNote(row: ClosingNote): void {
+    this.state.closingNotes = [
+      ...this.state.closingNotes.filter(
+        (n) => !(n.fiscalYear === row.fiscalYear && n.kind === row.kind),
+      ),
+      { ...row },
+    ];
+  }
+
+  listTaxReturnMemos(fiscalYear: number): TaxReturnMemo[] {
+    return structuredClone(this.state.taxReturnMemos.filter((m) => m.fiscalYear === fiscalYear));
+  }
+  upsertTaxReturnMemo(row: TaxReturnMemo): void {
+    this.state.taxReturnMemos = upsertById(this.state.taxReturnMemos, row);
+  }
+  deleteTaxReturnMemo(id: string): void {
+    this.state.taxReturnMemos = this.state.taxReturnMemos.filter((m) => m.id !== id);
+  }
+
+  listFiledDocuments(fiscalYear: number): FiledDocument[] {
+    return structuredClone(this.state.filedDocuments.filter((d) => d.fiscalYear === fiscalYear));
+  }
+  upsertFiledDocument(row: FiledDocument): void {
+    this.state.filedDocuments = upsertById(this.state.filedDocuments, row);
+  }
+  deleteFiledDocument(id: string): void {
+    this.state.filedDocuments = this.state.filedDocuments.filter((d) => d.id !== id);
+  }
+
+  appendClosingAudit(entry: ClosingAuditEntry): void {
+    this.state.audits.push({ ...entry });
+  }
+}
+
+/** ClosingUnitOfWork のフェイク（research R4） */
+export const fakeClosingUnitOfWork = (
+  ledger = new InMemoryLedgerRepository(),
+  masters = new InMemoryMasterRepository(),
+  closing = new InMemoryClosingStore(ledger),
+) => fakeUnitOfWork(ledger, masters, { closing });
+export type FakeClosingUnitOfWork = ReturnType<typeof fakeClosingUnitOfWork>;

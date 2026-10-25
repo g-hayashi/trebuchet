@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatYen, parseYenInput } from "@/lib/format";
+import { formatYen, parseWholeYen } from "@/lib/format";
 import { deleteMemo, type MemoRow, memosQuery, postMemo, putMemo, taxReturnKeys } from "./api";
 import { FILE_PATH_ERROR, MEMO_KIND_LABELS, MEMO_KINDS, memoKindText } from "./labels";
 
@@ -85,20 +85,16 @@ function MemoForm({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const amountText = values.amount.trim();
-    const amount = amountText === "" ? null : parseYenInput(amountText);
+    // 空欄は金額なし（undefined）。入力があって 0 以上の整数でなければ null（エラー）
+    const amount = amountText === "" ? undefined : parseWholeYen(amountText, { min: 0 });
     const next: Errors = {};
-    if (
-      amount === undefined ||
-      (amount !== null && (!Number.isSafeInteger(amount) || amount < 0))
-    ) {
-      next.amount = AMOUNT_ERROR;
-    }
+    if (amount === null) next.amount = AMOUNT_ERROR;
     const path = values.filePath.trim();
     if (path !== "" && !path.startsWith("/")) next.filePath = FILE_PATH_ERROR;
     if (values.kind === "other" && values.label.trim() === "") next.label = LABEL_ERROR;
     setErrors(next);
-    if (next.amount || next.filePath || next.label || amount === undefined) return;
-    save.mutate(amount);
+    if (next.amount || next.filePath || next.label || amount === null) return;
+    save.mutate(amount ?? null);
   };
 
   return (

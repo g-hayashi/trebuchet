@@ -1,7 +1,8 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Account, FiscalPeriod, OpeningBalancesData } from "@/lib/queries";
+import type { Account } from "@/features/accounts/api";
+import type { FiscalPeriod, OpeningBalancesData } from "@/features/periods/api";
 import { Route } from "@/routes/e/$entityId/periods/$year/opening-balances";
 import { apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";

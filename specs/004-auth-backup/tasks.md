@@ -21,19 +21,16 @@ description: "Task list for 004-auth-backup"
 
 ## 全タスク共通のルール
 
-- 003 の tasks.md の「全タスク共通のルール」をすべて引き継ぐ（依存の向き、整数の金額、`IdGenerator`・`Clock`、テストの一時ファイルは `.tmp/` と `useTempDataDir`、相対 import に `.ts`、enum・parameter properties・namespace を使わない、型だけの import は `import type`、実データ `work/`・`data/` を読まない・書かない、部下は担当のプロジェクトのテストだけを実行し整形は触ったファイルだけ、Conventional Commits）
-- 開発中は利用者がいないため、既存データの移行・旧版との互換は考慮しない（利用者の指示 2026-10-20）。帳簿の不変条件（Constitution I）は守る
+- **[AGENTS.md](../../AGENTS.md) の「開発の進め方」「認証とバックアップ（004）」「データと一時ファイル」に従う**（共通の規約、実データを扱わない規則、web・server のテスト、エラーコードを変えるときの grep、開発中は旧版との互換を考えない）。以下はこの機能に固有の規則（AGENTS.md の 004 の節と重なるものは、タスクの参照のために残す）
 - **認証を無効にする設定・環境変数を作らない**（R15）。テストは、セッションを直接作って cookie を付けるヘルパー（T007）で通す。本番のコードに「認証を飛ばす」分岐を置かない
 - **パスフレーズ・回復コード・セッションのトークン・ペアリングのトークンを、平文でログ・データ場所・リポジトリに置かない**。DB に置くのは、トークンと回復コードの SHA-256 だけ。パスフレーズはキーチェーンだけ（キーチェーンが使えない環境ではメモリだけ。R12）。エラーメッセージ・`auth_events.detail`・`backup_runs` にも入れない
 - **SHA-256 のハッシュは db の `hashToken`（`packages/db/src/auth-hash.ts`、T006）に一本化する**。セッション・回復コード・ペアリングのトークンのハッシュは、server もこれを使う（server に別の SHA-256 を書かない）
 - **許す Host・オリジン・RP ID の決定は `apps/server/src/lib/origin.ts`（T007）の1か所にまとめる**。host・csrf・WebAuthn の検証（T008・T017）はすべてこれを使い、別の場所で名前や origin を組み立てない
 - **`packages/domain` は `node:crypto` を import しない**（plan の Structure Decision）。`biome.json` の `noRestrictedImports`（`packages/domain/**`）が機械的に止める。乱数は `apps/server`、ハッシュ・暗号は `packages/db` が行い、domain は純関数だけ
 - **平文の DB の写し（スナップショット、復元の展開先）は `.tmp/` の下に作り、`finally` で必ず消す**（R9・R13）。バックアップのファイル・復元の作業用のフォルダは `.gitignore` で除外済み（`*.tbk`、`data.before-restore-*/`、`data.restore-*/`）
-- **サンドボックスではローカルのポートを開けない**ため、dev サーバー・E2E・Tailscale の確認は利用者の端末で行う。部下は `app.request()` とメモリ上のテストだけで確かめ、server を起動する手順を試さない
-- **エラーコードを足す・変える・なくすタスクでは、同じ値を参照するテストと実装を `grep -rn <値> packages apps scripts` で探し、担当外のプロジェクトも含めて直す**
+- Tailscale の確認も利用者の端末で行う（サンドボックスではポートを開けない）
 - 依存（npm パッケージ）は T002 の2つ（`@simplewebauthn/server`、`@simplewebauthn/browser`）だけ。ほかは足さない（暗号・アーカイブ・キーチェーンは標準機能。plan の Complexity Tracking）。CSRF は `hono/csrf` を使わず、自前のミドルウェア（T007）
 - マイグレーションは `drizzle-kit generate` の後に `0001_*.sql` の `);` を `) STRICT;` に置き換え、トリガーと部分 UNIQUE は `--custom` の SQL で足す（AGENTS.md。registry は `drizzle.registry.config.ts` など既存の設定を確認する）
-- web のテストは Testing Library ＋ jsdom（`apps/web/test/render-route.tsx`、`apps/web/test/mock-api.ts`、置き場所は `apps/web/test/routes/`）。ルートを足したら `pnpm --filter @trebuchet/web build` で `routeTree.gen.ts` を再生成してから typecheck する
 - 日時は ISO 8601（UTC）。`Clock` を経由する（`Date.now()` を直接呼ばない）
 
 ---

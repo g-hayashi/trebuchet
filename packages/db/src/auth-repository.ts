@@ -12,6 +12,7 @@ import {
   type Session,
 } from "@trebuchet/domain";
 import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { rowidOf } from "./internal.ts";
 import {
   appSettings,
   authEvents,
@@ -67,7 +68,7 @@ function toEvent(r: EventRow): AuthEvent {
 }
 
 /** 新しい順（同じ時刻は後から追記した方が先）。auth_events は追記のみなので rowid が追記の順 */
-const newestFirst = [desc(authEvents.occurredAt), sql`${authEvents}.rowid DESC`] as const;
+const newestFirst = [desc(authEvents.occurredAt), desc(rowidOf(authEvents))] as const;
 
 /**
  * AuthStore の Drizzle（better-sqlite3）による実装。registry の DB を使う。
@@ -86,7 +87,7 @@ export class DrizzleAuthStore implements AuthStore {
     return this.db
       .select()
       .from(passkeys)
-      .orderBy(passkeys.createdAt, sql`${passkeys}.rowid`)
+      .orderBy(passkeys.createdAt, rowidOf(passkeys))
       .all()
       .map(toPasskey);
   }
@@ -204,7 +205,7 @@ export class DrizzleAuthStore implements AuthStore {
       .select()
       .from(sessions)
       .where(isNull(sessions.revokedAt))
-      .orderBy(sessions.createdAt, sql`${sessions}.rowid`)
+      .orderBy(sessions.createdAt, rowidOf(sessions))
       .all()
       .map(toSession)
       .filter((s) => isSessionActive(s, now));

@@ -16,8 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
-import { queryKeys } from "@/lib/queries";
 import {
+  backupKeys,
   backupRunsQuery,
   backupStatusQuery,
   changeBackupPassphrase,
@@ -30,8 +30,8 @@ import { describeFailure, formatBytes, STATUS_LABELS, TRIGGER_LABELS } from "./l
 function useRefreshBackup() {
   const queryClient = useQueryClient();
   return async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.backupStatus });
-    await queryClient.invalidateQueries({ queryKey: queryKeys.backupRuns });
+    await queryClient.invalidateQueries({ queryKey: backupKeys.status });
+    await queryClient.invalidateQueries({ queryKey: backupKeys.runs });
   };
 }
 

@@ -1,23 +1,17 @@
 import { createHash, randomUUIDv7 } from "node:crypto";
 import { readFileSync } from "node:fs";
-import {
-  commitFreeeImport,
-  createEntity,
-  type FreeeCommitInput,
-  previewFreeeImport,
-} from "@trebuchet/domain";
+import { commitFreeeImport, type FreeeCommitInput, previewFreeeImport } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   EXPECTED_JOURNAL,
   EXPECTED_JOURNAL_V2,
   FIXTURE_FILES,
 } from "../../domain/test/fixtures/freee/expected.ts";
-import { DrizzleImportStore, DrizzleImportUnitOfWork } from "../src/import-repository.ts";
+import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { openTenant, type TenantDb } from "../src/tenant-store.ts";
+import { createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 // T063: 差分の取込の統合テスト（v1 → v2。FR-028〜030、research R9）
 
@@ -37,21 +31,11 @@ function inputOf(fileName: string, countNew: number): FreeeCommitInput {
   return { bytes, fileName, sha256, options: {}, expected: { fileSha256: sha256, countNew } };
 }
 
-const deps = () => ({ uow: new DrizzleImportUnitOfWork(db), ids, clock });
+const deps = () => ({ uow: createImportUnitOfWork(db), ids, clock });
 
 beforeEach(() => {
   tmp = useTempDataDir("import-incremental");
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2025 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  db = openTenant(created.value.id);
+  db = openTenant(createTestEntity({ firstFiscalYear: 2025 }).id);
   ledger = new DrizzleLedgerRepository(db);
   imports = new DrizzleImportStore(db);
   new DrizzleMasterRepository(db).replaceTaxSettings([
@@ -73,7 +57,7 @@ function refOf(freeeJournalId: string) {
   return found;
 }
 
-describe("差分の取込（v1 → v2。DrizzleImportUnitOfWork）", () => {
+describe("差分の取込（v1 → v2。createImportUnitOfWork）", () => {
   it("2回目は追加分だけを登録し、変更・削除された仕訳の帳簿は変わらない。警告の数を取込の回に残す", () => {
     const v1Count = EXPECTED_JOURNAL.journalCount - EXPECTED_JOURNAL.priorYearClosingIds.length;
     const first = commitFreeeImport(deps(), inputOf(FIXTURE_FILES.journal, v1Count));

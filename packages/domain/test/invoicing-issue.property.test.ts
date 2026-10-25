@@ -18,10 +18,9 @@ import {
   toInvoiceInput,
 } from "./invoicing-arbitraries.ts";
 import { setupScenario } from "./invoicing-setup.ts";
+import { TODAY } from "./test-dates.ts";
 
 // 005 US1: 発行の不変条件（data-model §4 の INV-30・31・32・38）
-
-const TODAY = "2026-10-31";
 
 type Scenario = ReturnType<typeof setupScenario>;
 

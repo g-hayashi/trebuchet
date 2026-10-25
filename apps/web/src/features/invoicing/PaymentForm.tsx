@@ -6,16 +6,11 @@ import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SaveNotice } from "@/components/ui/save-notice";
-import { formatYen, parseYenInput } from "@/lib/format";
-import { accountsQuery, queryKeys, subAccountsQuery } from "@/lib/queries";
-import { invoiceKeys, postPayment } from "./api";
-
-/** 画面の端末の今日（`YYYY-MM-DD`）。入金日の初期値だけに使う */
-const localToday = () => {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
+import { accountsQuery, subAccountsQuery } from "@/features/accounts/api";
+import { today } from "@/lib/dates";
+import { formatYen, parseWholeYen } from "@/lib/format";
+import { invalidateLedger } from "@/lib/queries";
+import { postPayment } from "./api";
 
 /**
  * 入金の消し込み（FR-017〜019）。入金日、入金額、入金先の科目・補助科目。入金額が残額より少ないとき、
@@ -30,7 +25,7 @@ export function PaymentForm({
 }) {
   const id = useId();
   const queryClient = useQueryClient();
-  const [receivedOn, setReceivedOn] = useState(localToday);
+  const [receivedOn, setReceivedOn] = useState(today);
   const [amount, setAmount] = useState(String(invoice.remaining));
   const [accountId, setAccountId] = useState("");
   const [subAccountId, setSubAccountId] = useState("");
@@ -52,11 +47,10 @@ export function PaymentForm({
     [accounts.data],
   );
 
-  const amountValue = parseYenInput(amount);
-  const amountValid =
-    amountValue !== undefined && Number.isInteger(amountValue) && amountValue >= 1;
+  const amountValue = parseWholeYen(amount, { min: 1 });
+  const amountValid = amountValue !== null;
   const fee =
-    treatAsFee && amountValid && amountValue < invoice.remaining
+    treatAsFee && amountValue !== null && amountValue < invoice.remaining
       ? invoice.remaining - amountValue
       : undefined;
 
@@ -73,11 +67,7 @@ export function PaymentForm({
       setNotice("消し込みました。");
       setAmount(String(result.invoice.remaining));
       setTreatAsFee(false);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: invoiceKeys.invoices(entityId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.journals(entityId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.reports(entityId) }),
-      ]);
+      await invalidateLedger(queryClient, entityId);
     },
   });
 

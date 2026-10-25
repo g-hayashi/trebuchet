@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ImportPreview } from "@trebuchet/schema";
 import { useId } from "react";
-import { fiscalPeriodsQuery } from "@/lib/queries";
+import { fiscalPeriodsQuery } from "@/features/periods/api";
 import { DECISION_LABELS } from "./labels";
 
 type Year = ImportPreview["years"][number];

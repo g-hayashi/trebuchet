@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import type { ReconciliationResult } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { app, type ErrorBody } from "./helpers.ts";
+import { app, errorOf, json } from "./helpers.ts";
 
 // T048: 元帳との照合の API（contracts/http-api.md の「照合」）
 
@@ -53,14 +53,6 @@ const reconcile = (
 };
 
 const get = (path: string) => app.request(url(path));
-const errorOf = async (res: Response) => ((await res.json()) as ErrorBody).error;
-
-async function json<T>(res: Response, status: number): Promise<T> {
-  if (res.status !== status) {
-    throw new Error(`expected ${status} but got ${res.status}: ${await res.text()}`);
-  }
-  return (await res.json()) as T;
-}
 
 /** 帳簿の状態（仕訳・期首残高・補助科目・対応表・取込の回） */
 async function books() {

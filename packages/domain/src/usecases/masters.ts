@@ -1,6 +1,14 @@
+import { MASTER_NAME_MAX, TAG_NAME_MAX } from "@trebuchet/schema";
+import { type AuditInput, auditEntry } from "../audit.ts";
 import { addDays, oneYearEnd } from "../dates.ts";
 import { type OpeningBalanceDraft, validateOpeningBalances } from "../opening.ts";
-import type { Clock, ClosingStore, IdGenerator, MasterRepository } from "../ports.ts";
+import type {
+  Clock,
+  ClosingStore,
+  ClosingUnitOfWork,
+  IdGenerator,
+  MasterRepository,
+} from "../ports.ts";
 import { NORMAL_SIDE, SECTION_SORT_BASE } from "../seed/accounts.individual.ts";
 import { type TaxSettingDraft, validateTaxSettings } from "../tax-settings.ts";
 import {
@@ -16,6 +24,7 @@ import {
   type OpeningBalance,
   ok,
   type Partner,
+  periodNotFound,
   type ReportSection,
   type Result,
   type SubAccount,
@@ -30,13 +39,10 @@ export type MasterDeps = {
   clock: Clock;
 };
 
-const NAME_MAX = 100;
-const TAG_NAME_MAX = 50;
-
 function validName(
   raw: string,
   field: string,
-  max = NAME_MAX,
+  max = MASTER_NAME_MAX,
 ): { ok: true; value: string } | { ok: false; error: DomainError } {
   const name = raw.trim();
   if (name.length === 0 || name.length > max) {
@@ -48,27 +54,13 @@ function validName(
 const accountNotFound = (accountId: string) =>
   err(domainError("ACCOUNT_NOT_FOUND", "勘定科目が見つかりません", { accountId }));
 
+/** マスタの変更を audit_log に残す（理由なし、日時は今） */
 function appendAudit(
   deps: MasterDeps,
   tx: MasterRepository,
-  entry: {
-    targetType: AuditTargetType;
-    targetId: string;
-    action: AuditAction;
-    before: unknown;
-    after: unknown;
-  },
+  entry: AuditInput<AuditTargetType, AuditAction>,
 ): void {
-  tx.appendAudit({
-    id: deps.ids.next(),
-    occurredAt: deps.clock.now(),
-    targetType: entry.targetType,
-    targetId: entry.targetId,
-    action: entry.action,
-    reason: null,
-    beforeJson: JSON.stringify(entry.before),
-    afterJson: JSON.stringify(entry.after),
-  });
+  tx.appendAudit(auditEntry(deps, entry));
 }
 
 // ---- 勘定科目（FR-004, FR-005） ----
@@ -282,17 +274,49 @@ export function setAccountReportLine(
     if (account.reportLine === reportLine) return ok(account);
     const updated = { ...account, reportLine };
     tx.updateAccount(updated);
-    deps.closing.appendClosingAudit({
-      id: deps.ids.next(),
-      occurredAt: deps.clock.now(),
-      targetType: "account_report_line",
-      targetId: accountId,
-      action: "update",
-      reason: null,
-      beforeJson: JSON.stringify({ reportLine: account.reportLine }),
-      afterJson: JSON.stringify({ reportLine }),
-    });
+    deps.closing.appendClosingAudit(
+      auditEntry(deps, {
+        targetType: "account_report_line",
+        targetId: accountId,
+        action: "update",
+        before: { reportLine: account.reportLine },
+        after: { reportLine },
+      }),
+    );
     return ok(updated);
+  });
+}
+
+/** 科目の変更（PATCH /accounts/:accountId）。指定した項目だけを変える */
+export type AccountUpdate = {
+  name?: string | undefined;
+  isActive?: boolean | undefined;
+  reportLine?: number | null | undefined;
+};
+
+/**
+ * 科目の名称・使用停止・決算書の欄を、指定された順（名称 → 使用停止 → 欄）に変える。
+ * どれかが失敗すれば、全部を取り消してその err を返す。欄の変更の履歴は ClosingStore に残すので、
+ * マスタと決算の記録を同じトランザクションで扱う決算の UnitOfWork を使う
+ */
+export function updateAccount(
+  deps: { uow: ClosingUnitOfWork; ids: IdGenerator; clock: Clock },
+  accountId: string,
+  patch: AccountUpdate,
+): Result<Account> {
+  return deps.uow.run(({ masters, closing }) => {
+    const txDeps = { repo: masters, closing, ids: deps.ids, clock: deps.clock };
+    const account = masters.getAccount(accountId);
+    if (account === undefined) return accountNotFound(accountId);
+    let current: Result<Account> = ok(account);
+    if (patch.name !== undefined) current = renameAccount(txDeps, accountId, patch.name);
+    if (current.ok && patch.isActive !== undefined) {
+      current = setAccountActive(txDeps, accountId, patch.isActive);
+    }
+    if (current.ok && patch.reportLine !== undefined) {
+      current = setAccountReportLine(txDeps, accountId, patch.reportLine);
+    }
+    return current;
   });
 }
 
@@ -470,7 +494,7 @@ export function replaceOpeningBalances(
   return deps.repo.transaction((tx) => {
     const period = tx.getFiscalPeriodByYear(fiscalYear);
     if (period === undefined) {
-      return err(domainError("VALIDATION", "会計期間が見つかりません", { fiscalYear }));
+      return err(periodNotFound(fiscalYear));
     }
     if (period.status === "closed") {
       return err(

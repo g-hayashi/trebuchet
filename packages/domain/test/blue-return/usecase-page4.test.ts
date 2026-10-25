@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import { getBlueReturn, saveClosingNote } from "../../src/usecases/blue-return.ts";
 import { replaceOpeningBalances } from "../../src/usecases/masters.ts";
-import { InMemoryClosingStore } from "../fakes.ts";
+import { fakeClosingUnitOfWork, InMemoryClosingStore } from "../fakes.ts";
 import { setupLedger } from "../ledger-fixture.ts";
 import { InMemoryReportRepository } from "../reports/fake-report-repository.ts";
 
@@ -10,6 +10,7 @@ let fx: ReturnType<typeof setupLedger>;
 let closing: InMemoryClosingStore;
 
 const deps = () => ({
+  uow: fakeClosingUnitOfWork(fx.ledger, fx.masters, closing),
   masters: fx.masters,
   reports: new InMemoryReportRepository(fx.ledger, fx.masters),
   closing,

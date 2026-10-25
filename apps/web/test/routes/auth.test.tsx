@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import type { AuthStatus } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthGate } from "@/features/auth/AuthGate";
-import { entitiesQuery } from "@/lib/queries";
+import { entitiesQuery } from "@/features/entities/api";
 import { Route } from "@/routes/settings/security";
 import { type ApiCall, apiError, DEFAULT_AUTH_STATUS, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";

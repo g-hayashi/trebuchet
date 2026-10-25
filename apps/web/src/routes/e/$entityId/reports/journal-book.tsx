@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { type JournalBook, journalBookQuery } from "@/features/reports/api";
 import { CsvLink, PeriodPicker } from "@/features/reports/controls";
 import { JournalLink } from "@/features/reports/JournalLink";
 import { useReportRange } from "@/features/reports/periods";
@@ -14,7 +15,6 @@ import {
   ReportTable,
 } from "@/features/reports/ReportTable";
 import { RangeSearch } from "@/features/reports/search";
-import { type JournalBook, journalBookQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/reports/journal-book")({
   validateSearch: RangeSearch,

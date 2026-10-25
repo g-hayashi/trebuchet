@@ -9,37 +9,34 @@
  *
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む
  */
-import { createHash, randomUUIDv7 } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
+  createImportUnitOfWork,
   DrizzleImportStore,
-  DrizzleImportUnitOfWork,
 } from "../packages/db/src/import-repository.ts";
 import { DrizzleMasterRepository } from "../packages/db/src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../packages/db/src/registry-repository.ts";
-import { openRegistry, openTenant } from "../packages/db/src/tenant-store.ts";
+import { openTenant } from "../packages/db/src/tenant-store.ts";
 import { useTempDataDir } from "../packages/db/src/testing.ts";
 import {
   JOURNAL_COLUMN_NAMES,
   JOURNAL_COLUMNS,
 } from "../packages/domain/src/import/freee/columns.ts";
-import { createEntity } from "../packages/domain/src/usecases/create-entity.ts";
 import {
   commitFreeeImport,
   previewFreeeImport,
 } from "../packages/domain/src/usecases/import-freee.ts";
+import {
+  benchClock as clock,
+  createBenchEntity,
+  benchIds as ids,
+  positiveNumber,
+  runBench,
+} from "./lib/bench-common.ts";
 
 const JOURNALS = 500;
 const FISCAL_YEAR = 2026;
 const PREVIEW_LIMIT_MS = positiveNumber("BENCH_PREVIEW_LIMIT_MS", 5_000);
 const COMMIT_LIMIT_MS = positiveNumber("BENCH_COMMIT_LIMIT_MS", 10_000);
-
-function positiveNumber(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw === undefined || raw === "") return fallback;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} は正の数: ${raw}`);
-  return value;
-}
 
 type Leg = { account: string; amount: number; partner: string };
 type FreeeJournal = { id: string; no: string; date: string; debits: Leg[]; credits: Leg[] };
@@ -125,104 +122,87 @@ function timed<T>(fn: () => T): { value: T; ms: number } {
 }
 
 const tmp = useTempDataDir("bench-import");
-let exitCode = 1;
-try {
-  const ids = { next: () => randomUUIDv7() };
-  const clock = { now: () => new Date().toISOString() };
+await runBench(
+  () => {
+    const entity = createBenchEntity({ name: "ベンチマーク", firstFiscalYear: FISCAL_YEAR });
+    const db = openTenant(entity.id);
+    new DrizzleMasterRepository(db).replaceTaxSettings([
+      {
+        id: ids.next(),
+        effectiveFrom: `${FISCAL_YEAR}-01-01`,
+        taxpayerStatus: "general",
+        accountingMethod: "tax_included",
+      },
+    ]);
 
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    {
-      name: "ベンチマーク",
-      kind: "individual",
-      fiscalStartMonth: 1,
-      firstFiscalYear: FISCAL_YEAR,
-    },
-  );
-  if (!created.ok) throw new Error(`事業体の作成に失敗しました: ${created.error.message}`);
-  const db = openTenant(created.value.id);
-  new DrizzleMasterRepository(db).replaceTaxSettings([
-    {
-      id: ids.next(),
-      effectiveFrom: `${FISCAL_YEAR}-01-01`,
-      taxpayerStatus: "general",
-      accountingMethod: "tax_included",
-    },
-  ]);
-
-  const journals = Array.from({ length: JOURNALS }, (_, i) => journalOf(i));
-  const rowCount = journals.reduce((n, j) => n + Math.max(j.debits.length, j.credits.length), 0);
-  const legCount = journals.reduce((n, j) => n + j.debits.length + j.credits.length, 0);
-  const bytes = toFreeeJournalCsv(journals);
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
-  console.log(
-    `仕訳帳 ${JOURNALS} 仕訳（CSV ${rowCount} 行, 仕訳の行 平均 ${(legCount / JOURNALS).toFixed(1)}, ${bytes.length} バイト）を生成`,
-  );
-
-  const uow = new DrizzleImportUnitOfWork(db);
-  const input = { bytes, fileName: "bench-journal.csv", sha256, options: {} };
-
-  const preview = timed(() => previewFreeeImport({ uow }, input));
-  if (!preview.value.ok)
-    throw new Error(`プレビューに失敗しました: ${preview.value.error.message}`);
-  const { counts, ready } = preview.value.value;
-  if (!ready || counts.new !== JOURNALS) {
-    throw new Error(`プレビューが想定と違います: ready=${ready} counts=${JSON.stringify(counts)}`);
-  }
-
-  const commit = timed(() =>
-    commitFreeeImport(
-      { uow, ids, clock },
-      { ...input, expected: { fileSha256: sha256, countNew: JOURNALS } },
-    ),
-  );
-  if (!commit.value.ok) throw new Error(`確定に失敗しました: ${commit.value.error.message}`);
-  if (commit.value.value.batch.countNew !== JOURNALS) {
-    throw new Error(
-      `取り込んだ仕訳が ${JOURNALS} 件ではありません: ${commit.value.value.batch.countNew}`,
+    const journals = Array.from({ length: JOURNALS }, (_, i) => journalOf(i));
+    const rowCount = journals.reduce((n, j) => n + Math.max(j.debits.length, j.credits.length), 0);
+    const legCount = journals.reduce((n, j) => n + j.debits.length + j.credits.length, 0);
+    const bytes = toFreeeJournalCsv(journals);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    console.log(
+      `仕訳帳 ${JOURNALS} 仕訳（CSV ${rowCount} 行, 仕訳の行 平均 ${(legCount / JOURNALS).toFixed(1)}, ${bytes.length} バイト）を生成`,
     );
-  }
-  const stored = new DrizzleImportStore(db).listBatches();
-  if (stored.length !== 1) throw new Error(`取込の回が 1 件ではありません: ${stored.length}`);
 
-  const again = timed(() => previewFreeeImport({ uow }, input));
-  if (!again.value.ok) throw new Error(`再プレビューに失敗しました: ${again.value.error.message}`);
-  if (again.value.value.counts.already !== JOURNALS) {
-    throw new Error(
-      `再プレビューの「取込済み」が ${JOURNALS} 件ではありません: ${JSON.stringify(again.value.value.counts)}`,
+    const uow = createImportUnitOfWork(db);
+    const input = { bytes, fileName: "bench-journal.csv", sha256, options: {} };
+
+    const preview = timed(() => previewFreeeImport({ uow }, input));
+    if (!preview.value.ok)
+      throw new Error(`プレビューに失敗しました: ${preview.value.error.message}`);
+    const { counts, ready } = preview.value.value;
+    if (!ready || counts.new !== JOURNALS) {
+      throw new Error(
+        `プレビューが想定と違います: ready=${ready} counts=${JSON.stringify(counts)}`,
+      );
+    }
+
+    const commit = timed(() =>
+      commitFreeeImport(
+        { uow, ids, clock },
+        { ...input, expected: { fileSha256: sha256, countNew: JOURNALS } },
+      ),
     );
-  }
+    if (!commit.value.ok) throw new Error(`確定に失敗しました: ${commit.value.error.message}`);
+    if (commit.value.value.batch.countNew !== JOURNALS) {
+      throw new Error(
+        `取り込んだ仕訳が ${JOURNALS} 件ではありません: ${commit.value.value.batch.countNew}`,
+      );
+    }
+    const stored = new DrizzleImportStore(db).listBatches();
+    if (stored.length !== 1) throw new Error(`取込の回が 1 件ではありません: ${stored.length}`);
 
-  const rows = [
-    { step: "preview", "time (ms)": Number(preview.ms.toFixed(1)), limit: PREVIEW_LIMIT_MS },
-    { step: "commit", "time (ms)": Number(commit.ms.toFixed(1)), limit: COMMIT_LIMIT_MS },
-    {
-      step: "preview (after commit, all already)",
-      "time (ms)": Number(again.ms.toFixed(1)),
-      limit: PREVIEW_LIMIT_MS,
-    },
-  ].map((r) => ({ ...r, result: r["time (ms)"] <= r.limit ? "OK" : "NG" }));
-  console.table(rows);
+    const again = timed(() => previewFreeeImport({ uow }, input));
+    if (!again.value.ok)
+      throw new Error(`再プレビューに失敗しました: ${again.value.error.message}`);
+    if (again.value.value.counts.already !== JOURNALS) {
+      throw new Error(
+        `再プレビューの「取込済み」が ${JOURNALS} 件ではありません: ${JSON.stringify(again.value.value.counts)}`,
+      );
+    }
 
-  const failed = rows.filter((r) => r.result === "NG");
-  if (failed.length > 0) {
-    console.error(
-      `SC-002 を満たしません: ${failed.map((r) => `${r.step}(${r["time (ms)"]} ms > ${r.limit} ms)`).join(", ")}`,
-    );
-  } else {
+    const rows = [
+      { step: "preview", "time (ms)": Number(preview.ms.toFixed(1)), limit: PREVIEW_LIMIT_MS },
+      { step: "commit", "time (ms)": Number(commit.ms.toFixed(1)), limit: COMMIT_LIMIT_MS },
+      {
+        step: "preview (after commit, all already)",
+        "time (ms)": Number(again.ms.toFixed(1)),
+        limit: PREVIEW_LIMIT_MS,
+      },
+    ].map((r) => ({ ...r, result: r["time (ms)"] <= r.limit ? "OK" : "NG" }));
+    console.table(rows);
+
+    const failed = rows.filter((r) => r.result === "NG");
+    if (failed.length > 0) {
+      console.error(
+        `SC-002 を満たしません: ${failed.map((r) => `${r.step}(${r["time (ms)"]} ms > ${r.limit} ms)`).join(", ")}`,
+      );
+      return false;
+    }
     console.log(
       `SC-002 OK: プレビュー ${PREVIEW_LIMIT_MS} ms 以内、確定 ${COMMIT_LIMIT_MS} ms 以内（${JOURNALS} 仕訳）`,
     );
-    exitCode = 0;
-  }
-} catch (error) {
-  console.error(error);
-} finally {
-  tmp.cleanup();
-}
-process.exitCode = exitCode;
+    return true;
+  },
+  () => tmp.cleanup(),
+);

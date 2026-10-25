@@ -14,8 +14,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime, formatYen } from "@/lib/format";
-import { queryKeys } from "@/lib/queries";
-import { invoiceKeys, postInvoiceVoid, postPaymentVoid } from "./api";
+import { invalidateLedger } from "@/lib/queries";
+import { postInvoiceVoid, postPaymentVoid } from "./api";
 import { quantityOf, recipientOf } from "./display";
 import { PaymentForm } from "./PaymentForm";
 import { INVOICE_STATUS_LABELS } from "./status";
@@ -40,13 +40,7 @@ export function InvoiceDetail({
 
   const voidInvoice = useMutation({
     mutationFn: (reason: string) => postInvoiceVoid(entityId, invoice.id, reason),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: invoiceKeys.invoices(entityId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.journals(entityId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.reports(entityId) }),
-      ]);
-    },
+    onSuccess: () => invalidateLedger(queryClient, entityId),
   });
 
   const confirmVoid = async (reason: string) => {
@@ -57,13 +51,7 @@ export function InvoiceDetail({
   const voidPayment = useMutation({
     mutationFn: ({ paymentId, reason }: { paymentId: string; reason: string }) =>
       postPaymentVoid(entityId, invoice.id, paymentId, reason),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: invoiceKeys.invoices(entityId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.journals(entityId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.reports(entityId) }),
-      ]);
-    },
+    onSuccess: () => invalidateLedger(queryClient, entityId),
   });
 
   const confirmVoidPayment = async (reason: string) => {

@@ -24,9 +24,9 @@ export type VerifiedRegistration = {
   transports: string[] | null;
 };
 
-export type VerifiedAuthentication = { newCounter: number };
+type VerifiedAuthentication = { newCounter: number };
 
-export type StoredCredential = {
+type StoredCredential = {
   id: string;
   publicKey: Uint8Array;
   counter: number;

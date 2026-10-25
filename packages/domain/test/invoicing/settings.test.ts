@@ -8,7 +8,12 @@ import {
   saveBillingTerms,
   saveInvoiceSettings,
 } from "../../src/usecases/invoicing.ts";
-import { FakeInvoicingUnitOfWork, FixedClock, SequentialIds } from "../fakes.ts";
+import {
+  type FakeInvoicingUnitOfWork,
+  FixedClock,
+  fakeInvoicingUnitOfWork,
+  SequentialIds,
+} from "../fakes.ts";
 import { invoiceRecord } from "../invoicing-setup.ts";
 
 // 005 US4: 発行者の設定と請求の条件（FR-001〜004。R4・R5・R6・R23）
@@ -19,7 +24,7 @@ let deps: { uow: FakeInvoicingUnitOfWork; ids: SequentialIds; clock: FixedClock 
 const PARTNER = "partner-1";
 
 beforeEach(() => {
-  uow = new FakeInvoicingUnitOfWork();
+  uow = fakeInvoicingUnitOfWork();
   deps = { uow, ids: new SequentialIds(), clock: new FixedClock("2026-10-24T09:00:00.000Z") };
   uow.masters.state.partners.push(
     { id: PARTNER, name: "株式会社A", honorific: "御中", memo: null, isActive: true },

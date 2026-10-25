@@ -1,21 +1,26 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
   type AuditEntry,
-  createEntity,
   createJournal,
   type FiscalPeriod,
   type Journal,
   type JournalDraft,
   type NewJournal,
+  ok,
   validateJournal,
 } from "@trebuchet/domain";
 import { balancedLinesArb, dateInPeriodArb, fc } from "@trebuchet/domain/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { openTenant, type TenantDb } from "../src/tenant-store.ts";
+import {
+  accountIdOf,
+  createTestEntity,
+  NOW,
+  type TempDataDir,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 let tmp: TempDataDir;
 let db: TenantDb;
@@ -24,21 +29,11 @@ let ledger: DrizzleLedgerRepository;
 let period: FiscalPeriod;
 
 const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-31T09:00:00.000Z" };
+const clock = { now: () => NOW };
 
 beforeEach(() => {
   tmp = useTempDataDir("ledger-repo");
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  db = openTenant(created.value.id);
+  db = openTenant(createTestEntity().id);
   masters = new DrizzleMasterRepository(db);
   ledger = new DrizzleLedgerRepository(db);
   const first = masters.listFiscalPeriods()[0];
@@ -47,11 +42,7 @@ beforeEach(() => {
 });
 afterEach(() => tmp.cleanup());
 
-const accountId = (name: string) => {
-  const a = masters.listAccounts().find((x) => x.name === name);
-  if (a === undefined) throw new Error(`科目がない: ${name}`);
-  return a.id;
-};
+const accountId = (name: string) => accountIdOf(masters, name);
 
 const context = () => ({
   accounts: masters.listAccounts(),
@@ -170,6 +161,7 @@ describe("DrizzleLedgerRepository（US2）", () => {
       expect(no).toBe(1);
       tx.insertJournal(newJournal(sale(), no));
       expect(tx.nextJournalNo()).toBe(2);
+      return ok(null);
     });
     expect(ledger.nextJournalNo()).toBe(2);
     expect(() =>
@@ -209,6 +201,7 @@ describe("DrizzleLedgerRepository（US2）", () => {
       fc.property(fc.array(journalArb, { minLength: 1000, maxLength: 1000 }), (drafts) => {
         ledger.transaction((tx) => {
           for (const draft of drafts) tx.insertJournal(newJournal(draft, tx.nextJournalNo(), ctx));
+          return ok(null);
         });
         expect(db.$client.prepare("SELECT * FROM v_unbalanced_journals").all()).toEqual([]);
       }),

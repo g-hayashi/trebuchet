@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 import { planRecurringRuns, type RecurringContext } from "../../src/recurring/due.ts";
 import { loadContext } from "../../src/usecases/create-journal.ts";
 import { setupInvoicing } from "../invoicing-setup.ts";
+import { MONTH_START_NOW } from "../test-dates.ts";
 
 // R17: 回の計画（blocked の理由を含む）。INV-35 の純関数の部分は recurring-plan.property.test.ts
 
-const NOW = "2026-10-01T00:00:00.000Z";
+const NOW = MONTH_START_NOW;
 
 function setup(options: { taxable?: boolean } = {}) {
   const t = setupInvoicing({ taxable: options.taxable ?? true });

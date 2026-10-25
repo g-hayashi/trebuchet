@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { type BalanceSheet, balanceSheetQuery } from "@/features/reports/api";
 import { AsOfPicker, CompareToggle, CsvLink } from "@/features/reports/controls";
 import { periodOf, useReportAsOf } from "@/features/reports/periods";
 import { BalancedBadge, ReportPage } from "@/features/reports/ReportPage";
 import { type StatementLine, StatementTable } from "@/features/reports/StatementTable";
 import { AsOfSearch } from "@/features/reports/search";
 import { SECTION_LABELS } from "@/lib/accounts";
-import { type BalanceSheet, balanceSheetQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/reports/balance-sheet")({
   validateSearch: AsOfSearch,

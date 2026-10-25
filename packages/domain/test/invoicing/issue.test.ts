@@ -2,10 +2,9 @@ import type { InvoiceInput } from "@trebuchet/schema";
 import { describe, expect, it } from "vitest";
 import { getInvoiceDetail, getJournalOrigin, issueInvoice } from "../../src/usecases/invoicing.ts";
 import { invoiceRecord, setupInvoicing } from "../invoicing-setup.ts";
+import { TODAY } from "../test-dates.ts";
 
 // 005 US1: 請求書の発行の検査と写し（R6・R9・R10・R11、FR-008〜013・015・016、H:§3.4・§3.6・§6.1）
-
-const TODAY = "2026-10-31";
 
 function ready(options: { taxable?: boolean; nextSeq?: number } = {}) {
   const t = setupInvoicing(options);

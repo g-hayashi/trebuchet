@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { parseHalfStep } from "@/lib/format";
 import { billingTermsQuery, invoiceKeys, putWorkHours, workHoursQuery } from "./api";
 
 const HOURS_ERROR = "0.5 時間単位で入力してください";
@@ -21,11 +22,7 @@ type Entry = { partnerId: string; hours: number | null };
 
 /** 入力欄の文字列を時間にする。空は undefined（未入力）、0 以上の 0.5 の倍数でなければ null */
 function parseHours(raw: string): number | undefined | null {
-  const text = raw.trim();
-  if (text === "") return undefined;
-  const hours = Number(text);
-  if (!Number.isFinite(hours) || hours < 0 || !Number.isInteger(hours * 2)) return null;
-  return hours;
+  return raw.trim() === "" ? undefined : parseHalfStep(raw);
 }
 
 /** 対象月の工数の入力。時間単価型の有効な取引先ごとに、0.5 時間単位で入れる（FR-005） */

@@ -4,8 +4,10 @@ import {
   createJournal,
   createRecurring,
   getRecurringDetail,
+  ok,
   pauseRecurring,
   postDueRecurring,
+  type RecurringUnitOfWork,
   recurringStatus,
   resumeRecurring,
   skipRecurringRun,
@@ -14,7 +16,7 @@ import {
 import type { Recurring, RecurringInput } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DrizzleInvoicingStore } from "../src/invoicing-repository.ts";
-import { DrizzleRecurringStore, DrizzleRecurringUnitOfWork } from "../src/recurring-repository.ts";
+import { createRecurringUnitOfWork, DrizzleRecurringStore } from "../src/recurring-repository.ts";
 import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
 import { setupInvoicingDb } from "./invoicing-db-setup.ts";
 
@@ -24,8 +26,8 @@ import { setupInvoicingDb } from "./invoicing-db-setup.ts";
 let tmp: TempDataDir;
 let t: ReturnType<typeof setupInvoicingDb>;
 let store: DrizzleRecurringStore;
-let uow: DrizzleRecurringUnitOfWork;
-let deps: { uow: DrizzleRecurringUnitOfWork; ids: { next(): string }; clock: { now(): string } };
+let uow: RecurringUnitOfWork;
+let deps: { uow: RecurringUnitOfWork; ids: { next(): string }; clock: { now(): string } };
 
 const TODAY = "2026-10-26";
 
@@ -33,7 +35,7 @@ beforeEach(() => {
   tmp = useTempDataDir("recurring-repository");
   t = setupInvoicingDb({ taxable: true });
   store = new DrizzleRecurringStore(t.db);
-  uow = new DrizzleRecurringUnitOfWork(t.db);
+  uow = createRecurringUnitOfWork(t.db);
   deps = { uow, ids: t.ids, clock: t.clock };
 });
 afterEach(() => tmp.cleanup());
@@ -243,7 +245,7 @@ describe("実 DB での判定（US3 Independent Test）", () => {
     expect(postDueRecurring(deps, TODAY).posted).toEqual([]);
     expect(postDueRecurring(deps, TODAY).posted).toEqual([]);
     // 作り直した UnitOfWork（再起動）でも増えない
-    const restarted = { ...deps, uow: new DrizzleRecurringUnitOfWork(t.db) };
+    const restarted = { ...deps, uow: createRecurringUnitOfWork(t.db) };
     expect(postDueRecurring(restarted, TODAY).posted).toEqual([]);
     expect(t.count("journals")).toBe(3);
     expect(t.count("recurring_runs")).toBe(3);
@@ -265,7 +267,7 @@ describe("実 DB での判定（US3 Independent Test）", () => {
     postDueRecurring(deps, TODAY);
     const before = t.count("journals");
     expect(() =>
-      uow.transaction(({ ledger, masters, recurring }) => {
+      uow.run(({ ledger, masters, recurring }) => {
         const created = createJournal(
           { ledger, masters, ids: t.ids, clock: t.clock },
           {
@@ -288,6 +290,7 @@ describe("実 DB での判定（US3 Independent Test）", () => {
           createdAt: "2026-10-26T09:00:00.000Z",
           acknowledgedAt: null,
         });
+        return ok(null);
       }),
     ).toThrow();
     expect(t.count("journals")).toBe(before);

@@ -1,10 +1,11 @@
+import { auditEntry } from "../audit.ts";
 import type { MasterRepository } from "../ports.ts";
 import {
   type AuditAction,
-  domainError,
   err,
   type FiscalPeriod,
   ok,
+  periodNotFound,
   type Result,
 } from "../types.ts";
 import { checkReason } from "./journal-edit.ts";
@@ -22,9 +23,7 @@ export type FiscalPeriodHistoryEntry = {
 
 function findPeriod(repo: MasterRepository, fiscalYear: number): Result<FiscalPeriod> {
   const period = repo.getFiscalPeriodByYear(fiscalYear);
-  return period === undefined
-    ? err(domainError("VALIDATION", "会計期間が見つかりません", { fiscalYear }))
-    : ok(period);
+  return period === undefined ? err(periodNotFound(fiscalYear)) : ok(period);
 }
 
 function transition(
@@ -37,16 +36,17 @@ function transition(
   now: string,
 ): FiscalPeriod {
   tx.updateFiscalPeriod(after);
-  tx.appendAudit({
-    id: deps.ids.next(),
-    occurredAt: now,
-    targetType: "fiscal_period",
-    targetId: before.id,
-    action,
-    reason,
-    beforeJson: JSON.stringify(before),
-    afterJson: JSON.stringify(after),
-  });
+  tx.appendAudit(
+    auditEntry(deps, {
+      targetType: "fiscal_period",
+      targetId: before.id,
+      action,
+      reason,
+      before,
+      after,
+      at: now,
+    }),
+  );
   return after;
 }
 

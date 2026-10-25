@@ -3,62 +3,47 @@ import {
   type AdjustmentRef,
   type ClosingAuditEntry,
   type ClosingNote,
-  createEntity,
+  type ClosingUnitOfWork,
   type DeductionAnswers,
   type FiledDocument,
   type FixedAsset,
   type HomeUseAllocation,
   type JournalDraft,
   type NewJournal,
+  ok,
   type RentDetail,
   TAX_PARAMETERS,
   type TaxReturnMemo,
   validateJournal,
 } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DrizzleClosingStore, DrizzleClosingUnitOfWork } from "../src/closing-repository.ts";
+import { createClosingUnitOfWork, DrizzleClosingStore } from "../src/closing-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { openTenant, type TenantDb } from "../src/tenant-store.ts";
+import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 let tmp: TempDataDir;
 let db: TenantDb;
 let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 let store: DrizzleClosingStore;
-let uow: DrizzleClosingUnitOfWork;
+let uow: ClosingUnitOfWork;
 
-const ids = { next: () => randomUUIDv7() };
 const clock = { now: () => "2026-10-19T09:00:00.000Z" };
 const NOW = clock.now();
 
 beforeEach(() => {
   tmp = useTempDataDir("closing-repo");
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2025 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  db = openTenant(created.value.id);
+  db = openTenant(createTestEntity({ firstFiscalYear: 2025 }).id);
   masters = new DrizzleMasterRepository(db);
   ledger = new DrizzleLedgerRepository(db);
   store = new DrizzleClosingStore(db);
-  uow = new DrizzleClosingUnitOfWork(db);
+  uow = createClosingUnitOfWork(db);
 });
 afterEach(() => tmp.cleanup());
 
-const accountId = (name: string) => {
-  const a = masters.listAccounts().find((x) => x.name === name);
-  if (a === undefined) throw new Error(`科目がない: ${name}`);
-  return a.id;
-};
+const accountId = (name: string) => accountIdOf(masters, name);
 
 const allocationOf = (overrides: Partial<HomeUseAllocation> = {}): HomeUseAllocation => ({
   id: randomUUIDv7(),
@@ -303,10 +288,10 @@ describe("DrizzleClosingStore（T008）", () => {
   });
 });
 
-describe("DrizzleClosingUnitOfWork（T008、research R4）", () => {
-  it("transaction の中で、仕訳・マスタ・決算の記録を同じ接続で読み書きできる", () => {
+describe("createClosingUnitOfWork（T008、research R4）", () => {
+  it("run の中で、仕訳・マスタ・決算の記録を同じ接続で読み書きできる", () => {
     const allocation = allocationOf();
-    uow.transaction(({ journals, masters: m, closing }) => {
+    uow.run(({ ledger: journals, masters: m, closing }) => {
       closing.upsertHomeUseAllocation(allocation);
       const journal = journals.insertJournal(newJournal(adjustment(), journals.nextJournalNo()));
       closing.insertAdjustmentRef({
@@ -318,17 +303,18 @@ describe("DrizzleClosingUnitOfWork（T008、research R4）", () => {
       });
       expect(m.listAccounts().length).toBeGreaterThan(0);
       expect(closing.listAdjustmentRefs(2025)).toHaveLength(1);
+      return ok(null);
     });
     expect(count("journals")).toBe(1);
     expect(count("adjustment_journal_refs")).toBe(1);
     expect(store.listHomeUseAllocations(2025)).toEqual([allocation]);
   });
 
-  it("transaction の中の例外で、仕訳と adjustment_journal_refs が両方とも残らない", () => {
+  it("run の中の例外で、仕訳と adjustment_journal_refs が両方とも残らない", () => {
     const allocation = allocationOf();
     store.upsertHomeUseAllocation(allocation);
     expect(() =>
-      uow.transaction(({ journals, closing }) => {
+      uow.run(({ ledger: journals, closing }) => {
         const journal = journals.insertJournal(newJournal(adjustment(), journals.nextJournalNo()));
         closing.insertAdjustmentRef({
           journalId: journal.id,

@@ -1,4 +1,5 @@
 import type { ImportPreview, ReconciliationResult } from "@trebuchet/schema";
+import { auditEntry } from "../audit.ts";
 import { type FreeeOpeningProposal, proposeOpeningBalances } from "../import/freee/opening.ts";
 import {
   type ImportPlan,
@@ -28,13 +29,13 @@ import type {
 import { computeBalances } from "../reports/balances.ts";
 import { FREEE_UNMAPPABLE_ACCOUNTS } from "../seed/freee-aliases.ts";
 import {
-  type DomainError,
   domainError,
   err,
   type Journal,
   type JournalLine,
   ok,
   type Result,
+  validationError,
 } from "../types.ts";
 import { checkReason } from "./journal-edit.ts";
 
@@ -141,10 +142,8 @@ export function previewFreeeImport(
 ): Result<FreeeImportPreview> {
   const file = readJournalFile(input.bytes);
   if (!file.ok) return file;
-  return ok(
-    deps.uow.transaction((tx) =>
-      withFile(buildPlan(tx, file.value, input.options), file.value, input),
-    ),
+  return deps.uow.run((tx) =>
+    ok(withFile(buildPlan(tx, file.value, input.options), file.value, input)),
   );
 }
 
@@ -181,7 +180,7 @@ export function commitFreeeImport(
   const file = readJournalFile(input.bytes);
   if (!file.ok) return file;
 
-  return deps.uow.transaction((tx): Result<FreeeImportResult> => {
+  return deps.uow.run((tx): Result<FreeeImportResult> => {
     const plan = buildPlan(tx, file.value, input.options);
     const preview = withFile(plan, file.value, input);
     if (!preview.ready) {
@@ -252,20 +251,15 @@ export function commitFreeeImport(
         source: "import_freee",
         lines,
       });
-      tx.ledger.appendAudit({
-        id: deps.ids.next(),
-        occurredAt: now,
-        targetType: "journal",
-        targetId: journal.id,
-        action: "create",
-        reason: null,
-        beforeJson: null,
-        afterJson: JSON.stringify({
-          ...journal,
-          importBatchId: batchId,
-          freeeJournalId: p.freee.freeeJournalId,
+      tx.ledger.appendAudit(
+        auditEntry(deps, {
+          targetType: "journal",
+          targetId: journal.id,
+          action: "create",
+          after: { ...journal, importBatchId: batchId, freeeJournalId: p.freee.freeeJournalId },
+          at: now,
         }),
-      });
+      );
       journals.push(journal);
       refs.push({
         journalId: journal.id,
@@ -314,9 +308,6 @@ export type ImportMappingsInput = {
 
 export type SavedImportMappings = { accounts: AccountMapping[]; taxes: TaxMapping[] };
 
-const invalid = (message: string, details: Record<string, unknown>): DomainError =>
-  domainError("VALIDATION", message, details);
-
 function validateAccountRows(
   rows: readonly AccountMapping[],
   masters: MasterRepository,
@@ -329,26 +320,28 @@ function validateAccountRows(
     const sourceName = normalizeName(row.sourceName);
     const at = { index, sourceName };
     if (sourceName === "")
-      return err(invalid("名前を入力してください", { ...at, field: "sourceName" }));
+      return err(validationError("名前を入力してください", { ...at, field: "sourceName" }));
     if (FREEE_UNMAPPABLE_ACCOUNTS.includes(sourceName)) {
-      return err(invalid(`「${sourceName}」は対応づけられません`, { ...at, field: "sourceName" }));
+      return err(
+        validationError(`「${sourceName}」は対応づけられません`, { ...at, field: "sourceName" }),
+      );
     }
     if (seen.has(sourceName)) {
-      return err(invalid("同じ名前が重複しています", { ...at, field: "sourceName" }));
+      return err(validationError("同じ名前が重複しています", { ...at, field: "sourceName" }));
     }
     seen.add(sourceName);
     const account = accounts.get(row.accountId);
     if (account === undefined) {
-      return err(invalid("勘定科目が見つかりません", { ...at, field: "accountId" }));
+      return err(validationError("勘定科目が見つかりません", { ...at, field: "accountId" }));
     }
     if (!account.isActive) {
       return err(
-        invalid(`勘定科目「${account.name}」は使用停止です`, { ...at, field: "accountId" }),
+        validationError(`勘定科目「${account.name}」は使用停止です`, { ...at, field: "accountId" }),
       );
     }
     if (row.subAccountId !== undefined && row.subAccountName !== undefined) {
       return err(
-        invalid("補助科目は、既存の補助科目か新しく作る名前のどちらかを指定してください", {
+        validationError("補助科目は、既存の補助科目か新しく作る名前のどちらかを指定してください", {
           ...at,
           field: "subAccountName",
         }),
@@ -359,12 +352,18 @@ function validateAccountRows(
       const sub = subAccounts.get(row.subAccountId);
       if (sub === undefined || sub.accountId !== row.accountId) {
         return err(
-          invalid("補助科目がこの勘定科目のものではありません", { ...at, field: "subAccountId" }),
+          validationError("補助科目がこの勘定科目のものではありません", {
+            ...at,
+            field: "subAccountId",
+          }),
         );
       }
       if (!sub.isActive) {
         return err(
-          invalid(`補助科目「${sub.name}」は使用停止です`, { ...at, field: "subAccountId" }),
+          validationError(`補助科目「${sub.name}」は使用停止です`, {
+            ...at,
+            field: "subAccountId",
+          }),
         );
       }
       mapping.subAccountId = row.subAccountId;
@@ -372,7 +371,9 @@ function validateAccountRows(
     if (row.subAccountName !== undefined) {
       const name = normalizeName(row.subAccountName);
       if (name === "") {
-        return err(invalid("補助科目の名前を入力してください", { ...at, field: "subAccountName" }));
+        return err(
+          validationError("補助科目の名前を入力してください", { ...at, field: "subAccountName" }),
+        );
       }
       mapping.subAccountName = name;
     }
@@ -392,13 +393,13 @@ function validateTaxRows(
     const sourceName = normalizeName(row.sourceName);
     const at = { index, sourceName };
     if (sourceName === "")
-      return err(invalid("名前を入力してください", { ...at, field: "sourceName" }));
+      return err(validationError("名前を入力してください", { ...at, field: "sourceName" }));
     if (seen.has(sourceName)) {
-      return err(invalid("同じ名前が重複しています", { ...at, field: "sourceName" }));
+      return err(validationError("同じ名前が重複しています", { ...at, field: "sourceName" }));
     }
     seen.add(sourceName);
     if (!codes.has(row.taxCategory)) {
-      return err(invalid("税区分が見つかりません", { ...at, field: "taxCategory" }));
+      return err(validationError("税区分が見つかりません", { ...at, field: "taxCategory" }));
     }
     out.push({ sourceName, taxCategory: row.taxCategory });
   }
@@ -410,7 +411,7 @@ export function saveImportMappings(
   deps: { uow: ImportUnitOfWork; clock: Clock },
   input: ImportMappingsInput,
 ): Result<SavedImportMappings> {
-  return deps.uow.transaction((tx): Result<SavedImportMappings> => {
+  return deps.uow.run((tx): Result<SavedImportMappings> => {
     const accounts = validateAccountRows(input.accounts ?? [], tx.masters);
     if (!accounts.ok) return accounts;
     const taxes = validateTaxRows(input.taxes ?? [], tx.masters);
@@ -470,7 +471,7 @@ export function proposeFreeeOpening(
   const ledger = readLedgerFile(input.bytes);
   if (!ledger.ok) return ledger;
 
-  return deps.uow.transaction((tx) => {
+  return deps.uow.run((tx) => {
     const periods = tx.masters.listFiscalPeriods();
     const period = periods.find((p) => p.fiscalYear === input.fiscalYear);
     if (period === undefined) {
@@ -541,7 +542,7 @@ export function reconcileFreee(
     journalFile = file.value;
   }
 
-  return deps.uow.transaction((tx) => {
+  return deps.uow.run((tx) => {
     const periods = tx.masters.listFiscalPeriods();
     const period = periods.find((p) => p.fiscalYear === input.fiscalYear);
     if (period === undefined) {
@@ -607,7 +608,7 @@ export function voidImportBatch(
   const reason = checkReason(input.reason);
   if (!reason.ok) return reason;
 
-  return deps.uow.transaction((tx): Result<VoidImportBatchResult> => {
+  return deps.uow.run((tx): Result<VoidImportBatchResult> => {
     const batch = tx.imports.getBatch(input.batchId);
     if (batch === undefined) {
       return err(
@@ -661,16 +662,17 @@ export function voidImportBatch(
     const now = deps.clock.now();
     for (const before of journals) {
       const after = tx.ledger.voidJournal(before.id, before.version, now);
-      tx.ledger.appendAudit({
-        id: deps.ids.next(),
-        occurredAt: now,
-        targetType: "journal",
-        targetId: before.id,
-        action: "void",
-        reason: reason.value,
-        beforeJson: JSON.stringify(before),
-        afterJson: JSON.stringify(after),
-      });
+      tx.ledger.appendAudit(
+        auditEntry(deps, {
+          targetType: "journal",
+          targetId: before.id,
+          action: "void",
+          reason: reason.value,
+          before,
+          after,
+          at: now,
+        }),
+      );
     }
     tx.imports.voidBatch(batch.id, reason.value, now);
     const voided = tx.imports.getBatch(batch.id);

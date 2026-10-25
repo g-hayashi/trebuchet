@@ -5,10 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { SaveNotice } from "@/components/ui/save-notice";
+import type { Account } from "@/features/accounts/api";
 import { blueReturnKeys } from "@/features/blue-return/api";
 import { formatRatioAsPercent, parsePercentToRatio } from "@/features/blue-return/ratio";
-import { parseYenInput } from "@/lib/format";
-import { type Account, journalSearchQuery } from "@/lib/queries";
+import { journalSearchQuery } from "@/features/journals/api";
+import { parseWholeYen } from "@/lib/format";
 import { type FixedAssetRow, fixedAssetKeys, postFixedAsset, putFixedAsset } from "./api";
 
 const COST_ERROR = "取得価額は1円以上の整数で入力してください";
@@ -176,12 +177,11 @@ export function FixedAssetForm({
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const cost = parseYenInput(values.cost);
+    const cost = parseWholeYen(values.cost, { min: 1 });
     const ratio = parsePercentToRatio(values.percent);
-    const costBad = cost === undefined || !Number.isSafeInteger(cost) || cost <= 0;
-    setCostError(costBad ? COST_ERROR : undefined);
+    setCostError(cost === null ? COST_ERROR : undefined);
     setRatioError(ratio === undefined ? RATIO_ERROR : undefined);
-    if (costBad || ratio === undefined) return;
+    if (cost === null || ratio === undefined) return;
     save.mutate({ cost, ratio });
   };
 

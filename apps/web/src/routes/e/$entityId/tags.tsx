@@ -9,8 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api, unwrap } from "@/lib/api";
-import { queryKeys, tagsQuery } from "@/lib/queries";
+import { masterKeys, postTag, tagsQuery } from "@/features/masters/api";
 
 export const Route = createFileRoute("/e/$entityId/tags")({
   component: TagsPage,
@@ -27,11 +26,10 @@ function TagsPage() {
   const message = form.formState.errors.name?.message;
 
   const create = useMutation({
-    mutationFn: async (json: TagCreate) =>
-      unwrap(await api.api.entities[":entityId"].tags.$post({ param: { entityId }, json })),
+    mutationFn: (json: TagCreate) => postTag(entityId, json),
     onSuccess: async () => {
       form.reset({ name: "" });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.tags(entityId) });
+      await queryClient.invalidateQueries({ queryKey: masterKeys.tags(entityId) });
     },
   });
 

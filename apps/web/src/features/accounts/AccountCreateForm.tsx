@@ -9,9 +9,8 @@ import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ALLOWED_SECTIONS, CATEGORY_LABELS, SECTION_LABELS } from "@/lib/accounts";
-import { api, unwrap } from "@/lib/api";
-import { type Account, queryKeys } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+import { type Account, accountKeys, postAccount } from "./api";
 
 type AccountCreateInput = z.input<typeof AccountCreate>;
 
@@ -42,15 +41,10 @@ export function AccountCreateForm({
   const category = form.watch("category");
 
   const create = useMutation({
-    mutationFn: async (input: AccountCreate) =>
-      (
-        await unwrap(
-          await api.api.entities[":entityId"].accounts.$post({ param: { entityId }, json: input }),
-        )
-      ).account,
+    mutationFn: (input: AccountCreate) => postAccount(entityId, input),
     onSuccess: async (account) => {
       form.reset({ name: "", category, reportSection: form.getValues("reportSection") });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(entityId) });
+      await queryClient.invalidateQueries({ queryKey: accountKeys.list(entityId) });
       onCreated?.(account);
     },
   });

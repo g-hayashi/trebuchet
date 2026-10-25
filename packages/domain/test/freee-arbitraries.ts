@@ -11,9 +11,9 @@ import { FREEE_JOURNAL_HEADER, FREEE_LEDGER_HEADER } from "./fixtures/freee/head
  * 元帳は1行目がタイトル・2行目がヘッダ、日付は YYYY-MM-DD、開始行は「前期繰越」、相手が複数なら「諸口」
  */
 
-export type FreeeAccountKind = "asset" | "liability" | "equity" | "revenue" | "expense" | "closing";
+type FreeeAccountKind = "asset" | "liability" | "equity" | "revenue" | "expense" | "closing";
 
-export type FreeeAccountDef = {
+type FreeeAccountDef = {
   /** freee の勘定科目名（ファイルの表記のまま。全角を含むことがある） */
   name: string;
   kind: FreeeAccountKind;
@@ -25,7 +25,7 @@ export type FreeeAccountDef = {
   book: { code: string; subAccountName?: string | undefined } | null;
 };
 
-export type FreeeLegModel = {
+type FreeeLegModel = {
   account: string;
   amount: number;
   taxName: string;
@@ -36,7 +36,7 @@ export type FreeeLegModel = {
 };
 
 /** freee の仕訳帳の1行。借方と貸方の両方、またはどちらか一方を持つ */
-export type FreeeRowModel = {
+type FreeeRowModel = {
   debit?: FreeeLegModel | undefined;
   credit?: FreeeLegModel | undefined;
   description: string;
@@ -123,13 +123,13 @@ const TAGS = ["案件Ａ", "案件B", "ＰＪ　１"];
 const DESCRIPTION_UNITS = ["業務", "委託", "料", "ＵＳＢ", "Ａ４", "　", " ", "ュ", "１", "ｶ", "-"];
 
 /** 内税・切り捨ての税額（001 の INV-10 と同じ計算） */
-export function freeeTaxAmount(taxName: string, amount: number): number {
+function freeeTaxAmount(taxName: string, amount: number): number {
   const rate = taxName.endsWith("10%") ? 10 : taxName.endsWith("8%（軽）") ? 8 : 0;
   return Math.floor((amount * rate) / (100 + rate));
 }
 
 /** 科目の集合: 必須の科目（口座・売掛金・事業主勘定・元入金・損益・売上高）、カード1〜2、費用1つ以上 */
-export const freeeAccountsArb: fc.Arbitrary<FreeeAccountDef[]> = fc
+const freeeAccountsArb: fc.Arbitrary<FreeeAccountDef[]> = fc
   .record({
     assets: fc.subarray(OPTIONAL_ASSETS),
     liabilities: fc.subarray(OPTIONAL_LIABILITIES),
@@ -353,7 +353,7 @@ const signed = (account: FreeeAccountDef, side: Side, amount: number) =>
   side === account.normalSide ? amount : -amount;
 
 /** 決算振替と当年の仕訳を、元帳と同じ順（日付 → 仕訳番号）に並べたもの */
-export const allFreeeJournals = (model: FreeeModel): FreeeJournalModel[] =>
+const allFreeeJournals = (model: FreeeModel): FreeeJournalModel[] =>
   [model.closing, ...model.journals].sort(
     (a, b) => a.date.localeCompare(b.date) || a.journalNo.localeCompare(b.journalNo),
   );

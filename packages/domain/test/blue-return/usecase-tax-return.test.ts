@@ -9,7 +9,7 @@ import {
   saveFiledDocument,
   saveTaxReturnMemo,
 } from "../../src/usecases/blue-return.ts";
-import { FakeClosingUnitOfWork } from "../fakes.ts";
+import { type FakeClosingUnitOfWork, fakeClosingUnitOfWork } from "../fakes.ts";
 import { setupLedger } from "../ledger-fixture.ts";
 import { InMemoryReportRepository } from "../reports/fake-report-repository.ts";
 
@@ -18,7 +18,7 @@ let uow: FakeClosingUnitOfWork;
 
 beforeEach(() => {
   fx = setupLedger();
-  uow = new FakeClosingUnitOfWork(fx.ledger, fx.masters);
+  uow = fakeClosingUnitOfWork(fx.ledger, fx.masters);
   uow.closing.taxParameters = [...TAX_PARAMETERS];
 });
 

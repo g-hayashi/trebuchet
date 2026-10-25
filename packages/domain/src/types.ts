@@ -10,6 +10,7 @@ import type {
   FiledDocumentKind,
   InvoiceIssuer,
   InvoiceTaxDisplay,
+  JournalSource,
   PaymentView,
   ReportSection,
   Side,
@@ -54,6 +55,18 @@ export const domainError = (
   message: string,
   details?: ErrorDetails,
 ): DomainError => (details === undefined ? { code, message } : { code, message, details });
+
+/** `VALIDATION` の `DomainError` */
+export const validationError = (message: string, details?: ErrorDetails): DomainError =>
+  domainError("VALIDATION", message, details);
+
+/** `VALIDATION` の失敗（`err(validationError(...))`） */
+export const validation = (message: string, details?: ErrorDetails) =>
+  err(validationError(message, details));
+
+/** 会計期間がない（`VALIDATION`、`details.fiscalYear` に年度）。HTTP のパスの年度は文字列のまま渡せる */
+export const periodNotFound = (fiscalYear: number | string): DomainError =>
+  validationError("会計期間が見つかりません", { fiscalYear });
 
 // ---- 事業体・マスタ ----
 
@@ -184,7 +197,7 @@ export type ValidJournal = {
 };
 
 export type JournalStatus = "active" | "voided";
-export type JournalSource = "manual" | "import_freee" | "invoice" | "payment" | "recurring";
+export type { JournalSource };
 
 export type JournalLine = ValidLine & { id: string };
 
@@ -246,12 +259,19 @@ export type AuditAction =
   | "reopen"
   | "replace";
 
-export type AuditEntry = {
+/**
+ * 監査の記録の 1 行（追記のみ）。既定は 001 の audit_log。決算（closing_audit_log）と
+ * 請求・定期仕訳（invoicing_audit_log）は対象と操作の型だけが違う。作るときは `auditEntry`（audit.ts）を使う
+ */
+export type AuditEntry<
+  TTarget extends string = AuditTargetType,
+  TAction extends string = AuditAction,
+> = {
   id: string;
   occurredAt: string;
-  targetType: AuditTargetType;
+  targetType: TTarget;
   targetId: string;
-  action: AuditAction;
+  action: TAction;
   reason: string | null;
   beforeJson: string | null;
   afterJson: string | null;
@@ -426,16 +446,7 @@ export type ClosingAuditTargetType =
 export type ClosingAuditAction = "create" | "update" | "dispose" | "delete";
 
 /** 決算の設定の変更履歴（§1.10） */
-export type ClosingAuditEntry = {
-  id: string;
-  occurredAt: string;
-  targetType: ClosingAuditTargetType;
-  targetId: string;
-  action: ClosingAuditAction;
-  reason: string | null;
-  beforeJson: string | null;
-  afterJson: string | null;
-};
+export type ClosingAuditEntry = AuditEntry<ClosingAuditTargetType, ClosingAuditAction>;
 
 // ---- 請求・定期仕訳（005） ----
 
@@ -458,16 +469,7 @@ export type InvoicingAuditAction =
   | "acknowledge";
 
 /** 請求・定期仕訳の操作の記録（`invoicing_audit_log`。追記のみ。data-model §1.10、R23） */
-export type InvoicingAuditEntry = {
-  id: string;
-  occurredAt: string;
-  targetType: InvoicingAuditTargetType;
-  targetId: string;
-  action: InvoicingAuditAction;
-  reason: string | null;
-  beforeJson: string | null;
-  afterJson: string | null;
-};
+export type InvoicingAuditEntry = AuditEntry<InvoicingAuditTargetType, InvoicingAuditAction>;
 
 /**
  * 定期仕訳の回（`recurring_runs` の 1 行。data-model §1.9）。`posted` は仕訳を持ち、`skipped` は理由を持つ。

@@ -50,6 +50,15 @@ export async function unwrap<R extends { ok: boolean; status: number; json(): Pr
   throw new ApiError(res.status, "INTERNAL", `HTTP ${res.status}`);
 }
 
+type QueryFactory = (...args: never[]) => { queryFn?: unknown };
+/** クエリの結果の型 */
+export type QueryData<Q extends QueryFactory> = Awaited<
+  ReturnType<Extract<ReturnType<Q>["queryFn"], (...args: never[]) => unknown>>
+>;
+/** クエリの結果の型（配列ならその要素の型） */
+export type QueryItem<Q extends QueryFactory> =
+  QueryData<Q> extends readonly (infer I)[] ? I : QueryData<Q>;
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

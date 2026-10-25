@@ -10,8 +10,8 @@ import {
   replaceOpeningBalances,
 } from "../../src/usecases/masters.ts";
 import {
-  FakeImportUnitOfWork,
   FixedClock,
+  fakeImportUnitOfWork,
   InMemoryLedgerRepository,
   InMemoryMasterRepository,
   InMemoryRegistry,
@@ -19,9 +19,9 @@ import {
 } from "../fakes.ts";
 import { EXPECTED_OPENING_PROPOSAL, FIXTURE_FILES } from "../fixtures/freee/expected.ts";
 import { readFixture } from "../fixtures/freee/load.ts";
+import { accountIdOfCode } from "../ledger-setup.ts";
 import { InMemoryReportRepository } from "../reports/fake-report-repository.ts";
-
-const NOW = "2026-10-19T00:00:00.000Z";
+import { NOW } from "./import-usecase-setup.ts";
 
 function setup(firstFiscalYear = 2025) {
   const masters = new InMemoryMasterRepository();
@@ -43,13 +43,9 @@ function setup(firstFiscalYear = 2025) {
     },
   ]);
   const ledger = new InMemoryLedgerRepository();
-  const uow = new FakeImportUnitOfWork(ledger, masters);
+  const uow = fakeImportUnitOfWork(ledger, masters);
   const reports = new InMemoryReportRepository(ledger, masters);
-  const code = (c: string) => {
-    const a = masters.state.accounts.find((x) => x.code === c);
-    if (a === undefined) throw new Error(`科目がない: ${c}`);
-    return a.id;
-  };
+  const code = (c: string) => accountIdOfCode(masters, c);
   const masterDeps = { repo: masters, ids, clock };
   const card = () => {
     const sub = addSubAccount(masterDeps, code("2020"), "ABCカード");

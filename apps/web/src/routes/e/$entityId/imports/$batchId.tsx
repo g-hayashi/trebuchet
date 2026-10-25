@@ -12,12 +12,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { entityKeys } from "@/features/entities/api";
 import { importBatchQuery } from "@/features/imports/api";
 import { BATCH_STATUS_LABELS, DECISION_LABELS } from "@/features/imports/labels";
 import { VoidBatchDialog } from "@/features/imports/VoidBatchDialog";
 import { JournalLink } from "@/features/reports/JournalLink";
 import { formatDateTime } from "@/lib/format";
-import { queryKeys } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/e/$entityId/imports/$batchId")({
@@ -139,7 +139,7 @@ function ImportBatchPage() {
           onVoided={async (result) => {
             setVoiding(false);
             setVoidedCount(result.voidedCount);
-            await queryClient.invalidateQueries({ queryKey: queryKeys.entity(entityId) });
+            await queryClient.invalidateQueries({ queryKey: entityKeys.entity(entityId) });
           }}
         />
       )}

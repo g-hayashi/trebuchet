@@ -1,6 +1,5 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
-  createEntity,
   createJournal,
   deleteBillingTerms,
   getInvoiceSettings,
@@ -10,12 +9,11 @@ import {
 } from "@trebuchet/domain";
 import type { BillingTermsInput, InvoiceSettingsInput } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DrizzleInvoicingStore, DrizzleInvoicingUnitOfWork } from "../src/invoicing-repository.ts";
+import { createInvoicingUnitOfWork, DrizzleInvoicingStore } from "../src/invoicing-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
-import { openRegistry, openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { openTenant, type TenantDb } from "../src/tenant-store.ts";
+import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 // 005 US4: 設定・条件の保存と読み戻しの往復、条件の削除、次の通し番号の下限（R6）。
 // トリガー・CHECK・UNIQUE の個別の検査は invoicing-schema.test.ts（T002）
@@ -24,7 +22,7 @@ let tmp: TempDataDir;
 let db: TenantDb;
 let masters: DrizzleMasterRepository;
 let deps: {
-  uow: DrizzleInvoicingUnitOfWork;
+  uow: ReturnType<typeof createInvoicingUnitOfWork>;
   ids: { next(): string };
   clock: { now(): string };
 };
@@ -35,19 +33,9 @@ beforeEach(() => {
   tmp = useTempDataDir("invoicing-settings");
   const ids = { next: () => randomUUIDv7() };
   const clock = { now: () => NOW };
-  const created = createEntity(
-    {
-      registry: new DrizzleRegistryRepository(openRegistry()),
-      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids,
-      clock,
-    },
-    { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 },
-  );
-  if (!created.ok) throw new Error(created.error.message);
-  db = openTenant(created.value.id);
+  db = openTenant(createTestEntity().id);
   masters = new DrizzleMasterRepository(db);
-  deps = { uow: new DrizzleInvoicingUnitOfWork(db), ids, clock };
+  deps = { uow: createInvoicingUnitOfWork(db), ids, clock };
 });
 afterEach(() => tmp.cleanup());
 
@@ -125,11 +113,7 @@ function seedInvoice(seq: number, voided = false): void {
     );
 }
 
-const accountId = (name: string) => {
-  const a = masters.listAccounts().find((x) => x.name === name);
-  if (a === undefined) throw new Error(`科目がない: ${name}`);
-  return a.id;
-};
+const accountId = (name: string) => accountIdOf(masters, name);
 
 describe("発行者の設定（FR-003, FR-004）", () => {
   it("行がなければ null、minimumNextSeq は 1", () => {

@@ -21,17 +21,12 @@ description: "Task list for 003-tax-return"
 
 ## 全タスク共通のルール
 
-- 001・002 の tasks.md の「全タスク共通のルール」をすべて引き継ぐ（依存の向き、整数の金額、`IdGenerator`・`Clock`、テストの一時ファイルは `.tmp/` と `useTempDataDir`、Conventional Commits）
-- 相対 import には `.ts` を付ける。enum・parameter properties・namespace は使わない。型だけの import は `import type`
-- **実データ（`work/`、`data/`）をテスト・フィクスチャ・文書・コミットに含めない。実データの金額・取引先名・按分率を、コード・コメント・文書・tasks.md に書かない**。実データを読むのは `scripts/verify-tax-return.ts` と `scripts/verify-freee-import.ts` の実行だけ（メインが行う）
-- 割合は万分率の整数（0〜10000）。事業分 = `Math.floor(amount * ratio / 10000)`（R5）。浮動小数点で金額を計算しない
+- **[AGENTS.md](../../AGENTS.md) の「開発の進め方」「決算書（003）」「データと一時ファイル」に従う**（共通の規約、実データを扱わない規則、web のテスト、マイグレーション、エラーコードを変えるときの grep、部下のテストの範囲）。実データを読むのは `scripts/verify-tax-return.ts` と `scripts/verify-freee-import.ts` の実行だけ（メインが行う）
+- この機能に固有: 割合は万分率の整数（0〜10000）。事業分 = `Math.floor(amount * ratio / 10000)`（R5）。浮動小数点で金額を計算しない
 - 科目は初期セットのコードで識別する（`packages/domain/src/seed/accounts.individual.ts`）: 現金 `1010`、普通預金 `1020`、売掛金 `1030`、前払金 `1040`、仮払金 `1050`、工具器具備品 `1060`、一括償却資産 `1070`、開業費 `1080`、事業主貸 `3090`、借入金 `2010`、未払金 `2020`、未払費用 `2030`、前受金 `2040`、預り金 `2050`、事業主借 `3010`、元入金 `3020`、売上高 `4010`（欄1）、雑収入 `4020`（欄1）、減価償却費 `5180`（欄18）、地代家賃 `5230`（欄23）、任意科目 `5250〜5290`（欄25〜29）、雑費 `5310`（欄31）
 - 決算整理の仕訳は 001 の `createJournal(deps: JournalDeps, draft: JournalDraft): Result<CreatedJournal>`（`packages/domain/src/usecases/create-journal.ts:95`）で登録する。`journals.source` と `audit_log` の CHECK は変えない（R4, R12）
-- web のテストは Testing Library ＋ jsdom（`apps/web/test/render-route.tsx`、`apps/web/test/mock-api.ts`、置き場所は `apps/web/test/routes/`）。ルートを足したら `pnpm --filter @trebuchet/web build` で `routeTree.gen.ts` を再生成してから typecheck する
-- マイグレーションは `drizzle-kit generate` の後に `0003_tax_return.sql` の `);` を `) STRICT;` に置き換え、投入とトリガーは `--custom` の SQL で足す（AGENTS.md）
+- マイグレーションは `0003_tax_return.sql` の `);` を `) STRICT;` に置き換え、投入とトリガーは `--custom` の SQL で足す
 - 依存（npm パッケージ）は追加しない
-- エラーコード・警告のコード・共有の型を変えるタスクでは、**同じ値を参照するテストと実装を `grep -rn <値> packages apps scripts` で探し、担当外のプロジェクトも含めて直す**
-- 部下は担当のプロジェクトのテストだけを実行する（`pnpm vitest run --project <name>`）。整形は触ったファイルだけに掛ける
 
 ---
 

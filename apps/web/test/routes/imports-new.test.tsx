@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ImportBatch, ImportPlanItem, ImportPreview, MappingRow } from "@trebuchet/schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/lib/queries";
+import type { Account } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/imports/new";
 import { type ApiCall, apiError, formFields, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";

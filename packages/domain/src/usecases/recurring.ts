@@ -12,7 +12,8 @@ import type {
   ResumeInput,
   SkipRunInput,
 } from "@trebuchet/schema";
-import { runInTransaction } from "../invoicing/rollback.ts";
+import { auditEntry } from "../audit.ts";
+import { dateInMonth, monthAtIndex, monthIndex, monthOfDate } from "../dates.ts";
 import { combineErrors, type JournalContext, validateJournal } from "../journal.ts";
 import type { Clock, IdGenerator, RecurringStore, RecurringUnitOfWork } from "../ports.ts";
 import {
@@ -21,7 +22,6 @@ import {
   type RecurringPlan,
   recurringJournalDraft,
 } from "../recurring/due.ts";
-import { monthIndex, scheduledDate } from "../recurring/schedule.ts";
 import {
   type DomainError,
   domainError,
@@ -30,6 +30,7 @@ import {
   ok,
   type RecurringRunRecord,
   type Result,
+  validation,
 } from "../types.ts";
 import { createJournal, loadContext } from "./create-journal.ts";
 import { checkReason } from "./journal-edit.ts";
@@ -41,9 +42,6 @@ export type RecurringDeps = {
   clock: Clock;
 };
 
-const validation = (message: string, details: Record<string, unknown>) =>
-  err(domainError("VALIDATION", message, details));
-
 const notFound = (id: string) =>
   err(domainError("RECURRING_NOT_FOUND", "定期仕訳が見つかりません", { recurringId: id }));
 
@@ -54,8 +52,6 @@ const versionConflict = (def: Recurring) =>
       currentVersion: def.version,
     }),
   );
-
-const monthOfDate = (date: string) => date.slice(0, 7);
 
 /** 保存の段階では見ない違反。予定日の期間・消費税の設定は回ごとの判定（blocked）に任せる（R17） */
 const TIME_DEPENDENT_CODES: ReadonlySet<string> = new Set([
@@ -134,7 +130,7 @@ export function createRecurring(
   input: RecurringInput,
   today: string,
 ): Result<Recurring> {
-  return deps.uow.transaction(({ masters, recurring }) => {
+  return deps.uow.run(({ masters, recurring }) => {
     const now = deps.clock.now();
     const def: Recurring = {
       id: deps.ids.next(),
@@ -156,16 +152,15 @@ export function createRecurring(
     if (confirm !== undefined) return err(confirm);
 
     recurring.insertRecurring(def);
-    recurring.appendRecurringAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "recurring_journal",
-      targetId: def.id,
-      action: "create",
-      reason: null,
-      beforeJson: null,
-      afterJson: JSON.stringify(def),
-    });
+    recurring.appendRecurringAudit(
+      auditEntry(deps, {
+        targetType: "recurring_journal",
+        targetId: def.id,
+        action: "create",
+        after: def,
+        at: now,
+      }),
+    );
     return ok(def);
   });
 }
@@ -180,7 +175,7 @@ export function updateRecurring(
   input: RecurringUpdate,
   today: string,
 ): Result<Recurring> {
-  return deps.uow.transaction(({ masters, recurring }) => {
+  return deps.uow.run(({ masters, recurring }) => {
     const before = recurring.getRecurring(id);
     if (before === null) return notFound(id);
     if (before.version !== input.version) return versionConflict(before);
@@ -204,16 +199,16 @@ export function updateRecurring(
     if (confirm !== undefined) return err(confirm);
 
     recurring.updateRecurring(after);
-    recurring.appendRecurringAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "recurring_journal",
-      targetId: id,
-      action: "update",
-      reason: null,
-      beforeJson: JSON.stringify(before),
-      afterJson: JSON.stringify(after),
-    });
+    recurring.appendRecurringAudit(
+      auditEntry(deps, {
+        targetType: "recurring_journal",
+        targetId: id,
+        action: "update",
+        before,
+        after,
+        at: now,
+      }),
+    );
     return ok(after);
   });
 }
@@ -224,7 +219,7 @@ export function pauseRecurring(
   id: string,
   input: PauseInput,
 ): Result<Recurring> {
-  return deps.uow.transaction(({ recurring }) => {
+  return deps.uow.run(({ recurring }) => {
     const before = recurring.getRecurring(id);
     if (before === null) return notFound(id);
     if (before.version !== input.version) return versionConflict(before);
@@ -238,16 +233,16 @@ export function pauseRecurring(
       updatedAt: now,
     };
     recurring.updateRecurring(after);
-    recurring.appendRecurringAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "recurring_journal",
-      targetId: id,
-      action: "pause",
-      reason: null,
-      beforeJson: JSON.stringify(before),
-      afterJson: JSON.stringify(after),
-    });
+    recurring.appendRecurringAudit(
+      auditEntry(deps, {
+        targetType: "recurring_journal",
+        targetId: id,
+        action: "pause",
+        before,
+        after,
+        at: now,
+      }),
+    );
     return ok(after);
   });
 }
@@ -263,7 +258,7 @@ export function resumeRecurring(
   input: ResumeInput,
   today: string,
 ): Result<Recurring> {
-  return deps.uow.transaction(({ masters, recurring }) => {
+  return deps.uow.run(({ masters, recurring }) => {
     const before = recurring.getRecurring(id);
     if (before === null) return notFound(id);
     if (before.version !== input.version) return versionConflict(before);
@@ -288,16 +283,16 @@ export function resumeRecurring(
     if (confirm !== undefined) return err(confirm);
 
     recurring.updateRecurring(after);
-    recurring.appendRecurringAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "recurring_journal",
-      targetId: id,
-      action: "resume",
-      reason: null,
-      beforeJson: JSON.stringify(before),
-      afterJson: JSON.stringify(after),
-    });
+    recurring.appendRecurringAudit(
+      auditEntry(deps, {
+        targetType: "recurring_journal",
+        targetId: id,
+        action: "resume",
+        before,
+        after,
+        at: now,
+      }),
+    );
     return ok(after);
   });
 }
@@ -324,7 +319,7 @@ export function skipRecurringRun(
 ): Result<RecurringRunView> {
   const reason = checkReason(input.reason);
   if (!reason.ok) return reason;
-  return deps.uow.transaction(({ recurring }) => {
+  return deps.uow.run(({ recurring }) => {
     const def = recurring.getRecurring(id);
     if (def === null) return notFound(id);
     const invalidMonth = (message: string) => validation(message, { field: "month", month });
@@ -333,7 +328,7 @@ export function skipRecurringRun(
     if (month < def.startMonth || (def.endMonth !== null && month > def.endMonth)) {
       return invalidMonth("この定期仕訳の対象の月ではありません");
     }
-    if (scheduledDate(month, def.dayOfMonth) > today) {
+    if (dateInMonth(month, def.dayOfMonth) > today) {
       return invalidMonth("予定日がまだ来ていない月は飛ばせません");
     }
     if (doneMonthsOf(recurring, id).includes(month)) {
@@ -352,16 +347,16 @@ export function skipRecurringRun(
       acknowledgedAt: null,
     };
     recurring.insertRun(run);
-    recurring.appendRecurringAudit({
-      id: deps.ids.next(),
-      occurredAt: now,
-      targetType: "recurring_run",
-      targetId: run.id,
-      action: "skip",
-      reason: reason.value,
-      beforeJson: null,
-      afterJson: JSON.stringify(run),
-    });
+    recurring.appendRecurringAudit(
+      auditEntry(deps, {
+        targetType: "recurring_run",
+        targetId: run.id,
+        action: "skip",
+        reason: reason.value,
+        after: run,
+        at: now,
+      }),
+    );
     return ok(toRunView(run));
   });
 }
@@ -377,18 +372,21 @@ export type PostDueResult = { posted: PostedRecurringRun[]; failed: FailedRecurr
  * 回の保存の失敗（UNIQUE の違反など）は例外で、その回の仕訳も巻き戻る。仕訳の検査の違反は `failed` に入れて続ける
  */
 export function postDueRecurring(deps: RecurringDeps, today: string): PostDueResult {
-  const plans = deps.uow.transaction(({ masters, recurring }) => {
-    const ctx = loadContext(masters);
-    return recurring.listRecurring().map((def) => ({
-      def,
-      plan: planRecurringRuns({ def, today, doneMonths: doneMonthsOf(recurring, def.id), ctx }),
-    }));
-  });
-
   const result: PostDueResult = { posted: [], failed: [] };
-  for (const { def, plan } of plans) {
+  const plans = deps.uow.run(({ masters, recurring }) => {
+    const ctx = loadContext(masters);
+    return ok(
+      recurring.listRecurring().map((def) => ({
+        def,
+        plan: planRecurringRuns({ def, today, doneMonths: doneMonthsOf(recurring, def.id), ctx }),
+      })),
+    );
+  });
+  if (!plans.ok) return result; // 読み取りだけなので err にはならない
+
+  for (const { def, plan } of plans.value) {
     for (const item of plan.post) {
-      const posted = runInTransaction(deps.uow, ({ ledger, masters, recurring }) => {
+      const posted = deps.uow.run(({ ledger, masters, recurring }) => {
         // 同じ回が先に登録されていたら何もしない（UNIQUE が最後の砦。R19）
         if (doneMonthsOf(recurring, def.id).includes(item.month)) return ok(null);
         const created = createJournal(
@@ -410,16 +408,15 @@ export function postDueRecurring(deps: RecurringDeps, today: string): PostDueRes
           acknowledgedAt: null,
         };
         recurring.insertRun(run);
-        recurring.appendRecurringAudit({
-          id: deps.ids.next(),
-          occurredAt: now,
-          targetType: "recurring_run",
-          targetId: run.id,
-          action: "create",
-          reason: null,
-          beforeJson: null,
-          afterJson: JSON.stringify(run),
-        });
+        recurring.appendRecurringAudit(
+          auditEntry(deps, {
+            targetType: "recurring_run",
+            targetId: run.id,
+            action: "create",
+            after: run,
+            at: now,
+          }),
+        );
         return ok(journal);
       });
       if (!posted.ok) {
@@ -456,7 +453,7 @@ export function recurringStatus(
   deps: RecurringDeps,
   today: string,
 ): Result<RecurringStatusResponse> {
-  return deps.uow.transaction(({ ledger, masters, recurring }) => {
+  return deps.uow.run(({ ledger, masters, recurring }) => {
     const defs = recurring.listRecurring();
     const names = new Map(defs.map((d) => [d.id, d.name]));
     const unacknowledged: RecurringStatusResponse["unacknowledged"] = [];
@@ -494,7 +491,7 @@ export function recurringStatus(
  * 1 つでもあれば `VALIDATION`（`details.field = "runIds"`）で何も変えない。確認済みの回は何もしない
  */
 export function acknowledgeRuns(deps: RecurringDeps, runIds: string[]): Result<null> {
-  return deps.uow.transaction(({ recurring }) => {
+  return deps.uow.run(({ recurring }) => {
     const runs = new Map(recurring.listRuns().map((r) => [r.id, r]));
     for (const runId of runIds) {
       const run = runs.get(runId);
@@ -513,16 +510,16 @@ export function acknowledgeRuns(deps: RecurringDeps, runIds: string[]): Result<n
       now,
     );
     for (const run of targets) {
-      recurring.appendRecurringAudit({
-        id: deps.ids.next(),
-        occurredAt: now,
-        targetType: "recurring_run",
-        targetId: run.id,
-        action: "acknowledge",
-        reason: null,
-        beforeJson: JSON.stringify(run),
-        afterJson: JSON.stringify({ ...run, acknowledgedAt: now }),
-      });
+      recurring.appendRecurringAudit(
+        auditEntry(deps, {
+          targetType: "recurring_run",
+          targetId: run.id,
+          action: "acknowledge",
+          before: run,
+          after: { ...run, acknowledgedAt: now },
+          at: now,
+        }),
+      );
     }
     return ok(null);
   });
@@ -536,10 +533,9 @@ function nextDate(def: Recurring, today: string): string | null {
   if (def.status === "paused") return null;
   let index = Math.max(monthIndex(def.startMonth), monthIndex(monthOfDate(today)));
   for (let step = 0; step < 2; step++, index++) {
-    const year = Math.floor(index / 12);
-    const month = `${String(year).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
+    const month = monthAtIndex(index);
     if (def.endMonth !== null && month > def.endMonth) return null;
-    const date = scheduledDate(month, def.dayOfMonth);
+    const date = dateInMonth(month, def.dayOfMonth);
     if (date > today) return date;
   }
   return null;
@@ -547,7 +543,7 @@ function nextDate(def: Recurring, today: string): string | null {
 
 /** 一覧（H:§5.1）: 定義に次の予定日と登録済みの件数を添える */
 export function listRecurring(deps: RecurringDeps, today: string): Result<RecurringView[]> {
-  return deps.uow.transaction(({ recurring }) => {
+  return deps.uow.run(({ recurring }) => {
     const runs = recurring.listRuns();
     return ok(
       recurring.listRecurring().map((def) => ({
@@ -565,7 +561,7 @@ export function getRecurringDetail(
   id: string,
   today: string,
 ): Result<RecurringDetailResponse> {
-  return deps.uow.transaction(({ masters, recurring }) => {
+  return deps.uow.run(({ masters, recurring }) => {
     const def = recurring.getRecurring(id);
     if (def === null) return notFound(id);
     const runs = recurring.listRuns(id);

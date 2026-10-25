@@ -9,6 +9,8 @@ import {
   InMemoryRegistry,
   SequentialIds,
 } from "./fakes.ts";
+import { accountIdOf } from "./ledger-setup.ts";
+import { NOW } from "./test-dates.ts";
 
 /**
  * 訂正・取消のテスト（US3）の準備: 2025 年度と 2026 年度の会計期間（どちらも open）を持つ個人事業。
@@ -18,7 +20,7 @@ export function setupLedger() {
   const masters = new InMemoryMasterRepository();
   const ledger = new InMemoryLedgerRepository();
   const ids = new SequentialIds();
-  const clock = new FixedClock("2026-10-31T09:00:00.000Z");
+  const clock = new FixedClock(NOW);
   const created = createEntity(
     { registry: new InMemoryRegistry(), openTenant: () => masters, ids, clock },
     { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2025 },
@@ -28,11 +30,7 @@ export function setupLedger() {
   if (!next.ok) throw new Error(next.error.message);
   const deps = { ledger, masters, ids, clock };
 
-  const accountId = (name: string) => {
-    const a = masters.listAccounts().find((x) => x.name === name);
-    if (a === undefined) throw new Error(`科目がない: ${name}`);
-    return a.id;
-  };
+  const accountId = (name: string) => accountIdOf(masters, name);
   const line = (side: LineDraft["side"], name: string, amount: number): LineDraft => ({
     side,
     accountId: accountId(name),

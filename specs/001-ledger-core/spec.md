@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-18
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "フェーズ1の基盤のうち、帳簿の中心となる機能。事業体（テナント）を作成し、勘定科目などのマスタを整え、仕訳を手動で入力・訂正し、仕訳帳・総勘定元帳・試算表・PL・BSを表示できるようにする。要件の正本は docs/requirements.md の FR-01〜03, FR-09。"
 

@@ -1,5 +1,7 @@
 # Contract: コマンドとモジュール（004-auth-backup）
 
+> **US4（Tailscale によるリモートの利用）は保留（2026-10-24）**。この文書の `pnpm start` とリモートに関する記述は未実装。`pnpm restore` は実装済み。
+
 ## 復元のコマンド（research R13、FR-024〜029）
 
 ```bash

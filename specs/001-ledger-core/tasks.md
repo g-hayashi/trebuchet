@@ -20,13 +20,8 @@ description: "Task list for 001-ledger-core"
 
 ## 全タスク共通のルール
 
-- パッケージ名: `@trebuchet/schema`, `@trebuchet/domain`, `@trebuchet/db`, `@trebuchet/server`, `@trebuchet/web`
-- 依存の向き: `apps/* → packages/db → packages/domain → packages/schema`、`apps/web → packages/schema`。`packages/domain` は hono・react・drizzle-orm・better-sqlite3・`node:fs`・`node:sqlite` を import しない
-- 金額は `number` の整数（`0 < amount < 1e12`）。浮動小数の演算をしない
-- ID は `import { randomUUIDv7 } from "node:crypto"`（グローバルの `crypto` にはない。T001 で確認）。ドメイン層では直接呼ばず、`IdGenerator` ポートから受け取る（純関数を保つため）
-- **テストの一時ファイルはプロジェクト内の `.tmp/`（`.gitignore` 済み）に作る。`/tmp`・`os.tmpdir()`・プロジェクト外のパスは使わない**（利用者の指示）
-- 実データ（`work/`）をテストやフィクスチャに使わない。フィクスチャは合成データ
-- コミットメッセージは Conventional Commits。末尾に `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
+- **[AGENTS.md](../../AGENTS.md) の「構成と依存の向き」「開発の進め方」「データと一時ファイル」に従う**（パッケージ名、依存の向き、整数の金額、`IdGenerator`、テストの一時ファイルは `.tmp/`、合成のフィクスチャ、Conventional Commits）
+- この機能に固有: ID は `import { randomUUIDv7 } from "node:crypto"`（グローバルの `crypto` にはない。T001 で確認）。ドメイン層では直接呼ばず、`IdGenerator` ポートから受け取る（純関数を保つため）
 
 ---
 

@@ -10,6 +10,8 @@ import {
   InMemoryRegistry,
   SequentialIds,
 } from "./fakes.ts";
+import { accountIdOf } from "./ledger-setup.ts";
+import { NOW } from "./test-dates.ts";
 
 let masters: InMemoryMasterRepository;
 let ledger: InMemoryLedgerRepository;
@@ -19,7 +21,7 @@ beforeEach(() => {
   masters = new InMemoryMasterRepository();
   ledger = new InMemoryLedgerRepository();
   const ids = new SequentialIds();
-  const clock = new FixedClock("2026-10-31T09:00:00.000Z");
+  const clock = new FixedClock(NOW);
   const created = createEntity(
     { registry: new InMemoryRegistry(), openTenant: () => masters, ids, clock },
     { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 },
@@ -28,11 +30,7 @@ beforeEach(() => {
   deps = { ledger, masters, ids, clock };
 });
 
-const accountId = (name: string) => {
-  const a = masters.listAccounts().find((x) => x.name === name);
-  if (a === undefined) throw new Error(`科目がない: ${name}`);
-  return a.id;
-};
+const accountId = (name: string) => accountIdOf(masters, name);
 
 const line = (side: LineDraft["side"], name: string, amount: number): LineDraft => ({
   side,
@@ -79,8 +77,8 @@ describe("createJournal（US2）", () => {
       version: 1,
       source: "manual",
       correctsJournalId: null,
-      createdAt: "2026-10-31T09:00:00.000Z",
-      updatedAt: "2026-10-31T09:00:00.000Z",
+      createdAt: NOW,
+      updatedAt: NOW,
     });
     expect(journal.lines).toHaveLength(2);
     expect(new Set(journal.lines.map((l) => l.id)).size).toBe(2);
@@ -93,7 +91,7 @@ describe("createJournal（US2）", () => {
       action: "create",
       reason: null,
       beforeJson: null,
-      occurredAt: "2026-10-31T09:00:00.000Z",
+      occurredAt: NOW,
     });
     expect(JSON.parse(ledger.audits[0]?.afterJson ?? "null")).toEqual(journal);
   });

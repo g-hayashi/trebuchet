@@ -26,6 +26,14 @@ export const MonthString = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "月は YYYY-MM で入力してください");
 
+/** パスの `:year`（4 桁の数字）。数値にする。形が違うときの応答は server の `validate` が決める */
+export const FiscalYearParam = z.object({
+  year: z
+    .string()
+    .regex(/^\d{4}$/)
+    .transform(Number),
+});
+
 /** 日（1〜28、または 31 = 末日。29・30 は不可。005 の R8） */
 export const DayOfMonthOrEnd = z
   .number()

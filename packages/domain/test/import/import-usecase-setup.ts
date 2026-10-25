@@ -4,8 +4,8 @@ import { createEntity } from "../../src/usecases/create-entity.ts";
 import { commitFreeeImport, proposeFreeeOpening } from "../../src/usecases/import-freee.ts";
 import { replaceOpeningBalances } from "../../src/usecases/masters.ts";
 import {
-  FakeImportUnitOfWork,
   FixedClock,
+  fakeImportUnitOfWork,
   InMemoryLedgerRepository,
   InMemoryMasterRepository,
   InMemoryRegistry,
@@ -13,6 +13,7 @@ import {
 } from "../fakes.ts";
 import { FIXTURE_FILES } from "../fixtures/freee/expected.ts";
 import { readFixture } from "../fixtures/freee/load.ts";
+import { accountIdOfCode } from "../ledger-setup.ts";
 import { InMemoryReportRepository } from "../reports/fake-report-repository.ts";
 
 // 取込のユースケース（取消・照合・差分の取込）のテストの共通の準備
@@ -40,13 +41,9 @@ export function setup() {
     },
   ]);
   const ledger = new InMemoryLedgerRepository();
-  const uow = new FakeImportUnitOfWork(ledger, masters);
+  const uow = fakeImportUnitOfWork(ledger, masters);
   const reports = new InMemoryReportRepository(ledger, masters);
-  const code = (c: string) => {
-    const a = masters.state.accounts.find((x) => x.code === c);
-    if (a === undefined) throw new Error(`科目がない: ${c}`);
-    return a.id;
-  };
+  const code = (c: string) => accountIdOfCode(masters, c);
   const masterDeps = { repo: masters, ids, clock };
   return { uow, reports, masters, ledger, ids, clock, code, masterDeps };
 }

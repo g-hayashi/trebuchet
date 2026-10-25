@@ -1,5 +1,6 @@
 import type { BackupRun, BackupStore, NewBackupRun } from "@trebuchet/domain";
-import { desc, inArray, sql } from "drizzle-orm";
+import { desc, inArray } from "drizzle-orm";
+import { rowidOf } from "../internal.ts";
 import { backupRuns } from "../schema/registry.ts";
 import type { RegistryDb } from "../tenant-store.ts";
 
@@ -21,7 +22,7 @@ function toRun(r: Row): BackupRun {
 }
 
 /** 新しい順。同じ時刻なら後に記録した行（rowid が大きい）を新しいとする */
-const newestFirst = [desc(backupRuns.finishedAt), desc(sql`${backupRuns}.rowid`)] as const;
+const newestFirst = [desc(backupRuns.finishedAt), desc(rowidOf(backupRuns))] as const;
 
 /** backup_runs だけ（app_settings は AuthStore の getSetting・setSetting） */
 export class DrizzleBackupStore implements BackupStore {

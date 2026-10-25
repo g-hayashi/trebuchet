@@ -6,6 +6,7 @@ import {
   backupRunner,
   backupStore,
   clock as defaultClock,
+  type RouteOptions,
   secretStore,
 } from "./deps.ts";
 import { onError } from "./errors.ts";
@@ -33,23 +34,23 @@ import { taxReturnRoutes } from "./routes/tax-return.ts";
 import { type TenantEnv, tenant } from "./tenant.ts";
 
 /**
- * 事業体の下のルート。請求・定期仕訳のルートは「今日」の元になる clock を受け取るので、
- * `createApp` の中で組み立てる（005 R22）
+ * 事業体の下のルート。時刻（更新日時・「今日」）を使うルートは clock を受け取るので、
+ * `createApp` の中で組み立てる（005 R22）。全ルートに同じ clock が渡る
  */
-function tenantRoutes(clock: Clock) {
+function tenantRoutes(options: RouteOptions) {
   return new Hono<TenantEnv>()
     .use(tenant)
     .route("/", entityRoutes)
-    .route("/", masterRoutes)
-    .route("/", periodRoutes)
-    .route("/", journalRoutes)
+    .route("/", masterRoutes(options))
+    .route("/", periodRoutes(options))
+    .route("/", journalRoutes(options))
     .route("/", reportRoutes)
-    .route("/", importRoutes)
-    .route("/", blueReturnRoutes)
-    .route("/", fixedAssetRoutes)
-    .route("/", taxReturnRoutes)
-    .route("/", invoicingRoutes({ clock }))
-    .route("/", recurringRoutes({ clock }));
+    .route("/", importRoutes(options))
+    .route("/", blueReturnRoutes(options))
+    .route("/", fixedAssetRoutes(options))
+    .route("/", taxReturnRoutes(options))
+    .route("/", invoicingRoutes(options))
+    .route("/", recurringRoutes(options));
 }
 
 export type AppOptions = {
@@ -108,8 +109,8 @@ export function createApp(options: AppOptions = {}) {
         ...(options.backup?.crypto === undefined ? {} : { crypto: options.backup.crypto }),
       }),
     )
-    .route("/entities", entitiesRoutes)
-    .route("/entities/:entityId", tenantRoutes(clock));
+    .route("/entities", entitiesRoutes({ clock }))
+    .route("/entities/:entityId", tenantRoutes({ clock }));
 
   app.onError(onError);
   return app;

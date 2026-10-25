@@ -1,10 +1,10 @@
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { client, createTestEntity, errorOf } from "./helpers.ts";
+import { accountLookup, client, createTestEntity, errorOf, okBody } from "./helpers.ts";
 
 let tmp: TempDataDir;
 let entityId: string;
-let accountIds: Map<string, string>;
+let acc: (name: string) => string;
 
 const e = client.api.entities[":entityId"];
 const assets = e["fixed-assets"];
@@ -13,17 +13,9 @@ const one = () => assets[":assetId"];
 beforeEach(async () => {
   tmp = useTempDataDir("server-fixed-assets");
   entityId = await createTestEntity();
-  const res = await e.accounts.$get({ param: { entityId } });
-  if (res.status !== 200) throw new Error(String(res.status));
-  accountIds = new Map((await res.json()).accounts.map((a) => [a.name, a.id]));
+  acc = await accountLookup(entityId);
 });
 afterEach(() => tmp.cleanup());
-
-const acc = (name: string) => {
-  const id = accountIds.get(name);
-  if (id === undefined) throw new Error(`科目がない: ${name}`);
-  return id;
-};
 
 const body = (over: Record<string, unknown> = {}) => ({
   name: "ノートパソコン",
@@ -38,11 +30,6 @@ const body = (over: Record<string, unknown> = {}) => ({
 type PostJson = Parameters<typeof assets.$post>[0]["json"];
 const post = (over: Record<string, unknown> = {}) =>
   assets.$post({ param: { entityId }, json: body(over) as PostJson });
-
-const okBody = async <R extends { json(): Promise<unknown> }>(
-  res: R,
-): Promise<Exclude<Awaited<ReturnType<R["json"]>>, { error: unknown }>> =>
-  (await res.json()) as Exclude<Awaited<ReturnType<R["json"]>>, { error: unknown }>;
 
 const create = async (over: Record<string, unknown> = {}) => {
   const res = await post(over);

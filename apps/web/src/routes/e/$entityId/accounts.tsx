@@ -19,16 +19,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AccountCreateForm } from "@/features/accounts/AccountCreateForm";
+import {
+  type Account,
+  accountKeys,
+  accountsQuery,
+  deleteAccount,
+  patchAccount,
+  postSubAccount,
+  subAccountsQuery,
+} from "@/features/accounts/api";
 import { CATEGORY_LABELS, groupAccountsBySection } from "@/lib/accounts";
-import { api, unwrap } from "@/lib/api";
-import { type Account, accountsQuery, queryKeys, subAccountsQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/e/$entityId/accounts")({
   component: AccountsPage,
 });
-
-const accountApi = api.api.entities[":entityId"].accounts;
 
 function AccountsPage() {
   const { entityId } = Route.useParams();
@@ -97,20 +102,17 @@ function AccountRow({ entityId, account }: { entityId: string; account: Account 
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [showSubAccounts, setShowSubAccounts] = useState(false);
-  const param = { entityId, accountId: account.id };
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.accounts(entityId) });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: accountKeys.list(entityId) });
 
   const patch = useMutation({
-    mutationFn: async (json: AccountPatch) =>
-      unwrap(await accountApi[":accountId"].$patch({ param, json })),
+    mutationFn: (json: AccountPatch) => patchAccount(entityId, account.id, json),
     onSuccess: async () => {
       setEditing(false);
       await invalidate();
     },
   });
   const remove = useMutation({
-    mutationFn: async () => unwrap(await accountApi[":accountId"].$delete({ param })),
+    mutationFn: () => deleteAccount(entityId, account.id),
     onSuccess: invalidate,
   });
   const error = patch.error ?? remove.error;
@@ -295,17 +297,11 @@ function SubAccountsPanel({ entityId, account }: { entityId: string; account: Ac
     defaultValues: { name: "" },
   });
   const create = useMutation({
-    mutationFn: async (json: SubAccountCreate) =>
-      unwrap(
-        await accountApi[":accountId"]["sub-accounts"].$post({
-          param: { entityId, accountId: account.id },
-          json,
-        }),
-      ),
+    mutationFn: (json: SubAccountCreate) => postSubAccount(entityId, account.id, json),
     onSuccess: async () => {
       form.reset({ name: "" });
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.subAccounts(entityId, account.id),
+        queryKey: accountKeys.subAccounts(entityId, account.id),
       });
     },
   });

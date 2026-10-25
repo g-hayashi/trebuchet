@@ -13,13 +13,13 @@ import {
   restoreBackup,
 } from "../../packages/db/src/backup/restore.ts";
 
-export const EXIT_OK = 0;
-export const EXIT_INVALID = 1;
-export const EXIT_USAGE = 2;
-export const EXIT_SERVER_RUNNING = 3;
-export const EXIT_CANCELLED = 4;
+const EXIT_OK = 0;
+const EXIT_INVALID = 1;
+const EXIT_USAGE = 2;
+const EXIT_SERVER_RUNNING = 3;
+const EXIT_CANCELLED = 4;
 
-export const SERVER_PORT = 8787;
+const SERVER_PORT = 8787;
 
 export type RestoreCliDeps = {
   env: Record<string, string | undefined>;

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { contentSha256, packArchive, unpackArchive } from "../src/backup/archive.ts";
+import { packArchive, sha256Hex, unpackArchive } from "../src/backup/archive.ts";
 import type { Snapshot } from "../src/backup/types.ts";
 
 const ID = "0192f3a0-0000-7000-8000-000000000001";
@@ -54,7 +54,7 @@ describe("アーカイブ", () => {
 
   it("content_sha256 はアーカイブの平文の SHA-256", () => {
     const archive = packArchive(snapshot());
-    expect(contentSha256(archive)).toBe(createHash("sha256").update(archive).digest("hex"));
+    expect(sha256Hex(archive)).toBe(createHash("sha256").update(archive).digest("hex"));
   });
 
   it("マニフェストのハッシュが合わないものは拒否する", () => {

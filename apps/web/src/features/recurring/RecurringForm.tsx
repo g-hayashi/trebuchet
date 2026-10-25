@@ -6,15 +6,12 @@ import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SaveNotice } from "@/components/ui/save-notice";
+import { accountsQuery } from "@/features/accounts/api";
+import { taxCategoriesQuery, taxSettingsQuery } from "@/features/entities/api";
 import { JournalForm } from "@/features/journals/JournalForm";
-import { today } from "@/lib/dates";
-import {
-  accountsQuery,
-  partnersQuery,
-  queryKeys,
-  taxCategoriesQuery,
-  taxSettingsQuery,
-} from "@/lib/queries";
+import { partnersQuery } from "@/features/masters/api";
+import { thisMonth, today } from "@/lib/dates";
+import { invalidateLedger } from "@/lib/queries";
 import { confirmDetailsOf, postRecurring, putRecurring, recurringKeys } from "./api";
 import { DAY_OPTIONS } from "./labels";
 
@@ -40,7 +37,7 @@ export function RecurringForm({
   const queryClient = useQueryClient();
   const [name, setName] = useState(recurring?.name ?? "");
   const [day, setDay] = useState(String(recurring?.dayOfMonth ?? 1));
-  const [startMonth, setStartMonth] = useState(recurring?.startMonth ?? today().slice(0, 7));
+  const [startMonth, setStartMonth] = useState(recurring?.startMonth ?? thisMonth());
   const [endMonth, setEndMonth] = useState(recurring?.endMonth ?? "");
   const [errors, setErrors] = useState<{ name?: string; startMonth?: string; endMonth?: string }>(
     {},
@@ -69,15 +66,9 @@ export function RecurringForm({
     setConfirming(undefined);
     const posted = result.posted.length;
     setNotice(posted > 0 ? `保存しました。${posted} 件の仕訳を登録しました。` : "保存しました。");
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: recurringKeys.all(entityId) }),
-      ...(posted > 0
-        ? [
-            queryClient.invalidateQueries({ queryKey: queryKeys.journals(entityId) }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.reports(entityId) }),
-          ]
-        : []),
-    ]);
+    await (posted > 0
+      ? invalidateLedger(queryClient, entityId)
+      : queryClient.invalidateQueries({ queryKey: recurringKeys.all(entityId) }));
     onSaved?.(result.recurring);
   };
 

@@ -15,12 +15,17 @@ import {
 const Text = z.string().max(500);
 const Timestamp = z.string().min(1);
 
-/** 0.5 の倍数か（`1.25` は不可） */
-const isHalfStep = (n: number) => Number.isInteger(n * 2);
+/** 0.5 の倍数か（`1.25` は不可）。工数・数量の半単位の検査の正本 */
+export const isHalfStep = (n: number) => Number.isInteger(n * 2);
+
+/** 1 明細の金額 = `floor(数量（半単位の整数）× 単価 / 2)`（data-model §1.5、INV-37）。金額の式の正本 */
+export function itemAmountOfHalves(quantityHalves: number, unitPrice: number): number {
+  return Math.floor((quantityHalves * unitPrice) / 2);
+}
 
 /** 1 明細の金額 = `floor(数量 × 単価)`（数量は 0.5 の倍数。data-model §1.5、INV-37） */
 export function itemAmountOf(quantity: number, unitPrice: number): number {
-  return Math.floor((quantity * 2 * unitPrice) / 2);
+  return itemAmountOfHalves(quantity * 2, unitPrice);
 }
 
 export const MAX_INVOICE_ITEMS = 5;
@@ -70,7 +75,9 @@ export type InvoiceSettingsResponse = z.infer<typeof InvoiceSettingsResponse>;
 
 // ---- 請求の条件（§2.3〜§2.5） ----
 
-export const BillingType = z.enum(["hourly", "monthly"]);
+/** 請求の種別。db の列の enum もここから導出する（正本） */
+export const BILLING_TYPES = ["hourly", "monthly"] as const;
+export const BillingType = z.enum(BILLING_TYPES);
 export type BillingType = z.infer<typeof BillingType>;
 
 const BillingTermsFields = z.object({

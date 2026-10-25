@@ -1,5 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { formatSignedYen, formatYen, parseYenInput } from "./format";
+import { formatSignedYen, formatYen, parseHalfStep, parseWholeYen, parseYenInput } from "./format";
+
+describe("parseWholeYen", () => {
+  it("min 以上の整数だけを返し、それ以外は null", () => {
+    expect(parseWholeYen("1,000", { min: 0 })).toBe(1000);
+    expect(parseWholeYen("１２３", { min: 1 })).toBe(123);
+    expect(parseWholeYen("0", { min: 0 })).toBe(0);
+    expect(parseWholeYen("0", { min: 1 })).toBeNull();
+    expect(parseWholeYen("-5", { min: 0 })).toBeNull();
+    expect(parseWholeYen("1.5", { min: 0 })).toBeNull();
+    expect(parseWholeYen("", { min: 0 })).toBeNull();
+    expect(parseWholeYen("abc", { min: 0 })).toBeNull();
+    expect(parseWholeYen("1e20", { min: 0 })).toBeNull();
+  });
+});
+
+describe("parseHalfStep", () => {
+  it("0.5 の倍数だけを返し、それ以外は null", () => {
+    expect(parseHalfStep("1.5")).toBe(1.5);
+    expect(parseHalfStep(" 8 ")).toBe(8);
+    expect(parseHalfStep("0")).toBe(0);
+    expect(parseHalfStep("0.3")).toBeNull();
+    expect(parseHalfStep("-0.5")).toBeNull();
+    expect(parseHalfStep("")).toBeNull();
+    expect(parseHalfStep("abc")).toBeNull();
+  });
+
+  it("min 未満は null", () => {
+    expect(parseHalfStep("0", { min: 0.5 })).toBeNull();
+    expect(parseHalfStep("0.5", { min: 0.5 })).toBe(0.5);
+  });
+});
 
 describe("formatYen", () => {
   it("3桁区切りで表示する", () => {

@@ -20,10 +20,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AccountCreateForm } from "@/features/accounts/AccountCreateForm";
+import { type Account, subAccountsQuery } from "@/features/accounts/api";
+import type { TaxCategory } from "@/features/entities/api";
 import { groupAccountsBySection } from "@/lib/accounts";
-import { type Account, queryKeys, subAccountsQuery, type TaxCategory } from "@/lib/queries";
 import { cn } from "@/lib/utils";
-import { saveImportMappings } from "./api";
+import { importKeys, saveImportMappings } from "./api";
 import { MAPPING_STATUS_LABELS } from "./labels";
 
 /** 科目の対応先（未定なら accountId がない）。補助科目は既存の ID か、取込で作る名前のどちらか */
@@ -42,7 +43,7 @@ const targetOf = (row: MappingRow): AccountTarget => ({
 });
 
 /** 保存する行: 利用者が変えた行と、案のままの行（画面で確かめた案）。対応先のない行は送らない */
-export function mappingsToSave(
+function mappingsToSave(
   mappings: { accounts: readonly MappingRow[]; taxes: readonly MappingRow[] },
   accountEdits: AccountEdits,
   taxEdits: TaxEdits,
@@ -111,7 +112,7 @@ export function MappingEditor({
         ...(toSave.taxes.length > 0 && { taxes: toSave.taxes }),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.importMappings(entityId) });
+      await queryClient.invalidateQueries({ queryKey: importKeys.mappings(entityId) });
       await onSaved();
     },
   });

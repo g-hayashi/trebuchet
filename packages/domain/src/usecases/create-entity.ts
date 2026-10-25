@@ -1,3 +1,4 @@
+import { ENTITY_NAME_MAX } from "@trebuchet/schema";
 import { fiscalYearStart, oneYearEnd } from "../dates.ts";
 import type { Clock, IdGenerator, MasterRepository, RegistryRepository } from "../ports.ts";
 import { INDIVIDUAL_ACCOUNTS } from "../seed/accounts.individual.ts";
@@ -25,13 +26,13 @@ export type CreateEntityDeps = {
   clock: Clock;
 };
 
-const NAME_MAX = 100;
-
 function validateInput(input: CreateEntityInput): Result<CreateEntityInput> {
   const name = input.name.trim();
-  if (name.length === 0 || name.length > NAME_MAX) {
+  if (name.length === 0 || name.length > ENTITY_NAME_MAX) {
     return err(
-      domainError("VALIDATION", "名称は 1〜100 文字で入力してください", { field: "name" }),
+      domainError("VALIDATION", `名称は 1〜${ENTITY_NAME_MAX} 文字で入力してください`, {
+        field: "name",
+      }),
     );
   }
   const month = input.fiscalStartMonth;
@@ -109,6 +110,7 @@ export function createEntity(
         accountingMethod: "tax_included",
       },
     ]);
+    return ok(null);
   });
 
   deps.registry.insertEntity({
@@ -118,4 +120,26 @@ export function createEntity(
     createdAt: profile.createdAt,
   });
   return ok(profile);
+}
+
+/**
+ * 事業体の名前を変える（PATCH /entities/:entityId）。テナントのプロファイルと registry の両方を変える。
+ * registry とテナントは別の DB のため、registry の更新をテナントのトランザクションの最後に行う。
+ * registry の更新が例外で失敗すれば、プロファイルの変更も巻き戻る
+ */
+export function renameEntity(
+  deps: { tenant: MasterRepository; registry: RegistryRepository },
+  entityId: string,
+  name: string,
+): Result<EntityProfile> {
+  return deps.tenant.transaction((tx) => {
+    const profile = tx.getProfile();
+    if (profile === undefined) {
+      return err(domainError("ENTITY_NOT_FOUND", "事業体が見つかりません"));
+    }
+    const updated = { ...profile, name };
+    tx.saveProfile(updated);
+    deps.registry.renameEntity(entityId, name);
+    return ok(updated);
+  });
 }

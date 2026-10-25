@@ -8,7 +8,7 @@ import {
   voidPayment,
 } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { type TempDataDir, TODAY, useTempDataDir } from "../src/testing.ts";
 import { setupInvoicingDb } from "./invoicing-db-setup.ts";
 
 // 005 US2: 消し込みの実 DB での往復と、障害の注入（INV-32）。
@@ -17,8 +17,6 @@ import { setupInvoicingDb } from "./invoicing-db-setup.ts";
 let tmp: TempDataDir;
 let t: ReturnType<typeof setupInvoicingDb>;
 let invoiceId: string;
-
-const TODAY = "2026-10-31";
 
 beforeEach(() => {
   tmp = useTempDataDir("invoicing-payments");
