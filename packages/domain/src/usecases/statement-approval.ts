@@ -1,4 +1,9 @@
-import type { Purpose, StatementAccount, StatementView } from "@trebuchet/schema";
+import type {
+  InferenceRuleView,
+  Purpose,
+  StatementAccount,
+  StatementView,
+} from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
 import { findAccountByCode } from "../invoicing/journal-drafts.ts";
 import type { Clock, IdGenerator, StatementUnitOfWork } from "../ports.ts";
@@ -18,6 +23,7 @@ import {
   validation,
 } from "../types.ts";
 import { createJournal } from "./create-journal.ts";
+import { learnFromApproval } from "./inference-rules.ts";
 import { checkReason } from "./journal-edit.ts";
 import { loadStatementStates, type StatementState } from "./statement-candidates.ts";
 import { getStatementSettings, type StatementTx, statementViewsInTx } from "./statements.ts";
@@ -33,9 +39,11 @@ export type ApproveStatementInput = {
   draft?: JournalDraft | undefined;
   /** 結びつけ先の既存の仕訳の行（`match` の候補、または利用者が選んだ仕訳）。`draft` とは同時に渡せない */
   match?: { journalId: string; lineId: string } | undefined;
-  /** 以下は推定ルールの学習（US3 の T019）が使う。T015 では読まない */
+  /** 推定ルールの学習（US3。R9）に使う判定。省略なら登録した仕訳の相手の科目から決める（事業主貸・借なら私用） */
   purpose?: Purpose | undefined;
+  /** 推定ルールの学習に使う取引先。省略なら登録した仕訳の相手の行の取引先 */
   partnerId?: string | undefined;
+  /** false ならルールを学ばない（既定は学ぶ）。既存の仕訳への結びつき（`match`）は学ばない */
   learn?: boolean | undefined;
 };
 
@@ -47,6 +55,8 @@ export type ApprovedStatement = {
   /** 振替の対の相手の明細の結びつき（同じ仕訳の別の行）。対がなければ null */
   pairLink: StatementLinkRecord | null;
   warnings: DomainWarning[];
+  /** この承認で作った・直したルール。学ばなかったとき（`learn: false`、`match`、分割の仕訳）はない */
+  rule?: InferenceRuleView | undefined;
 };
 
 const REVOKE_REASON = "結びつけた仕訳が取り消されたため";
@@ -216,6 +226,15 @@ export function approveCandidate(
       .find((c) => c.statementId === statementId);
     const plan = resolvePlan(input, candidate);
     if (!plan.ok) return plan;
+    if (
+      input.partnerId !== undefined &&
+      !tx.masters.listPartners().some((p) => p.id === input.partnerId)
+    ) {
+      return validation("取引先が見つかりません", {
+        field: "partnerId",
+        partnerId: input.partnerId,
+      });
+    }
     const inflow = record.amount > 0;
     const target = ledgerAccountOf(tx, account, inflow);
     if (!target.ok) return target;
@@ -268,7 +287,25 @@ export function approveCandidate(
       candidate?.method === "transfer"
         ? linkTransferPair(deps, tx, states, record, candidate, journal, ownLine.id, now)
         : null;
-    return ok({ journal, link, pairLink, warnings: posted.value.warnings });
+    // 承認から学ぶ（同じ UnitOfWork。INV-47）。最後に行うので、ここまでに作った結びつきも候補の作り直しに反映される
+    const rule =
+      input.learn === false
+        ? null
+        : learnFromApproval(deps, tx, {
+            record,
+            journal,
+            ownLineId: ownLine.id,
+            purpose: input.purpose,
+            partnerId: input.partnerId,
+            now,
+          });
+    return ok({
+      journal,
+      link,
+      pairLink,
+      warnings: posted.value.warnings,
+      ...(rule === null ? {} : { rule }),
+    });
   });
 }
 

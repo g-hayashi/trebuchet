@@ -1,4 +1,6 @@
 import type {
+  InferenceRule,
+  InferenceRuleHistoryRecord,
   StatementAuditEntry,
   StatementCandidateRecord,
   StatementLinkRecord,
@@ -8,8 +10,10 @@ import type {
 } from "@trebuchet/domain";
 import type { StatementAccount, StatementBatch, StatementSettings } from "@trebuchet/schema";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { insertionOrder, type TenantConn } from "./internal.ts";
+import { asTaxCategory, insertionOrder, type TenantConn } from "./internal.ts";
 import {
+  inferenceRuleHistory,
+  inferenceRules,
   statementAccounts,
   statementAuditLog,
   statementBatches,
@@ -34,7 +38,7 @@ const toRow = (record: StatementRecord): StatementRow => ({
 
 /**
  * StatementStore の Drizzle（better-sqlite3）による実装。メソッドはすべて同期。
- * ルールなどのメソッドは各ストーリーの db のタスクで足す
+ * 評価（US5）などのメソッドは各ストーリーの db のタスクで足す
  */
 export class DrizzleStatementStore implements StatementStore {
   private readonly db: TenantConn;
@@ -142,6 +146,42 @@ export class DrizzleStatementStore implements StatementStore {
       .where(and(eq(statementLinks.id, id), isNull(statementLinks.revokedAt)))
       .run();
     if (result.changes === 0) throw new Error(`active statement link not found: ${id}`);
+  }
+
+  listInferenceRules(): InferenceRule[] {
+    return this.db
+      .select()
+      .from(inferenceRules)
+      .orderBy(insertionOrder)
+      .all()
+      .map((row) => ({ ...row, taxCategory: asTaxCategory(row.taxCategory) }));
+  }
+
+  insertInferenceRule(rule: InferenceRule): void {
+    this.db.insert(inferenceRules).values(rule).run();
+  }
+
+  updateInferenceRule(rule: InferenceRule): void {
+    const { id: _id, createdAt: _createdAt, ...changes } = rule;
+    const result = this.db
+      .update(inferenceRules)
+      .set(changes)
+      .where(eq(inferenceRules.id, rule.id))
+      .run();
+    if (result.changes === 0) throw new Error(`inference rule not found: ${rule.id}`);
+  }
+
+  appendInferenceRuleHistory(entry: InferenceRuleHistoryRecord): void {
+    this.db.insert(inferenceRuleHistory).values(entry).run();
+  }
+
+  listInferenceRuleHistory(ruleId: string): InferenceRuleHistoryRecord[] {
+    return this.db
+      .select()
+      .from(inferenceRuleHistory)
+      .where(eq(inferenceRuleHistory.ruleId, ruleId))
+      .orderBy(insertionOrder)
+      .all();
   }
 
   getStatementSettings(): StatementSettings | undefined {

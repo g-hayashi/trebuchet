@@ -1,8 +1,9 @@
 import type { Candidate, Purpose, StatementAccount, StatementStatus } from "@trebuchet/schema";
 import { addDays, daysBetween } from "../dates.ts";
 import type { LedgerRepository, StatementUnitOfWork } from "../ports.ts";
-import { journalShape } from "../statements/journal-shape.ts";
+import { journalShape, STATEMENT_ACCOUNT_CODES } from "../statements/journal-shape.ts";
 import { MATCH_WINDOW_DAYS, matchExistingJournal } from "../statements/match-existing.ts";
+import { ruleConfidence, ruleFor } from "../statements/rules.ts";
 import { statementStatus } from "../statements/status.ts";
 import {
   findTransferPair,
@@ -11,6 +12,8 @@ import {
   transferJournal,
 } from "../statements/transfer.ts";
 import {
+  type Account,
+  type InferenceRule,
   type Journal,
   type JournalDraft,
   ok,
@@ -74,7 +77,7 @@ export function loadStatementStates(tx: StatementTx): StatementState[] {
 }
 
 /** 日付の範囲の有効な仕訳（取消済みを除く）。全件をページをたどって集める */
-function journalsBetween(ledger: LedgerRepository, from: string, to: string): Journal[] {
+export function journalsBetween(ledger: LedgerRepository, from: string, to: string): Journal[] {
   const items: Journal[] = [];
   let cursor: string | undefined;
   for (;;) {
@@ -119,7 +122,7 @@ const AI_METHODS = new Set<string>(["local_ai", "external_ai"]);
 export type BuildResult = { built: number; needsAi: string[] };
 
 /**
- * 候補を作る（R8: 既存の仕訳 → 振替の対 → none。ルールの段は US3 が足す）。
+ * 候補を作る（R8: 既存の仕訳 → 振替の対 → ルール → none。AI は後の段）。
  * `targetIds` のうち、未処理で 0 円でない明細の候補を作り直す。0 円の明細は候補を作らず、あれば消す。
  * AI の候補（`local_ai`・`external_ai`）は、前の段で作れなかったとき `rebuild` でなければ残す（AI の呼び出しは遅い）。
  * `built` は書いた候補の数（none を含む）。`needsAi` は none で、AI に回す明細（`private` の口座も含む）
@@ -156,6 +159,7 @@ export function buildCandidatesInTx(
   const claimedLines = new Set(states.flatMap((s) => s.activeLinks.map((l) => l.journalLineId)));
   const claimed = new Set<string>();
   const ledgerAccounts = tx.masters.listAccounts();
+  const rules = tx.statements.listInferenceRules();
 
   let built = 0;
   const needsAi: string[] = [];
@@ -203,11 +207,27 @@ export function buildCandidatesInTx(
       continue;
     }
 
-    // 3. （ルール・AI は後の段）作れなければ none
+    // 3. ルール（対のない引落は、ルールでカードが決まれば transfer。R9）
+    const guess = inferUnpairedTransfer(record);
+    const rule = ruleFor(record, rules);
+    if (rule !== undefined) {
+      const body = ruleCandidateBody(
+        record,
+        account,
+        rule,
+        ledgerAccounts,
+        guess.kind === "card_payment",
+      );
+      if (body !== undefined) {
+        write(record.id, body);
+        continue;
+      }
+    }
+
+    // 4. （AI は後の段）作れなければ none
     const previous = existing.get(record.id);
     if (!rebuild && previous !== undefined && AI_METHODS.has(previous.method)) continue;
     // private の口座の出金・入金も事業／私用の判定が要るので、AI に回す（US2-5）
-    const guess = inferUnpairedTransfer(record);
     write(
       record.id,
       noneBody(
@@ -219,6 +239,100 @@ export function buildCandidatesInTx(
     needsAi.push(record.id);
   }
   return ok({ built, needsAi });
+}
+
+/**
+ * ルールから候補の中身を作る（R9）。相手の科目がない・使用停止、または仕訳の案を作れなければ undefined
+ * （次の段へ進む）。私用の口座で私用の判定のルールは、仕訳にならない `none`（AI に回さない）。
+ * `cardPayment`（対のない引落がカードの支払いらしい）で、ルールの相手が未払金なら、方法は `transfer`
+ * （借 未払金（カードの補助科目）/ 貸 明細の口座。税区分は対象外）
+ */
+function ruleCandidateBody(
+  record: StatementRecord,
+  account: StatementAccount,
+  rule: InferenceRule,
+  ledgerAccounts: readonly Account[],
+  cardPayment: boolean,
+): CandidateBody | undefined {
+  const counter = ledgerAccounts.find((a) => a.id === rule.counterAccountId);
+  if (counter === undefined || !counter.isActive) return undefined;
+  const confidence = ruleConfidence(rule);
+  const evidence =
+    rule.origin === "seed"
+      ? `過去の同じ内容の仕訳 ${rule.hits} 件と一致`
+      : `過去の同じ内容の明細 ${rule.hits} 件と一致`;
+  const reason = rule.overrides > 0 ? `${evidence}（修正 ${rule.overrides} 回）` : evidence;
+
+  if (cardPayment && counter.code === STATEMENT_ACCOUNT_CODES.accountsPayable) {
+    const shaped = journalShape({
+      statement: record,
+      account,
+      purpose: "business",
+      counter: {
+        accountId: counter.id,
+        subAccountId: rule.counterSubAccountId,
+        taxCategory: "OUT_OF_SCOPE",
+      },
+      accounts: ledgerAccounts,
+    });
+    if (!shaped.ok || shaped.value === null) return undefined;
+    return transferBody(shaped.value.draft, "business", confidence, `カードの引落（${reason}）`);
+  }
+
+  const shaped = journalShape({
+    statement: record,
+    account,
+    purpose: rule.purpose,
+    counter: {
+      accountId: counter.id,
+      subAccountId: rule.counterSubAccountId,
+      taxCategory: rule.taxCategory,
+      partnerId: rule.partnerId,
+      description: rule.descriptionTemplate,
+    },
+    accounts: ledgerAccounts,
+  });
+  if (!shaped.ok) return undefined;
+  if (shaped.value === null) return noneBody(PRIVATE_ACCOUNT_REASON);
+  return {
+    method: "rule",
+    purpose: rule.purpose,
+    confidence,
+    reason,
+    draftJson: JSON.stringify(shaped.value.draft),
+    ruleId: rule.id,
+    model: null,
+  };
+}
+
+/**
+ * ルールが変わった（作成・更新・停止・再開・初期作成・承認からの学習）とき、その内容の
+ * 未処理の明細で、候補が `rule`・`none` のものだけを作り直す（R8）。AI・既存の仕訳・振替の候補は残す。
+ * UnitOfWork の中で呼ぶ
+ */
+export function rebuildRuleCandidates(
+  deps: { clock: { now(): string } },
+  tx: StatementTx,
+  contents: ReadonlySet<string>,
+): void {
+  if (contents.size === 0) return;
+  const states = loadStatementStates(tx);
+  const methodOf = new Map(
+    tx.statements.listStatementCandidates().map((c) => [c.statementId, c.method]),
+  );
+  const targetIds = new Set(
+    states
+      .filter((s) => {
+        const method = methodOf.get(s.record.id);
+        return (
+          s.status === "unprocessed" &&
+          contents.has(s.record.normalizedContent) &&
+          (method === "rule" || method === "none")
+        );
+      })
+      .map((s) => s.record.id),
+  );
+  if (targetIds.size > 0) buildCandidatesInTx(deps, tx, states, targetIds, true);
 }
 
 /** 振替の対の 2 件分の候補の中身（`[record の側, pair の側]`） */

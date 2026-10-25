@@ -1,5 +1,8 @@
 import type {
   CandidateMethod,
+  Purpose,
+  RuleHistoryAction,
+  RuleStatus,
   StatementAccountKind,
   StatementAccountUsage,
   StatementOrigin,
@@ -48,6 +51,26 @@ export const METHOD_LABELS: Record<CandidateMethod, string> = {
   local_ai: "端末内の AI",
   external_ai: "外部の AI",
   none: "候補なし",
+};
+
+/** 判定（事業／私用） */
+export const PURPOSE_LABELS: Record<Purpose, string> = {
+  business: "事業",
+  private: "私用",
+};
+
+export const RULE_STATUS_LABELS: Record<RuleStatus, string> = {
+  active: "有効",
+  paused: "停止中",
+};
+
+/** ルールの履歴の操作（`inference_rule_history.action`） */
+export const RULE_ACTION_LABELS: Record<RuleHistoryAction, string> = {
+  create: "作成",
+  update: "承認で更新",
+  edit: "編集",
+  pause: "停止",
+  resume: "再開",
 };
 
 /** 変更ありの行の項目の名前（`changed.before`・`after` のキー） */

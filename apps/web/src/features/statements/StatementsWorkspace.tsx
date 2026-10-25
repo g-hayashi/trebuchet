@@ -99,7 +99,14 @@ export function StatementsWorkspace({
         <Link to="/e/$entityId/statements/import" params={{ entityId }} className={linkButtonClass}>
           明細を取り込む
         </Link>
-        <Link to="/settings/statements" className={linkButtonClass}>
+        <Link to="/e/$entityId/statements/rules" params={{ entityId }} className={linkButtonClass}>
+          推定のルール
+        </Link>
+        <Link
+          to="/e/$entityId/statements/settings"
+          params={{ entityId }}
+          className={linkButtonClass}
+        >
           しきい値の設定
         </Link>
         <Button disabled={build.isPending} onClick={() => build.mutate()}>

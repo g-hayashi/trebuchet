@@ -431,6 +431,123 @@ describe("承認（H:§4.4）", () => {
     });
   });
 
+  describe("推定ルールの学習の指定（US3。H:§4.4 の learn・purpose・partnerId）", () => {
+    const PARTNER = {
+      id: uuid(500),
+      name: "取引先A",
+      honorific: null,
+      memo: null,
+      isActive: true,
+    };
+    const approveReply = (extra: Record<string, unknown> = {}) =>
+      ok(
+        {
+          journal: { ...EXISTING, journalNo: 7 },
+          link: {},
+          pairLink: null,
+          warnings: [],
+          ...extra,
+        },
+        201,
+      );
+    const openForApproval = (extra: Record<string, unknown> = {}) =>
+      openApi([statement(1, { candidate: transferCandidate, amount: -5000 })], {
+        [`GET ${BASE}/partners`]: () => ok({ partners: [PARTNER] }),
+        [`POST ${BASE}/statements/${uuid(1)}/approve`]: () => approveReply(extra),
+      });
+    const openPanel = async (u: ReturnType<typeof user>) => {
+      await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "確認する" }));
+      return editor();
+    };
+
+    it("既定ではルールを学ぶ（チェック済み）。何も指定しなければ learn・purpose・partnerId を送らない", async () => {
+      const { all } = openForApproval();
+      const u = user();
+      renderStatements();
+      const panel = await openPanel(u);
+
+      expect(
+        within(panel).getByRole("checkbox", { name: "この承認からルールを学ぶ" }),
+      ).toBeChecked();
+      expect(within(panel).getByLabelText("判定（ルールに記憶）")).toHaveValue("");
+      expect(within(panel).getByLabelText("取引先（ルールに記憶）")).toHaveValue("");
+      await u.click(within(panel).getByRole("button", { name: "承認して登録" }));
+      await screen.findByText("承認しました（仕訳 No.7）。");
+      const body = calls(all, "POST", `/statements/${uuid(1)}/approve`)[0]?.body;
+      expect(body).not.toHaveProperty("learn");
+      expect(body).not.toHaveProperty("purpose");
+      expect(body).not.toHaveProperty("partnerId");
+    });
+
+    it("チェックを外すと learn: false を送る（ルールを学ばない）", async () => {
+      const { all } = openForApproval();
+      const u = user();
+      renderStatements();
+      const panel = await openPanel(u);
+
+      await u.click(within(panel).getByRole("checkbox", { name: "この承認からルールを学ぶ" }));
+      expect(within(panel).getByLabelText("判定（ルールに記憶）")).toBeDisabled();
+      expect(within(panel).getByLabelText("取引先（ルールに記憶）")).toBeDisabled();
+      await u.click(within(panel).getByRole("button", { name: "承認して登録" }));
+      await screen.findByText("承認しました（仕訳 No.7）。");
+      const body = calls(all, "POST", `/statements/${uuid(1)}/approve`)[0]?.body;
+      expect(body).toMatchObject({ learn: false });
+      expect(body).not.toHaveProperty("purpose");
+    });
+
+    it("判定（事業／私用）と取引先を選ぶと、purpose・partnerId を送る", async () => {
+      const { all } = openForApproval();
+      const u = user();
+      renderStatements();
+      const panel = await openPanel(u);
+
+      await u.selectOptions(within(panel).getByLabelText("判定（ルールに記憶）"), "私用");
+      await u.selectOptions(within(panel).getByLabelText("取引先（ルールに記憶）"), "取引先A");
+      await u.click(within(panel).getByRole("button", { name: "承認して登録" }));
+      await screen.findByText("承認しました（仕訳 No.7）。");
+      const body = calls(all, "POST", `/statements/${uuid(1)}/approve`)[0]?.body;
+      expect(body).toMatchObject({ purpose: "private", partnerId: PARTNER.id });
+      expect(body).not.toHaveProperty("learn");
+    });
+
+    it("ルールを学んだときは、承認の知らせに確信度を添える", async () => {
+      openForApproval({
+        rule: { id: uuid(600), hits: 2, overrides: 0, confidence: 70, status: "active" },
+      });
+      const u = user();
+      renderStatements();
+      const panel = await openPanel(u);
+
+      await u.click(within(panel).getByRole("button", { name: "承認して登録" }));
+      expect(
+        await screen.findByText(/承認しました（仕訳 No\.7）。.*ルールを学びました（確信度 70）。/),
+      ).toBeInTheDocument();
+    });
+
+    it("既存の仕訳と結びつけるときは、ルールの指定を出さず、learn も送らない", async () => {
+      const { all } = openApi(
+        [statement(1, { amount: -80_000, content: "家賃", candidate: matchCandidate })],
+        {
+          [`POST ${BASE}/statements/${uuid(1)}/approve`]: () =>
+            ok({ journal: null, link: {}, pairLink: null, warnings: [] }, 201),
+        },
+      );
+      const u = user();
+      renderStatements();
+      await u.click(within(await rowOf(/家賃/)).getByRole("button", { name: "確認する" }));
+      const panel = await editor();
+
+      expect(
+        within(panel).queryByRole("checkbox", { name: "この承認からルールを学ぶ" }),
+      ).not.toBeInTheDocument();
+      await u.click(within(panel).getByRole("button", { name: "結びつけて承認" }));
+      await screen.findByText("既存の仕訳に結びつけました。");
+      expect(calls(all, "POST", `/statements/${uuid(1)}/approve`)[0]?.body).not.toHaveProperty(
+        "learn",
+      );
+    });
+  });
+
   it("API のエラー（締め済みの年度）は案の画面に出し、承認の記録は出さない", async () => {
     openApi([statement(1, { candidate: transferCandidate, amount: -5000 })], {
       [`POST ${BASE}/statements/${uuid(1)}/approve`]: () =>
@@ -663,7 +780,7 @@ describe("メニュー", () => {
     );
   });
 
-  it("一覧から取込・しきい値の設定へ進める", async () => {
+  it("一覧から取込・しきい値の設定・推定のルールへ進める（どれも事業体の下）", async () => {
     openApi([]);
     renderStatements();
     expect(await screen.findByRole("link", { name: "明細を取り込む" })).toHaveAttribute(
@@ -672,7 +789,11 @@ describe("メニュー", () => {
     );
     expect(screen.getByRole("link", { name: "しきい値の設定" })).toHaveAttribute(
       "href",
-      "/settings/statements",
+      "/e/e1/statements/settings",
+    );
+    expect(screen.getByRole("link", { name: "推定のルール" })).toHaveAttribute(
+      "href",
+      "/e/e1/statements/rules",
     );
   });
 });

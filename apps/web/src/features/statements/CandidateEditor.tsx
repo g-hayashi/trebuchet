@@ -1,8 +1,15 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { JournalInput, StatementAccount } from "@trebuchet/schema";
+import {
+  type JournalInput,
+  PURPOSES,
+  type Purpose,
+  type StatementAccount,
+} from "@trebuchet/schema";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
+import { NativeSelect } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { type Account, accountsQuery } from "@/features/accounts/api";
 import { taxCategoriesQuery, taxSettingsQuery } from "@/features/entities/api";
 import { journalSearchQuery } from "@/features/journals/api";
@@ -13,7 +20,7 @@ import { addDays } from "@/lib/dates";
 import { formatYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
 import { type ApproveBody, postApprove, type StatementView, statementAccountsQuery } from "./api";
-import { METHOD_LABELS } from "./labels";
+import { METHOD_LABELS, PURPOSE_LABELS } from "./labels";
 
 /** 既存の仕訳との照合に見る日付の幅（日。domain の `MATCH_WINDOW_DAYS` と同じ） */
 const MATCH_WINDOW_DAYS = 7;
@@ -198,8 +205,13 @@ export function CandidateEditor({
     (q) => q.error,
   )?.error;
 
+  const learnId = useId();
   const [mode, setMode] = useState<Mode>(candidate?.method === "match" ? "link" : "create");
   const [selected, setSelected] = useState<LineRef | undefined>(candidate?.match);
+  // 推定ルールの学習（US3）。既定は学ぶ。判定・取引先は「仕訳のとおり」なら送らない
+  const [learn, setLearn] = useState(true);
+  const [purposeChoice, setPurposeChoice] = useState<Purpose | "">("");
+  const [partnerChoice, setPartnerChoice] = useState("");
 
   const approve = useMutation({
     mutationFn: (body: ApproveBody) => postApprove(entityId, statement.id, body),
@@ -209,6 +221,7 @@ export function CandidateEditor({
         result.journal ? `承認しました（仕訳 No.${result.journal.journalNo}）。` : "",
         result.journal ? "" : "既存の仕訳に結びつけました。",
         result.pairLink ? "振替の対の相手の明細も、同じ仕訳に結びつけました。" : "",
+        result.rule ? `ルールを学びました（確信度 ${result.rule.confidence}）。` : "",
         ...result.warnings.map((w) => `注意: ${w.message}`),
       ].filter((n) => n !== "");
       onApproved(notes.join(" "));
@@ -265,23 +278,76 @@ export function CandidateEditor({
       {!ready && !loadError && <p className="text-sm text-muted-foreground">読み込み中…</p>}
 
       {ready && mode === "create" && (
-        <JournalForm
-          key={statement.id}
-          entityId={entityId}
-          accounts={accounts.data}
-          partners={partners.data}
-          tags={tags.data}
-          taxSettings={taxSettings.data}
-          taxCategories={taxCategories.data}
-          defaultDate={statement.date}
-          journal={initialSource(statement, candidate?.draft, statementAccount)}
-          formLabel="仕訳の案"
-          submitLabel="承認して登録"
-          onSubmit={async (input) => {
-            checkStatementLines(input, statement, statementAccount);
-            await approve.mutateAsync({ draft: input });
-          }}
-        />
+        <>
+          <fieldset aria-label="ルールの学習" className="grid gap-3 rounded-md border px-3 py-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={learn} onChange={(e) => setLearn(e.target.checked)} />
+              この承認からルールを学ぶ
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid content-start gap-1">
+                <Label htmlFor={`${learnId}-purpose`}>判定（ルールに記憶）</Label>
+                <NativeSelect
+                  id={`${learnId}-purpose`}
+                  disabled={!learn}
+                  value={purposeChoice}
+                  onChange={(e) => setPurposeChoice(e.target.value as Purpose | "")}
+                >
+                  <option value="">仕訳のとおり</option>
+                  {PURPOSES.map((p) => (
+                    <option key={p} value={p}>
+                      {PURPOSE_LABELS[p]}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+              <div className="grid content-start gap-1">
+                <Label htmlFor={`${learnId}-partner`}>取引先（ルールに記憶）</Label>
+                <NativeSelect
+                  id={`${learnId}-partner`}
+                  disabled={!learn}
+                  value={partnerChoice}
+                  onChange={(e) => setPartnerChoice(e.target.value)}
+                >
+                  <option value="">仕訳のとおり</option>
+                  {partners.data.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              同じ内容の明細の候補を、次からこの内容で作ります。外すと、この承認からは学びません。
+            </p>
+          </fieldset>
+          <JournalForm
+            key={statement.id}
+            entityId={entityId}
+            accounts={accounts.data}
+            partners={partners.data}
+            tags={tags.data}
+            taxSettings={taxSettings.data}
+            taxCategories={taxCategories.data}
+            defaultDate={statement.date}
+            journal={initialSource(statement, candidate?.draft, statementAccount)}
+            formLabel="仕訳の案"
+            submitLabel="承認して登録"
+            onSubmit={async (input) => {
+              checkStatementLines(input, statement, statementAccount);
+              await approve.mutateAsync({
+                draft: input,
+                ...(learn
+                  ? {
+                      ...(purposeChoice === "" ? {} : { purpose: purposeChoice }),
+                      ...(partnerChoice === "" ? {} : { partnerId: partnerChoice }),
+                    }
+                  : { learn: false as const }),
+              });
+            }}
+          />
+        </>
       )}
 
       {ready && mode === "link" && (

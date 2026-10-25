@@ -71,6 +71,8 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   "GET /statements/imports": () => ok({ batches: [] }),
   // 明細の一覧・しきい値の設定（US2）。一覧は空、設定は既定の値
   "GET /statements": () => ok({ statements: [] }),
+  // 推定のルール（US3）。一覧は空
+  "GET /inference-rules": () => ok({ rules: [] }),
   "GET /statement-settings": () =>
     ok({
       settings: { bulkThreshold: 80, externalThreshold: 60, updatedAt: "2026-10-26T00:00:00.000Z" },

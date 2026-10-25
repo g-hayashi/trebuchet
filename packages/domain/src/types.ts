@@ -15,6 +15,9 @@ import type {
   PaymentView,
   Purpose,
   ReportSection,
+  RuleHistoryAction,
+  RuleOrigin,
+  RuleStatus,
   Side,
   StatementLinkKind,
   TaxCategoryCode,
@@ -550,6 +553,37 @@ export type StatementLinkRecord = {
   createdAt: string;
   revokedAt: string | null;
   revokedReason: string | null;
+};
+
+/** 推定のルール（`inference_rules` の 1 行。006 data-model §1.6、R9）。`statementAccountId` が null ならすべての口座 */
+export type InferenceRule = {
+  id: string;
+  normalizedContent: string;
+  statementAccountId: string | null;
+  counterAccountId: string;
+  counterSubAccountId: string | null;
+  partnerId: string | null;
+  taxCategory: TaxCategoryCode;
+  purpose: Purpose;
+  descriptionTemplate: string | null;
+  hits: number;
+  overrides: number;
+  status: RuleStatus;
+  origin: RuleOrigin;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** ルールの履歴（`inference_rule_history` の 1 行。追記のみ。§1.7）。before・after はルールの JSON */
+export type InferenceRuleHistoryRecord = {
+  id: string;
+  ruleId: string;
+  action: RuleHistoryAction;
+  beforeJson: string | null;
+  afterJson: string | null;
+  /** 承認が起点のとき */
+  statementId: string | null;
+  at: string;
 };
 
 /**

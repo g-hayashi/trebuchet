@@ -19,6 +19,8 @@ import {
  * 見つからなければ `ACCOUNT_NOT_FOUND`、使用停止なら 001 の検証が `ACCOUNT_INACTIVE` を返す
  */
 export const STATEMENT_ACCOUNT_CODES = {
+  /** 現金 */
+  cash: "1010",
   /** 普通預金 */
   ordinaryDeposit: "1020",
   /** 未払金（カード） */

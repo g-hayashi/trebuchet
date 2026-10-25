@@ -7,20 +7,29 @@ import {
   commitStatementImport,
   excludeStatement,
   getStatementSettings,
+  listRules,
   listStatementAccounts,
   listStatementBatches,
   listStatements,
+  pauseRule,
   previewStatementImport,
+  resumeRule,
+  ruleHistory,
   saveStatementAccount,
   saveStatementSettings,
+  seedRulesFromJournals,
   unexcludeStatement,
   unlinkStatement,
+  updateRule,
 } from "@trebuchet/domain";
 import {
   ApproveBulkInput,
   ApproveInput,
   BuildCandidatesInput,
   ExcludeInput,
+  InferenceRuleListQuery,
+  InferenceRuleUpdateInput,
+  SeedRulesInput,
   StatementAccountInput,
   StatementImportCommitInput,
   StatementImportPreviewInput,
@@ -117,8 +126,11 @@ export function statementRoutes({
           c.req.param("statementId"),
           c.req.valid("json"),
         );
-        return respond(c, result, ({ journal, link, pairLink, warnings }) =>
-          c.json({ journal, link, pairLink, warnings }, 201),
+        return respond(c, result, ({ journal, link, pairLink, warnings, rule }) =>
+          c.json(
+            { journal, link, pairLink, warnings, ...(rule === undefined ? {} : { rule }) },
+            201,
+          ),
         );
       })
       .post("/statements/:statementId/exclude", validate("json", ExcludeInput), (c) => {
@@ -148,6 +160,31 @@ export function statementRoutes({
           c.req.valid("json"),
         );
         return respond(c, result, (statement) => c.json({ statement }, 200));
+      })
+      // §5 ルール
+      .get("/inference-rules", validate("query", InferenceRuleListQuery), (c) => {
+        const result = listRules(deps(c.var.db), c.req.valid("query"));
+        return respond(c, result, (rules) => c.json({ rules }, 200));
+      })
+      .post("/inference-rules/seed", validate("json", SeedRulesInput), (c) => {
+        const result = seedRulesFromJournals(deps(c.var.db), c.req.valid("json"));
+        return respond(c, result, (seeded) => c.json(seeded, 200));
+      })
+      .patch("/inference-rules/:ruleId", validate("json", InferenceRuleUpdateInput), (c) => {
+        const result = updateRule(deps(c.var.db), c.req.param("ruleId"), c.req.valid("json"));
+        return respond(c, result, (rule) => c.json({ rule }, 200));
+      })
+      .post("/inference-rules/:ruleId/pause", (c) => {
+        const result = pauseRule(deps(c.var.db), c.req.param("ruleId"));
+        return respond(c, result, (rule) => c.json({ rule }, 200));
+      })
+      .post("/inference-rules/:ruleId/resume", (c) => {
+        const result = resumeRule(deps(c.var.db), c.req.param("ruleId"));
+        return respond(c, result, (rule) => c.json({ rule }, 200));
+      })
+      .get("/inference-rules/:ruleId/history", (c) => {
+        const result = ruleHistory(deps(c.var.db), c.req.param("ruleId"));
+        return respond(c, result, (history) => c.json({ history }, 200));
       })
       // §6.3 設定
       .get("/statement-settings", (c) => {

@@ -8,6 +8,8 @@ import type {
 import {
   domainError,
   err,
+  type InferenceRule,
+  type InferenceRuleHistoryRecord,
   type Result,
   type StatementAuditEntry,
   type StatementCandidateRecord,
@@ -25,6 +27,8 @@ type StatementState = {
   statements: StatementRecord[];
   candidates: StatementCandidateRecord[];
   links: StatementLinkRecord[];
+  rules: InferenceRule[];
+  ruleHistory: InferenceRuleHistoryRecord[];
   settings: StatementSettings | undefined;
 };
 
@@ -40,6 +44,8 @@ export class InMemoryStatementStore implements StatementStore {
     statements: [],
     candidates: [],
     links: [],
+    rules: [],
+    ruleHistory: [],
     settings: undefined,
   };
   /** true なら insertStatements で、1 行目を書いた後に例外を投げる（ロールバックの確認用） */
@@ -178,6 +184,40 @@ export class InMemoryStatementStore implements StatementStore {
     }
     target.revokedAt = at;
     target.revokedReason = reason;
+  }
+
+  listInferenceRules(): InferenceRule[] {
+    return structuredClone(this.state.rules);
+  }
+
+  insertInferenceRule(rule: InferenceRule): void {
+    const duplicate = this.state.rules.some(
+      (r) =>
+        r.normalizedContent === rule.normalizedContent &&
+        (r.statementAccountId ?? "") === (rule.statementAccountId ?? ""),
+    );
+    if (duplicate) throw new Error("UNIQUE constraint failed: inference_rules_key");
+    if (this.state.rules.some((r) => r.id === rule.id)) {
+      throw new Error("UNIQUE constraint failed: inference_rules.id");
+    }
+    this.state.rules.push(structuredClone(rule));
+  }
+
+  updateInferenceRule(rule: InferenceRule): void {
+    const index = this.state.rules.findIndex((r) => r.id === rule.id);
+    if (index < 0) throw new Error(`inference rule not found: ${rule.id}`);
+    this.state.rules[index] = structuredClone(rule);
+  }
+
+  appendInferenceRuleHistory(entry: InferenceRuleHistoryRecord): void {
+    if (!this.state.rules.some((r) => r.id === entry.ruleId)) {
+      throw new Error("FOREIGN KEY constraint failed: inference_rule_history.rule_id");
+    }
+    this.state.ruleHistory.push(structuredClone(entry));
+  }
+
+  listInferenceRuleHistory(ruleId: string): InferenceRuleHistoryRecord[] {
+    return structuredClone(this.state.ruleHistory.filter((h) => h.ruleId === ruleId));
   }
 
   getStatementSettings(): StatementSettings | undefined {

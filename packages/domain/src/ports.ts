@@ -39,6 +39,8 @@ import type {
   FiscalPeriod,
   FixedAsset,
   HomeUseAllocation,
+  InferenceRule,
+  InferenceRuleHistoryRecord,
   InvoiceItemRecord,
   InvoiceRecord,
   InvoicingAuditEntry,
@@ -392,6 +394,18 @@ export interface StatementStore {
   insertStatementLink(link: StatementLinkRecord): void;
   /** 有効な結びつきを失効させる（`revoked_at`・`revoked_reason`）。ない・失効済みなら例外 */
   revokeStatementLink(id: string, at: string, reason: string): void;
+
+  // ---- 推定のルール（US3。§1.6・§1.7） ----
+  /** 作成の順 */
+  listInferenceRules(): InferenceRule[];
+  /** （内容, 口座）の重複（口座なしを含む）は一意制約の違反で例外 */
+  insertInferenceRule(rule: InferenceRule): void;
+  /** `rule.id` のルールを上書きする。ない場合は例外 */
+  updateInferenceRule(rule: InferenceRule): void;
+  /** 追記のみ。ルールがなければ例外 */
+  appendInferenceRuleHistory(entry: InferenceRuleHistoryRecord): void;
+  /** `ruleId` の履歴を追記の順で返す */
+  listInferenceRuleHistory(ruleId: string): InferenceRuleHistoryRecord[];
 
   // ---- 設定（US2。§1.8） ----
   /** 保存がなければ undefined */

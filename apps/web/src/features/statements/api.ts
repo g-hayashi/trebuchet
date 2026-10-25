@@ -1,6 +1,9 @@
 import { queryOptions } from "@tanstack/react-query";
 import type {
+  InferenceRuleUpdateInput,
   JournalInput,
+  Purpose,
+  RuleStatus,
   StatementAccountInput,
   StatementImportSource,
   StatementSettingsInput,
@@ -23,6 +26,10 @@ export const statementKeys = {
   list: (entityId: string, filter: StatementFilter) =>
     ["entities", entityId, "statements", "list", filter] as const,
   settings: (entityId: string) => ["entities", entityId, "statements", "settings"] as const,
+  rules: (entityId: string, status?: RuleStatus) =>
+    ["entities", entityId, "statements", "rules", status ?? "all"] as const,
+  ruleHistory: (entityId: string, ruleId: string) =>
+    ["entities", entityId, "statements", "rules", "history", ruleId] as const,
 };
 
 /** 貼り付けの取込元（自動取得は US4 で足す） */
@@ -101,10 +108,16 @@ export type StatementView = QueryItem<typeof statementsQuery>;
 export const postBuildCandidates = async (entityId: string) =>
   unwrap(await entityApi.statements.candidates.$post({ param: { entityId }, json: {} }));
 
-/** 承認の入力。`draft` か `match` のどちらか（省略で候補のまま） */
+/**
+ * 承認の入力。`draft` か `match` のどちらか（省略で候補のまま）。
+ * `learn: false` はルールを学ばない。`purpose`・`partnerId` は学ぶルールの判定・取引先（省略で仕訳のとおり）
+ */
 export type ApproveBody = {
   draft?: JournalInput | undefined;
   match?: { journalId: string; lineId: string } | undefined;
+  learn?: false | undefined;
+  purpose?: Purpose | undefined;
+  partnerId?: string | undefined;
 };
 
 /** 承認する（§4.4）。仕訳が変わるので、呼び出し側が `invalidateLedger` を呼ぶ */
@@ -159,6 +172,72 @@ export const postUnlink = async (entityId: string, statementId: string, reason: 
       json: { reason },
     }),
   );
+
+// ---- ルール（§5） ----
+
+/** ルールの一覧（§5.1）。`status` を省くと、有効と停止中の両方 */
+export const rulesQuery = (entityId: string, status?: RuleStatus) =>
+  queryOptions({
+    queryKey: statementKeys.rules(entityId, status),
+    queryFn: async () =>
+      (
+        await unwrap(
+          await entityApi["inference-rules"].$get({
+            param: { entityId },
+            query: status === undefined ? {} : { status },
+          }),
+        )
+      ).rules,
+  });
+
+export type RuleView = QueryItem<typeof rulesQuery>;
+
+/** ルールの履歴（§5.5。追記の順） */
+export const ruleHistoryQuery = (entityId: string, ruleId: string) =>
+  queryOptions({
+    queryKey: statementKeys.ruleHistory(entityId, ruleId),
+    queryFn: async () =>
+      (
+        await unwrap(
+          await entityApi["inference-rules"][":ruleId"].history.$get({
+            param: { entityId, ruleId },
+          }),
+        )
+      ).history,
+  });
+
+export type RuleHistoryEntry = QueryItem<typeof ruleHistoryQuery>;
+
+/** ルールの初期作成（§5.2）。`dryRun` は何も作らず案だけを返す */
+export const postSeedRules = async (entityId: string, dryRun: boolean) =>
+  unwrap(
+    await entityApi["inference-rules"].seed.$post({
+      param: { entityId },
+      json: dryRun ? { dryRun: true } : {},
+    }),
+  );
+
+/** ルールを直す（§5.3） */
+export const patchRule = async (entityId: string, ruleId: string, json: InferenceRuleUpdateInput) =>
+  (
+    await unwrap(
+      await entityApi["inference-rules"][":ruleId"].$patch({ param: { entityId, ruleId }, json }),
+    )
+  ).rule;
+
+/** ルールを止める・再開する（§5.4） */
+export const postRuleStatus = async (
+  entityId: string,
+  ruleId: string,
+  action: "pause" | "resume",
+) =>
+  (
+    await unwrap(
+      await entityApi["inference-rules"][":ruleId"][action].$post({
+        param: { entityId, ruleId },
+      }),
+    )
+  ).rule;
 
 // ---- 設定（§6.3） ----
 
