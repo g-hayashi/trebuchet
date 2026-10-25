@@ -1,4 +1,4 @@
-import type { BillingTerms, InvoiceSettings, JournalOrigin } from "@trebuchet/schema";
+import type { BillingTerms, InvoiceSettings, JournalOrigin, Recurring } from "@trebuchet/schema";
 import type {
   AppSettingKey,
   AuthEvent,
@@ -43,6 +43,7 @@ import type {
   Partner,
   PaymentRecord,
   PostedLine,
+  RecurringRunRecord,
   RentDetail,
   SubAccount,
   Tag,
@@ -312,9 +313,22 @@ export interface InvoicingUnitOfWork {
   ): T;
 }
 
-/** 定期仕訳（005 US3）の永続化。メソッドは US3 の db のタスクで足す */
+/** 定期仕訳（005 US3）の永続化。メソッドはすべて同期。操作の記録は `invoicing_audit_log`（R23） */
 export interface RecurringStore {
   appendRecurringAudit(entry: InvoicingAuditEntry): void;
+  /** 定義の全件（行を含む。行番号の順）。作成の順（`createdAt`、同じなら `id`） */
+  listRecurring(): Recurring[];
+  getRecurring(id: string): Recurring | null;
+  /** 定義と行を保存する（`id`・`version`・`createdAt` は呼び出し側が決める） */
+  insertRecurring(def: Recurring): void;
+  /** 定義の列を上書きし、行を全件置き換える（`version` の検査はドメインが先に行う。R16） */
+  updateRecurring(def: Recurring): void;
+  /** 回の全件、または 1 つの定義の回（対象月の昇順） */
+  listRuns(recurringId?: string): RecurringRunRecord[];
+  /** 回を保存する。（定義, 対象月）の重複と、同じ仕訳の再利用は一意制約の違反で例外（R19） */
+  insertRun(run: RecurringRunRecord): void;
+  /** 回を確認済みにする（`acknowledged_at` を NULL から一度だけ書く。R21） */
+  markRunsAcknowledged(runIds: string[], at: string): void;
 }
 
 /** 定期仕訳の登録で、仕訳・マスタ・定期仕訳の記録を1つのトランザクションで扱う（R9） */

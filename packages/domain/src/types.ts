@@ -469,6 +469,23 @@ export type InvoicingAuditEntry = {
   afterJson: string | null;
 };
 
+/**
+ * 定期仕訳の回（`recurring_runs` の 1 行。data-model §1.9）。`posted` は仕訳を持ち、`skipped` は理由を持つ。
+ * 登録できない回（`blocked`）は保存しない（R17）
+ */
+export type RecurringRunRecord = {
+  id: string;
+  recurringId: string;
+  /** `YYYY-MM` */
+  targetMonth: string;
+  status: "posted" | "skipped";
+  journalId: string | null;
+  skipReason: string | null;
+  createdAt: string;
+  /** 利用者が確かめた時刻（NULL から一度だけ書く。R21） */
+  acknowledgedAt: string | null;
+};
+
 /** 工数（`work_hours` の 1 行）。`halfHours` は半時間の整数（0.5 時間 = 1。R7） */
 export type WorkHoursRow = {
   partnerId: string;

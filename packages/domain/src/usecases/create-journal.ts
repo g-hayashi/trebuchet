@@ -10,6 +10,7 @@ import {
   type JournalLine,
   type JournalSource,
   ok,
+  type Partner,
   type Result,
   type ValidLine,
 } from "../types.ts";
@@ -39,7 +40,10 @@ export const linkedError = (journalId: string): DomainError =>
     { journalId },
   );
 
-export function loadContext(masters: MasterRepository): JournalContext {
+/** 取引先は使用停止の情報（`isActive`）も持つ（定期仕訳の判定が使う。005 R17） */
+export function loadContext(
+  masters: MasterRepository,
+): JournalContext & { partners: readonly Partner[] } {
   return {
     accounts: masters.listAccounts(),
     subAccounts: masters.listSubAccounts(),
