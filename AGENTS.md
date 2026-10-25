@@ -124,6 +124,30 @@ apps/server ──→ packages/schema
 - バックアップには、端末に結びつく設定（Mac の ID、置き場所など。`app_settings`）と認証の表を含めない。復元した帳簿には認証の行がなく、次の起動でパスキーの登録から始まる。
 - Tailscale によるリモートの利用（US4: `pnpm start`、server の静的配信、ペアリング）は保留。未実装なので、これらのコマンドや場所を前提にしない。
 
+## 請求と定期仕訳（005）
+
+請求書の発行・入金の消し込み・取消と、定期仕訳の実装は次に置く。
+
+| 層 | 場所 |
+|---|---|
+| 業務ルール（請求の金額と税、請求番号、支払期限、状態、仕訳の案、発行の巻き戻し `RollbackError`、定期仕訳の予定日と登録する回の選び方） | `packages/domain/src/invoicing/`（`amounts.ts`、`tax.ts`、`number.ts`、`due-date.ts`、`status.ts`、`draft.ts`、`detail.ts`、`journal-drafts.ts`、`rollback.ts`）、`packages/domain/src/recurring/`（`schedule.ts`、`due.ts`） |
+| ユースケース | `packages/domain/src/usecases/invoicing.ts`、`recurring.ts` |
+| 永続化（設定・条件・工数・請求書・消し込み・定期仕訳・操作の記録） | `packages/db/src/invoicing-repository.ts`、`recurring-repository.ts` |
+| HTTP | `apps/server/src/routes/invoicing.ts`、`recurring.ts` |
+| server の部品 | `apps/server/src/lib/today.ts`（`todayOf`）、`recurring-scheduler.ts` |
+| 画面 | `apps/web/src/features/invoicing/`、`apps/web/src/features/recurring/`、`apps/web/src/routes/e/$entityId/` の `invoice-settings.tsx`・`work-hours.tsx`・`invoices/`・`recurring/` |
+| E2E | `apps/web/e2e/invoicing.spec.ts` |
+
+- **書く順序を守る**（research R9）。drizzle のトランザクションは `err` を返しても確定する。ユースケースは (1) 読み取りと検査をすべて先に行い、違反は `err`、(2) 最初の書き込みを 001 の `createJournal` / `voidJournal` にして、その `err` はそのまま返す、(3) 以降の書き込みの失敗・ドメインの判断での中止は `RollbackError`（`DomainError` を持つ例外）を投げて全体を巻き戻し、ユースケースの外側で `err` に直す。
+- **請求書・入金の仕訳は `JOURNAL_LINKED` で守る**（R13、[ADR 0008](docs/adr/0008-invoice-journal-linkage.md)）。`source` が `invoice` / `payment` の仕訳は、001 の通常の訂正・取消（`PUT /journals/:id`、`POST /journals/:id/void`）を 409 で拒否する。請求・入金の取消だけが `{ linked: true }` で仕訳を取り消す。`recurring` の仕訳は通常の仕訳と同じく訂正・取消できる。
+- **請求書は発行時の写しを持つ**。発行者・宛名・税の表示・支払期限・明細を請求書の行に写し、設定や取引先を後で変えても発行済みの請求書は変わらない。写しの列と明細は DB のトリガーで更新を止める。取消で書けるのは取消の列だけ。物理削除しない。
+- **消し込みのある請求書は取消せない**（`INVOICE_HAS_PAYMENTS`）。先に消し込みを取り消す。
+- **「今日」は `today: string`（`YYYY-MM-DD`）で domain に渡す**。server は `todayOf(clock)`（`lib/today.ts`）で作る。domain・ルートで `Date.now()`・`new Date()` を直接呼ばない（R22）。ルートは `invoicingRoutes({ clock })`・`recurringRoutes({ clock })`。server のテストは偽の時計を渡し、時刻を日付の境目から離す。
+- **仕訳の科目はコードで引く**（R10）。定数 `INVOICING_ACCOUNT_CODES`（`journal-drafts.ts`）が売掛金・売上高・支払手数料のコードを持つ。科目の選択の設定は増やさない。
+- **金額と工数は整数**。工数は半時間の整数、明細の金額は `Math.floor(quantityHalves * unitPrice / 2)`。別記の税額は 001 の `computeInclusiveTax` を税率ごとに 1 回。
+- 請求・入金の操作は `invoicing_audit_log`（追記のみ）に記録する。仕訳そのものの記録は 001 の `audit_log`。
+- E2E（`invoicing.spec.ts`）の対象月・発行日・入金日は固定の日付で、実行日に依存しない。
+
 ## データと一時ファイル
 
 - **実データを読まない、コミットしない**。`work/` と `data/` は実データを含む。中身を開く・要約する・テストの入力にする・コミットすることをしない。`.gitignore` で除外済み。
