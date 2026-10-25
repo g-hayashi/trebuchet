@@ -7,7 +7,7 @@
 | HTTP | code | 発生条件 | 要件 |
 |---|---|---|---|
 | 404 | `STATEMENT_NOT_FOUND` | 明細がない。`details.statementId` | FR-012 |
-| 404 | `STATEMENT_ACCOUNT_NOT_FOUND` | 取込元の口座がない | FR-003 |
+| 404 | `STATEMENT_ACCOUNT_NOT_FOUND` | §4.1 の `accountId` の絞り込みなど、ID で口座を指したとき、その口座がない | FR-003 |
 | 404 | `INFERENCE_RULE_NOT_FOUND` | ルールがない | FR-024 |
 | 404 | `JOB_NOT_FOUND` | 取得・評価のジョブがない（server の再起動で消えたものを含む） | FR-008, FR-029 |
 | 422 | `STATEMENT_PASTE_UNREADABLE` | 必須の列がそろわない・1 行も読めない。`details: { missingColumns?, unreadable }` | FR-001, Edge Cases |
@@ -20,7 +20,7 @@
 | 409 | `JOB_RUNNING` | 取得・評価のジョブが動いている間に、もう1つを始めた | FR-008 |
 | 422 | `AI_NOT_CONFIGURED` | 外部の AI を有効にしようとしたが、接続先・モデル・API キーがない。`details.fields` | FR-027 |
 
-既存のコードの再利用: `VALIDATION`、`PERIOD_CLOSED`・`OUT_OF_PERIOD`（承認の日付）、`ACCOUNT_NOT_FOUND`・`ACCOUNT_INACTIVE`、`UNBALANCED`、`TAX_SETTING_GAP`、`REASON_REQUIRED`（除外・結びつきの取消）。
+既存のコードの再利用: `VALIDATION`、`PERIOD_CLOSED`・`OUT_OF_PERIOD`（承認の日付）、`ACCOUNT_NOT_FOUND`・`ACCOUNT_INACTIVE`、`UNBALANCED`、`TAX_SETTING_GAP`、`REASON_REQUIRED`（除外の取消・結びつきの取消。除外の `reason` は任意）。
 
 ## 2. 取込元の口座（US1, FR-003）
 
@@ -33,7 +33,7 @@
 
 | § | メソッド | パス | 入力 | 出力 | 要件 |
 |---|---|---|---|---|---|
-| 3.1 | POST | `/statements/imports/preview` | `{ source: { kind: "paste", text, year } \| { kind: "mfme_fetch", jobId } }` | 200 `StatementImportPreview` = `{ inputSha256, period, totals: { inflow, outflow }, rows: { key, date, amount, content, accountName, status: "new" \| "existing" \| "changed", warnings: ("POSSIBLE_DUPLICATE")[] }[], unreadable: { line, reason }[], unmappedAccounts: string[], countNew }` / 422 `STATEMENT_PASTE_UNREADABLE` | FR-002, FR-004〜FR-006 |
+| 3.1 | POST | `/statements/imports/preview` | `{ source: { kind: "paste", text, year } \| { kind: "mfme_fetch", jobId } }` | 200 `StatementImportPreview` = `{ inputSha256, period, totals: { inflow, outflow }, rows: { key, date, amount, content, accountName, status: "new" \| "existing" \| "changed", changed?: { before, after }, warnings: ("POSSIBLE_DUPLICATE")[] }[], unreadable: { line, reason }[], unmappedAccounts: string[], countNew }` / 422 `STATEMENT_PASTE_UNREADABLE` | FR-002, FR-004〜FR-006 |
 | 3.2 | POST | `/statements/imports` | 3.1 の入力 ＋ `{ expected: { inputSha256, countNew } }` | 201 `{ batch, added: number, changed: number }` / 422 `STATEMENT_ACCOUNT_UNMAPPED` / 409 `STATEMENT_PLAN_CHANGED` | FR-007 |
 | 3.3 | GET | `/statements/imports` | — | 200 `{ batches }`（新しい順） | FR-002 |
 | 3.4 | POST | `/statements/mfme/fetch` | `{ from: YYYY-MM, to: YYYY-MM }` | 202 `{ jobId }` / 409 `JOB_RUNNING`。server が見えるブラウザを開く（R13） | FR-008, FR-009 |
@@ -45,17 +45,18 @@
 
 | § | メソッド | パス | 入力 | 出力 | 要件 |
 |---|---|---|---|---|---|
-| 4.1 | GET | `/statements?status=&accountId=&from=&to=` | `status` は `unprocessed`・`registered`・`excluded`・`changed` | 200 `{ statements: StatementView[] }`。`StatementView` = `{ id, date, amount, content, accountName, usage, status, changed, candidate: Candidate \| null, links: { journalId, kind }[], duplicateOf?: string[] }`。`Candidate` = `{ method, purpose, confidence, reason, draft, match?: { journalId, lineId }, model? }` | FR-012 |
+| 4.1 | GET | `/statements?status=&accountId=&from=&to=` | `status` は `unprocessed`・`registered`・`excluded`・`changed` | 200 `{ statements: StatementView[] }`。`StatementView` = `{ id, date, amount, content, accountName, usage, status, changed: { before, after } \| null（`changed_json` があり未確認のとき）, candidate: Candidate \| null, links: { journalId, kind }[], duplicateOf?: string[] }`。`Candidate` = `{ method, purpose, confidence, reason, draft, match?: { journalId, lineId }, model? }` | FR-012 |
 | 4.2 | POST | `/statements/candidates` | `{ statementIds? }`（省略で未処理すべて） | 200 `{ built, needsAi: string[] }`（match → transfer → rule の段で作る。AI が要る明細の ID） | FR-013 |
 | 4.3 | POST | `/statements/infer` | `{ statementIds }`（10 件まで） | 200 `{ results: { statementId, method, confidence }[], localAvailable, externalUsed }`（R8。web が繰り返して呼ぶ） | FR-025〜FR-028 |
 | 4.4 | POST | `/statements/:statementId/approve` | `{ draft?: JournalDraft, purpose?, match?: { journalId, lineId }, partnerId?, learn?: boolean（既定 true） }`（省略で候補のまま） | 201 `{ journal \| null, link, rule? }` / 409 `STATEMENT_ALREADY_REGISTERED`・`STATEMENT_EXCLUDED`・`JOURNAL_LINE_ALREADY_LINKED`・`PERIOD_CLOSED` / 422 `STATEMENT_AMOUNT_MISMATCH`・`UNBALANCED`・`OUT_OF_PERIOD` | FR-014〜FR-016, FR-020, FR-021a, FR-022 |
 | 4.5 | POST | `/statements/approve-bulk` | `{ statementIds?, threshold? }`（省略で設定の `bulk_threshold` 以上の未処理すべて） | 200 `{ approved: string[], failed: { statementId, code, message }[] }`（明細ごとに1つの UnitOfWork） | FR-018 |
 | 4.6 | POST | `/statements/:statementId/exclude` | `{ reason? }` | 200 `{ statement }` / 409 `STATEMENT_ALREADY_REGISTERED` | FR-017 |
 | 4.7 | POST | `/statements/:statementId/unexclude` | `{ reason }` | 200 `{ statement }` | FR-017 |
-| 4.8 | POST | `/statements/:statementId/acknowledge-change` | — | 200 `{ statement }` | FR-005 |
+| 4.8 | POST | `/statements/:statementId/acknowledge-change` | — | 200 `{ statement }`（`changed_ack_at` を書く。監査に記録） | FR-005 |
+| 4.9 | POST | `/statements/:statementId/unlink` | `{ reason }`（必須。空なら `REASON_REQUIRED`） | 200 `{ statement }`。有効な `matched` の結びつきだけを外す（`revoked_at`・`revoked_reason`）。`created` の結びつき・結びつきがない明細は 422 `VALIDATION`（`created` は 001 の仕訳の取消で戻す） / 404 `STATEMENT_NOT_FOUND` | FR-021a |
 
 - 仕訳から明細へ: 001 の `GET /journals/:journalId` の出力に `statements: { statementId, kind }[]` を足す（FR-020。005 の契約 §6 の出所と同じ場所）
-- 承認の順序（1 つの `StatementUnitOfWork`）: 検査 → `createJournal`（`source = statement`）または結びつけ先の検査 → `statement_links` → ルールの学習 → 監査
+- 承認の順序（1 つの `StatementUnitOfWork`）: 検査 → その明細の有効な結びつきの仕訳が取消済み（訂正されていない）なら結びつきを失効（`revoked_at`） → `createJournal`（`source = statement`）または結びつけ先の検査 → `statement_links` → ルールの学習 → 監査。どこで失敗しても失効も含めて全部巻き戻る
 
 ## 5. ルール（US3）
 
@@ -67,7 +68,7 @@
 | 5.4 | POST | `/inference-rules/:ruleId/pause`・`/resume` | — | 200 `{ rule }` | FR-024 |
 | 5.5 | GET | `/inference-rules/:ruleId/history` | — | 200 `{ history }` | FR-022 |
 
-## 6. 評価と設定（US5）
+## 6. 評価（US5）と設定（§6.3 は US2）
 
 | § | メソッド | パス | 入力 | 出力 | 要件 |
 |---|---|---|---|---|---|

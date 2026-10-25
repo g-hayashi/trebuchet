@@ -46,10 +46,11 @@
 | memo | text | NULL 可（MF ME のメモ。AI には送らない） |
 | transfer_flag | integer | 0・1（MF ME の振替の印） |
 | changed_json | text | NULL 可（`external_id` が同じで内容が違う取込があったときの新しい内容。FR-005） |
+| changed_ack_at | text | NULL 可（「確認した」の日時。H5） |
 | excluded_at, excluded_reason | text | NULL 可（FR-017） |
 | created_at | text | |
 
-更新できるのは `changed_json`・`excluded_at`・`excluded_reason` だけ（トリガー）。削除しない。
+更新できるのは `changed_json`・`changed_ack_at`（「確認した」の日時。NULL 可）・`excluded_at`・`excluded_reason` だけ（トリガー）。削除しない。新しい内容の取込で `changed_json` を書き換えるとき `changed_ack_at` を NULL に戻す。
 
 ### 1.4 `statement_candidates`（FR-012, FR-013。R8）
 
@@ -79,7 +80,7 @@
 | created_at | text | |
 | revoked_at, revoked_reason | text | NULL 可 |
 
-部分 UNIQUE: `(statement_id) WHERE revoked_at IS NULL`、`(journal_line_id) WHERE revoked_at IS NULL`（INV-43）。更新できるのは `revoked_*` だけ。
+部分 UNIQUE: `(statement_id) WHERE revoked_at IS NULL`、`(journal_line_id) WHERE revoked_at IS NULL`（INV-43）。更新できるのは `revoked_*` だけ。承認のときに、その明細の有効な結びつきの仕訳が取消済み（訂正されていない）なら、先に `revoked_at` を書いてから新しい結びつきを作る（同じ UnitOfWork）。既存の仕訳との結びつき（`matched`）は利用者が外せる（`revoked_reason` 必須）。
 
 ### 1.6 `inference_rules`（FR-022〜FR-024。R9）
 
@@ -130,7 +131,7 @@
 
 ## 4. 状態遷移
 
-- **明細**（導出。R15）: `unprocessed` →（承認で仕訳を作る／既存の仕訳に結ぶ）→ `registered` →（仕訳を 001 で取り消す）→ `unprocessed`。`registered` の仕訳を 001 で訂正しても `registered`。`unprocessed` →（除外）→ `excluded` →（除外の取消）→ `unprocessed`。`changed` は並ぶ印で、利用者が「確認した」で `changed_json` を残したまま印を消す（`acknowledged` を監査に記録）
+- **明細**（導出。R15）: `unprocessed` →（承認で仕訳を作る／既存の仕訳に結ぶ）→ `registered` →（仕訳を 001 で取り消す）→ `unprocessed`。`registered` の仕訳を 001 で訂正しても `registered`。`unprocessed` →（除外）→ `excluded` →（除外の取消）→ `unprocessed`。`changed` は並ぶ印で、`changed_json` があり `changed_ack_at` が NULL のとき立つ。利用者が「確認した」で `changed_ack_at` を書き（監査にも記録）、印を消す
 - **ルール**: `active` ⇄ `paused`。承認で `hits`・`overrides` と内容が変わる
 
 ## 5. 不変条件（INV-1〜39 に追加。fast-check で検証。R19）
@@ -140,7 +141,7 @@
 - **INV-42**: `created` の結びつきの仕訳は、R5 の表どおりの形で、明細の口座の行（`journal_line_id`）の金額 = |明細の金額|、向きは入金なら借方・出金なら貸方（`private` の口座は相手の事業主貸・事業主借の行で同じ規則）。貸借は一致する
 - **INV-43**: 有効な結びつきは、明細ごとに高々 1 件、仕訳の行ごとに高々 1 件。振替の対は同じ仕訳の別々の行に結びつく
 - **INV-44**: 明細の状態は、結びつき・除外・仕訳の状態だけで決まる。仕訳の取消で `unprocessed` に戻り、訂正では `registered` のまま
-- **INV-45**: 任意の明細・口座の名前・メモから作った AI への送信の内容（`buildAiPayload`）に、4 桁以上の数字の並び、口座の名前、メモ、振込の名義が含まれない（SC-005）
+- **INV-45**: 任意の明細・口座の名前・メモから作った AI への送信の内容（`buildAiPayload`）のうち、マスクした内容の項目に4 桁以上の数字の並びと振込の名義が含まれず、送信の内容のどこにも口座の名前・メモが含まれない（日付・金額の項目は数字の検査の対象外）（SC-005）
 - **INV-46**: AI の出力から作る候補は、`AiSuggestion` の検証を通り、科目のコードが相手になりうる有効な科目、税区分が既知のコードのものだけ。それ以外は `none`
 - **INV-47**: 取込（回と明細）と承認（仕訳と結びつき、ルールの更新）は全部か無か。任意の段階の失敗の後、明細が `registered` ⇔ 有効な結びつきの仕訳がある
 
