@@ -497,6 +497,29 @@ export type StatementAuditAction =
 /** 明細の取込・承認などの操作の記録（`statement_audit_log`。追記のみ。006 data-model §1.10、R18） */
 export type StatementAuditEntry = AuditEntry<StatementAuditTargetType, StatementAuditAction>;
 
+/** 取り込んだ明細（`statements` の 1 行。006 data-model §1.3）。金額は符号つき（入金が正） */
+export type StatementRecord = {
+  id: string;
+  batchId: string;
+  statementAccountId: string;
+  stableKey: string;
+  externalId: string | null;
+  date: string;
+  amount: number;
+  content: string;
+  normalizedContent: string;
+  categoryMajor: string | null;
+  categoryMinor: string | null;
+  memo: string | null;
+  transferFlag: boolean;
+  /** `external_id` が同じで内容が違う取込があったときの新しい内容（JSON。FR-005） */
+  changedJson: string | null;
+  changedAckAt: string | null;
+  excludedAt: string | null;
+  excludedReason: string | null;
+  createdAt: string;
+};
+
 /**
  * 定期仕訳の回（`recurring_runs` の 1 行。data-model §1.9）。`posted` は仕訳を持ち、`skipped` は理由を持つ。
  * 登録できない回（`blocked`）は保存しない（R17）

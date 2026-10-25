@@ -66,6 +66,9 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 定期仕訳（US3）。事業体の画面の上部の知らせが status を読む（`/recurring-journals/:id` より具体的なので先に当たる）
   "GET /recurring-journals": () => ok({ recurring: [] }),
   "GET /recurring-journals/status": () => ok({ unacknowledged: [], blocked: [] }),
+  // 明細の取込（006 US1）。取込元の口座と取込の履歴は空
+  "GET /statement-accounts": () => ok({ accounts: [] }),
+  "GET /statements/imports": () => ok({ batches: [] }),
 };
 
 /** `:name` を 1 つのパスの区切りに当てはめて、事業体の下のパスの既定の応答を探す */

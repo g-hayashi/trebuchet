@@ -1,4 +1,11 @@
-import type { BillingTerms, InvoiceSettings, JournalOrigin, Recurring } from "@trebuchet/schema";
+import type {
+  BillingTerms,
+  InvoiceSettings,
+  JournalOrigin,
+  Recurring,
+  StatementAccount,
+  StatementBatch,
+} from "@trebuchet/schema";
 import type {
   AppSettingKey,
   AuthEvent,
@@ -47,6 +54,7 @@ import type {
   RentDetail,
   Result,
   StatementAuditEntry,
+  StatementRecord,
   SubAccount,
   Tag,
   TaxCategory,
@@ -345,6 +353,23 @@ export type RecurringUnitOfWork = TenantUnitOfWork<{ recurring: RecurringStore }
  */
 export interface StatementStore {
   appendStatementAudit(entry: StatementAuditEntry): void;
+
+  // ---- 取込元の口座（US1。data-model §1.1） ----
+  /** 名前の順 */
+  listStatementAccounts(): StatementAccount[];
+  /** `account.id` が保存済みなら更新、なければ追加する（名前は一意） */
+  upsertStatementAccount(account: StatementAccount): void;
+
+  // ---- 取込（US1。§1.2・§1.3） ----
+  insertStatementBatch(batch: StatementBatch): void;
+  /** 新しい順（作成の日時の降順） */
+  listStatementBatches(): StatementBatch[];
+  /** 全件を追加する。`stable_key`・`external_id` の重複は例外（INV-40） */
+  insertStatements(rows: StatementRecord[]): void;
+  /** 取り込んだ順（`rowid`） */
+  listStatements(): StatementRecord[];
+  /** `changed_json` を書き、`changed_ack_at` を NULL に戻す（FR-005）。明細がなければ例外 */
+  markStatementChanged(id: string, changedJson: string): void;
 }
 
 /** 明細の取込・承認で、仕訳・マスタ・明細の記録を1つのトランザクションで扱う（INV-47。data-model §6） */

@@ -1,23 +1,36 @@
+import type { StatementAccount, StatementBatch } from "@trebuchet/schema";
 import type {
   StatementStore,
   SuggestionContext,
   SuggestionPayload,
   SuggestionProvider,
 } from "../../src/ports.ts";
-import { domainError, err, type Result, type StatementAuditEntry } from "../../src/types.ts";
+import {
+  domainError,
+  err,
+  type Result,
+  type StatementAuditEntry,
+  type StatementRecord,
+} from "../../src/types.ts";
 import { InMemoryLedgerRepository } from "./ledger.ts";
 import { InMemoryMasterRepository } from "./master.ts";
 import { fakeUnitOfWork } from "./unit-of-work.ts";
 
 type StatementState = {
   audits: StatementAuditEntry[];
+  accounts: StatementAccount[];
+  batches: StatementBatch[];
+  statements: StatementRecord[];
 };
 
 /**
- * StatementStore のフェイク。メソッドは各ストーリーのタスクで、ポートと実装と同時に足す
+ * StatementStore のフェイク。メソッドは各ストーリーのタスクで、ポートと実装と同時に足す。
+ * DB の制約（口座名・`stable_key`・`external_id` の一意、回・口座の存在）も確かめる
  */
 export class InMemoryStatementStore implements StatementStore {
-  state: StatementState = { audits: [] };
+  state: StatementState = { audits: [], accounts: [], batches: [], statements: [] };
+  /** true なら insertStatements で、1 行目を書いた後に例外を投げる（ロールバックの確認用） */
+  failOnInsertStatements = false;
 
   get audits(): StatementAuditEntry[] {
     return this.state.audits;
@@ -25,6 +38,68 @@ export class InMemoryStatementStore implements StatementStore {
 
   appendStatementAudit(entry: StatementAuditEntry): void {
     this.state.audits.push(structuredClone(entry));
+  }
+
+  listStatementAccounts(): StatementAccount[] {
+    return structuredClone(this.state.accounts).sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+    );
+  }
+
+  upsertStatementAccount(account: StatementAccount): void {
+    if (this.state.accounts.some((a) => a.name === account.name && a.id !== account.id)) {
+      throw new Error("UNIQUE constraint failed: statement_accounts.name");
+    }
+    const copy = structuredClone(account);
+    const index = this.state.accounts.findIndex((a) => a.id === account.id);
+    if (index < 0) this.state.accounts.push(copy);
+    else this.state.accounts[index] = copy;
+  }
+
+  insertStatementBatch(batch: StatementBatch): void {
+    if (this.state.batches.some((b) => b.id === batch.id)) {
+      throw new Error("UNIQUE constraint failed: statement_batches.id");
+    }
+    this.state.batches.push(structuredClone(batch));
+  }
+
+  listStatementBatches(): StatementBatch[] {
+    return structuredClone(this.state.batches).sort(
+      (a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+    );
+  }
+
+  insertStatements(rows: StatementRecord[]): void {
+    for (const [i, row] of rows.entries()) {
+      if (!this.state.batches.some((b) => b.id === row.batchId)) {
+        throw new Error("FOREIGN KEY constraint failed: statements.batch_id");
+      }
+      if (!this.state.accounts.some((a) => a.id === row.statementAccountId)) {
+        throw new Error("FOREIGN KEY constraint failed: statements.statement_account_id");
+      }
+      if (this.state.statements.some((s) => s.stableKey === row.stableKey)) {
+        throw new Error("UNIQUE constraint failed: statements.stable_key");
+      }
+      if (
+        row.externalId !== null &&
+        this.state.statements.some((s) => s.externalId === row.externalId)
+      ) {
+        throw new Error("UNIQUE constraint failed: statements.external_id");
+      }
+      this.state.statements.push(structuredClone(row));
+      if (this.failOnInsertStatements && i === 0) throw new Error("insertStatements failed");
+    }
+  }
+
+  listStatements(): StatementRecord[] {
+    return structuredClone(this.state.statements);
+  }
+
+  markStatementChanged(id: string, changedJson: string): void {
+    const target = this.state.statements.find((s) => s.id === id);
+    if (target === undefined) throw new Error(`statement not found: ${id}`);
+    target.changedJson = changedJson;
+    target.changedAckAt = null;
   }
 }
 
