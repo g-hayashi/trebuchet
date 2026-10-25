@@ -112,6 +112,10 @@ export function seedAuthRows(marker: string): void {
   db.prepare(
     "INSERT INTO pairing_tokens (id, token_hash, rp_id, created_at, expires_at) VALUES (?, ?, 'localhost', ?, ?)",
   ).run(`pt-${marker}`, `pairing-${marker}`, now, now);
+  // 006: AI の接続の設定も端末に結びつく（R12）
+  db.prepare(
+    "INSERT INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, updated_at) VALUES (1, 1, 1, ?, ?, ?)",
+  ).run(`https://ai-${marker}.example.com/v1`, `model-${marker}`, now);
 }
 
 export const EXCLUDED_REGISTRY_TABLES = [
@@ -122,6 +126,7 @@ export const EXCLUDED_REGISTRY_TABLES = [
   "app_settings",
   "backup_runs",
   "pairing_tokens",
+  "ai_settings",
 ] as const;
 
 /** すべての表の内容を、行の JSON の並べ替えた配列にして返す（VACUUM は rowid を振り直すため順序に依存しない） */

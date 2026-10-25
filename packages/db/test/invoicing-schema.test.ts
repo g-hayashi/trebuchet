@@ -830,9 +830,16 @@ describe("invoicing_audit_log", () => {
 });
 
 describe("journals.source のトリガー（R15）", () => {
-  it("manual・import_freee・invoice・payment・recurring を挿入できる。それ以外は拒否", () => {
+  it("manual・import_freee・invoice・payment・recurring・statement を挿入できる。それ以外は拒否", () => {
     const period = seedPeriod();
-    for (const source of ["manual", "import_freee", "invoice", "payment", "recurring"]) {
+    for (const source of [
+      "manual",
+      "import_freee",
+      "invoice",
+      "payment",
+      "recurring",
+      "statement",
+    ]) {
       expect(() => seedJournal(period, source), source).not.toThrow();
     }
     expect(() => seedJournal(period, "bogus")).toThrow(/source/);

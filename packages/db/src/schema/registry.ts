@@ -155,3 +155,28 @@ export const pairingTokens = sqliteTable("pairing_tokens", {
   expiresAt: text("expires_at").notNull(),
   usedAt: text("used_at"),
 });
+
+/**
+ * AI の接続の設定（1 行。端末に結びつくのでバックアップに含めない）。006 の data-model §2.1・R12。
+ * API キーはキーチェーン（`trebuchet-ai-api-key`）に置き、この表に持たない
+ */
+export const aiSettings = sqliteTable(
+  "ai_settings",
+  {
+    id: integer("id").primaryKey(),
+    localEnabled: integer("local_enabled").notNull().default(1),
+    externalEnabled: integer("external_enabled").notNull().default(0),
+    externalBaseUrl: text("external_base_url"),
+    externalModel: text("external_model"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    check("ai_settings_single", sql`${t.id} = 1`),
+    check("ai_settings_local_enabled", sql`${t.localEnabled} IN (0, 1)`),
+    check("ai_settings_external_enabled", sql`${t.externalEnabled} IN (0, 1)`),
+    check(
+      "ai_settings_external",
+      sql`${t.externalEnabled} = 0 OR (${t.externalBaseUrl} IS NOT NULL AND ${t.externalModel} IS NOT NULL)`,
+    ),
+  ],
+);

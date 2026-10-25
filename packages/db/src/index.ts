@@ -10,5 +10,6 @@ export * from "./recurring-repository.ts";
 export * from "./registry-repository.ts";
 export * as registrySchema from "./schema/registry.ts";
 export * as tenantSchema from "./schema/tenant.ts";
+export * from "./statement-repository.ts";
 export * from "./tenant-store.ts";
 export * from "./unit-of-work.ts";

@@ -8,6 +8,7 @@ export const JOURNAL_SOURCES = [
   "invoice",
   "payment",
   "recurring",
+  "statement",
 ] as const;
 export const JournalSource = z.enum(JOURNAL_SOURCES);
 export type JournalSource = z.infer<typeof JournalSource>;

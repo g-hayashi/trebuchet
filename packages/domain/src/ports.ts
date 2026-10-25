@@ -46,6 +46,7 @@ import type {
   RecurringRunRecord,
   RentDetail,
   Result,
+  StatementAuditEntry,
   SubAccount,
   Tag,
   TaxCategory,
@@ -336,6 +337,33 @@ export interface RecurringStore {
 
 /** 定期仕訳の登録で、仕訳・マスタ・定期仕訳の記録を1つのトランザクションで扱う（R9） */
 export type RecurringUnitOfWork = TenantUnitOfWork<{ recurring: RecurringStore }>;
+
+/**
+ * 明細の取込と AI 仕訳（006）の永続化。メソッドはすべて同期。各ストーリーの db のタスクで、
+ * ポートと実装（`DrizzleStatementStore`）・偽物（`InMemoryStatementStore`）を同時に足す。
+ * 操作の記録は `statement_audit_log`（R18）
+ */
+export interface StatementStore {
+  appendStatementAudit(entry: StatementAuditEntry): void;
+}
+
+/** 明細の取込・承認で、仕訳・マスタ・明細の記録を1つのトランザクションで扱う（INV-47。data-model §6） */
+export type StatementUnitOfWork = TenantUnitOfWork<{ statements: StatementStore }>;
+
+/** AI に渡す明細の内容（`buildAiPayload` の出力。R11）。形は US5 のタスクで決める */
+export type SuggestionPayload = Readonly<Record<string, unknown>>;
+/** AI に渡す文脈（相手になりうる科目、税区分のコード。R10）。形は US5 のタスクで決める */
+export type SuggestionContext = Readonly<Record<string, unknown>>;
+
+/**
+ * AI の推定（端末内・外部の 2 つの実装を渡す。R10）。出力は `unknown` で返し、ドメインの
+ * `parseSuggestion` が検証する（INV-46）。ネットワーク・プロセスを使うので非同期
+ */
+export interface SuggestionProvider {
+  /** 使える（接続先・モデルなどがそろっている）か */
+  available(): Promise<boolean>;
+  suggest(payload: SuggestionPayload, context: SuggestionContext): Promise<Result<unknown>>;
+}
 
 /** 事業体の一覧（data/registry.sqlite） */
 export interface RegistryRepository {

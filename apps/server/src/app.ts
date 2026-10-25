@@ -7,6 +7,7 @@ import {
   backupStore,
   clock as defaultClock,
   type RouteOptions,
+  type SuggestionProviders,
   secretStore,
 } from "./deps.ts";
 import { onError } from "./errors.ts";
@@ -18,6 +19,7 @@ import { simpleWebAuthnVerifier } from "./lib/webauthn-simplewebauthn.ts";
 import { authCheck } from "./middleware/auth.ts";
 import { csrfCheck } from "./middleware/csrf.ts";
 import { type GuardEnv, hostCheck } from "./middleware/host.ts";
+import { aiSettingsRoutes } from "./routes/ai-settings.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { backupRoutes } from "./routes/backup.ts";
 import { blueReturnRoutes } from "./routes/blue-return.ts";
@@ -30,6 +32,7 @@ import { masterRoutes } from "./routes/masters.ts";
 import { periodRoutes } from "./routes/periods.ts";
 import { recurringRoutes } from "./routes/recurring.ts";
 import { reportRoutes } from "./routes/reports.ts";
+import { statementRoutes } from "./routes/statements.ts";
 import { taxReturnRoutes } from "./routes/tax-return.ts";
 import { type TenantEnv, tenant } from "./tenant.ts";
 
@@ -37,7 +40,7 @@ import { type TenantEnv, tenant } from "./tenant.ts";
  * 事業体の下のルート。時刻（更新日時・「今日」）を使うルートは clock を受け取るので、
  * `createApp` の中で組み立てる（005 R22）。全ルートに同じ clock が渡る
  */
-function tenantRoutes(options: RouteOptions) {
+function tenantRoutes(options: RouteOptions & { suggestion?: SuggestionProviders }) {
   return new Hono<TenantEnv>()
     .use(tenant)
     .route("/", entityRoutes)
@@ -50,7 +53,8 @@ function tenantRoutes(options: RouteOptions) {
     .route("/", fixedAssetRoutes(options))
     .route("/", taxReturnRoutes(options))
     .route("/", invoicingRoutes(options))
-    .route("/", recurringRoutes(options));
+    .route("/", recurringRoutes(options))
+    .route("/", statementRoutes(options));
 }
 
 export type AppOptions = {
@@ -58,6 +62,8 @@ export type AppOptions = {
   getRemoteSettings?: GetRemoteSettings;
   store?: () => AuthStore;
   clock?: Clock;
+  /** AI の推定（006）。既定は「使えない」。実物は T025 で main が渡す */
+  suggestion?: SuggestionProviders;
   /** WebAuthn の検証。既定は @simplewebauthn/server。ルートのテストは偽物を渡す */
   webauthn?: WebAuthnVerifier;
   /** バックアップの依存（既定は deps.ts の実物）。テストは偽の SecretStore・実行を渡す */
@@ -109,8 +115,15 @@ export function createApp(options: AppOptions = {}) {
         ...(options.backup?.crypto === undefined ? {} : { crypto: options.backup.crypto }),
       }),
     )
+    .route("/settings", aiSettingsRoutes({ clock }))
     .route("/entities", entitiesRoutes({ clock }))
-    .route("/entities/:entityId", tenantRoutes({ clock }));
+    .route(
+      "/entities/:entityId",
+      tenantRoutes({
+        clock,
+        ...(options.suggestion === undefined ? {} : { suggestion: options.suggestion }),
+      }),
+    );
 
   app.onError(onError);
   return app;

@@ -471,6 +471,32 @@ export type InvoicingAuditAction =
 /** 請求・定期仕訳の操作の記録（`invoicing_audit_log`。追記のみ。data-model §1.10、R23） */
 export type InvoicingAuditEntry = AuditEntry<InvoicingAuditTargetType, InvoicingAuditAction>;
 
+// ---- 明細の取込と AI 仕訳（006） ----
+
+export type StatementAuditTargetType =
+  | "statement_batch"
+  | "statement"
+  | "statement_link"
+  | "statement_account"
+  | "inference_rule"
+  | "statement_settings";
+
+export type StatementAuditAction =
+  | "create"
+  | "update"
+  | "exclude"
+  | "unexclude"
+  | "acknowledge"
+  | "unlink"
+  | "revoke"
+  | "pause"
+  | "resume"
+  | "edit"
+  | "seed";
+
+/** 明細の取込・承認などの操作の記録（`statement_audit_log`。追記のみ。006 data-model §1.10、R18） */
+export type StatementAuditEntry = AuditEntry<StatementAuditTargetType, StatementAuditAction>;
+
 /**
  * 定期仕訳の回（`recurring_runs` の 1 行。data-model §1.9）。`posted` は仕訳を持ち、`skipped` は理由を持つ。
  * 登録できない回（`blocked`）は保存しない（R17）

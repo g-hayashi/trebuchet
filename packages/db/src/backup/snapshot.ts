@@ -19,6 +19,7 @@ const EXCLUDED_REGISTRY_TABLES = [
   "app_settings",
   "backup_runs",
   "pairing_tokens",
+  "ai_settings",
 ] as const;
 
 const MIGRATION_JOURNALS = {
@@ -81,7 +82,7 @@ function closeAsSingleFile(db: Database.Database): void {
 
 /**
  * registry の写しの加工（R9）:
- * トリガーを控えて DROP → 7 表の全行を削除 → トリガーを作り直す → VACUUM（消した行を空き領域に残さない）。
+ * トリガーを控えて DROP → 端末の表（EXCLUDED_REGISTRY_TABLES）の全行を削除 → トリガーを作り直す → VACUUM（消した行を空き領域に残さない）。
  */
 function sanitizeRegistryCopy(file: string, hasTenant: (entityId: string) => boolean): void {
   const db = new Database(file, { fileMustExist: true });

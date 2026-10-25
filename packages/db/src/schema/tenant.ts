@@ -1,4 +1,16 @@
-import { BILLING_TYPES, JOURNAL_SOURCES } from "@trebuchet/schema";
+import {
+  BILLING_TYPES,
+  CANDIDATE_METHODS,
+  JOURNAL_SOURCES,
+  PURPOSES,
+  RULE_HISTORY_ACTIONS,
+  RULE_ORIGINS,
+  RULE_STATUSES,
+  STATEMENT_ACCOUNT_KINDS,
+  STATEMENT_ACCOUNT_USAGES,
+  STATEMENT_LINK_KINDS,
+  STATEMENT_ORIGINS,
+} from "@trebuchet/schema";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
@@ -932,5 +944,271 @@ export const invoicingAuditLog = sqliteTable(
       "invoicing_audit_log_action",
       sql`${t.action} IN ('create', 'update', 'void', 'pause', 'resume', 'skip', 'acknowledge')`,
     ),
+  ],
+);
+
+// ---- 006-mfme-ai-journal（specs/006-mfme-ai-journal/data-model.md §1） ----
+
+const STATEMENT_AUDIT_TARGETS = [
+  "statement_batch",
+  "statement",
+  "statement_link",
+  "statement_account",
+  "inference_rule",
+  "statement_settings",
+] as const;
+const STATEMENT_AUDIT_ACTIONS = [
+  "create",
+  "update",
+  "exclude",
+  "unexclude",
+  "acknowledge",
+  "unlink",
+  "revoke",
+  "pause",
+  "resume",
+  "edit",
+  "seed",
+] as const;
+const inList = (values: readonly string[]) => sql.raw(values.map((v) => `'${v}'`).join(", "));
+
+export const statementAccounts = sqliteTable(
+  "statement_accounts",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull().unique(),
+    usage: text("usage", { enum: STATEMENT_ACCOUNT_USAGES }).notNull(),
+    kind: text("kind", { enum: STATEMENT_ACCOUNT_KINDS }).notNull(),
+    accountId: text("account_id").references(() => accounts.id),
+    subAccountId: text("sub_account_id").references(() => subAccounts.id),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    check("statement_accounts_usage", sql`${t.usage} IN (${inList(STATEMENT_ACCOUNT_USAGES)})`),
+    check("statement_accounts_kind", sql`${t.kind} IN (${inList(STATEMENT_ACCOUNT_KINDS)})`),
+    check(
+      "statement_accounts_account",
+      sql`(${t.usage} = 'private' AND ${t.accountId} IS NULL AND ${t.subAccountId} IS NULL) OR (${t.usage} <> 'private' AND ${t.accountId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const statementBatches = sqliteTable(
+  "statement_batches",
+  {
+    id: text("id").primaryKey(),
+    origin: text("origin", { enum: STATEMENT_ORIGINS }).notNull(),
+    inputSha256: text("input_sha256").notNull(),
+    periodFrom: text("period_from").notNull(),
+    periodTo: text("period_to").notNull(),
+    countNew: integer("count_new").notNull(),
+    countExisting: integer("count_existing").notNull(),
+    countUnreadable: integer("count_unreadable").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    check("statement_batches_origin", sql`${t.origin} IN (${inList(STATEMENT_ORIGINS)})`),
+    check("statement_batches_count_new", sql`${t.countNew} >= 0`),
+    check("statement_batches_count_existing", sql`${t.countExisting} >= 0`),
+    check("statement_batches_count_unreadable", sql`${t.countUnreadable} >= 0`),
+  ],
+);
+
+export const statements = sqliteTable(
+  "statements",
+  {
+    id: text("id").primaryKey(),
+    batchId: text("batch_id")
+      .notNull()
+      .references(() => statementBatches.id),
+    statementAccountId: text("statement_account_id")
+      .notNull()
+      .references(() => statementAccounts.id),
+    // INV-40: 事業体の中で重複しない
+    stableKey: text("stable_key").notNull().unique(),
+    externalId: text("external_id"),
+    date: text("date").notNull(),
+    amount: integer("amount").notNull(),
+    content: text("content").notNull(),
+    normalizedContent: text("normalized_content").notNull(),
+    categoryMajor: text("category_major"),
+    categoryMinor: text("category_minor"),
+    memo: text("memo"),
+    transferFlag: integer("transfer_flag").notNull(),
+    changedJson: text("changed_json"),
+    changedAckAt: text("changed_ack_at"),
+    excludedAt: text("excluded_at"),
+    excludedReason: text("excluded_reason"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("statements_external_id").on(t.externalId).where(sql`external_id IS NOT NULL`),
+    index("statements_account_date").on(t.statementAccountId, t.date),
+    index("statements_batch").on(t.batchId),
+    check("statements_amount", sql`abs(${t.amount}) < 1000000000000`),
+    check("statements_transfer_flag", sql`${t.transferFlag} IN (0, 1)`),
+  ],
+);
+
+export const statementCandidates = sqliteTable(
+  "statement_candidates",
+  {
+    statementId: text("statement_id")
+      .primaryKey()
+      .references(() => statements.id),
+    method: text("method", { enum: CANDIDATE_METHODS }).notNull(),
+    purpose: text("purpose", { enum: PURPOSES }),
+    confidence: integer("confidence"),
+    reason: text("reason").notNull(),
+    draftJson: text("draft_json"),
+    ruleId: text("rule_id").references(() => inferenceRules.id),
+    model: text("model"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    check("statement_candidates_method", sql`${t.method} IN (${inList(CANDIDATE_METHODS)})`),
+    check("statement_candidates_purpose", sql`${t.purpose} IN (${inList(PURPOSES)})`),
+    check("statement_candidates_confidence", sql`${t.confidence} BETWEEN 0 AND 100`),
+    check(
+      "statement_candidates_shape",
+      sql`(${t.method} = 'none' AND ${t.purpose} IS NULL AND ${t.confidence} IS NULL AND ${t.draftJson} IS NULL) OR (${t.method} <> 'none' AND ${t.purpose} IS NOT NULL AND ${t.confidence} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const statementLinks = sqliteTable(
+  "statement_links",
+  {
+    id: text("id").primaryKey(),
+    statementId: text("statement_id")
+      .notNull()
+      .references(() => statements.id),
+    journalId: text("journal_id")
+      .notNull()
+      .references(() => journals.id),
+    journalLineId: text("journal_line_id")
+      .notNull()
+      .references(() => journalLines.id),
+    kind: text("kind", { enum: STATEMENT_LINK_KINDS }).notNull(),
+    createdAt: text("created_at").notNull(),
+    revokedAt: text("revoked_at"),
+    revokedReason: text("revoked_reason"),
+  },
+  (t) => [
+    // INV-43: 有効な結びつきは、明細ごと・仕訳の行ごとに高々 1 件
+    uniqueIndex("statement_links_active_statement")
+      .on(t.statementId)
+      .where(sql`revoked_at IS NULL`),
+    uniqueIndex("statement_links_active_line").on(t.journalLineId).where(sql`revoked_at IS NULL`),
+    index("statement_links_journal").on(t.journalId),
+    check("statement_links_kind", sql`${t.kind} IN (${inList(STATEMENT_LINK_KINDS)})`),
+  ],
+);
+
+export const inferenceRules = sqliteTable(
+  "inference_rules",
+  {
+    id: text("id").primaryKey(),
+    normalizedContent: text("normalized_content").notNull(),
+    statementAccountId: text("statement_account_id").references(() => statementAccounts.id),
+    counterAccountId: text("counter_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    counterSubAccountId: text("counter_sub_account_id").references(() => subAccounts.id),
+    partnerId: text("partner_id").references(() => partners.id),
+    taxCategory: text("tax_category")
+      .notNull()
+      .references(() => taxCategories.code),
+    purpose: text("purpose", { enum: PURPOSES }).notNull(),
+    descriptionTemplate: text("description_template"),
+    hits: integer("hits").notNull().default(0),
+    overrides: integer("overrides").notNull().default(0),
+    status: text("status", { enum: RULE_STATUSES }).notNull(),
+    origin: text("origin", { enum: RULE_ORIGINS }).notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    // UNIQUE（normalized_content, ifnull(statement_account_id, '')）は式のインデックスで、
+    // drizzle-kit が出力できないため 0008_statements_integrity.sql に手書きする
+    check("inference_rules_purpose", sql`${t.purpose} IN (${inList(PURPOSES)})`),
+    check("inference_rules_status", sql`${t.status} IN (${inList(RULE_STATUSES)})`),
+    check("inference_rules_origin", sql`${t.origin} IN (${inList(RULE_ORIGINS)})`),
+    check("inference_rules_hits", sql`${t.hits} >= 0`),
+    check("inference_rules_overrides", sql`${t.overrides} >= 0`),
+  ],
+);
+
+export const inferenceRuleHistory = sqliteTable(
+  "inference_rule_history",
+  {
+    id: text("id").primaryKey(),
+    ruleId: text("rule_id")
+      .notNull()
+      .references(() => inferenceRules.id),
+    action: text("action", { enum: RULE_HISTORY_ACTIONS }).notNull(),
+    beforeJson: text("before_json"),
+    afterJson: text("after_json"),
+    statementId: text("statement_id").references(() => statements.id),
+    at: text("at").notNull(),
+  },
+  (t) => [
+    index("inference_rule_history_rule").on(t.ruleId),
+    check("inference_rule_history_action", sql`${t.action} IN (${inList(RULE_HISTORY_ACTIONS)})`),
+  ],
+);
+
+export const statementSettings = sqliteTable(
+  "statement_settings",
+  {
+    id: integer("id").primaryKey(),
+    bulkThreshold: integer("bulk_threshold").notNull().default(80),
+    externalThreshold: integer("external_threshold").notNull().default(60),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    check("statement_settings_single", sql`${t.id} = 1`),
+    check("statement_settings_bulk", sql`${t.bulkThreshold} BETWEEN 0 AND 100`),
+    check("statement_settings_external", sql`${t.externalThreshold} BETWEEN 0 AND 100`),
+  ],
+);
+
+export const evalRuns = sqliteTable(
+  "eval_runs",
+  {
+    id: text("id").primaryKey(),
+    splitDate: text("split_date").notNull(),
+    includeAi: integer("include_ai").notNull(),
+    sampleCount: integer("sample_count").notNull(),
+    resultJson: text("result_json").notNull(),
+    modelsJson: text("models_json").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    check("eval_runs_include_ai", sql`${t.includeAi} IN (0, 1)`),
+    check("eval_runs_sample_count", sql`${t.sampleCount} >= 0`),
+  ],
+);
+
+export const statementAuditLog = sqliteTable(
+  "statement_audit_log",
+  {
+    id: text("id").primaryKey(),
+    occurredAt: text("occurred_at").notNull(),
+    targetType: text("target_type", { enum: STATEMENT_AUDIT_TARGETS }).notNull(),
+    targetId: text("target_id").notNull(),
+    action: text("action", { enum: STATEMENT_AUDIT_ACTIONS }).notNull(),
+    reason: text("reason"),
+    beforeJson: text("before_json"),
+    afterJson: text("after_json"),
+  },
+  (t) => [
+    index("statement_audit_log_target").on(t.targetType, t.targetId),
+    check(
+      "statement_audit_log_target_type",
+      sql`${t.targetType} IN (${inList(STATEMENT_AUDIT_TARGETS)})`,
+    ),
+    check("statement_audit_log_action", sql`${t.action} IN (${inList(STATEMENT_AUDIT_ACTIONS)})`),
   ],
 );
