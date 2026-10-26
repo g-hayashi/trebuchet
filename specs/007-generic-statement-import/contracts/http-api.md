@@ -20,7 +20,7 @@
 
 ### 2.1 `POST /statements/imports/layout`
 
-`options`: `{ origin: "paste" | "file", sourceId?: Id, delimiter?: Delimiter, headerRow?: number | null }`（`delimiter`・`headerRow` は利用者の選び直し）
+`options`: `{ origin: "paste" | "file", sourceId?: Id, encoding?: "utf-8" | "shift_jis", delimiter?: Delimiter, headerRow?: number | null }`（`encoding`・`delimiter`・`headerRow` は利用者の選び直し。§2.2・§2.3・§4.1 も同じ `encoding` を受け、layout で使った値を送る）
 
 `200`: `StatementTableLayout`（data-model §3）。`sourceId` を指定し、見出しが違えば `headerDiff` と、見出しの名前の同じ列の役割を引き継いだ `suggestedColumns` を返す
 

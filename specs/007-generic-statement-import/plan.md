@@ -14,7 +14,7 @@
 
 **Primary Dependencies**: 既存の Hono、Drizzle ＋ better-sqlite3、Zod、React ＋ TanStack Router、Vitest ＋ fast-check。**追加なし**（CSV の分割と文字コードは 002 の `csv.ts`、AI の呼び出しは 006 の `ai-client.ts`・`fm-server.ts`）
 
-**Storage**: tenant に `statement_sources` を足し、`statement_batches` を作り直す（`0009_statement_sources.sql`・`0010_statement_sources_integrity.sql`。data-model §2）。registry は変えない
+**Storage**: tenant に `statement_sources` を足し、`statement_batches`・`statement_audit_log` を作り直す（`0009_statement_sources.sql`・`0010_statement_sources_integrity.sql`。data-model §2）。registry は変えない
 
 **Testing**: Vitest ＋ fast-check（INV-48〜50。`fc.assert(fc.property(...))` を直接）、合成のフィクスチャ（`packages/domain/test/fixtures/statements/`、CP932 の CSV を含む）、db のテスト（作り直し後のトリガー・外部キー）、`app.request()` ＋ 偽の `fetch`（端末内の endpoint だけに行くこと）、Testing Library ＋ jsdom、E2E（利用者の端末）
 
@@ -37,7 +37,7 @@
 | I. 帳簿の正確性 | ✅ | 値の読み取りは純関数で、生成した表から元の行を復元できることを性質テストで確かめる（INV-49）。符号の向きは利用者が選ぶ（R5）。仕訳の登録は 006 の承認（001 の `createJournal`）のまま |
 | II. 監査可能性 | ✅ | 取込元の作成・変更・削除と、確定で保存した口座の対応を `statement_audit_log` に残す。取込の回は取込元の名前の写しを持つ（R7） |
 | III. ローカルファーストとプライバシー | ✅ | 列の案は端末内の AI だけ。外部の endpoint を受け取る口を持たない（R10、INV-48）。前置きの行（口座番号など）は AI に渡さず保存もしない（R2）。明細の値は外部へ出ない |
-| IV. AIは提案、確定は人 | ✅ | AI は列の役割の案だけで、`AiColumnSuggestion`（Zod）で検証し確信度と根拠を持つ。利用者が確かめるまで読み取りに進まない（FR-019）。口座の推定は規則で、確定まで保存しない（R9）。AI の候補（006）の評価は変えない。列の案は帳簿の値を作らないので Evals の対象にしない（読み取りの正しさは INV-49 で保証する） |
+| IV. AIは提案、確定は人 | ✅ | AI は列の役割の案だけで、`AiColumnSuggestion`（Zod）で検証し確信度と根拠を持つ。利用者が確かめるまで読み取りに進まない（FR-019）。口座の推定は規則で、確定まで保存しない（R9）。列の案にも評価を持たせる: 合成の見出しと正しい対応の例で一致率を測り、前回と比べる（`pnpm eval:columns`、R15）。プロンプト・行数・待ち時間の変更は前後の評価の比較を伴う。AI の候補（006）の評価は変えない。読み取りの正しさは INV-49 で保証する |
 | V. テストファースト | ✅ | 読み取り・判定・辞書・推定・当てはめ・プロンプトの純関数と INV-48〜50 を先に書く。取込は合成のフィクスチャで件数・金額を照合する（R14） |
 | VI. 税制ルールはデータ | ✅ | 税制の値を扱わない |
 | VII. シンプルさと境界 | ✅ | 依存を足さない。判定と読み取りは domain、ファイルの受け取りと AI の呼び出しは server。取込元は 1 つの表で 2 種類を表す（R7）。辞書・語の表は 1 か所の一覧 |
@@ -51,7 +51,7 @@
 ```text
 specs/007-generic-statement-import/
 ├── plan.md              # 本ファイル
-├── research.md          # Phase 0（R1〜R14）
+├── research.md          # Phase 0（R1〜R15）
 ├── data-model.md        # Phase 1（statement_sources、statement_batches の変更、型、関数、INV-48〜50）
 ├── quickstart.md        # Phase 1
 ├── contracts/
@@ -106,6 +106,7 @@ apps/web/src/
 └── routes/e/$entityId/statements/   # import.tsx・index.tsx の文言、取込元の一覧（settings.tsx に足す）
 
 scripts/bench-statements.ts    # CSV と multipart に直す
+scripts/eval-column-suggestions.ts  # 新規: 列の案の評価（R15、`pnpm eval:columns`）
 apps/web/e2e/statements.spec.ts  # CSV の取込と 2 回目の当てはめ
 ```
 

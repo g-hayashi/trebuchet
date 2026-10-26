@@ -28,12 +28,12 @@
 ### 1.3 そのほか
 
 - `statements`・`statement_accounts` は変えない。`statements.external_id` は、対応で `externalId` の役割を選んだ取込元の値を入れる（006 の FR-005 の「変更あり」がそのまま効く）
-- `statement_audit_log` の `target` に `statement_source`（create / update / delete）を足す
+- `statement_audit_log`: `target_type` の CHECK（`STATEMENT_AUDIT_TARGETS`、`packages/db/src/schema/tenant.ts`）に `statement_source` を、`action` の CHECK（`STATEMENT_AUDIT_ACTIONS`）に `delete` を足す（取込元の create / update / delete）。CHECK を変えるので、この表も作り直す
 
 ## 2. マイグレーション
 
-1. `0009_statement_sources.sql`（`drizzle-kit generate`）: `statement_sources` の作成と `statement_batches` の作り直し（`__new_statement_batches` への写し）。生成後に新しい表の `);` を `) STRICT;` に置き換える
-2. `0010_statement_sources_integrity.sql`（`--custom`）: `statement_batches` の更新・削除を止めるトリガー（0008 と同じ本文）を作り直す。`statement_audit_log` の `target` の CHECK があれば同じく直す
+1. `0009_statement_sources.sql`（`drizzle-kit generate`）: `statement_sources` の作成と、`statement_batches`・`statement_audit_log` の作り直し（`__new_` の表への写し）。生成後に新しい表の `);` を `) STRICT;` に置き換える。CHECK だけの変更で drizzle-kit が作り直しを出さなければ、`--custom` で作り直しの SQL を手で書く（`PRAGMA foreign_keys=OFF` → 新しい表 → 写し → 古い表の削除 → 名前の変更 → `PRAGMA foreign_keys=ON`）
+2. `0010_statement_sources_integrity.sql`（`--custom`）: 作り直しで消える 0008 のトリガー（`statement_batches` の更新・削除の拒否、`statement_audit_log` の追記のみ）を、0008 と同じ本文で作り直す
 - 生成した SQL で、`statements.batch_id` の外部キーが写しの後も効くこと（`PRAGMA foreign_key_check`）を db のテストで確かめる
 
 ## 3. 型（`packages/schema/src/statements.ts`）
@@ -46,7 +46,8 @@ StatementAmountSign = "inflow_positive" | "outflow_positive"
 
 StatementColumnMapping = {
   delimiter: StatementDelimiter
-  headerRow: number | null          // 前置きを除いた後ではなく、元のテキストの行の番号（0 起点）。null は見出しなし
+  headerRow: number | null          // 元のテキストの行の番号（0 起点）。null は見出しなし。保存した対応を当てはめるときは
+                                    // この値を使わず、今回の判定で署名が一致した行を使う（前置きの行数は月ごとに変わりうる。R8）
   columns: Partial<Record<StatementColumnRole, number>>   // 列の番号（0 起点）
   amountSign?: StatementAmountSign  // columns.amount があるときは必須
 }
@@ -58,9 +59,11 @@ StatementColumnMapping = {
 - 同じ列の番号を 2 つの役割に使わない
 - 列の番号は 0〜49（research R12）
 
+`StatementEncoding = "utf-8" | "shift_jis"`（取込の `options.encoding` で指定すれば自動の判定を使わない。FR-002）
+
 `StatementTableLayout`（layout の応答）:
 ```text
-{ encoding: "utf-8" | "shift_jis", delimiter, headerRow: number | null, header: string[] | null,
+{ encoding: StatementEncoding, delimiter, headerRow: number | null, header: string[] | null,
   columnCount, rowCount, sampleRows: string[][] (≤10), needsYear: boolean,
   suggestedColumns: Partial<Record<Role, number>>,     // 辞書の案（R4）
   match: { kind: "none" } | { kind: "one", source: StatementSource } | { kind: "many", sources: StatementSource[] },
@@ -85,6 +88,7 @@ StatementColumnMapping = {
 | `headerSignature(header)`・`matchStatementSources(layout, sources)`・`diffHeader` | `statements/sources.ts` | 当てはめ（R8） |
 | `inferStatementAccount(name, categoryMajors, accounts, subAccounts)` | `statements/account-inference.ts` | 口座の推定（R9） |
 | `buildColumnPrompt(layout)`・`parseColumnSuggestion(raw, columnCount)` | `statements/column-prompt.ts` | AI の案（R10） |
+| `evaluateColumnSuggestions(cases, provider)` | `usecases/statement-columns.ts` | 列の案の評価（R15） |
 | `ColumnSuggestionProvider` | `ports.ts` | 端末内の AI の口（R10） |
 | `StatementStore` に `listStatementSources`・`upsertStatementSource`・`deleteStatementSource` を足す | `ports.ts`、`packages/db/src/statement-repository.ts` | |
 | ユースケース `detectStatementLayout`・`previewStatementImport`・`commitStatementImport`（入力を変更）・`listStatementSources`・`renameStatementSource`・`deleteStatementSource` | `usecases/statements.ts`、`usecases/statement-sources.ts` | |

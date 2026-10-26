@@ -4,7 +4,7 @@
 
 ## R1. 入力の運び方（貼り付けとファイルを同じ道に）
 
-- **Decision**: 貼り付けもファイルも、web から multipart の `file`（貼り付けは web が UTF-8 の Blob にする）と `options`（JSON 文字列）で送る。server は 002 の `readUpload`（`apps/server/src/lib/upload.ts`、上限 5 MB）でバイト列を受け、domain の `decodeText`（`packages/domain/src/import/csv.ts`。UTF-8 を厳密に読めなければ Shift_JIS＝CP932）で文字列にする。出所（`paste` / `file`）は `options.origin` で受ける
+- **Decision**: 貼り付けもファイルも、web から multipart の `file`（貼り付けは web が UTF-8 の Blob にする）と `options`（JSON 文字列）で送る。server は 002 の `readUpload`（`apps/server/src/lib/upload.ts`、上限 5 MB）でバイト列を受け、domain の `decodeText`（`packages/domain/src/import/csv.ts`。UTF-8 を厳密に読めなければ Shift_JIS＝CP932）で文字列にする。出所（`paste` / `file`）は `options.origin` で受ける。`options.encoding`（`utf-8` / `shift_jis`）があれば自動の判定を使わずその文字コードで読む（利用者の選び直し。FR-002。文字化けしたときに使う）
 - **Rationale**: 読み取りの道が 1 本になり、文字コードの判定も 1 か所で済む。002 のファイルの受け取りと上限をそのまま使える。web は文字コードを判定しない（業務ルールを持たない）
 - **Alternatives**: 貼り付けは JSON・ファイルは multipart の 2 本（読み取りの入口が 2 つになる）。web の `TextDecoder` で文字列にしてから送る（文字コードの判定が web に漏れる）
 
@@ -68,6 +68,7 @@
 ## R8. 保存した対応の当てはめ
 
 - **Decision**: layout の判定の後、見出しの署名が一致する取込元を探す（`matchStatementSources`）。
+  - 署名は、今回の判定（R2）で見つけた見出しの行で作る。当てはめるときの見出しの行は今回の判定の行で、保存した `headerRow` は使わない（前置きの行数は月ごとに変わりうる）。区切り文字・列の役割・符号の向きは保存した値を使う
   - 1 件: その対応を当てはめ、列の選択を飛ばして preview へ進める（SC-003）
   - 2 件以上（同じ会社の 2 枚のカードなど）: どれかを利用者が選ぶ（列は選ばない）
   - 0 件: 列の選択の画面。辞書（R4）で案を入れる
@@ -121,7 +122,7 @@
   - エラーコード `STATEMENT_PASTE_UNREADABLE` → `STATEMENT_TABLE_UNREADABLE`（文言から「MF ME の入出金の表」を消す）
   - テストの部品: `formatMfmePaste`・`MFME_HEADER`・`mfmeDate` を、R14 の汎用の生成器に置き換える。フィクスチャ `packages/domain/test/fixtures/mfme/` → `fixtures/statements/`
   - 画面の文言（`import.tsx`・`index.tsx`・`PasteImport.tsx`・`api-errors.ts`・`labels.ts`）から MF ME を前提とした説明を消す
-  - マイグレーション: `statement_sources` を足し、`statement_batches` に `source_name` を足して origin の CHECK を直す。SQLite は CHECK を変えられないので、drizzle-kit の再作成（`__new_` の表への写し）を使い、0008 の `statement_batches` のトリガーを `--custom` の SQL で作り直す（data-model §2）。既存の `mfme_fetch` の行はない（取得は実装していない）ので、写しで落ちる行はない
+  - マイグレーション: `statement_sources` を足し、`statement_batches` に `source_name` を足して origin の CHECK を直す。`statement_audit_log` の target・action の CHECK にも取込元の値を足す。SQLite は CHECK を変えられないので、drizzle-kit の再作成（`__new_` の表への写し）を使い、0008 の両方の表のトリガーを `--custom` の SQL で作り直す（data-model §2）。既存の `mfme_fetch` の行はない（取得は実装していない）ので、写しで落ちる行はない
   - `006-mfme-ai-journal` の機能の名前を指すコメント（`// 006-mfme-ai-journal（...）`）は、機能の記録としてそのまま残す
 - **Rationale**: 開発中で利用者がいないので、互換の別名を残さない（spec の Assumptions）
 - **Alternatives**: 古い名前を別名として残す（使われない名前が残る）
@@ -134,3 +135,13 @@
   - AI: 偽の `ColumnSuggestionProvider`。server のテストは偽の `fetch` で、端末内の endpoint だけに要求が行き、外部の設定があっても外部へ行かないことを確かめる
   - 006 の既存のテストは、`PastedRow` → `StatementRow` などの名前を直し、貼り付けの入力を multipart に直す
 - **Rationale**: SC-001（金額の誤り 0 件）は具体例だけでは保証できない（Constitution V）
+
+## R15. 列の案の評価（Constitution IV の Evals）
+
+- **Decision**: 列の案（R10）にも評価を持たせる。
+  - 評価の例: `packages/domain/test/fixtures/statements/column-evals.ts` に、合成の見出しと先頭の行（R10 の入力と同じ形）と正しい対応の組を 20 件以上置く（T001 の各形、独自の見出し、英語の見出し、見出しなし）。実データから作らない
+  - `evaluateColumnSuggestions(cases, provider)`（`usecases/statement-columns.ts`）が、例ごとに `suggestStatementColumns` と同じ経路で案を作り、必須の役割（日付・内容・金額か出金・入金）がすべて正しい割合、役割ごとの一致率、案なしの割合を返す
+  - `pnpm eval:columns`（`scripts/eval-column-suggestions.ts`）が端末内の AI で評価を実行し、結果（件数と割合だけ）を `.tmp/eval-columns/` に日時つきの JSON で残して前回と比べる。CI は偽の provider で `evaluateColumnSuggestions` の集計だけを確かめ、AI は呼ばない
+  - プロンプト・`COLUMN_PROMPT_ROWS`・待ち時間を変えるときは、変更の前と後の `pnpm eval:columns` の結果を比べる（AGENTS.md に書く）
+- **Rationale**: 憲法 IV は「AI機能の変更は MUST 評価データセットでの精度比較を伴う」とする。列の案は帳簿の値を作らないが、AI 機能なので例外にしない。006 の評価（`evals.ts`）は承認の結果を正解にする仕組みで、列の対応には正解の材料がないため、合成の例で別に持つ
+- **Alternatives**: 006 の評価の表に混ぜる（正解の作り方と保存の形が違う）。評価なし（憲法に反する）
