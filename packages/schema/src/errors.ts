@@ -87,6 +87,12 @@ export const ErrorCode = z.enum([
   "JOURNAL_LINE_ALREADY_LINKED",
   "JOB_RUNNING",
   "AI_NOT_CONFIGURED",
+  // 007-generic-statement-import（contracts/http-api.md §1）。STATEMENT_PASTE_UNREADABLE は T007 で消す
+  "STATEMENT_TABLE_UNREADABLE",
+  "STATEMENT_TABLE_TOO_LARGE",
+  "STATEMENT_MAPPING_INVALID",
+  "STATEMENT_SOURCE_NOT_FOUND",
+  "STATEMENT_SOURCE_NAME_TAKEN",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 

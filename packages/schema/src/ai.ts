@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TaxCategoryCode } from "./primitives.ts";
+import { StatementAmountSign, StatementColumnRole } from "./statements.ts";
 
 // 006-mfme-ai-journal（research R10・R12、contracts/http-api.md §7）
 
@@ -12,6 +13,15 @@ export const AiSuggestion = z.object({
   reason: z.string().max(200),
 });
 export type AiSuggestion = z.infer<typeof AiSuggestion>;
+
+/** 端末内の AI による列の対応の案（007/R10）。範囲・重複・必須の役割はドメインの `parseColumnSuggestion` が検査する */
+export const AiColumnSuggestion = z.object({
+  columns: z.partialRecord(StatementColumnRole, z.number().int().min(0).nullable()),
+  amountSign: StatementAmountSign.nullable().optional(),
+  confidence: z.number().int().min(0).max(100),
+  reason: z.string().max(200),
+});
+export type AiColumnSuggestion = z.infer<typeof AiColumnSuggestion>;
 
 /** 外部の接続先の URL は `https://` か localhost（127.0.0.1・[::1]）の `http://` だけ */
 export function isAllowedAiBaseUrl(value: string): boolean {

@@ -485,7 +485,8 @@ export type StatementAuditTargetType =
   | "statement_link"
   | "statement_account"
   | "inference_rule"
-  | "statement_settings";
+  | "statement_settings"
+  | "statement_source";
 
 export type StatementAuditAction =
   | "create"
@@ -498,7 +499,8 @@ export type StatementAuditAction =
   | "pause"
   | "resume"
   | "edit"
-  | "seed";
+  | "seed"
+  | "delete";
 
 /** 明細の取込・承認などの操作の記録（`statement_audit_log`。追記のみ。006 data-model §1.10、R18） */
 export type StatementAuditEntry = AuditEntry<StatementAuditTargetType, StatementAuditAction>;

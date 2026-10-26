@@ -50,7 +50,7 @@ const PREVIEW = {
     row("k2", { date: "2026-05-11", amount: 3000, content: "売上入金" }),
   ],
   unreadable: [{ line: 5, reason: "列が足りません" }],
-  unmappedAccounts: [] as string[],
+  unmappedAccounts: [] as { name: string; suggestion: null }[],
   countNew: 3,
 };
 
@@ -209,7 +209,10 @@ describe("貼り付けとプレビュー（FR-001〜004）", () => {
 });
 
 describe("口座の対応（FR-003）", () => {
-  const withUnmapped = { ...PREVIEW, unmappedAccounts: ["サンプル銀行"] };
+  const withUnmapped = {
+    ...PREVIEW,
+    unmappedAccounts: [{ name: "サンプル銀行", suggestion: null }],
+  };
 
   it("未対応の口座があると対応の入力を出し、取り込めない。保存後にプレビューを作り直す", async () => {
     let mapped = false;

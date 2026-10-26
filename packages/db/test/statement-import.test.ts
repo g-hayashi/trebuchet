@@ -54,6 +54,7 @@ const account = (over: Partial<StatementAccount> = {}): StatementAccount => ({
 const batch = (over: Partial<StatementBatch> = {}): StatementBatch => ({
   id: randomUUIDv7(),
   origin: "paste",
+  sourceName: null,
   inputSha256: SHA,
   periodFrom: "2026-05-10",
   periodTo: "2026-05-11",
@@ -117,11 +118,20 @@ describe("DrizzleStatementStore（取込の回と明細）", () => {
     const a = account();
     store.upsertStatementAccount(a);
     const b1 = batch({ createdAt: "2026-10-25T09:00:00.000Z" });
-    const b2 = batch({ createdAt: "2026-10-26T09:00:00.000Z", origin: "mfme_fetch" });
+    const b2 = batch({ createdAt: "2026-10-26T09:00:00.000Z" });
     store.insertStatementBatch(b1);
     store.insertStatementBatch(b2);
     expect(store.listStatementBatches().map((x) => x.id)).toEqual([b2.id, b1.id]);
     expect(store.listStatementBatches()[1]).toEqual(b1);
+
+    // 007: origin は file も、source_name（取込元の名前の写し）も往復する
+    const b3 = batch({
+      origin: "file",
+      sourceName: "サンプル銀行",
+      createdAt: "2026-10-27T09:00:00.000Z",
+    });
+    store.insertStatementBatch(b3);
+    expect(store.listStatementBatches()[0]).toEqual(b3);
 
     const r1 = record(b1, a, {
       transferFlag: true,
@@ -235,14 +245,14 @@ describe("取込のユースケース（実 DB）", () => {
     mapBank();
     const original: PastedRow = { ...(rows[0] as PastedRow), externalId: "ext-1" };
     commitStatementRows(deps(), {
-      origin: "mfme_fetch",
+      origin: "paste",
       rows: [original],
       unreadable: [],
       sha256: SHA,
       expected: { inputSha256: SHA, countNew: 1 },
     });
     const r = commitStatementRows(deps(), {
-      origin: "mfme_fetch",
+      origin: "paste",
       rows: [{ ...original, memo: "直した" }],
       unreadable: [],
       sha256: "b".repeat(64),

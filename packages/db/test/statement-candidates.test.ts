@@ -122,6 +122,7 @@ function seedStatement(): { statementId: string; account: StatementAccount } {
   const b: StatementBatch = {
     id: randomUUIDv7(),
     origin: "paste",
+    sourceName: null,
     inputSha256: "a".repeat(64),
     periodFrom: "2026-10-10",
     periodTo: "2026-10-10",

@@ -219,7 +219,7 @@ function toPreview(plan: StatementImportPlan, input: StatementRowsInput): Statem
       warnings: r.warnings,
     })),
     unreadable: input.unreadable,
-    unmappedAccounts: plan.unmappedAccounts,
+    unmappedAccounts: plan.unmappedAccounts.map((name) => ({ name, suggestion: null })),
     countNew: plan.countNew,
   };
 }
@@ -292,6 +292,7 @@ function commitInTx(
   const batch: StatementBatch = {
     id: deps.ids.next(),
     origin: input.origin,
+    sourceName: null,
     inputSha256: input.sha256,
     periodFrom: plan.period.from,
     periodTo: plan.period.to,

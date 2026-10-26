@@ -25,7 +25,7 @@ export const KIND_LABELS: Record<StatementAccountKind, string> = {
 
 export const ORIGIN_LABELS: Record<StatementOrigin, string> = {
   paste: "貼り付け",
-  mfme_fetch: "自動取得",
+  file: "ファイル",
 };
 
 export const STATUS_LABELS: Record<StatementStatus, string> = {

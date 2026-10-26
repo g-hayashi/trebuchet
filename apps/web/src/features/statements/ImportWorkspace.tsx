@@ -152,7 +152,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
               <p className="text-sm text-muted-foreground">
                 対応づいていない保有金融機関があります。用途と科目を決めると、プレビューを作り直します。
               </p>
-              {unmapped.map((name) => (
+              {unmapped.map(({ name }) => (
                 <AccountMappingForm
                   key={name}
                   entityId={entityId}

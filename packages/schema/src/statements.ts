@@ -68,9 +68,184 @@ export type StatementAccountSaved = z.infer<typeof StatementAccountSaved>;
 
 // ---- 取込（§3） ----
 
-export const STATEMENT_ORIGINS = ["paste", "mfme_fetch"] as const;
+export const STATEMENT_ORIGINS = ["paste", "file"] as const;
 export const StatementOrigin = z.enum(STATEMENT_ORIGINS);
 export type StatementOrigin = z.infer<typeof StatementOrigin>;
+
+// ---- 列の対応と取込元（007 data-model §3） ----
+
+export const STATEMENT_COLUMN_ROLES = [
+  "date",
+  "content",
+  "amount",
+  "outflow",
+  "inflow",
+  "accountName",
+  "categoryMajor",
+  "categoryMinor",
+  "memo",
+  "externalId",
+  "transferFlag",
+] as const;
+export const StatementColumnRole = z.enum(STATEMENT_COLUMN_ROLES);
+export type StatementColumnRole = z.infer<typeof StatementColumnRole>;
+
+export const STATEMENT_DELIMITERS = ["\t", ",", ";"] as const;
+export const StatementDelimiter = z.enum(STATEMENT_DELIMITERS);
+export type StatementDelimiter = z.infer<typeof StatementDelimiter>;
+
+export const STATEMENT_AMOUNT_SIGNS = ["inflow_positive", "outflow_positive"] as const;
+export const StatementAmountSign = z.enum(STATEMENT_AMOUNT_SIGNS);
+export type StatementAmountSign = z.infer<typeof StatementAmountSign>;
+
+export const STATEMENT_ENCODINGS = ["utf-8", "shift_jis"] as const;
+export const StatementEncoding = z.enum(STATEMENT_ENCODINGS);
+export type StatementEncoding = z.infer<typeof StatementEncoding>;
+
+/** 列の番号の上限（0〜49。007/R12） */
+export const MAX_STATEMENT_COLUMN_INDEX = 49;
+const ColumnIndex = z.number().int().min(0).max(MAX_STATEMENT_COLUMN_INDEX);
+/** 元のテキストの行の番号（0 起点）。null は見出しなし */
+const HeaderRow = z.number().int().min(0).nullable();
+
+/** 役割ごとの列の番号（辞書の案・保存した対応の写しなど） */
+export const StatementColumnIndexes = z.partialRecord(StatementColumnRole, ColumnIndex);
+export type StatementColumnIndexes = z.infer<typeof StatementColumnIndexes>;
+
+export const StatementColumnMapping = z
+  .object({
+    delimiter: StatementDelimiter,
+    headerRow: HeaderRow,
+    columns: StatementColumnIndexes,
+    amountSign: StatementAmountSign.optional(),
+  })
+  .superRefine((v, ctx) => {
+    const c = v.columns;
+    for (const role of ["date", "content"] as const) {
+      if (c[role] === undefined) {
+        ctx.addIssue({ code: "custom", path: ["columns", role], message: `${role} は必須です` });
+      }
+    }
+    const hasAmount = c.amount !== undefined;
+    const hasOutflow = c.outflow !== undefined;
+    const hasInflow = c.inflow !== undefined;
+    const single = hasAmount && !hasOutflow && !hasInflow;
+    const split = !hasAmount && hasOutflow && hasInflow;
+    if (!single && !split) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["columns"],
+        message: "amount か、outflow と inflow の両方の、どちらか一方だけを指定してください",
+      });
+    }
+    if (hasAmount && v.amountSign === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["amountSign"],
+        message: "amount があるときは amountSign が必須です",
+      });
+    }
+    const used = new Map<number, string>();
+    for (const [role, index] of Object.entries(c)) {
+      const other = used.get(index);
+      if (other !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["columns", role],
+          message: `列 ${index} を ${other} と ${role} の 2 つの役割に使えません`,
+        });
+      } else {
+        used.set(index, role);
+      }
+    }
+  });
+export type StatementColumnMapping = z.infer<typeof StatementColumnMapping>;
+
+/** 取込元（列の対応の保存）。007 data-model §3 */
+export const StatementSource = z.object({
+  id: Id,
+  name: z.string().min(1).max(100),
+  fixedAccountName: z.string().nullable(),
+  mapping: StatementColumnMapping,
+  header: z.array(z.string()).nullable(),
+  lastUsedAt: Timestamp,
+  createdAt: Timestamp,
+  updatedAt: Timestamp,
+});
+export type StatementSource = z.infer<typeof StatementSource>;
+
+/** POST /statements/imports/layout の応答 */
+export const StatementTableLayout = z.object({
+  encoding: StatementEncoding,
+  delimiter: StatementDelimiter,
+  headerRow: HeaderRow,
+  header: z.array(z.string()).nullable(),
+  columnCount: Count,
+  rowCount: Count,
+  sampleRows: z.array(z.array(z.string())).max(10),
+  needsYear: z.boolean(),
+  suggestedColumns: StatementColumnIndexes,
+  match: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("none") }),
+    z.object({ kind: z.literal("one"), source: StatementSource }),
+    z.object({ kind: z.literal("many"), sources: z.array(StatementSource) }),
+  ]),
+  headerDiff: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }).optional(),
+});
+export type StatementTableLayout = z.infer<typeof StatementTableLayout>;
+
+/** 口座の推定（preview の未対応の口座に添える。007/R9） */
+export const StatementAccountSuggestion = z.object({
+  kind: StatementAccountKind,
+  accountId: Id,
+  subAccountId: Id.nullable(),
+  usage: StatementAccountUsage.nullable(),
+  cues: z.array(z.string()),
+});
+export type StatementAccountSuggestion = z.infer<typeof StatementAccountSuggestion>;
+
+// ---- 取込の options（multipart の `options` の JSON。contracts §2.1〜§2.3・§4.1） ----
+
+/** POST /statements/imports/layout */
+export const StatementLayoutOptions = z.object({
+  origin: StatementOrigin,
+  sourceId: Id.optional(),
+  encoding: StatementEncoding.optional(),
+  delimiter: StatementDelimiter.optional(),
+  headerRow: HeaderRow.optional(),
+});
+export type StatementLayoutOptions = z.infer<typeof StatementLayoutOptions>;
+
+/** POST /statements/imports/column-suggestion */
+export const StatementColumnSuggestionOptions = z.object({
+  origin: StatementOrigin,
+  encoding: StatementEncoding.optional(),
+  delimiter: StatementDelimiter.optional(),
+  headerRow: HeaderRow.optional(),
+});
+export type StatementColumnSuggestionOptions = z.infer<typeof StatementColumnSuggestionOptions>;
+
+/** POST /statements/imports/preview。`fixedAccountName` は mapping が accountName を持たないとき必須（INV-50。domain で検査） */
+export const StatementPreviewOptions = z.object({
+  origin: StatementOrigin,
+  /** 年のない日付にだけ使う */
+  year: z.number().int().min(1900).max(9999),
+  mapping: StatementColumnMapping,
+  fixedAccountName: z.string().min(1).optional(),
+  sourceId: Id.optional(),
+  encoding: StatementEncoding.optional(),
+});
+export type StatementPreviewOptions = z.infer<typeof StatementPreviewOptions>;
+
+/** POST /statements/imports */
+export const StatementCommitOptions = StatementPreviewOptions.extend({
+  expected: z.object({ inputSha256: Sha256, countNew: Count }),
+  /** 未対応の口座の対応（既に対応のある口座は入れない） */
+  accounts: z.array(z.object({ name: z.string().min(1), input: StatementAccountInput })),
+  /** 取込元を保存・更新する。null は保存しない */
+  saveSource: z.object({ id: Id.optional(), name: z.string().min(1).max(100) }).nullable(),
+});
+export type StatementCommitOptions = z.infer<typeof StatementCommitOptions>;
 
 export const StatementImportSource = z.discriminatedUnion("kind", [
   z.object({
@@ -127,7 +302,9 @@ export const StatementImportPreview = z.object({
   totals: z.object({ inflow: Count, outflow: Count }),
   rows: z.array(StatementImportRow),
   unreadable: z.array(StatementUnreadableRow),
-  unmappedAccounts: z.array(z.string()),
+  unmappedAccounts: z.array(
+    z.object({ name: z.string().min(1), suggestion: StatementAccountSuggestion.nullable() }),
+  ),
   countNew: Count,
 });
 export type StatementImportPreview = z.infer<typeof StatementImportPreview>;
@@ -135,6 +312,8 @@ export type StatementImportPreview = z.infer<typeof StatementImportPreview>;
 export const StatementBatch = z.object({
   id: Id,
   origin: StatementOrigin,
+  /** 取込のときに使った取込元の名前（保存しなかったときは null） */
+  sourceName: z.string().nullable(),
   inputSha256: Sha256,
   periodFrom: DateString,
   periodTo: DateString,

@@ -105,7 +105,7 @@ describe("取込のプレビュー（§3.1）", () => {
     expect(body.countNew).toBe(3);
     expect(body.period).toEqual({ from: "2026-05-10", to: "2026-05-11" });
     expect(body.totals).toEqual({ inflow: 3000, outflow: 2400 });
-    expect(body.unmappedAccounts).toEqual(["サンプル銀行"]);
+    expect(body.unmappedAccounts).toEqual([{ name: "サンプル銀行", suggestion: null }]);
     expect(body.unreadable).toEqual([{ line: 5, reason: "列が足りません" }]);
     expect(body.rows.map((r) => [r.status, r.key])).toEqual([
       ["new", "サンプル銀行|2026-05-10|-1200|ショップ#|0"],

@@ -161,7 +161,10 @@ describe("previewStatementImport", () => {
       inflow: 330_000 + 1_500 + 45_000 + 20_000,
       outflow: 1_200 + 45_000 + 20_000 + 3_980 * 2,
     });
-    expect(p.unmappedAccounts).toEqual(["テストカードA", "テスト現金"]);
+    expect(p.unmappedAccounts).toEqual([
+      { name: "テストカードA", suggestion: null },
+      { name: "テスト現金", suggestion: null },
+    ]);
     expect(p.unreadable).toEqual([{ line: 11, reason: expect.stringContaining("日付") }]);
     expect(p.rows[0]).toMatchObject({
       key: "サンプル銀行|2026-10-01|-1200|ショップ#|0",
@@ -293,7 +296,7 @@ describe("commitStatementRows（external_id を持つ行。自動取得 US4 も�
   const setupStored = () => {
     mapAccount(ctx, "サンプル銀行");
     const first = commitStatementRows(ctx.deps, {
-      origin: "mfme_fetch",
+      origin: "file",
       rows: [original],
       unreadable: [],
       sha256: SHA,
@@ -311,7 +314,7 @@ describe("commitStatementRows（external_id を持つ行。自動取得 US4 も�
     target.changedAckAt = "2026-10-26T00:00:00.000Z"; // 利用者が前の変更を確認した状態
     const edited = row({ externalId: "ext-1", memo: "直したメモ" });
     const r = commitStatementRows(ctx.deps, {
-      origin: "mfme_fetch",
+      origin: "file",
       rows: [edited],
       unreadable: [],
       sha256: SHA2,
@@ -336,7 +339,7 @@ describe("commitStatementRows（external_id を持つ行。自動取得 US4 も�
     setupStored();
     const edited = row({ externalId: "ext-1", memo: "直したメモ" });
     const r = previewStatementRows(ctx.deps, {
-      origin: "mfme_fetch",
+      origin: "file",
       rows: [edited],
       unreadable: [],
       sha256: SHA2,
