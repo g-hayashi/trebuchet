@@ -121,7 +121,7 @@ description: "Task list for 006-mfme-ai-journal"
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T028 E2E `apps/web/e2e/statements.spec.ts`（合成の貼り付け → 口座の対応 → 承認 → 仕訳帳 → 取消で未処理。ロケーターは `exact: true` でコンテナに絞る）。実行は利用者の端末
+- [X] T028 E2E `apps/web/e2e/statements.spec.ts`（合成の貼り付け → 口座の対応 → 承認 → 仕訳帳 → 取消で未処理。ロケーターは `exact: true` でコンテナに絞る）。実行は利用者の端末
 - [ ] T029 性能計測 `scripts/bench-statements.ts` と `package.json` の `bench:statements`（SC-006: 合成の 500 件の貼り付け → プレビュー → 候補の一覧が 5 秒以内。AI を除く。認証つきで、`scripts/lib/bench-common.ts` と `.tmp/` を使う。`bench-reports.ts` を参考にする）。実行は利用者の端末。US2（T016）の後
 - [ ] T030 [P] 文書: `AGENTS.md` に「明細の取込と AI 仕訳（006）」の層の表と規則（`buildAiPayload` だけで送る、DOM は `dom.ts`、API キーはキーチェーン）、コマンド表に `pnpm bench:statements`、ADR `docs/adr/0009-ai-journal-suggestions.md`（R20。マスクは口座名・メモ・数字・振込の名義を除くが、利用名に混じる個人名は伏せきれない限界を書く）、`specs/INVARIANTS.md` に INV-40〜47、`docs/requirements.md` の FR-06・FR-07・NFR-07 の状態
 - [ ] T031 quickstart §3 の実環境の確認（メインと利用者。貼り付けの形、`fm serve` の `response_format`、外部の AI のマスク、時間、精度）。違いは形だけを記録し、値を書かない。**貼り付けの形の確認は、US1 の実データでの仕上げ（quickstart §2.1 を実データで行う）の前提**。形が違えば `paste.ts` とフィクスチャを直すタスクを足す
