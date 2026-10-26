@@ -78,6 +78,7 @@ export function createOpenAiProvider(options: AiProviderOptions): SuggestionProv
         { role: "user", content: prompt.user },
       ],
       temperature: 0,
+      stream: false,
       ...(withFormat ? { response_format: responseFormat(context) } : {}),
     };
     try {

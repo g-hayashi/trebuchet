@@ -179,7 +179,7 @@ describe("評価の開始と結果（§6.1・§6.2）", () => {
     expect(t.calls).toHaveLength(1);
     expect(t.calls[0]?.url).toBe("http://127.0.0.1:18790/v1/chat/completions");
     const run = (await t.runs())[0];
-    expect(run).toMatchObject({ includeAi: true, models: ["fm"] });
+    expect(run).toMatchObject({ includeAi: true, models: ["system"] });
     expect(run?.result.methods.map((m) => [m.method, m.count])).toEqual([
       ["rule", 1],
       ["local_ai", 1],

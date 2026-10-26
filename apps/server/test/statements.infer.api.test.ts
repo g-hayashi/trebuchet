@@ -158,8 +158,8 @@ describe("POST /statements/infer", () => {
     expect(t.calls).toHaveLength(1);
     expect(t.calls[0]?.url).toBe("http://127.0.0.1:18790/v1/chat/completions");
     expect(new Headers(t.calls[0]?.init.headers).has("authorization")).toBe(false);
-    expect(JSON.parse(String(t.calls[0]?.init.body)).model).toBe("fm");
-    expect((await t.candidate())?.model).toBe("fm");
+    expect(JSON.parse(String(t.calls[0]?.init.body)).model).toBe("system");
+    expect((await t.candidate())?.model).toBe("system");
   });
 
   it("端末内を無効にすると fm を使わない。外部も無効なら AI を呼ばず none", async () => {

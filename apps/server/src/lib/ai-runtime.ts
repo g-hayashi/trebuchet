@@ -9,7 +9,7 @@ import {
 import type { FmServer } from "./fm-server.ts";
 
 /** 端末内の AI（`fm serve`）のモデル名。候補の `model` にも記録する */
-export const LOCAL_AI_MODEL = "fm";
+export const LOCAL_AI_MODEL = "system";
 
 /** AI の接続の設定の置き場（registry の `ai_settings`。テストは差し替える） */
 export type AiSettingsStore = {

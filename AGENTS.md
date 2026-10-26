@@ -182,7 +182,7 @@ apps/server ──→ packages/schema
 
 - **AI へ送る情報は `buildAiPayload`（`mask.ts`）を通したものだけ**（006/R11、INV-45）。端末内も外部も、評価も同じ `createAiSuggester`（`usecases/inference.ts`）を共有する。口座の名前・メモ・取引先の一覧は送らない。AI の出力は `AiSuggestion`（Zod）で検証し、形に合わない・一覧にないコードは「候補なし」にする（INV-46）。
 - **`inferWithAi` は 読む → AI を呼ぶ（UnitOfWork の外）→ 書く の 3 段**（006/R8）。AI の呼び出し（遅い、外部に出る）をトランザクションの中に入れない。取込と承認は 1 つの `StatementUnitOfWork` の中で書く（INV-47）。
-- **端末内のモデルは `fm serve`**（モデル名 `fm`、ポート `TREBUCHET_FM_PORT`、既定 18790）。最初の推定で起動し、server の終了で止める（006/R10）。外部の AI の API キーはキーチェーン（004 と同じ `SecretStore`）に置く。`ai_settings` は registry の表で、バックアップに含めない（006/R12）。
+- **端末内のモデルは `fm serve`**（モデル名 `system`。`stream: false` を必ず送る（省くと SSE で返る）。ポート `TREBUCHET_FM_PORT`、既定 18790）。最初の推定で起動し、server の終了で止める（006/R10）。外部の AI の API キーはキーチェーン（004 と同じ `SecretStore`）に置く。`ai_settings` は registry の表で、バックアップに含めない（006/R12）。
 - **AI の設定の必須項目の検査**（外部を有効にするのに URL・モデル・API キーがそろっていなければ 422 `AI_NOT_CONFIGURED`）は `apps/server/src/routes/ai-settings.ts` にある。帳簿の業務ルールではなく、端末の設定値の検査なので server に置く。
 - **MF ME の画面からの取得（US4）は取りやめた**（2026-10-26。利用者の判断。汎用の明細取込を 007 で作る）。取込は貼り付けだけ。`apps/server` は Playwright に依存しない。
 - **評価のジョブは同時に 1 つ**（409 `JOB_RUNNING`。`lib/jobs.ts` の `startTask`）。server の差し替えは `createApp({ jobs, ai: { fetch, secrets, settings, fm } })`。

@@ -105,13 +105,15 @@ describe("createOpenAiProvider: 要求", () => {
     expect(messages[0]?.content).toContain("5100 消耗品費");
     expect(messages[1]?.content).toBe(JSON.stringify(PAYLOAD));
     expect((call.body.response_format as { type: string }).type).toBe("json_schema");
+    // fm serve は stream を省くとストリーミング（SSE）で返すため、明示して 1 つの JSON で受ける
+    expect(call.body.stream).toBe(false);
     // API キーは本文に入らない
     expect(JSON.stringify(call.body)).not.toContain("sk-secret-123");
   });
 
   it("API キーがない接続先（端末内）には Authorization を付けない", async () => {
     const { fn, calls } = fakeFetch(completion(SUGGESTION_TEXT));
-    await provider(fn, { baseUrl: "http://127.0.0.1:18790", model: "fm" }).suggest(
+    await provider(fn, { baseUrl: "http://127.0.0.1:18790", model: "system" }).suggest(
       PAYLOAD,
       CONTEXT,
     );
