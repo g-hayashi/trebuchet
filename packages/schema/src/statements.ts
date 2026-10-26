@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { JournalInput } from "./journals.ts";
-import { DateString, Id, MonthString, TaxCategoryCode } from "./primitives.ts";
+import { DateString, Id, TaxCategoryCode } from "./primitives.ts";
 
 // 006-mfme-ai-journal（contracts/http-api.md §2〜§6、data-model §1）
 
@@ -78,7 +78,6 @@ export const StatementImportSource = z.discriminatedUnion("kind", [
     text: z.string().min(1),
     year: z.number().int().min(1900).max(9999),
   }),
-  z.object({ kind: z.literal("mfme_fetch"), jobId: Id }),
 ]);
 export type StatementImportSource = z.infer<typeof StatementImportSource>;
 
@@ -153,26 +152,14 @@ export const StatementImportCommitted = z.object({
 });
 export type StatementImportCommitted = z.infer<typeof StatementImportCommitted>;
 
-/** POST /statements/mfme/fetch */
-export const MfmeFetchInput = z
-  .object({ from: MonthString, to: MonthString })
-  .refine((v) => v.from <= v.to, { message: "開始月は終了月以前にしてください", path: ["to"] });
-export type MfmeFetchInput = z.infer<typeof MfmeFetchInput>;
-
-export const JOB_STATUSES = ["waiting_login", "running", "done", "failed"] as const;
+export const JOB_STATUSES = ["running", "done", "failed"] as const;
 export const JobStatus = z.enum(JOB_STATUSES);
 export type JobStatus = z.infer<typeof JobStatus>;
 
+/** GET /jobs/:jobId（評価のジョブ） */
 export const JobView = z.object({
   status: JobStatus,
-  progress: z.unknown().optional(),
-  error: z
-    .object({
-      code: z.string(),
-      message: z.string(),
-      failedAccounts: z.array(z.string()).optional(),
-    })
-    .optional(),
+  error: z.object({ code: z.string(), message: z.string() }).optional(),
 });
 export type JobView = z.infer<typeof JobView>;
 

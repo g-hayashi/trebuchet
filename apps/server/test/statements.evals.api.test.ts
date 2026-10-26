@@ -1,10 +1,10 @@
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
-import { domainError, err, ok, type PastedRow } from "@trebuchet/domain";
+import { domainError, err, ok } from "@trebuchet/domain";
 import { testClient } from "hono/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.ts";
 import type { FmServer } from "../src/lib/fm-server.ts";
-import { createJobStore, type MfmeFetcher } from "../src/lib/jobs.ts";
+import { createJobStore } from "../src/lib/jobs.ts";
 import { createMemorySecretStore } from "../src/lib/keychain.ts";
 import {
   accountLookup,
@@ -62,18 +62,10 @@ async function setup(options: { fmAvailable?: boolean; hold?: Promise<void> } = 
     ensureStarted: async () => (options.fmAvailable ? "http://127.0.0.1:18790" : undefined),
     stop: () => {},
   };
-  const holdFetcher = { release: () => {} };
-  const mfmeFetcher: MfmeFetcher = {
-    fetch: () =>
-      new Promise<PastedRow[]>((resolve) => {
-        holdFetcher.release = () => resolve([]);
-      }),
-  };
   const client = testClient(
     createApp({
       clock: { now: () => NOW },
       ai: { fetch: fetchFn as unknown as typeof fetch, secrets: createMemorySecretStore(), fm },
-      mfme: { fetcher: mfmeFetcher },
     }),
     undefined,
     undefined,
@@ -140,7 +132,7 @@ async function setup(options: { fmAvailable?: boolean; hold?: Promise<void> } = 
     journals: (await okBody(await e.journals.$get({ param, query: {} }))).journals,
     rules: (await okBody(await e["inference-rules"].$get({ param, query: {} }))).rules,
   });
-  return { e, param, calls, start, runs, job, waitFor, snapshot, holdFetcher, client };
+  return { e, param, calls, start, runs, job, waitFor, snapshot, client };
 }
 
 describe("評価の開始と結果（§6.1・§6.2）", () => {
@@ -260,7 +252,7 @@ describe("JobStore.startTask（失敗の扱い）", () => {
 });
 
 describe("ジョブの規則（§3）", () => {
-  it("動いている間に 2 つ目を始めると 409 JOB_RUNNING。MF ME の取得のジョブとも同時に動かない。終われば始められる", async () => {
+  it("動いている間に 2 つ目を始めると 409 JOB_RUNNING。終われば始められる", async () => {
     let release: () => void = () => {};
     const hold = new Promise<void>((resolve) => {
       release = resolve;
@@ -273,28 +265,10 @@ describe("ジョブの規則（§3）", () => {
     const second = await t.start();
     expect(second.status).toBe(409);
     expect((await errorOf(second)).code).toBe("JOB_RUNNING");
-    const fetchJob = await t.e.statements.mfme.fetch.$post({
-      param: t.param,
-      json: { from: "2026-05", to: "2026-05" },
-    });
-    expect(fetchJob.status).toBe(409);
 
     release();
     await t.waitFor(jobId, "done");
     expect((await t.start()).status).toBe(202);
-  });
-
-  it("評価のジョブが動いている間に MF ME の取得を始めても 409。取得のジョブが動いている間は評価も 409", async () => {
-    const t = await setup();
-    const started = await t.e.statements.mfme.fetch.$post({
-      param: t.param,
-      json: { from: "2026-05", to: "2026-05" },
-    });
-    expect(started.status).toBe(202);
-    const res = await t.start();
-    expect(res.status).toBe(409);
-    expect((await errorOf(res)).code).toBe("JOB_RUNNING");
-    t.holdFetcher.release();
   });
 
   it("別の事業体からは評価のジョブが見えない（404 JOB_NOT_FOUND）。結果も事業体ごと", async () => {

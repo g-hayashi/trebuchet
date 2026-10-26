@@ -17,8 +17,7 @@ import { type AiRuntime, type AiSettingsStore, createAiRuntime } from "./lib/ai-
 import type { BackupRunner } from "./lib/backup-run.ts";
 import { ChallengeStore } from "./lib/challenges.ts";
 import type { FmServer } from "./lib/fm-server.ts";
-import { createJobStore, type JobStore, type MfmeFetcher } from "./lib/jobs.ts";
-import { playwrightFetcher } from "./lib/mfme/fetcher.ts";
+import { createJobStore, type JobStore } from "./lib/jobs.ts";
 import { type GetRemoteSettings, getRemoteSettingsDisabled } from "./lib/origin.ts";
 import type { WebAuthnVerifier } from "./lib/webauthn.ts";
 import { simpleWebAuthnVerifier } from "./lib/webauthn-simplewebauthn.ts";
@@ -38,7 +37,7 @@ import { masterRoutes } from "./routes/masters.ts";
 import { periodRoutes } from "./routes/periods.ts";
 import { recurringRoutes } from "./routes/recurring.ts";
 import { reportRoutes } from "./routes/reports.ts";
-import { type MfmeOptions, statementRoutes } from "./routes/statements.ts";
+import { statementRoutes } from "./routes/statements.ts";
 import { taxReturnRoutes } from "./routes/tax-return.ts";
 import { type TenantEnv, tenant } from "./tenant.ts";
 
@@ -49,7 +48,7 @@ import { type TenantEnv, tenant } from "./tenant.ts";
 function tenantRoutes(
   options: RouteOptions & {
     suggestion?: SuggestionProviders;
-    mfme: MfmeOptions;
+    jobs: JobStore;
     ai: AiRuntime;
   },
 ) {
@@ -83,8 +82,8 @@ export type AppOptions = {
     settings?: () => AiSettingsStore;
     fm?: FmServer;
   };
-  /** MF ME の取得（006 US4）。既定は Playwright の取得器と、このアプリ専用のジョブの置き場 */
-  mfme?: { fetcher?: MfmeFetcher; jobs?: JobStore };
+  /** 評価のジョブの置き場（006 R17）。既定はこのアプリ専用の置き場 */
+  jobs?: JobStore;
   /** WebAuthn の検証。既定は @simplewebauthn/server。ルートのテストは偽物を渡す */
   webauthn?: WebAuthnVerifier;
   /** バックアップの依存（既定は deps.ts の実物）。テストは偽の SecretStore・実行を渡す */
@@ -107,10 +106,7 @@ export function createApp(options: AppOptions = {}) {
   const getRemoteSettings = options.getRemoteSettings ?? getRemoteSettingsDisabled;
   const store = options.store ?? authStore;
   const clock = options.clock ?? defaultClock;
-  const mfme: MfmeOptions = {
-    fetcher: options.mfme?.fetcher ?? playwrightFetcher,
-    jobs: options.mfme?.jobs ?? createJobStore(),
-  };
+  const jobs = options.jobs ?? createJobStore();
   const ai = createAiRuntime({
     fetch: options.ai?.fetch ?? ((...args) => globalThis.fetch(...args)),
     secrets: options.ai?.secrets ?? secretStore,
@@ -152,7 +148,7 @@ export function createApp(options: AppOptions = {}) {
       "/entities/:entityId",
       tenantRoutes({
         clock,
-        mfme,
+        jobs,
         ai,
         ...(options.suggestion === undefined ? {} : { suggestion: options.suggestion }),
       }),

@@ -212,12 +212,13 @@ describe("取込の入出力（H:§3）", () => {
       }).success,
     ).toBe(true);
     expect(StatementImportCommitInput.safeParse({ source }).success).toBe(false);
+    // MF ME からの取得（取りやめ）の取込元は受け付けない
     expect(
       StatementImportCommitInput.safeParse({
         source: { kind: "mfme_fetch", jobId: ID },
         expected: { inputSha256: SHA, countNew: 0 },
       }).success,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("プレビューの出力の形", () => {

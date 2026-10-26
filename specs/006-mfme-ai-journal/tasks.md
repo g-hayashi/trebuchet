@@ -124,8 +124,9 @@ description: "Task list for 006-mfme-ai-journal"
 - [X] T028 E2E `apps/web/e2e/statements.spec.ts`（合成の貼り付け → 口座の対応 → 承認 → 仕訳帳 → 取消で未処理。ロケーターは `exact: true` でコンテナに絞る）。実行は利用者の端末
 - [X] T029 性能計測 `scripts/bench-statements.ts` と `package.json` の `bench:statements`（SC-006: 合成の 500 件の貼り付け → プレビュー → 候補の一覧が 5 秒以内。AI を除く。認証つきで、`scripts/lib/bench-common.ts` と `.tmp/` を使う。`bench-reports.ts` を参考にする）。実行は利用者の端末。US2（T016）の後
 - [X] T030 [P] 文書: `AGENTS.md` に「明細の取込と AI 仕訳（006）」の層の表と規則（`buildAiPayload` だけで送る、DOM は `dom.ts`、API キーはキーチェーン）、コマンド表に `pnpm bench:statements`、ADR `docs/adr/0009-ai-journal-suggestions.md`（R20。マスクは口座名・メモ・数字・振込の名義を除くが、利用名に混じる個人名は伏せきれない限界を書く）、`specs/INVARIANTS.md` に INV-40〜47、`docs/requirements.md` の FR-06・FR-07・NFR-07 の状態
-- [ ] T031 quickstart §3 の実環境の確認（メインと利用者。貼り付けの形、`fm serve` の `response_format`、外部の AI のマスク、時間、精度）。違いは形だけを記録し、値を書かない。**貼り付けの形の確認は、US1 の実データでの仕上げ（quickstart §2.1 を実データで行う）の前提**。形が違えば `paste.ts` とフィクスチャを直すタスクを足す
-- [ ] T032 MF ME の DOM の解析の後、`apps/server/src/lib/mfme/dom.ts` のセレクターと合成の `cf-month.html` を実画面に合わせて仕上げる（T031 の後、利用者の端末。メインと利用者）。**SC-007（1 か月分を 3 分以内）はこのタスクまで保留**。値・口座名は書かず、形だけを記録する
+- [ ] T031 quickstart §3 の実環境の確認（メインと利用者。`fm serve` の `response_format`、外部の AI のマスク、時間、精度）。違いは形だけを記録し、値を書かない。**貼り付けの形（§3.1）は確かめない**: 実データの MF ME の貼り付けが読めず、汎用の明細取込（列の対応を取込元ごとに保存し、AI は対応の案だけ）を 007 で作るため（2026-10-26 利用者の判断）
+- ~~T032 MF ME の DOM の解析の後、`dom.ts` のセレクターと `cf-month.html` を仕上げる~~ **取りやめ**（2026-10-26 利用者の判断。US4 の取得をやめ、T034 で削除する。SC-007 も取りやめ）
+- [X] T034 US4（MF ME からの取得）の削除: `apps/server/src/lib/mfme/`、取得のルートと `statements.fetch.api.test.ts`・`mfme-fetcher.test.ts`・`mfme-dom.test.ts`・`fixtures/mfme/`、web の `MfmeFetch` とテスト、schema の取得の入力、server の `playwright` 依存。`lib/jobs.ts` は評価のジョブに残す。DB の表と出所の値は 007 で見直すので変えない。AGENTS.md・spec.md（US4 に取りやめの注記）・requirements の FR-06 を直す
 - [ ] T033 最終の全体検証（メイン）: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`
 
 ---
@@ -166,7 +167,7 @@ description: "Task list for 006-mfme-ai-journal"
 ### Incremental Delivery
 
 1. MVP → US3（ルール）で確かめるだけの明細を増やす（SC-001, SC-004）
-2. US4（取得）は DOM の解析の後に実画面で仕上げる（T032。SC-007 はそれまで保留）
+2. ~~US4（取得）は DOM の解析の後に実画面で仕上げる~~ 取りやめ（T034 で削除）
 3. US5（AI）でルールに一致しない明細を減らす
 4. フェーズの区切りごとにコミットし（メッセージにタスク ID）、`/usage` を控える
 

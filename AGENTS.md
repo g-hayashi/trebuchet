@@ -176,7 +176,7 @@ apps/server ──→ packages/schema
 | ユースケース | `packages/domain/src/usecases/statements.ts`、`statement-candidates.ts`、`statement-approval.ts`、`inference.ts`、`inference-rules.ts`、`evals.ts` |
 | 永続化（取込の回・明細・候補・結びつき・ルール・評価・操作の記録、registry の AI 設定） | `packages/db/src/statement-repository.ts`、`ai-settings-repository.ts` |
 | HTTP | `apps/server/src/routes/statements.ts`、`ai-settings.ts` |
-| server の部品 | `apps/server/src/lib/`（`ai-client.ts`、`ai-runtime.ts`、`fm-server.ts`、`jobs.ts`、`mfme/fetcher.ts`、`mfme/dom.ts`） |
+| server の部品 | `apps/server/src/lib/`（`ai-client.ts`、`ai-runtime.ts`、`fm-server.ts`、`jobs.ts`） |
 | 画面 | `apps/web/src/features/statements/`、`features/ai-settings/`、`apps/web/src/routes/e/$entityId/statements/`、`apps/web/src/routes/settings/ai.tsx` |
 | E2E・性能 | `apps/web/e2e/statements.spec.ts`、`scripts/bench-statements.ts` |
 
@@ -184,11 +184,11 @@ apps/server ──→ packages/schema
 - **`inferWithAi` は 読む → AI を呼ぶ（UnitOfWork の外）→ 書く の 3 段**（006/R8）。AI の呼び出し（遅い、外部に出る）をトランザクションの中に入れない。取込と承認は 1 つの `StatementUnitOfWork` の中で書く（INV-47）。
 - **端末内のモデルは `fm serve`**（モデル名 `fm`、ポート `TREBUCHET_FM_PORT`、既定 18790）。最初の推定で起動し、server の終了で止める（006/R10）。外部の AI の API キーはキーチェーン（004 と同じ `SecretStore`）に置く。`ai_settings` は registry の表で、バックアップに含めない（006/R12）。
 - **AI の設定の必須項目の検査**（外部を有効にするのに URL・モデル・API キーがそろっていなければ 422 `AI_NOT_CONFIGURED`）は `apps/server/src/routes/ai-settings.ts` にある。帳簿の業務ルールではなく、端末の設定値の検査なので server に置く。
-- **MF ME の画面のセレクターと行の読み取りは `apps/server/src/lib/mfme/dom.ts` の 1 か所**。実画面の解析は未了で暫定（006/T032 で仕上げる。SC-007 はそれまで保留）。ブラウザは永続しない文脈（`browser.newContext()`。`launchPersistentContext` やユーザーデータの場所を使わない。FR-009）。
-- **取得と評価のジョブは事業体ごとに同時に 1 つ**（409 `JOB_RUNNING`。`lib/jobs.ts`）。server の差し替えは `createApp({ mfme: { fetcher, jobs }, ai: { fetch, secrets, settings, fm } })`。
-- **テストは `fm`・外部の AI・Chromium を呼ばない**。偽の `SuggestionProvider`（domain）と偽の `fetch`（server）を使う。`mfme-dom.test.ts` は `describe.skipIf`（Chromium のある環境だけ）。
+- **MF ME の画面からの取得（US4）は取りやめた**（2026-10-26。利用者の判断。汎用の明細取込を 007 で作る）。取込は貼り付けだけ。`apps/server` は Playwright に依存しない。
+- **評価のジョブは同時に 1 つ**（409 `JOB_RUNNING`。`lib/jobs.ts` の `startTask`）。server の差し替えは `createApp({ jobs, ai: { fetch, secrets, settings, fm } })`。
+- **テストは `fm`・外部の AI を呼ばない**。偽の `SuggestionProvider`（domain）と偽の `fetch`（server）を使う。
 - **明細の承認だけが仕訳を作る**（INV-41）。仕訳の `source` は `statement`（通常どおり訂正・取消できる）。明細の状態は保存せず、結びつき・除外・仕訳の状態から導く（006/R15）。
-- **実環境の確認（貼り付けの形、MF ME の DOM、`fm serve`）の結果は、値・口座名・摘要を書かない**。形だけを記録する（quickstart §3）。
+- **実環境の確認（貼り付けの形、`fm serve`）の結果は、値・口座名・摘要を書かない**。形だけを記録する（quickstart §3）。
 
 ## データと一時ファイル
 

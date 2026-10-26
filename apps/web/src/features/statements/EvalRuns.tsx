@@ -39,7 +39,7 @@ const diff = (now: number, before: number) => {
 
 /**
  * 評価（H:§6.1・§6.2。FR-029）: 古い明細で学び、新しい明細の科目などを当てて一致率を測る。
- * 実行はジョブ（取得と同じ）で、終わったら履歴を読み直す。履歴は新しい順で、各行に 1 つ前の実行との差を示す
+ * 実行はジョブで、終わったら履歴を読み直す。履歴は新しい順で、各行に 1 つ前の実行との差を示す
  */
 export function EvalRuns({ entityId }: { entityId: string }) {
   const id = useId();
@@ -56,7 +56,7 @@ export function EvalRuns({ entityId }: { entityId: string }) {
   });
   const job = useQuery({ ...jobQuery(entityId, jobId ?? ""), enabled: jobId !== undefined });
   const status = job.data?.status;
-  const active = start.isPending || status === "waiting_login" || status === "running";
+  const active = start.isPending || status === "running";
 
   // 終わったら、同じジョブについて 1 回だけ履歴を読み直す
   const notified = useRef<string | undefined>(undefined);

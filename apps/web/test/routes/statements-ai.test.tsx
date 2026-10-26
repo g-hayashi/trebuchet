@@ -317,12 +317,12 @@ describe("評価の実行（H:§6.1）", () => {
     mockApi({
       [`GET ${BASE}/statements/evals`]: () => ok({ runs: [] }),
       [`POST ${BASE}/statements/evals`]: () =>
-        apiError(409, "JOB_RUNNING", "取得・評価のジョブが動いています"),
+        apiError(409, "JOB_RUNNING", "評価のジョブが動いています"),
     });
     const u = user();
     renderEvals();
     await u.click(await screen.findByRole("button", { name: "評価を実行" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("取得・評価のジョブが動いています");
+    expect(await screen.findByRole("alert")).toHaveTextContent("評価のジョブが動いています");
   });
 
   it("ジョブが失敗したら、理由を示す", async () => {

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { StatementAccountInput, StatementImportPreview } from "@trebuchet/schema";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { SaveNotice } from "@/components/ui/save-notice";
@@ -24,7 +24,6 @@ import {
 } from "./api";
 import { ImportPreview } from "./ImportPreview";
 import { ORIGIN_LABELS } from "./labels";
-import { MfmeFetch } from "./MfmeFetch";
 import { PasteImport } from "./PasteImport";
 
 /** 取込の履歴（H:§3.3。新しい順） */
@@ -76,7 +75,6 @@ function BatchHistory({ entityId }: { entityId: string }) {
 export function ImportWorkspace({ entityId }: { entityId: string }) {
   const queryClient = useQueryClient();
   const [source, setSource] = useState<ImportSource | undefined>();
-  const pasteSection = useRef<HTMLElement>(null);
   const [preview, setPreview] = useState<StatementImportPreview | undefined>();
   const [notice, setNotice] = useState("");
 
@@ -124,7 +122,6 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
     commitMutation.reset();
     previewMutation.mutate(s);
   };
-  const focusPaste = () => pasteSection.current?.querySelector("textarea")?.focus();
 
   const changedCount = preview?.rows.filter((r) => r.status === "changed").length ?? 0;
   const unmapped = preview?.unmappedAccounts ?? [];
@@ -138,12 +135,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
 
   return (
     <div className="grid gap-8">
-      <section aria-label="MF ME から取得" className="grid gap-3">
-        <h2 className="text-lg font-semibold">MF ME から取得</h2>
-        <MfmeFetch entityId={entityId} onFetched={startPreview} onFallbackToPaste={focusPaste} />
-      </section>
-
-      <section ref={pasteSection} aria-label="貼り付け" className="grid gap-3">
+      <section aria-label="貼り付け" className="grid gap-3">
         <PasteImport pending={previewMutation.isPending} onPreview={startPreview} />
         <ApiErrorMessage error={previewMutation.error} />
         {notice && <SaveNotice message={notice} />}
