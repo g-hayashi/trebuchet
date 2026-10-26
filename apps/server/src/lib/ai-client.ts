@@ -60,6 +60,23 @@ function responseFormat(context: SuggestionContext) {
 const isTimeout = (e: unknown) =>
   e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
 
+type Choice = { message?: { content?: unknown }; delta?: { content?: unknown } };
+
+/** 応答の本文から `content` を取り出す。1 つの JSON（`message.content`）か、SSE（`data:` の行の `delta.content` をつなげる） */
+function contentOf(text: string): unknown {
+  if (!text.trimStart().startsWith("data:")) {
+    return (JSON.parse(text) as { choices?: Choice[] }).choices?.[0]?.message?.content;
+  }
+  let joined: string | undefined;
+  for (const line of text.split("\n")) {
+    const data = line.startsWith("data:") ? line.slice(5).trim() : "";
+    if (data === "" || data === "[DONE]") continue;
+    const piece = (JSON.parse(data) as { choices?: Choice[] }).choices?.[0]?.delta?.content;
+    if (typeof piece === "string") joined = (joined ?? "") + piece;
+  }
+  return joined;
+}
+
 /** OpenAI 互換の `SuggestionProvider`。`suggest` は `message.content` の文字列をそのまま返す */
 export function createOpenAiProvider(options: AiProviderOptions): SuggestionProvider {
   const post = async (
@@ -77,8 +94,8 @@ export function createOpenAiProvider(options: AiProviderOptions): SuggestionProv
         { role: "system", content: prompt.system },
         { role: "user", content: prompt.user },
       ],
+      // stream は送らない（fm serve は stream: false に応答しない。省くと SSE で返すので読み分ける）
       temperature: 0,
-      stream: false,
       ...(withFormat ? { response_format: responseFormat(context) } : {}),
     };
     try {
@@ -118,10 +135,7 @@ export function createOpenAiProvider(options: AiProviderOptions): SuggestionProv
 
       let content: unknown;
       try {
-        const json = (await res.json()) as {
-          choices?: { message?: { content?: unknown } }[];
-        };
-        content = json.choices?.[0]?.message?.content;
+        content = contentOf(await res.text());
       } catch {
         return failed("AI の応答を読めません");
       }

@@ -105,8 +105,8 @@ describe("createOpenAiProvider: 要求", () => {
     expect(messages[0]?.content).toContain("5100 消耗品費");
     expect(messages[1]?.content).toBe(JSON.stringify(PAYLOAD));
     expect((call.body.response_format as { type: string }).type).toBe("json_schema");
-    // fm serve は stream を省くとストリーミング（SSE）で返すため、明示して 1 つの JSON で受ける
-    expect(call.body.stream).toBe(false);
+    // fm serve は stream: false を送ると応答しない。stream は送らない（SSE で返れば読む）
+    expect(call.body).not.toHaveProperty("stream");
     // API キーは本文に入らない
     expect(JSON.stringify(call.body)).not.toContain("sk-secret-123");
   });
@@ -143,6 +143,7 @@ describe("createOpenAiProvider: 応答", () => {
         ok: res.ok,
         status: res.status,
         json: () => res.json(),
+        text: () => res.text(),
       }) as unknown as Response;
     const { fn, calls } = fakeFetch(
       foreign(new Response("", { status: 400 })),
@@ -151,6 +152,24 @@ describe("createOpenAiProvider: 応答", () => {
     const result = await provider(fn).suggest(PAYLOAD, CONTEXT);
     expect(result).toEqual({ ok: true, value: SUGGESTION_TEXT });
     expect(calls).toHaveLength(2);
+  });
+
+  it("ストリーミング（SSE）の応答は、delta.content をつなげて返す（fm serve は stream を省くと SSE で返す）", async () => {
+    const chunk = (delta: Record<string, unknown>) =>
+      `data: ${JSON.stringify({ object: "chat.completion.chunk", choices: [{ index: 0, delta }] })}\n\n`;
+    const half = Math.floor(SUGGESTION_TEXT.length / 2);
+    const sse = [
+      chunk({ role: "assistant" }),
+      chunk({ content: SUGGESTION_TEXT.slice(0, half) }),
+      chunk({ content: SUGGESTION_TEXT.slice(half) }),
+      chunk({}),
+      "data: [DONE]\n\n",
+    ].join("");
+    const { fn } = fakeFetch(
+      new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } }),
+    );
+    const result = await provider(fn).suggest(PAYLOAD, CONTEXT);
+    expect(result).toEqual({ ok: true, value: SUGGESTION_TEXT });
   });
 
   it("response_format を受けない接続先（400）には、response_format なしで 1 回だけ再試行する", async () => {
