@@ -8,6 +8,7 @@ import { ApiErrorMessage } from "@/components/ui/form-error";
 import { NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SaveNotice } from "@/components/ui/save-notice";
+import { AiInfer } from "./AiInfer";
 import {
   postAcknowledgeChange,
   postBuildCandidates,
@@ -49,6 +50,8 @@ export function StatementsWorkspace({
   const [reviewingId, setReviewingId] = useState<string>();
   const [reasonTarget, setReasonTarget] = useState<ReasonTarget>();
   const [notice, setNotice] = useState("");
+  /** 「候補を作る」で AI に回すことになった明細の ID（AI で推定が送り終えると外れる） */
+  const [needsAi, setNeedsAi] = useState<string[]>([]);
 
   const filter = {
     ...(status === "" ? {} : { status }),
@@ -64,6 +67,7 @@ export function StatementsWorkspace({
     mutationFn: () => postBuildCandidates(entityId),
     onSuccess: async (result) => {
       setNotice(`候補を ${result.built} 件作りました（候補なし ${result.needsAi.length} 件）。`);
+      setNeedsAi(result.needsAi);
       await refresh();
     },
   });
@@ -109,12 +113,20 @@ export function StatementsWorkspace({
         >
           しきい値の設定
         </Link>
+        <Link to="/e/$entityId/statements/evals" params={{ entityId }} className={linkButtonClass}>
+          推定の評価
+        </Link>
         <Button disabled={build.isPending} onClick={() => build.mutate()}>
           候補を作る
         </Button>
         {notice && <SaveNotice message={notice} />}
       </div>
       <ApiErrorMessage error={build.error} />
+      <AiInfer
+        entityId={entityId}
+        needsAi={needsAi}
+        onProcessed={(ids) => setNeedsAi((current) => current.filter((id) => !ids.includes(id)))}
+      />
 
       <div className="flex flex-wrap items-end gap-4">
         <div className="grid gap-1">

@@ -42,10 +42,22 @@ const DEFAULT_BACKUP_STATUS = {
   running: false,
 };
 
+/** AI の設定（006 US5）の既定の応答。端末内の AI が使えて、外部は使わない */
+const DEFAULT_AI_SETTINGS = {
+  localEnabled: true,
+  localAvailable: true,
+  externalEnabled: false,
+  externalBaseUrl: null,
+  externalModel: null,
+  apiKeySet: false,
+};
+
 const DEFAULT_ROUTES: Record<string, Handler> = {
   "GET /api/auth/status": () => ok(DEFAULT_AUTH_STATUS),
   // 全画面の上部の知らせ（004）が読む。設定済みで、知らせなし
   "GET /api/backup/status": () => ok(DEFAULT_BACKUP_STATUS),
+  // AI の設定（006 US5）。端末内だけを使い、外部は未設定
+  "GET /api/settings/ai": () => ok(DEFAULT_AI_SETTINGS),
 };
 
 /**
@@ -76,6 +88,8 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   "GET /statements": () => ok({ statements: [] }),
   // 推定のルール（US3）。一覧は空
   "GET /inference-rules": () => ok({ rules: [] }),
+  // 評価の履歴（US5）。実行はまだない
+  "GET /statements/evals": () => ok({ runs: [] }),
   "GET /statement-settings": () =>
     ok({
       settings: { bulkThreshold: 80, externalThreshold: 60, updatedAt: "2026-10-26T00:00:00.000Z" },

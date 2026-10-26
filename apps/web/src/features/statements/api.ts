@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import type {
+  EvalStartInput,
   InferenceRuleUpdateInput,
   JournalInput,
   Purpose,
@@ -26,6 +27,7 @@ export const statementKeys = {
   list: (entityId: string, filter: StatementFilter) =>
     ["entities", entityId, "statements", "list", filter] as const,
   settings: (entityId: string) => ["entities", entityId, "statements", "settings"] as const,
+  evals: (entityId: string) => ["entities", entityId, "statements", "evals"] as const,
   rules: (entityId: string, status?: RuleStatus) =>
     ["entities", entityId, "statements", "rules", status ?? "all"] as const,
   ruleHistory: (entityId: string, ruleId: string) =>
@@ -154,6 +156,13 @@ export const postApprove = async (entityId: string, statementId: string, json: A
     }),
   );
 
+/**
+ * AI で推定する（§4.3。10 件まで）。候補だけが変わり、仕訳は変わらない。
+ * 10 件を超える分は、呼び出し側が繰り返して呼ぶ
+ */
+export const postInfer = async (entityId: string, statementIds: string[]) =>
+  unwrap(await entityApi.statements.infer.$post({ param: { entityId }, json: { statementIds } }));
+
 /** まとめて承認（§4.5）。`statementIds` を省くと、設定のしきい値以上の未処理すべて */
 export const postApproveBulk = async (entityId: string, statementIds: string[]) =>
   unwrap(
@@ -276,3 +285,19 @@ export const statementSettingsQuery = (entityId: string) =>
 export const putStatementSettings = async (entityId: string, json: StatementSettingsInput) =>
   (await unwrap(await entityApi["statement-settings"].$put({ param: { entityId }, json })))
     .settings;
+
+// ---- 評価（§6.1・§6.2） ----
+
+/** 評価の履歴（§6.2。新しい順） */
+export const evalRunsQuery = (entityId: string) =>
+  queryOptions({
+    queryKey: statementKeys.evals(entityId),
+    queryFn: async () =>
+      (await unwrap(await entityApi.statements.evals.$get({ param: { entityId } }))).runs,
+  });
+
+export type EvalRunView = QueryItem<typeof evalRunsQuery>;
+
+/** 評価を始める（§6.1）。202 `{ jobId }`。状態は `jobQuery` で取り直す */
+export const postEvalStart = async (entityId: string, json: EvalStartInput) =>
+  unwrap(await entityApi.statements.evals.$post({ param: { entityId }, json }));
