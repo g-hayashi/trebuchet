@@ -67,7 +67,7 @@ export function createOpenAiProvider(options: AiProviderOptions): SuggestionProv
     payload: SuggestionPayload,
     context: SuggestionContext,
     withFormat: boolean,
-  ): Promise<Response | { error: string }> => {
+  ): Promise<{ response: Response } | { error: string }> => {
     const prompt = buildPrompt(payload, context.accounts, context.taxCategories);
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (endpoint.apiKey !== undefined) headers.authorization = `Bearer ${endpoint.apiKey}`;
@@ -81,12 +81,16 @@ export function createOpenAiProvider(options: AiProviderOptions): SuggestionProv
       ...(withFormat ? { response_format: responseFormat(context) } : {}),
     };
     try {
-      return await options.fetch(`${endpoint.baseUrl.replace(/\/+$/, "")}/v1/chat/completions`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(options.timeoutMs),
-      });
+      const response = await options.fetch(
+        `${endpoint.baseUrl.replace(/\/+$/, "")}/v1/chat/completions`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(options.timeoutMs),
+        },
+      );
+      return { response };
     } catch (e) {
       // 元のエラーのメッセージは出さない（URL・内部の事情が混じる）
       return {
@@ -101,12 +105,14 @@ export function createOpenAiProvider(options: AiProviderOptions): SuggestionProv
       const endpoint = await options.endpoint();
       if (endpoint === undefined) return unavailable();
 
-      let res = await post(endpoint, payload, context, true);
+      // instanceof Response で見分けない（@hono/node-server の serve が global.Response を置き換えるため）
+      let sent = await post(endpoint, payload, context, true);
       // response_format を受けない接続先は 400 で断る。付けずに 1 回だけ再試行する
-      if (res instanceof Response && res.status === 400) {
-        res = await post(endpoint, payload, context, false);
+      if ("response" in sent && sent.response.status === 400) {
+        sent = await post(endpoint, payload, context, false);
       }
-      if (!(res instanceof Response)) return failed(res.error);
+      if ("error" in sent) return failed(sent.error);
+      const res = sent.response;
       if (!res.ok) return failed(`AI がエラーを返しました（HTTP ${res.status}）`);
 
       let content: unknown;

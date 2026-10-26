@@ -134,6 +134,23 @@ describe("createOpenAiProvider: 応答", () => {
     });
   });
 
+  it("グローバルの Response が置き換えられていても（@hono/node-server の serve）、fetch の応答を読める", async () => {
+    // serve は global.Response を独自のクラスに置き換えるため、fetch の応答は instanceof Response にならない
+    const foreign = (res: Response) =>
+      ({
+        ok: res.ok,
+        status: res.status,
+        json: () => res.json(),
+      }) as unknown as Response;
+    const { fn, calls } = fakeFetch(
+      foreign(new Response("", { status: 400 })),
+      foreign(completion(SUGGESTION_TEXT)),
+    );
+    const result = await provider(fn).suggest(PAYLOAD, CONTEXT);
+    expect(result).toEqual({ ok: true, value: SUGGESTION_TEXT });
+    expect(calls).toHaveLength(2);
+  });
+
   it("response_format を受けない接続先（400）には、response_format なしで 1 回だけ再試行する", async () => {
     const { fn, calls } = fakeFetch(
       new Response('{"error":"unsupported response_format"}', { status: 400 }),
