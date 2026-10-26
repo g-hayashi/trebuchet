@@ -127,7 +127,7 @@ description: "Task list for 006-mfme-ai-journal"
 - [ ] T031 quickstart §3 の実環境の確認（メインと利用者。`fm serve` の `response_format`、外部の AI のマスク、時間、精度）。違いは形だけを記録し、値を書かない。**貼り付けの形（§3.1）は確かめない**: 実データの MF ME の貼り付けが読めず、汎用の明細取込（列の対応を取込元ごとに保存し、AI は対応の案だけ）を 007 で作るため（2026-10-26 利用者の判断）
 - ~~T032 MF ME の DOM の解析の後、`dom.ts` のセレクターと `cf-month.html` を仕上げる~~ **取りやめ**（2026-10-26 利用者の判断。US4 の取得をやめ、T034 で削除する。SC-007 も取りやめ）
 - [X] T034 US4（MF ME からの取得）の削除: `apps/server/src/lib/mfme/`、取得のルートと `statements.fetch.api.test.ts`・`mfme-fetcher.test.ts`・`mfme-dom.test.ts`・`fixtures/mfme/`、web の `MfmeFetch` とテスト、schema の取得の入力、server の `playwright` 依存。`lib/jobs.ts` は評価のジョブに残す。DB の表と出所の値は 007 で見直すので変えない。AGENTS.md・spec.md（US4 に取りやめの注記）・requirements の FR-06 を直す
-- [ ] T033 最終の全体検証（メイン）: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`
+- [X] T033 最終の全体検証（メイン）: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`
 
 ---
 
