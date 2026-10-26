@@ -25,6 +25,9 @@ function RootLayout() {
             <Link to="/settings/backup" className="text-sm underline-offset-4 hover:underline">
               バックアップ
             </Link>
+            <Link to="/settings/ai" className="text-sm underline-offset-4 hover:underline">
+              AI の設定
+            </Link>
             <Link to="/settings/security" className="text-sm underline-offset-4 hover:underline">
               設定
             </Link>

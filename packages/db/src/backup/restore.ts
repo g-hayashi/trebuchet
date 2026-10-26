@@ -160,6 +160,35 @@ function readAppSettings(dataDir: string): SettingRow[] {
   }
 }
 
+type AiSettingsRow = {
+  id: number;
+  local_enabled: number;
+  external_enabled: number;
+  external_base_url: string | null;
+  external_model: string | null;
+  updated_at: string;
+};
+
+/** データ場所の registry の `ai_settings`（端末の AI の接続の設定。006 R12）。表・行がなければ undefined */
+function readAiSettings(dataDir: string): AiSettingsRow | undefined {
+  const file = join(dataDir, "registry.sqlite");
+  if (!existsSync(file)) return undefined;
+  const db = new Database(file, { readonly: true, fileMustExist: true });
+  try {
+    const table = db
+      .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'ai_settings'")
+      .get();
+    if (table === undefined) return undefined;
+    return db
+      .prepare(
+        "SELECT id, local_enabled, external_enabled, external_base_url, external_model, updated_at FROM ai_settings WHERE id = 1",
+      )
+      .get() as AiSettingsRow | undefined;
+  } finally {
+    db.close();
+  }
+}
+
 function integrityOk(file: string): boolean {
   let db: Database.Database | undefined;
   try {
@@ -249,9 +278,11 @@ export async function restoreBackup(
   // 4. 今の帳簿を同じパスフレーズ・同じ形式でバックアップ（db の関数だけ。backup_runs には記録しない）
   let beforeRestoreBackup: string | null = null;
   let settings: SettingRow[];
+  let aiSettings: AiSettingsRow | undefined;
   if (hasLedger) {
     try {
       settings = readAppSettings(dataDir);
+      aiSettings = readAiSettings(dataDir);
       const macId = settings.find((s) => s.key === "mac_id")?.value ?? randomUUID();
       const name = beforeRestoreFileName(at);
       const snapDir = createSnapshotDir(options.tmpRoot);
@@ -287,6 +318,7 @@ export async function restoreBackup(
     }
   } else {
     settings = [];
+    aiSettings = undefined;
   }
 
   // 5〜6. 展開 → integrity_check → app_settings の引き継ぎ → 改名の入れ替え
@@ -311,6 +343,21 @@ export async function restoreBackup(
       );
       registry.transaction(() => {
         for (const s of settings) insert.run(s.key, s.value, s.updated_at);
+        // ai_settings も app_settings と同じく端末の値のまま引き継ぐ（006 R12）
+        if (aiSettings !== undefined) {
+          registry
+            .prepare(
+              "INSERT OR REPLACE INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            )
+            .run(
+              aiSettings.id,
+              aiSettings.local_enabled,
+              aiSettings.external_enabled,
+              aiSettings.external_base_url,
+              aiSettings.external_model,
+              aiSettings.updated_at,
+            );
+        }
       })();
     } finally {
       registry.close();

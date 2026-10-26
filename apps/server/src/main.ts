@@ -7,6 +7,7 @@ import {
   backupStore,
   clock,
   entityIds,
+  fmServer,
   ids,
   openRecurringUnitOfWork,
   secretStore,
@@ -30,6 +31,7 @@ const background = startBackgroundServices({
   clock,
   tmpRoot: TMP_ROOT,
   recurring: { entities: entityIds, openUnitOfWork: openRecurringUnitOfWork, ids },
+  fm: fmServer,
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

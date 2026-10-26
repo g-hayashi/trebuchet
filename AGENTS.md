@@ -38,6 +38,7 @@ apps/server ──→ packages/schema
 | 性能計測（SC-004 の仕訳 2,000 件、003 の SC-006 の決算書。認証つき） | `pnpm bench:reports` |
 | 性能計測（freee 取込の 500 仕訳、002 の SC-002） | `pnpm bench:import` |
 | 性能計測（バックアップ、004 の SC-005） | `pnpm bench:backup`（環境変数でしきい値と件数を変えられる。使い方は `scripts/bench-backup.ts` の先頭のコメント） |
+| 性能計測（明細 500 件の貼り付け・確認・候補、006 の SC-006。AI は呼ばない） | `pnpm bench:statements`（環境変数でしきい値・回数・件数を変えられる。使い方は `scripts/bench-statements.ts` の先頭のコメント） |
 | バックアップ（`.tbk`）の復元（server を止めて行う） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--yes]`（`scripts/restore-backup.ts` の先頭のコメント） |
 | freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。`scripts/verify-freee-import.ts` の先頭のコメント） |
 | 青色申告決算書の照合（実データ、ローカル専用） | `pnpm verify:tax-return`（`work/` を読む。`scripts/verify-tax-return.ts` の先頭のコメント） |
@@ -57,7 +58,7 @@ apps/server ──→ packages/schema
 - **月・日付（`YYYY-MM`、`YYYY-MM-DD`）の計算は `packages/domain/src/dates.ts` に集める**（`addDays`、`monthEnd`、`dateInMonth`、`addMonths`、`monthIndex`、`monthOfDate` など）。ユースケース・各機能で月の計算・`pad`・月の正規表現を書き直さない。
 - **db のリポジトリの共通部品は `packages/db/src/internal.ts`**（`TenantConn`、`insertionOrder`・`rowidOf`、`asTaxCategory`）。リポジトリごとに型や `rowid` の並びを書き直さない（外へは export しない）。
 - **server のルートは `respond(c, result, (v) => c.json(..., status))`**（`apps/server/src/errors.ts`）で結果を返す（失敗は `fail`）。パスの `:year` は `validate("param", FiscalYearParam)`（`validator.ts` が 4 桁でない年を「会計期間が見つかりません」にする）。時刻を使うルートは `routes(options: RouteOptions)` で clock を受け取り、`createApp({ clock })` が全ルートに渡す。Zod の issue は `validationError`（`errors.ts`）で `details.issues` にする。
-- **不変条件**は `specs/INVARIANTS.md`（INV-1〜39 の索引。正本は各 `data-model.md` §4）。対応するテストは fast-check の性質テストで書く。`fc.assert(fc.property(...))` を直接呼ぶ（`@fast-check/vitest` は使わない。001/R6）。
+- **不変条件**は `specs/INVARIANTS.md`（INV-1〜47 の索引。正本は各 `data-model.md` §4）。対応するテストは fast-check の性質テストで書く。`fc.assert(fc.property(...))` を直接呼ぶ（`@fast-check/vitest` は使わない。001/R6）。
 - **テストの共通部品を使う**（同じ準備を各ファイルに書かない）。db: `packages/db/src/testing.ts` の `createTestEntity`・`accountIdOf`・`useTempDataDir`・`NOW`/`TODAY`。domain: `packages/domain/test/fakes/`（ストアごとのフェイク。`fakes.ts` は再エクスポート）、`test-dates.ts`（`NOW`/`TODAY` の正本）、`ledger-setup.ts`（`setupBase`・`accountIdOf`）。server: `apps/server/test/helpers.ts`（`createTestEntity`・`accountLookup`・`errorOf`・`json`・`okBody`・`makeClock`。`backup-helpers.ts`・`invoicing-helpers.ts` はこれを拡張する）。bench: `scripts/lib/bench-common.ts`。
 - **web のテストはコンポーネントテスト**（Testing Library + jsdom。`apps/web/test/render-route.tsx`、`mock-api.ts`、置き場所は `apps/web/test/routes/`）。テストのためだけに node 専用のロジックを別ファイルに切り出さない。新しい API を呼ぶ画面を足したら `mock-api.ts` に既定の応答を足し、既存の web のテストが落ちないことを確かめる。ルートを足したら `pnpm --filter @trebuchet/web build` で `routeTree.gen.ts` を再生成してから typecheck する。
 - **web の API 呼び出しと query key は `features/<機能>/api.ts`**。画面・ルートのファイルで `api.api...` や `unwrap(...)` を直接呼ばない。`lib/queries.ts` には機能をまたぐ `invalidateLedger` だけを置く。
@@ -164,6 +165,31 @@ apps/server ──→ packages/schema
 - **工数は半時間の整数**、明細の金額は `Math.floor(quantityHalves * unitPrice / 2)`。別記の税額は 001 の `computeInclusiveTax` を税率ごとに 1 回。
 - 請求・入金の操作は `invoicing_audit_log`（追記のみ）に記録する。仕訳そのものの記録は 001 の `audit_log`。
 
+## 明細の取込と AI 仕訳（006）
+
+仕様: `specs/006-mfme-ai-journal/`。推定の順序、AI の呼び出し、送る情報のマスク、候補の保存と承認、評価: [ADR 0009](docs/adr/0009-ai-journal-suggestions.md)。
+
+| 層 | 場所 |
+|---|---|
+| 入出力の型（明細・口座・候補・ルール・評価、AI の出力 `AiSuggestion`） | `packages/schema/src/statements.ts`、`ai.ts` |
+| 業務ルール（貼り付けの解析、安定したキー、正規化、仕訳の形、振替、既存の仕訳との照合、ルール、マスクと送信の内容、プロンプト、評価、状態の導出） | `packages/domain/src/statements/`（`paste.ts`、`keys.ts`、`normalize.ts`、`journal-shape.ts`、`transfer.ts`、`match-existing.ts`、`rules.ts`、`mask.ts`、`prompt.ts`、`evals.ts`、`status.ts`） |
+| ユースケース | `packages/domain/src/usecases/statements.ts`、`statement-candidates.ts`、`statement-approval.ts`、`inference.ts`、`inference-rules.ts`、`evals.ts` |
+| 永続化（取込の回・明細・候補・結びつき・ルール・評価・操作の記録、registry の AI 設定） | `packages/db/src/statement-repository.ts`、`ai-settings-repository.ts` |
+| HTTP | `apps/server/src/routes/statements.ts`、`ai-settings.ts` |
+| server の部品 | `apps/server/src/lib/`（`ai-client.ts`、`ai-runtime.ts`、`fm-server.ts`、`jobs.ts`） |
+| 画面 | `apps/web/src/features/statements/`、`features/ai-settings/`、`apps/web/src/routes/e/$entityId/statements/`、`apps/web/src/routes/settings/ai.tsx` |
+| E2E・性能 | `apps/web/e2e/statements.spec.ts`、`scripts/bench-statements.ts` |
+
+- **AI へ送る情報は `buildAiPayload`（`mask.ts`）を通したものだけ**（006/R11、INV-45）。端末内も外部も、評価も同じ `createAiSuggester`（`usecases/inference.ts`）を共有する。口座の名前・メモ・取引先の一覧は送らない。AI の出力は `AiSuggestion`（Zod）で検証し、形に合わない・一覧にないコードは「候補なし」にする（INV-46）。
+- **`inferWithAi` は 読む → AI を呼ぶ（UnitOfWork の外）→ 書く の 3 段**（006/R8）。AI の呼び出し（遅い、外部に出る）をトランザクションの中に入れない。取込と承認は 1 つの `StatementUnitOfWork` の中で書く（INV-47）。
+- **端末内のモデルは `fm serve`**（モデル名 `fm`、ポート `TREBUCHET_FM_PORT`、既定 18790）。最初の推定で起動し、server の終了で止める（006/R10）。外部の AI の API キーはキーチェーン（004 と同じ `SecretStore`）に置く。`ai_settings` は registry の表で、バックアップに含めない（006/R12）。
+- **AI の設定の必須項目の検査**（外部を有効にするのに URL・モデル・API キーがそろっていなければ 422 `AI_NOT_CONFIGURED`）は `apps/server/src/routes/ai-settings.ts` にある。帳簿の業務ルールではなく、端末の設定値の検査なので server に置く。
+- **MF ME の画面からの取得（US4）は取りやめた**（2026-10-26。利用者の判断。汎用の明細取込を 007 で作る）。取込は貼り付けだけ。`apps/server` は Playwright に依存しない。
+- **評価のジョブは同時に 1 つ**（409 `JOB_RUNNING`。`lib/jobs.ts` の `startTask`）。server の差し替えは `createApp({ jobs, ai: { fetch, secrets, settings, fm } })`。
+- **テストは `fm`・外部の AI を呼ばない**。偽の `SuggestionProvider`（domain）と偽の `fetch`（server）を使う。
+- **明細の承認だけが仕訳を作る**（INV-41）。仕訳の `source` は `statement`（通常どおり訂正・取消できる）。明細の状態は保存せず、結びつき・除外・仕訳の状態から導く（006/R15）。
+- **実環境の確認（貼り付けの形、`fm serve`）の結果は、値・口座名・摘要を書かない**。形だけを記録する（quickstart §3）。
+
 ## データと一時ファイル
 
 - **実データを読まない、コミットしない**。`work/` と `data/` は実データを含む。中身を開く・要約する・テストの入力にする・コミットすることをしない。`.gitignore` で除外済み。
@@ -172,7 +198,7 @@ apps/server ──→ packages/schema
 
 ## 仕様と文書
 
-- Spec Kit の成果物は `specs/<NNN-feature>/`（001〜005）に置く: `spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`tasks.md`（`contracts/`、`checklists/` がある機能もある）。完了した機能の `tasks.md` と `checklists/` は記録として残す。
+- Spec Kit の成果物は `specs/<NNN-feature>/`（001〜006）に置く: `spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`tasks.md`（`contracts/`、`checklists/` がある機能もある）。完了した機能の `tasks.md` と `checklists/` は記録として残す。
 - **番号は機能ごとに振り直される**（research の R、タスクの T）。他の機能の番号を指すときは `001/R6`、`005/T024` の形で機能の番号をつける。不変条件の INV だけは通し番号（`specs/INVARIANTS.md`）。
 - Spec Kit のテンプレート、スクリプト、憲法（`.specify/memory/constitution.md`）は `.specify/` に置く。
 - Spec Kit のスキルは、Claude Code 用が `.claude/skills/speckit-*`、GitHub Copilot CLI 用が `.github/skills/speckit-*` にある。どちらも `uvx --from git+https://github.com/github/spec-kit.git@v1.2.1 specify integration upgrade <claude|copilot>` で更新する（手で片方だけを直さない）。

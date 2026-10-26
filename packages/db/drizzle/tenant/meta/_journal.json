@@ -50,6 +50,20 @@
       "when": 1792852515571,
       "tag": "0006_invoicing_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792935398237,
+      "tag": "0007_statements",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792935398755,
+      "tag": "0008_statements_integrity",
+      "breakpoints": true
     }
   ]
 }

@@ -205,6 +205,27 @@ export function describeError(error: unknown): ErrorDescription {
         details: [],
       };
     }
+    case "STATEMENT_PASTE_UNREADABLE": {
+      const missing = asStrings(error.details?.missingColumns);
+      return {
+        message:
+          "貼り付けのテキストを読み取れませんでした。MF ME の入出金の表をコピーしたものか確認してください。",
+        details: missing.length > 0 ? [`見つからない列: ${missing.join("、")}`] : [],
+      };
+    }
+    case "STATEMENT_ACCOUNT_UNMAPPED": {
+      const names = asStrings(error.details?.names);
+      return {
+        message: "対応が決まっていない口座があります。用途と科目を決めてください。",
+        details: names.length > 0 ? [`未対応: ${names.join("、")}`] : [],
+      };
+    }
+    case "STATEMENT_PLAN_CHANGED":
+      return {
+        message:
+          "プレビューの後に内容が変わったため、プレビューを作り直しました。内容を確かめてから、もう一度取り込んでください。",
+        details: [],
+      };
     case "INTERNAL":
       return {
         message: "サーバーでエラーが発生しました。時間をおいて再度お試しください。",

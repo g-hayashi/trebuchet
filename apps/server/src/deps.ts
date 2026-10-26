@@ -4,6 +4,8 @@ import {
   createImportUnitOfWork,
   createInvoicingUnitOfWork,
   createRecurringUnitOfWork,
+  createStatementUnitOfWork,
+  DrizzleAiSettingsStore,
   DrizzleAuthStore,
   DrizzleBackupStore,
   DrizzleClosingStore,
@@ -19,29 +21,34 @@ import {
   type TenantDb,
   TMP_ROOT,
 } from "@trebuchet/db";
-import type {
-  AuthStore,
-  BackupStore,
-  Clock,
-  ClosingReadDeps,
-  ClosingSettingsDeps,
-  ClosingStore,
-  ClosingUnitOfWork,
-  CommitAdjustmentDeps,
-  IdGenerator,
-  ImportStore,
-  ImportUnitOfWork,
-  InvoicingStore,
-  InvoicingUnitOfWork,
-  LedgerDeps,
-  MasterDeps,
-  RecurringStore,
-  RecurringUnitOfWork,
-  ReportDeps,
-  SecretStore,
-  TaxReturnRecordDeps,
+import {
+  type AuthStore,
+  type BackupStore,
+  type Clock,
+  type ClosingReadDeps,
+  type ClosingSettingsDeps,
+  type ClosingStore,
+  type ClosingUnitOfWork,
+  type CommitAdjustmentDeps,
+  domainError,
+  err,
+  type IdGenerator,
+  type ImportStore,
+  type ImportUnitOfWork,
+  type InvoicingStore,
+  type InvoicingUnitOfWork,
+  type LedgerDeps,
+  type MasterDeps,
+  type RecurringStore,
+  type RecurringUnitOfWork,
+  type ReportDeps,
+  type SecretStore,
+  type StatementUnitOfWork,
+  type SuggestionProvider,
+  type TaxReturnRecordDeps,
 } from "@trebuchet/domain";
 import { type BackupRunner, createBackupRunner } from "./lib/backup-run.ts";
+import { createFmServer } from "./lib/fm-server.ts";
 import { createKeychainSecretStore, createMemorySecretStore } from "./lib/keychain.ts";
 
 /** R8: 主キーは UUIDv7 */
@@ -70,6 +77,18 @@ export const backupStore = (): BackupStore => new DrizzleBackupStore(openRegistr
  */
 export const secretStore: SecretStore =
   process.platform === "darwin" ? createKeychainSecretStore() : createMemorySecretStore();
+
+/** AI の接続の設定（registry の ai_settings。006 R12）。要求のたびに今のデータの置き場所の registry を開く */
+export const aiSettingsStore = (): DrizzleAiSettingsStore =>
+  new DrizzleAiSettingsStore(openRegistry());
+
+/**
+ * 端末内の AI（`fm serve`）。最初の推定で起動し、server の終了で止める（006 R10）。
+ * ポートは環境変数 `TREBUCHET_FM_PORT`（既定 18790）
+ */
+export const fmServer = createFmServer({
+  port: Number.parseInt(process.env.TREBUCHET_FM_PORT ?? "", 10) || 18790,
+});
 
 /** バックアップの実行（同時に 1 つだけ）。app と自動のスケジューラーが同じものを使う */
 export const backupRunner: BackupRunner = createBackupRunner({
@@ -188,6 +207,40 @@ export function recurringDeps(
     recurring: new DrizzleRecurringStore(db),
     ids,
     clock,
+  };
+}
+
+/** 端末内・外部の AI の推定（006 R10）。実物は `lib/ai-runtime.ts` が作り、`createApp` が差す */
+export type SuggestionProviders = { local: SuggestionProvider; external: SuggestionProvider };
+
+/** 「使えない」を返す SuggestionProvider（実物を差すまでの既定。006 T006） */
+export const unavailableSuggestionProvider: SuggestionProvider = {
+  available: async () => false,
+  suggest: async () => err(domainError("AI_NOT_CONFIGURED", "AI を使えません")),
+};
+
+/**
+ * 明細の取込と AI 仕訳（006）のユースケースの依存。仕訳・マスタ・明細の記録を1つのトランザクションで扱う
+ * （INV-47）。`providers` を省略した側は「使えない」（`unavailableSuggestionProvider`）
+ */
+export function statementDeps(
+  db: TenantDb,
+  clock: Clock,
+  providers: Partial<SuggestionProviders> = {},
+): {
+  uow: StatementUnitOfWork;
+  ids: IdGenerator;
+  clock: Clock;
+  suggestion: SuggestionProviders;
+} {
+  return {
+    uow: createStatementUnitOfWork(db),
+    ids,
+    clock,
+    suggestion: {
+      local: providers.local ?? unavailableSuggestionProvider,
+      external: providers.external ?? unavailableSuggestionProvider,
+    },
   };
 }
 

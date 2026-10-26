@@ -29,6 +29,7 @@ import {
 import { JournalForm } from "@/features/journals/JournalForm";
 import { partnersQuery, tagsQuery } from "@/features/masters/api";
 import { fiscalPeriodsQuery } from "@/features/periods/api";
+import { JournalStatements } from "@/features/statements/JournalStatements";
 import { ApiError } from "@/lib/api";
 import { formatDateTime, formatYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
@@ -168,6 +169,7 @@ function JournalDetailPage() {
         <>
           <References entityId={entityId} detail={detail.data} />
           <JournalOrigin entityId={entityId} journalId={journalId} />
+          <JournalStatements entityId={entityId} statements={detail.data.statements ?? []} />
           {closedFiscalYear !== undefined && journal.status === "active" && (
             <div className="grid gap-2 rounded-md border border-amber-500/60 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               <p>

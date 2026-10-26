@@ -22,7 +22,8 @@ type NavTo =
   | "/e/$entityId/tax-return/$year"
   | "/e/$entityId/imports"
   | "/e/$entityId/invoices"
-  | "/e/$entityId/recurring";
+  | "/e/$entityId/recurring"
+  | "/e/$entityId/statements";
 
 /** 事業体ごとの画面の共通レイアウト。ナビの項目は各画面を追加するときに足す（US1〜US5） */
 const NAV: { label: string; to: NavTo }[] = [
@@ -41,6 +42,8 @@ const NAV: { label: string; to: NavTo }[] = [
   // 請求書の一覧から、工数・請求書の作成・設定へ進む
   { label: "請求", to: "/e/$entityId/invoices" },
   { label: "定期仕訳", to: "/e/$entityId/recurring" },
+  // MF ME の明細（006）。一覧から、取込・候補の確認と承認・しきい値の設定へ進む
+  { label: "明細", to: "/e/$entityId/statements" },
 ];
 
 function EntityLayout() {

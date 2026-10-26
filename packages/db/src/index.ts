@@ -1,3 +1,4 @@
+export * from "./ai-settings-repository.ts";
 export * from "./auth-hash.ts";
 export * from "./auth-repository.ts";
 export * from "./backup/index.ts";
@@ -10,5 +11,6 @@ export * from "./recurring-repository.ts";
 export * from "./registry-repository.ts";
 export * as registrySchema from "./schema/registry.ts";
 export * as tenantSchema from "./schema/tenant.ts";
+export * from "./statement-repository.ts";
 export * from "./tenant-store.ts";
 export * from "./unit-of-work.ts";

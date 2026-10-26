@@ -2,22 +2,29 @@ import type { CryptoOptions } from "@trebuchet/db";
 import type { AuthStore, BackupStore, Clock, SecretStore } from "@trebuchet/domain";
 import { Hono } from "hono";
 import {
+  aiSettingsStore,
   authStore,
   backupRunner,
   backupStore,
   clock as defaultClock,
+  fmServer,
   type RouteOptions,
+  type SuggestionProviders,
   secretStore,
 } from "./deps.ts";
 import { onError } from "./errors.ts";
+import { type AiRuntime, type AiSettingsStore, createAiRuntime } from "./lib/ai-runtime.ts";
 import type { BackupRunner } from "./lib/backup-run.ts";
 import { ChallengeStore } from "./lib/challenges.ts";
+import type { FmServer } from "./lib/fm-server.ts";
+import { createJobStore, type JobStore } from "./lib/jobs.ts";
 import { type GetRemoteSettings, getRemoteSettingsDisabled } from "./lib/origin.ts";
 import type { WebAuthnVerifier } from "./lib/webauthn.ts";
 import { simpleWebAuthnVerifier } from "./lib/webauthn-simplewebauthn.ts";
 import { authCheck } from "./middleware/auth.ts";
 import { csrfCheck } from "./middleware/csrf.ts";
 import { type GuardEnv, hostCheck } from "./middleware/host.ts";
+import { aiSettingsRoutes } from "./routes/ai-settings.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { backupRoutes } from "./routes/backup.ts";
 import { blueReturnRoutes } from "./routes/blue-return.ts";
@@ -30,6 +37,7 @@ import { masterRoutes } from "./routes/masters.ts";
 import { periodRoutes } from "./routes/periods.ts";
 import { recurringRoutes } from "./routes/recurring.ts";
 import { reportRoutes } from "./routes/reports.ts";
+import { statementRoutes } from "./routes/statements.ts";
 import { taxReturnRoutes } from "./routes/tax-return.ts";
 import { type TenantEnv, tenant } from "./tenant.ts";
 
@@ -37,7 +45,13 @@ import { type TenantEnv, tenant } from "./tenant.ts";
  * 事業体の下のルート。時刻（更新日時・「今日」）を使うルートは clock を受け取るので、
  * `createApp` の中で組み立てる（005 R22）。全ルートに同じ clock が渡る
  */
-function tenantRoutes(options: RouteOptions) {
+function tenantRoutes(
+  options: RouteOptions & {
+    suggestion?: SuggestionProviders;
+    jobs: JobStore;
+    ai: AiRuntime;
+  },
+) {
   return new Hono<TenantEnv>()
     .use(tenant)
     .route("/", entityRoutes)
@@ -50,7 +64,8 @@ function tenantRoutes(options: RouteOptions) {
     .route("/", fixedAssetRoutes(options))
     .route("/", taxReturnRoutes(options))
     .route("/", invoicingRoutes(options))
-    .route("/", recurringRoutes(options));
+    .route("/", recurringRoutes(options))
+    .route("/", statementRoutes(options));
 }
 
 export type AppOptions = {
@@ -58,6 +73,17 @@ export type AppOptions = {
   getRemoteSettings?: GetRemoteSettings;
   store?: () => AuthStore;
   clock?: Clock;
+  /** AI の推定の差し替え（006）。省略すると `ai` の設定から作った端末内・外部の実物を使う */
+  suggestion?: SuggestionProviders;
+  /** AI の依存（006 R10・R12）。既定は deps.ts の実物（fetch、キーチェーン、registry の ai_settings、`fm serve`） */
+  ai?: {
+    fetch?: typeof fetch;
+    secrets?: SecretStore;
+    settings?: () => AiSettingsStore;
+    fm?: FmServer;
+  };
+  /** 評価のジョブの置き場（006 R17）。既定はこのアプリ専用の置き場 */
+  jobs?: JobStore;
   /** WebAuthn の検証。既定は @simplewebauthn/server。ルートのテストは偽物を渡す */
   webauthn?: WebAuthnVerifier;
   /** バックアップの依存（既定は deps.ts の実物）。テストは偽の SecretStore・実行を渡す */
@@ -80,6 +106,13 @@ export function createApp(options: AppOptions = {}) {
   const getRemoteSettings = options.getRemoteSettings ?? getRemoteSettingsDisabled;
   const store = options.store ?? authStore;
   const clock = options.clock ?? defaultClock;
+  const jobs = options.jobs ?? createJobStore();
+  const ai = createAiRuntime({
+    fetch: options.ai?.fetch ?? ((...args) => globalThis.fetch(...args)),
+    secrets: options.ai?.secrets ?? secretStore,
+    settings: options.ai?.settings ?? aiSettingsStore,
+    fm: options.ai?.fm ?? fmServer,
+  });
   const app = new Hono<GuardEnv>()
     .basePath("/api")
     .use(hostCheck(getRemoteSettings))
@@ -109,8 +142,17 @@ export function createApp(options: AppOptions = {}) {
         ...(options.backup?.crypto === undefined ? {} : { crypto: options.backup.crypto }),
       }),
     )
+    .route("/settings", aiSettingsRoutes({ clock, ai }))
     .route("/entities", entitiesRoutes({ clock }))
-    .route("/entities/:entityId", tenantRoutes({ clock }));
+    .route(
+      "/entities/:entityId",
+      tenantRoutes({
+        clock,
+        jobs,
+        ai,
+        ...(options.suggestion === undefined ? {} : { suggestion: options.suggestion }),
+      }),
+    );
 
   app.onError(onError);
   return app;

@@ -42,10 +42,22 @@ const DEFAULT_BACKUP_STATUS = {
   running: false,
 };
 
+/** AI の設定（006 US5）の既定の応答。端末内の AI が使えて、外部は使わない */
+const DEFAULT_AI_SETTINGS = {
+  localEnabled: true,
+  localAvailable: true,
+  externalEnabled: false,
+  externalBaseUrl: null,
+  externalModel: null,
+  apiKeySet: false,
+};
+
 const DEFAULT_ROUTES: Record<string, Handler> = {
   "GET /api/auth/status": () => ok(DEFAULT_AUTH_STATUS),
   // 全画面の上部の知らせ（004）が読む。設定済みで、知らせなし
   "GET /api/backup/status": () => ok(DEFAULT_BACKUP_STATUS),
+  // AI の設定（006 US5）。端末内だけを使い、外部は未設定
+  "GET /api/settings/ai": () => ok(DEFAULT_AI_SETTINGS),
 };
 
 /**
@@ -66,6 +78,21 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 定期仕訳（US3）。事業体の画面の上部の知らせが status を読む（`/recurring-journals/:id` より具体的なので先に当たる）
   "GET /recurring-journals": () => ok({ recurring: [] }),
   "GET /recurring-journals/status": () => ok({ unacknowledged: [], blocked: [] }),
+  // 明細の取込（006 US1）。取込元の口座と取込の履歴は空
+  "GET /statement-accounts": () => ok({ accounts: [] }),
+  "GET /statements/imports": () => ok({ batches: [] }),
+  // ジョブ（評価）の状態は完了
+  "GET /jobs/:jobId": () => ok({ status: "done" }),
+  // 明細の一覧・しきい値の設定（US2）。一覧は空、設定は既定の値
+  "GET /statements": () => ok({ statements: [] }),
+  // 推定のルール（US3）。一覧は空
+  "GET /inference-rules": () => ok({ rules: [] }),
+  // 評価の履歴（US5）。実行はまだない
+  "GET /statements/evals": () => ok({ runs: [] }),
+  "GET /statement-settings": () =>
+    ok({
+      settings: { bulkThreshold: 80, externalThreshold: 60, updatedAt: "2026-10-26T00:00:00.000Z" },
+    }),
 };
 
 /** `:name` を 1 つのパスの区切りに当てはめて、事業体の下のパスの既定の応答を探す */

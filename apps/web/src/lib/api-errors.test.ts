@@ -82,6 +82,21 @@ describe("describeError", () => {
     expect(code("UNAUTHENTICATED")).toContain("サインイン");
   });
 
+  it("明細の取込（006）: 貼り付け・口座の対応・プレビューの変更", () => {
+    const paste = describeError(
+      new ApiError(422, "STATEMENT_PASTE_UNREADABLE", "x", { missingColumns: ["金額（円）"] }),
+    );
+    expect(paste.message).toContain("貼り付けのテキストを読み取れませんでした");
+    expect(paste.details).toEqual(["見つからない列: 金額（円）"]);
+    const unmapped = describeError(
+      new ApiError(422, "STATEMENT_ACCOUNT_UNMAPPED", "x", { names: ["A", "B"] }),
+    );
+    expect(unmapped.details).toEqual(["未対応: A、B"]);
+    expect(describeError(new ApiError(409, "STATEMENT_PLAN_CHANGED", "x")).message).toContain(
+      "プレビューを作り直しました",
+    );
+  });
+
   it("その他のコードはサーバーのメッセージをそのまま", () => {
     const e = new ApiError(404, "ACCOUNT_NOT_FOUND", "勘定科目が見つかりません");
     expect(describeError(e)).toEqual({ message: "勘定科目が見つかりません", details: [] });

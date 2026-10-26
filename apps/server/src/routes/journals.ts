@@ -5,11 +5,12 @@ import {
   type DomainError,
   getJournalDetail,
   getJournalHistory,
+  listJournalStatements,
   voidJournal,
 } from "@trebuchet/domain";
 import { JournalCorrection, JournalInput, JournalQuery, VoidInput } from "@trebuchet/schema";
 import { type Context, Hono } from "hono";
-import { invoicingDeps, journalDeps, type RouteOptions } from "../deps.ts";
+import { invoicingDeps, journalDeps, type RouteOptions, statementDeps } from "../deps.ts";
 import { fail, respond } from "../errors.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
@@ -45,8 +46,14 @@ export function journalRoutes({ clock }: RouteOptions) {
       return c.json(result.value, 201);
     })
     .get("/journals/:journalId", (c) => {
-      const result = getJournalDetail(journalDeps(c.var.db, clock), c.req.param("journalId"));
-      return respond(c, result, (detail) => c.json(detail, 200));
+      const journalId = c.req.param("journalId");
+      const result = getJournalDetail(journalDeps(c.var.db, clock), journalId);
+      if (!result.ok) return fail(c, result.error);
+      // 元の明細（006 FR-020。失効していない結びつきだけ）
+      const statements = listJournalStatements(statementDeps(c.var.db, clock), journalId);
+      return respond(c, statements, (linked) =>
+        c.json({ ...result.value, statements: linked }, 200),
+      );
     })
     .put("/journals/:journalId", validate("json", JournalCorrection), (c) => {
       const result = correctJournal(

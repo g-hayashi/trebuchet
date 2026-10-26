@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EEntityIdRouteRouteImport } from './routes/e/$entityId/route'
+import { Route as SettingsAiRouteImport } from './routes/settings/ai'
 import { Route as SettingsBackupRouteImport } from './routes/settings/backup'
 import { Route as SettingsSecurityRouteImport } from './routes/settings/security'
 import { Route as EEntityIdIndexRouteImport } from './routes/e/$entityId/index'
@@ -42,6 +43,11 @@ import { Route as EEntityIdReportsGeneralLedgerRouteImport } from './routes/e/$e
 import { Route as EEntityIdReportsJournalBookRouteImport } from './routes/e/$entityId/reports/journal-book'
 import { Route as EEntityIdReportsProfitAndLossRouteImport } from './routes/e/$entityId/reports/profit-and-loss'
 import { Route as EEntityIdReportsTrialBalanceRouteImport } from './routes/e/$entityId/reports/trial-balance'
+import { Route as EEntityIdStatementsIndexRouteImport } from './routes/e/$entityId/statements/index'
+import { Route as EEntityIdStatementsEvalsRouteImport } from './routes/e/$entityId/statements/evals'
+import { Route as EEntityIdStatementsImportRouteImport } from './routes/e/$entityId/statements/import'
+import { Route as EEntityIdStatementsRulesRouteImport } from './routes/e/$entityId/statements/rules'
+import { Route as EEntityIdStatementsSettingsRouteImport } from './routes/e/$entityId/statements/settings'
 import { Route as EEntityIdTaxReturnYearRouteImport } from './routes/e/$entityId/tax-return/$year'
 import { Route as EEntityIdBlueReturnYearIndexRouteImport } from './routes/e/$entityId/blue-return/$year/index'
 import { Route as EEntityIdBlueReturnYearDeductionRouteImport } from './routes/e/$entityId/blue-return/$year/deduction'
@@ -57,6 +63,11 @@ const IndexRoute = IndexRouteImport.update({
 const EEntityIdRouteRoute = EEntityIdRouteRouteImport.update({
   id: '/e/$entityId',
   path: '/e/$entityId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsAiRoute = SettingsAiRouteImport.update({
+  id: '/settings/ai',
+  path: '/settings/ai',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsBackupRoute = SettingsBackupRouteImport.update({
@@ -226,6 +237,36 @@ const EEntityIdReportsTrialBalanceRoute =
     path: '/reports/trial-balance',
     getParentRoute: () => EEntityIdRouteRoute,
   } as any)
+const EEntityIdStatementsIndexRoute =
+  EEntityIdStatementsIndexRouteImport.update({
+    id: '/statements/',
+    path: '/statements/',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
+const EEntityIdStatementsEvalsRoute =
+  EEntityIdStatementsEvalsRouteImport.update({
+    id: '/statements/evals',
+    path: '/statements/evals',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
+const EEntityIdStatementsImportRoute =
+  EEntityIdStatementsImportRouteImport.update({
+    id: '/statements/import',
+    path: '/statements/import',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
+const EEntityIdStatementsRulesRoute =
+  EEntityIdStatementsRulesRouteImport.update({
+    id: '/statements/rules',
+    path: '/statements/rules',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
+const EEntityIdStatementsSettingsRoute =
+  EEntityIdStatementsSettingsRouteImport.update({
+    id: '/statements/settings',
+    path: '/statements/settings',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
 const EEntityIdTaxReturnYearRoute = EEntityIdTaxReturnYearRouteImport.update({
   id: '/tax-return/$year',
   path: '/tax-return/$year',
@@ -265,6 +306,7 @@ const EEntityIdPeriodsYearOpeningBalancesRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
+  '/settings/ai': typeof SettingsAiRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
@@ -288,6 +330,10 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/reports/journal-book': typeof EEntityIdReportsJournalBookRoute
   '/e/$entityId/reports/profit-and-loss': typeof EEntityIdReportsProfitAndLossRoute
   '/e/$entityId/reports/trial-balance': typeof EEntityIdReportsTrialBalanceRoute
+  '/e/$entityId/statements/evals': typeof EEntityIdStatementsEvalsRoute
+  '/e/$entityId/statements/import': typeof EEntityIdStatementsImportRoute
+  '/e/$entityId/statements/rules': typeof EEntityIdStatementsRulesRoute
+  '/e/$entityId/statements/settings': typeof EEntityIdStatementsSettingsRoute
   '/e/$entityId/tax-return/$year': typeof EEntityIdTaxReturnYearRoute
   '/e/$entityId/blue-return/': typeof EEntityIdBlueReturnIndexRoute
   '/e/$entityId/fixed-assets/': typeof EEntityIdFixedAssetsIndexRoute
@@ -297,6 +343,7 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
   '/e/$entityId/recurring/': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
+  '/e/$entityId/statements/': typeof EEntityIdStatementsIndexRoute
   '/e/$entityId/blue-return/$year/deduction': typeof EEntityIdBlueReturnYearDeductionRoute
   '/e/$entityId/blue-return/$year/home-use': typeof EEntityIdBlueReturnYearHomeUseRoute
   '/e/$entityId/invoices/$invoiceId/print': typeof EEntityIdInvoicesInvoiceIdPrintRoute
@@ -305,6 +352,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/settings/ai': typeof SettingsAiRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
@@ -328,6 +376,10 @@ export interface FileRoutesByTo {
   '/e/$entityId/reports/journal-book': typeof EEntityIdReportsJournalBookRoute
   '/e/$entityId/reports/profit-and-loss': typeof EEntityIdReportsProfitAndLossRoute
   '/e/$entityId/reports/trial-balance': typeof EEntityIdReportsTrialBalanceRoute
+  '/e/$entityId/statements/evals': typeof EEntityIdStatementsEvalsRoute
+  '/e/$entityId/statements/import': typeof EEntityIdStatementsImportRoute
+  '/e/$entityId/statements/rules': typeof EEntityIdStatementsRulesRoute
+  '/e/$entityId/statements/settings': typeof EEntityIdStatementsSettingsRoute
   '/e/$entityId/tax-return/$year': typeof EEntityIdTaxReturnYearRoute
   '/e/$entityId/blue-return': typeof EEntityIdBlueReturnIndexRoute
   '/e/$entityId/fixed-assets': typeof EEntityIdFixedAssetsIndexRoute
@@ -337,6 +389,7 @@ export interface FileRoutesByTo {
   '/e/$entityId/periods': typeof EEntityIdPeriodsIndexRoute
   '/e/$entityId/recurring': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports': typeof EEntityIdReportsIndexRoute
+  '/e/$entityId/statements': typeof EEntityIdStatementsIndexRoute
   '/e/$entityId/blue-return/$year/deduction': typeof EEntityIdBlueReturnYearDeductionRoute
   '/e/$entityId/blue-return/$year/home-use': typeof EEntityIdBlueReturnYearHomeUseRoute
   '/e/$entityId/invoices/$invoiceId/print': typeof EEntityIdInvoicesInvoiceIdPrintRoute
@@ -347,6 +400,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
+  '/settings/ai': typeof SettingsAiRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
@@ -370,6 +424,10 @@ export interface FileRoutesById {
   '/e/$entityId/reports/journal-book': typeof EEntityIdReportsJournalBookRoute
   '/e/$entityId/reports/profit-and-loss': typeof EEntityIdReportsProfitAndLossRoute
   '/e/$entityId/reports/trial-balance': typeof EEntityIdReportsTrialBalanceRoute
+  '/e/$entityId/statements/evals': typeof EEntityIdStatementsEvalsRoute
+  '/e/$entityId/statements/import': typeof EEntityIdStatementsImportRoute
+  '/e/$entityId/statements/rules': typeof EEntityIdStatementsRulesRoute
+  '/e/$entityId/statements/settings': typeof EEntityIdStatementsSettingsRoute
   '/e/$entityId/tax-return/$year': typeof EEntityIdTaxReturnYearRoute
   '/e/$entityId/blue-return/': typeof EEntityIdBlueReturnIndexRoute
   '/e/$entityId/fixed-assets/': typeof EEntityIdFixedAssetsIndexRoute
@@ -379,6 +437,7 @@ export interface FileRoutesById {
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
   '/e/$entityId/recurring/': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
+  '/e/$entityId/statements/': typeof EEntityIdStatementsIndexRoute
   '/e/$entityId/blue-return/$year/deduction': typeof EEntityIdBlueReturnYearDeductionRoute
   '/e/$entityId/blue-return/$year/home-use': typeof EEntityIdBlueReturnYearHomeUseRoute
   '/e/$entityId/invoices/$invoiceId_/print': typeof EEntityIdInvoicesInvoiceIdPrintRoute
@@ -390,6 +449,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/e/$entityId'
+    | '/settings/ai'
     | '/settings/backup'
     | '/settings/security'
     | '/e/$entityId/accounts'
@@ -413,6 +473,10 @@ export interface FileRouteTypes {
     | '/e/$entityId/reports/journal-book'
     | '/e/$entityId/reports/profit-and-loss'
     | '/e/$entityId/reports/trial-balance'
+    | '/e/$entityId/statements/evals'
+    | '/e/$entityId/statements/import'
+    | '/e/$entityId/statements/rules'
+    | '/e/$entityId/statements/settings'
     | '/e/$entityId/tax-return/$year'
     | '/e/$entityId/blue-return/'
     | '/e/$entityId/fixed-assets/'
@@ -422,6 +486,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/periods/'
     | '/e/$entityId/recurring/'
     | '/e/$entityId/reports/'
+    | '/e/$entityId/statements/'
     | '/e/$entityId/blue-return/$year/deduction'
     | '/e/$entityId/blue-return/$year/home-use'
     | '/e/$entityId/invoices/$invoiceId/print'
@@ -430,6 +495,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/settings/ai'
     | '/settings/backup'
     | '/settings/security'
     | '/e/$entityId/accounts'
@@ -453,6 +519,10 @@ export interface FileRouteTypes {
     | '/e/$entityId/reports/journal-book'
     | '/e/$entityId/reports/profit-and-loss'
     | '/e/$entityId/reports/trial-balance'
+    | '/e/$entityId/statements/evals'
+    | '/e/$entityId/statements/import'
+    | '/e/$entityId/statements/rules'
+    | '/e/$entityId/statements/settings'
     | '/e/$entityId/tax-return/$year'
     | '/e/$entityId/blue-return'
     | '/e/$entityId/fixed-assets'
@@ -462,6 +532,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/periods'
     | '/e/$entityId/recurring'
     | '/e/$entityId/reports'
+    | '/e/$entityId/statements'
     | '/e/$entityId/blue-return/$year/deduction'
     | '/e/$entityId/blue-return/$year/home-use'
     | '/e/$entityId/invoices/$invoiceId/print'
@@ -471,6 +542,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/e/$entityId'
+    | '/settings/ai'
     | '/settings/backup'
     | '/settings/security'
     | '/e/$entityId/accounts'
@@ -494,6 +566,10 @@ export interface FileRouteTypes {
     | '/e/$entityId/reports/journal-book'
     | '/e/$entityId/reports/profit-and-loss'
     | '/e/$entityId/reports/trial-balance'
+    | '/e/$entityId/statements/evals'
+    | '/e/$entityId/statements/import'
+    | '/e/$entityId/statements/rules'
+    | '/e/$entityId/statements/settings'
     | '/e/$entityId/tax-return/$year'
     | '/e/$entityId/blue-return/'
     | '/e/$entityId/fixed-assets/'
@@ -503,6 +579,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/periods/'
     | '/e/$entityId/recurring/'
     | '/e/$entityId/reports/'
+    | '/e/$entityId/statements/'
     | '/e/$entityId/blue-return/$year/deduction'
     | '/e/$entityId/blue-return/$year/home-use'
     | '/e/$entityId/invoices/$invoiceId_/print'
@@ -513,6 +590,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EEntityIdRouteRoute: typeof EEntityIdRouteRouteWithChildren
+  SettingsAiRoute: typeof SettingsAiRoute
   SettingsBackupRoute: typeof SettingsBackupRoute
   SettingsSecurityRoute: typeof SettingsSecurityRoute
 }
@@ -531,6 +609,13 @@ declare module '@tanstack/react-router' {
       path: '/e/$entityId'
       fullPath: '/e/$entityId'
       preLoaderRoute: typeof EEntityIdRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/ai': {
+      id: '/settings/ai'
+      path: '/settings/ai'
+      fullPath: '/settings/ai'
+      preLoaderRoute: typeof SettingsAiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/backup': {
@@ -750,6 +835,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EEntityIdReportsTrialBalanceRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
+    '/e/$entityId/statements/': {
+      id: '/e/$entityId/statements/'
+      path: '/statements'
+      fullPath: '/e/$entityId/statements/'
+      preLoaderRoute: typeof EEntityIdStatementsIndexRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/statements/evals': {
+      id: '/e/$entityId/statements/evals'
+      path: '/statements/evals'
+      fullPath: '/e/$entityId/statements/evals'
+      preLoaderRoute: typeof EEntityIdStatementsEvalsRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/statements/import': {
+      id: '/e/$entityId/statements/import'
+      path: '/statements/import'
+      fullPath: '/e/$entityId/statements/import'
+      preLoaderRoute: typeof EEntityIdStatementsImportRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/statements/rules': {
+      id: '/e/$entityId/statements/rules'
+      path: '/statements/rules'
+      fullPath: '/e/$entityId/statements/rules'
+      preLoaderRoute: typeof EEntityIdStatementsRulesRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/statements/settings': {
+      id: '/e/$entityId/statements/settings'
+      path: '/statements/settings'
+      fullPath: '/e/$entityId/statements/settings'
+      preLoaderRoute: typeof EEntityIdStatementsSettingsRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
     '/e/$entityId/tax-return/$year': {
       id: '/e/$entityId/tax-return/$year'
       path: '/tax-return/$year'
@@ -817,6 +937,10 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdReportsJournalBookRoute: typeof EEntityIdReportsJournalBookRoute
   EEntityIdReportsProfitAndLossRoute: typeof EEntityIdReportsProfitAndLossRoute
   EEntityIdReportsTrialBalanceRoute: typeof EEntityIdReportsTrialBalanceRoute
+  EEntityIdStatementsEvalsRoute: typeof EEntityIdStatementsEvalsRoute
+  EEntityIdStatementsImportRoute: typeof EEntityIdStatementsImportRoute
+  EEntityIdStatementsRulesRoute: typeof EEntityIdStatementsRulesRoute
+  EEntityIdStatementsSettingsRoute: typeof EEntityIdStatementsSettingsRoute
   EEntityIdTaxReturnYearRoute: typeof EEntityIdTaxReturnYearRoute
   EEntityIdBlueReturnIndexRoute: typeof EEntityIdBlueReturnIndexRoute
   EEntityIdFixedAssetsIndexRoute: typeof EEntityIdFixedAssetsIndexRoute
@@ -826,6 +950,7 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdPeriodsIndexRoute: typeof EEntityIdPeriodsIndexRoute
   EEntityIdRecurringIndexRoute: typeof EEntityIdRecurringIndexRoute
   EEntityIdReportsIndexRoute: typeof EEntityIdReportsIndexRoute
+  EEntityIdStatementsIndexRoute: typeof EEntityIdStatementsIndexRoute
   EEntityIdBlueReturnYearDeductionRoute: typeof EEntityIdBlueReturnYearDeductionRoute
   EEntityIdBlueReturnYearHomeUseRoute: typeof EEntityIdBlueReturnYearHomeUseRoute
   EEntityIdInvoicesInvoiceIdPrintRoute: typeof EEntityIdInvoicesInvoiceIdPrintRoute
@@ -855,6 +980,10 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdReportsJournalBookRoute: EEntityIdReportsJournalBookRoute,
   EEntityIdReportsProfitAndLossRoute: EEntityIdReportsProfitAndLossRoute,
   EEntityIdReportsTrialBalanceRoute: EEntityIdReportsTrialBalanceRoute,
+  EEntityIdStatementsEvalsRoute: EEntityIdStatementsEvalsRoute,
+  EEntityIdStatementsImportRoute: EEntityIdStatementsImportRoute,
+  EEntityIdStatementsRulesRoute: EEntityIdStatementsRulesRoute,
+  EEntityIdStatementsSettingsRoute: EEntityIdStatementsSettingsRoute,
   EEntityIdTaxReturnYearRoute: EEntityIdTaxReturnYearRoute,
   EEntityIdBlueReturnIndexRoute: EEntityIdBlueReturnIndexRoute,
   EEntityIdFixedAssetsIndexRoute: EEntityIdFixedAssetsIndexRoute,
@@ -864,6 +993,7 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdPeriodsIndexRoute: EEntityIdPeriodsIndexRoute,
   EEntityIdRecurringIndexRoute: EEntityIdRecurringIndexRoute,
   EEntityIdReportsIndexRoute: EEntityIdReportsIndexRoute,
+  EEntityIdStatementsIndexRoute: EEntityIdStatementsIndexRoute,
   EEntityIdBlueReturnYearDeductionRoute: EEntityIdBlueReturnYearDeductionRoute,
   EEntityIdBlueReturnYearHomeUseRoute: EEntityIdBlueReturnYearHomeUseRoute,
   EEntityIdInvoicesInvoiceIdPrintRoute: EEntityIdInvoicesInvoiceIdPrintRoute,
@@ -879,6 +1009,7 @@ const EEntityIdRouteRouteWithChildren = EEntityIdRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EEntityIdRouteRoute: EEntityIdRouteRouteWithChildren,
+  SettingsAiRoute: SettingsAiRoute,
   SettingsBackupRoute: SettingsBackupRoute,
   SettingsSecurityRoute: SettingsSecurityRoute,
 }

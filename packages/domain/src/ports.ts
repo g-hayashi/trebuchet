@@ -1,4 +1,12 @@
-import type { BillingTerms, InvoiceSettings, JournalOrigin, Recurring } from "@trebuchet/schema";
+import type {
+  BillingTerms,
+  InvoiceSettings,
+  JournalOrigin,
+  Recurring,
+  StatementAccount,
+  StatementBatch,
+  StatementSettings,
+} from "@trebuchet/schema";
 import type {
   AppSettingKey,
   AuthEvent,
@@ -18,6 +26,8 @@ import type {
   JournalSignature,
   TaxMapping,
 } from "./import/types.ts";
+import type { AiPayload } from "./statements/mask.ts";
+import type { PromptAccount } from "./statements/prompt.ts";
 import type {
   Account,
   AdjustmentRef,
@@ -27,10 +37,13 @@ import type {
   DeductionAnswers,
   EntityProfile,
   EntitySummary,
+  EvalRunRecord,
   FiledDocument,
   FiscalPeriod,
   FixedAsset,
   HomeUseAllocation,
+  InferenceRule,
+  InferenceRuleHistoryRecord,
   InvoiceItemRecord,
   InvoiceRecord,
   InvoicingAuditEntry,
@@ -46,6 +59,10 @@ import type {
   RecurringRunRecord,
   RentDetail,
   Result,
+  StatementAuditEntry,
+  StatementCandidateRecord,
+  StatementLinkRecord,
+  StatementRecord,
   SubAccount,
   Tag,
   TaxCategory,
@@ -336,6 +353,95 @@ export interface RecurringStore {
 
 /** 定期仕訳の登録で、仕訳・マスタ・定期仕訳の記録を1つのトランザクションで扱う（R9） */
 export type RecurringUnitOfWork = TenantUnitOfWork<{ recurring: RecurringStore }>;
+
+/**
+ * 明細の取込と AI 仕訳（006）の永続化。メソッドはすべて同期。各ストーリーの db のタスクで、
+ * ポートと実装（`DrizzleStatementStore`）・偽物（`InMemoryStatementStore`）を同時に足す。
+ * 操作の記録は `statement_audit_log`（R18）
+ */
+export interface StatementStore {
+  appendStatementAudit(entry: StatementAuditEntry): void;
+
+  // ---- 取込元の口座（US1。data-model §1.1） ----
+  /** 名前の順 */
+  listStatementAccounts(): StatementAccount[];
+  /** `account.id` が保存済みなら更新、なければ追加する（名前は一意） */
+  upsertStatementAccount(account: StatementAccount): void;
+
+  // ---- 取込（US1。§1.2・§1.3） ----
+  insertStatementBatch(batch: StatementBatch): void;
+  /** 新しい順（作成の日時の降順） */
+  listStatementBatches(): StatementBatch[];
+  /** 全件を追加する。`stable_key`・`external_id` の重複は例外（INV-40） */
+  insertStatements(rows: StatementRecord[]): void;
+  /** 取り込んだ順（`rowid`） */
+  listStatements(): StatementRecord[];
+  /** `changed_json` を書き、`changed_ack_at` を NULL に戻す（FR-005）。明細がなければ例外 */
+  markStatementChanged(id: string, changedJson: string): void;
+  /** `changed_ack_at` を書く（「確認した」。FR-005）。明細がなければ例外 */
+  acknowledgeStatementChange(id: string, at: string): void;
+  /** 除外する（`{ at, reason }`）か、除外を取り消す（null。`excluded_*` を NULL に戻す）。明細がなければ例外（FR-017） */
+  setStatementExcluded(id: string, excluded: { at: string; reason: string | null } | null): void;
+
+  // ---- 候補（US2。§1.4） ----
+  /** 明細ごとに高々 1 件。並びは問わない */
+  listStatementCandidates(): StatementCandidateRecord[];
+  /** `statementId` の候補があれば置き換え、なければ追加する。形（`none` は purpose・confidence・draft が null）は CHECK */
+  upsertStatementCandidate(candidate: StatementCandidateRecord): void;
+  deleteStatementCandidate(statementId: string): void;
+
+  // ---- 結びつき（US2。§1.5。書き込みは承認・取消のタスク（T015）が使う） ----
+  /** 失効したものを含む全件（作成の順） */
+  listStatementLinks(): StatementLinkRecord[];
+  /** 有効な結びつきの重複（明細ごと・仕訳の行ごと）は一意制約の違反で例外（INV-43） */
+  insertStatementLink(link: StatementLinkRecord): void;
+  /** 有効な結びつきを失効させる（`revoked_at`・`revoked_reason`）。ない・失効済みなら例外 */
+  revokeStatementLink(id: string, at: string, reason: string): void;
+
+  // ---- 推定のルール（US3。§1.6・§1.7） ----
+  /** 作成の順 */
+  listInferenceRules(): InferenceRule[];
+  /** （内容, 口座）の重複（口座なしを含む）は一意制約の違反で例外 */
+  insertInferenceRule(rule: InferenceRule): void;
+  /** `rule.id` のルールを上書きする。ない場合は例外 */
+  updateInferenceRule(rule: InferenceRule): void;
+  /** 追記のみ。ルールがなければ例外 */
+  appendInferenceRuleHistory(entry: InferenceRuleHistoryRecord): void;
+  /** `ruleId` の履歴を追記の順で返す */
+  listInferenceRuleHistory(ruleId: string): InferenceRuleHistoryRecord[];
+
+  // ---- 設定（US2。§1.8） ----
+  /** 保存がなければ undefined */
+  getStatementSettings(): StatementSettings | undefined;
+  saveStatementSettings(settings: StatementSettings): void;
+
+  // ---- 評価（US5。§1.9） ----
+  /** 追記のみ（評価の結果は書き換えない） */
+  insertEvalRun(run: EvalRunRecord): void;
+  /** 新しい順（作成の日時の降順、同じなら ID の降順） */
+  listEvalRuns(): EvalRunRecord[];
+}
+
+/** 明細の取込・承認で、仕訳・マスタ・明細の記録を1つのトランザクションで扱う（INV-47。data-model §6） */
+export type StatementUnitOfWork = TenantUnitOfWork<{ statements: StatementStore }>;
+
+/** AI に渡す明細の内容（`buildAiPayload` の出力。R11） */
+export type SuggestionPayload = AiPayload;
+/** AI に渡す文脈（相手になりうる有効な科目のコードと名前、税区分のコード。R10。`buildPrompt` の入力） */
+export type SuggestionContext = {
+  readonly accounts: readonly PromptAccount[];
+  readonly taxCategories: readonly string[];
+};
+
+/**
+ * AI の推定（端末内・外部の 2 つの実装を渡す。R10）。出力は `unknown` で返し、ドメインの
+ * `parseSuggestion` が検証する（INV-46）。ネットワーク・プロセスを使うので非同期
+ */
+export interface SuggestionProvider {
+  /** 使える（接続先・モデルなどがそろっている）か */
+  available(): Promise<boolean>;
+  suggest(payload: SuggestionPayload, context: SuggestionContext): Promise<Result<unknown>>;
+}
 
 /** 事業体の一覧（data/registry.sqlite） */
 export interface RegistryRepository {

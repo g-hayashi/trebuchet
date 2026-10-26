@@ -2,6 +2,7 @@ import type {
   AccountCategory,
   AccountingMethod,
   AdjustmentKind,
+  CandidateMethod,
   ClosingNoteKind,
   DepreciationMethod,
   EntityKind,
@@ -12,8 +13,13 @@ import type {
   InvoiceTaxDisplay,
   JournalSource,
   PaymentView,
+  Purpose,
   ReportSection,
+  RuleHistoryAction,
+  RuleOrigin,
+  RuleStatus,
   Side,
+  StatementLinkKind,
   TaxCategoryCode,
   TaxpayerStatus,
   TaxReturnMemoKind,
@@ -470,6 +476,129 @@ export type InvoicingAuditAction =
 
 /** 請求・定期仕訳の操作の記録（`invoicing_audit_log`。追記のみ。data-model §1.10、R23） */
 export type InvoicingAuditEntry = AuditEntry<InvoicingAuditTargetType, InvoicingAuditAction>;
+
+// ---- 明細の取込と AI 仕訳（006） ----
+
+export type StatementAuditTargetType =
+  | "statement_batch"
+  | "statement"
+  | "statement_link"
+  | "statement_account"
+  | "inference_rule"
+  | "statement_settings";
+
+export type StatementAuditAction =
+  | "create"
+  | "update"
+  | "exclude"
+  | "unexclude"
+  | "acknowledge"
+  | "unlink"
+  | "revoke"
+  | "pause"
+  | "resume"
+  | "edit"
+  | "seed";
+
+/** 明細の取込・承認などの操作の記録（`statement_audit_log`。追記のみ。006 data-model §1.10、R18） */
+export type StatementAuditEntry = AuditEntry<StatementAuditTargetType, StatementAuditAction>;
+
+/** 取り込んだ明細（`statements` の 1 行。006 data-model §1.3）。金額は符号つき（入金が正） */
+export type StatementRecord = {
+  id: string;
+  batchId: string;
+  statementAccountId: string;
+  stableKey: string;
+  externalId: string | null;
+  date: string;
+  amount: number;
+  content: string;
+  normalizedContent: string;
+  categoryMajor: string | null;
+  categoryMinor: string | null;
+  memo: string | null;
+  transferFlag: boolean;
+  /** `external_id` が同じで内容が違う取込があったときの新しい内容（JSON。FR-005） */
+  changedJson: string | null;
+  changedAckAt: string | null;
+  excludedAt: string | null;
+  excludedReason: string | null;
+  createdAt: string;
+};
+
+/**
+ * 明細の候補（`statement_candidates` の 1 行。006 data-model §1.4）。明細ごとに高々 1 件で、作り直しで置き換える。
+ * `none` は purpose・confidence・draftJson が null。`match` の draftJson は `{ journalId, lineId }`、
+ * ほかは仕訳の案（`JournalDraft` の JSON）
+ */
+export type StatementCandidateRecord = {
+  statementId: string;
+  method: CandidateMethod;
+  purpose: Purpose | null;
+  confidence: number | null;
+  reason: string;
+  draftJson: string | null;
+  ruleId: string | null;
+  model: string | null;
+  createdAt: string;
+};
+
+/** 明細と仕訳の行の結びつき（`statement_links` の 1 行。006 data-model §1.5）。`revokedAt` が null のものが有効 */
+export type StatementLinkRecord = {
+  id: string;
+  statementId: string;
+  journalId: string;
+  journalLineId: string;
+  kind: StatementLinkKind;
+  createdAt: string;
+  revokedAt: string | null;
+  revokedReason: string | null;
+};
+
+/** 推定のルール（`inference_rules` の 1 行。006 data-model §1.6、R9）。`statementAccountId` が null ならすべての口座 */
+export type InferenceRule = {
+  id: string;
+  normalizedContent: string;
+  statementAccountId: string | null;
+  counterAccountId: string;
+  counterSubAccountId: string | null;
+  partnerId: string | null;
+  taxCategory: TaxCategoryCode;
+  purpose: Purpose;
+  descriptionTemplate: string | null;
+  hits: number;
+  overrides: number;
+  status: RuleStatus;
+  origin: RuleOrigin;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** ルールの履歴（`inference_rule_history` の 1 行。追記のみ。§1.7）。before・after はルールの JSON */
+export type InferenceRuleHistoryRecord = {
+  id: string;
+  ruleId: string;
+  action: RuleHistoryAction;
+  beforeJson: string | null;
+  afterJson: string | null;
+  /** 承認が起点のとき */
+  statementId: string | null;
+  at: string;
+};
+
+/**
+ * 評価の実行の記録（`eval_runs` の 1 行。006 data-model §1.9、R17）。`resultJson` は項目ごとの一致率・方法ごとの
+ * 件数と一致率（千分率の整数）、`modelsJson` は使ったモデル名（JSON の配列）
+ */
+export type EvalRunRecord = {
+  id: string;
+  splitDate: string;
+  includeAi: boolean;
+  sampleCount: number;
+  resultJson: string;
+  modelsJson: string;
+  createdAt: string;
+};
 
 /**
  * 定期仕訳の回（`recurring_runs` の 1 行。data-model §1.9）。`posted` は仕訳を持ち、`skipped` は理由を持つ。

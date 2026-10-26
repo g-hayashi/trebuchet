@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { previousDay, previousMonth, thisMonth, thisYear, today } from "./dates";
+import { addDays, previousDay, previousMonth, thisMonth, thisYear, today } from "./dates";
 
 describe("today / thisMonth / thisYear", () => {
   afterEach(() => {
@@ -20,6 +20,15 @@ describe("previousDay", () => {
     expect(previousDay("2026-03-01")).toBe("2026-02-28");
     expect(previousDay("2024-03-01")).toBe("2024-02-29");
     expect(previousDay("2026-01-01")).toBe("2025-12-31");
+  });
+});
+
+describe("addDays", () => {
+  it("日数を足す・引く（月・年またぎ、うるう日）", () => {
+    expect(addDays("2026-05-10", 7)).toBe("2026-05-17");
+    expect(addDays("2026-03-01", -1)).toBe("2026-02-28");
+    expect(addDays("2024-02-28", 2)).toBe("2024-03-01");
+    expect(addDays("2025-12-30", 3)).toBe("2026-01-02");
   });
 });
 
