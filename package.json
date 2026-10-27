@@ -17,6 +17,7 @@
     "bench:import": "node scripts/bench-import.ts",
     "bench:backup": "node scripts/bench-backup.ts",
     "bench:statements": "node scripts/bench-statements.ts",
+    "eval:columns": "node scripts/eval-column-suggestions.ts",
     "restore": "node scripts/restore-backup.ts",
     "verify:freee": "node scripts/verify-freee-import.ts",
     "verify:tax-return": "node scripts/verify-tax-return.ts"
