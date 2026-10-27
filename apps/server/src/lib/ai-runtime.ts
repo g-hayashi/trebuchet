@@ -47,7 +47,7 @@ export async function readApiKey(secrets: SecretStore): Promise<string | undefin
 
 /**
  * 端末内・外部の SuggestionProvider を作る。設定とキーは呼ぶたびに読む（PUT がすぐ効く）。
- * 端末内: 設定で有効、かつ `fm available`。`fm serve` は最初の推定で起動する。
+ * 端末内: 設定で有効、かつ `fm models` に `✓ system` がある。`fm serve` は最初の推定で起動する。
  * 外部: 設定で有効、かつ接続先・モデル・API キーがそろっている
  */
 export function createAiRuntime(options: AiRuntimeOptions): AiRuntime {

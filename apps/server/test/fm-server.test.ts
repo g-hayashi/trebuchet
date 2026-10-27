@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createFmServer, type FmChild, type FmSpawn } from "../src/lib/fm-server.ts";
 
-// 006 R10: `fm available` で確かめ、使えれば `fm serve --host 127.0.0.1 --port <port>` を子プロセスで起動し、
+// 006 R10: `fm models` の出力で確かめ、使えれば `fm serve --host 127.0.0.1 --port <port>` を子プロセスで起動し、
 // `/health` を待つ。実プロセス・ネットワークには触れない（偽の spawn・fetch）
 
 type FakeChild = FmChild & {
@@ -11,12 +11,29 @@ type FakeChild = FmChild & {
   exit(code: number | null): void;
 };
 
-/** 起動した子プロセスを記録する偽の spawn。`available` の子は終了コードですぐ終わる */
-function fakeSpawn(options: { availableCode?: number | null; spawnThrows?: boolean } = {}) {
+/** 実機の `fm models` の出力（system は使え、pcc は使えない） */
+const MODELS_OK = [
+  "  Apple Foundation Models\n",
+  "  ✓ system ()\n",
+  "  ✗ pcc        (Using Private Cloud Compute requires an iCloud account.)\n",
+];
+const MODELS_NG = [
+  "  Apple Foundation Models\n",
+  "  ✗ system (Apple Intelligence is not enabled)\n",
+];
+
+/**
+ * 起動した子プロセスを記録する偽の spawn。`models` の子は stdout を流してから終了コードで終わる。
+ * 既定は実機と同じ（system が使え、pcc が使えないので終了コード 1）
+ */
+function fakeSpawn(
+  options: { modelsOut?: string[]; modelsCode?: number | null; spawnThrows?: boolean } = {},
+) {
   const children: FakeChild[] = [];
   const spawn: FmSpawn = (command, args) => {
     if (options.spawnThrows) throw new Error("spawn ENOENT");
     let onExit: (code: number | null) => void = () => {};
+    let onStdout: (chunk: string) => void = () => {};
     const child: FakeChild = {
       command,
       args,
@@ -24,16 +41,20 @@ function fakeSpawn(options: { availableCode?: number | null; spawnThrows?: boole
       onExit: (cb) => {
         onExit = cb;
       },
+      onStdout: (cb) => {
+        onStdout = cb;
+      },
       kill: () => {
         child.killed = true;
       },
       exit: (code) => onExit(code),
     };
     children.push(child);
-    if (args[0] === "available") {
-      queueMicrotask(() =>
-        child.exit("availableCode" in options ? (options.availableCode ?? null) : 0),
-      );
+    if (args[0] === "models") {
+      queueMicrotask(() => {
+        for (const chunk of options.modelsOut ?? MODELS_OK) onStdout(chunk);
+        child.exit("modelsCode" in options ? (options.modelsCode ?? null) : 1);
+      });
     }
     return child;
   };
@@ -46,27 +67,66 @@ const make = (over: Partial<Parameters<typeof createFmServer>[0]> = {}) =>
   createFmServer({ pollMs: 1, healthTimeoutMs: 200, availableTimeoutMs: 200, ...over });
 
 describe("createFmServer: available", () => {
-  it("`fm available` が 0 で終わるなら true。結果は覚えて、2 回目は子プロセスを起動しない", async () => {
-    const { spawn, children } = fakeSpawn();
+  it("`✓ system` があれば、`✗ pcc` で終了コード 1 でも true。結果は覚えて、2 回目は子プロセスを起動しない", async () => {
+    const { spawn, children } = fakeSpawn({ modelsCode: 1 });
     const fm = make({ spawn, fetch: vi.fn() as unknown as typeof fetch });
     expect(await fm.available()).toBe(true);
     expect(await fm.available()).toBe(true);
     expect(children).toHaveLength(1);
     expect(children[0]?.command).toBe("fm");
-    expect(children[0]?.args).toEqual(["available"]);
   });
 
-  it("0 以外の終了、起動の失敗（fm がない）、例外はすべて false", async () => {
-    expect(await make({ spawn: fakeSpawn({ availableCode: 1 }).spawn }).available()).toBe(false);
-    expect(await make({ spawn: fakeSpawn({ availableCode: null }).spawn }).available()).toBe(false);
+  it("引数は `models` だけ（`available` や モデル名は渡さない）", async () => {
+    const { spawn, children } = fakeSpawn();
+    await make({ spawn }).available();
+    expect(children[0]?.args).toEqual(["models"]);
+  });
+
+  it("終了コードが 0 でも `✓ system` がなければ false。`✗ system` も false", async () => {
+    expect(
+      await make({ spawn: fakeSpawn({ modelsOut: MODELS_NG, modelsCode: 0 }).spawn }).available(),
+    ).toBe(false);
+    expect(
+      await make({ spawn: fakeSpawn({ modelsOut: [], modelsCode: 0 }).spawn }).available(),
+    ).toBe(false);
+    // 別のモデルだけが使える（system で始まる別名も system ではない）
+    const other = ["  ✓ pcc ()\n", "  ✓ systemx ()\n"];
+    expect(
+      await make({ spawn: fakeSpawn({ modelsOut: other, modelsCode: 0 }).spawn }).available(),
+    ).toBe(false);
+  });
+
+  it("ANSI の色つきの出力でも判定できる。チャンクが行の途中で切れても判定できる", async () => {
+    const colored = [
+      "\u001b[1m  Apple Foundation Models\u001b[0m\n",
+      "  \u001b[32m✓\u001b[0m \u001b[1msystem\u001b[0m ()\n",
+    ];
+    expect(await make({ spawn: fakeSpawn({ modelsOut: colored }).spawn }).available()).toBe(true);
+    const split = ["  Apple Foundation Models\n  ✓ sys", "tem ()\n  ✗ pcc (x)\n"];
+    expect(await make({ spawn: fakeSpawn({ modelsOut: split }).spawn }).available()).toBe(true);
+    const coloredNg = ["  \u001b[31m✗\u001b[0m system (x)\n"];
+    expect(await make({ spawn: fakeSpawn({ modelsOut: coloredNg }).spawn }).available()).toBe(
+      false,
+    );
+  });
+
+  it("モデル名は options.model で変えられる", async () => {
+    const out = ["  ✗ system ()\n", "  ✓ other ()\n"];
+    expect(
+      await make({ spawn: fakeSpawn({ modelsOut: out }).spawn, model: "other" }).available(),
+    ).toBe(true);
+  });
+
+  it("起動の失敗（fm がない、終了コード null）、例外はすべて false", async () => {
+    expect(await make({ spawn: fakeSpawn({ modelsCode: null }).spawn }).available()).toBe(false);
     expect(await make({ spawn: fakeSpawn({ spawnThrows: true }).spawn }).available()).toBe(false);
   });
 
-  it("終わらない `fm available` は時間切れで false にし、子プロセスを止める", async () => {
+  it("終わらない `fm models` は時間切れで false にし、子プロセスを止める", async () => {
     const { spawn, children } = fakeSpawn();
     const hang: FmSpawn = (command, args) => {
       const child = spawn(command, args);
-      return { onExit: () => {}, kill: () => child.kill() };
+      return { onExit: () => {}, onStdout: () => {}, kill: () => child.kill() };
     };
     const fm = make({ spawn: hang, availableTimeoutMs: 10 });
     expect(await fm.available()).toBe(false);
@@ -76,7 +136,7 @@ describe("createFmServer: available", () => {
 
 describe("createFmServer: ensureStarted", () => {
   it("使えなければ起動せず undefined", async () => {
-    const { spawn, serves } = fakeSpawn({ availableCode: 1 });
+    const { spawn, serves } = fakeSpawn({ modelsOut: MODELS_NG, modelsCode: 1 });
     const fm = make({ spawn, fetch: vi.fn() as unknown as typeof fetch });
     expect(await fm.ensureStarted()).toBeUndefined();
     expect(serves()).toHaveLength(0);
