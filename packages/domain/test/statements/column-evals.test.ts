@@ -25,8 +25,17 @@ function scripted(responses: Result<unknown>[]): ColumnSuggestionProvider & { pr
   };
 }
 
-const answer = (columns: Record<string, number | null>, amountSign: string | null = null) =>
-  ok({ columns, amountSign, confidence: 80, reason: "テスト" });
+/** 役割 → 列の番号（例は 4 列）を、AI の出力の形（列ごとに役割 1 つ）にして返す */
+const answer = (roles: Record<string, number>, amountSign: string | null = null) =>
+  ok({
+    columns: Array.from({ length: 4 }, (_, index) => ({
+      index,
+      role: Object.entries(roles).find(([, i]) => i === index)?.[0] ?? "none",
+    })),
+    amountSign,
+    confidence: 80,
+    reason: "テスト",
+  });
 
 const caseOf = (
   name: string,

@@ -663,18 +663,35 @@ describe("StatementImportPreview.unmappedAccounts（007）", () => {
 
 describe("AiColumnSuggestion（007/R10）", () => {
   const ok = {
-    columns: { date: 0, content: 1, amount: 2, memo: null },
+    columns: [
+      { index: 0, role: "date" },
+      { index: 1, role: "content" },
+      { index: 2, role: "amount" },
+      { index: 3, role: "none" },
+    ],
     amountSign: "outflow_positive",
     confidence: 80,
     reason: "見出しから判断",
   };
-  it("役割ごとの列の番号か null。amountSign は任意", () => {
+  it("列ごとに役割 1 つ（none 可）。amountSign は任意", () => {
     expect(AiColumnSuggestion.safeParse(ok).success).toBe(true);
     const { amountSign: _a, ...noSign } = ok;
     expect(AiColumnSuggestion.safeParse(noSign).success).toBe(true);
     expect(AiColumnSuggestion.safeParse({ ...ok, amountSign: null }).success).toBe(true);
-    expect(AiColumnSuggestion.safeParse({ ...ok, columns: { date: "A" } }).success).toBe(false);
-    expect(AiColumnSuggestion.safeParse({ ...ok, columns: { bogus: 1 } }).success).toBe(false);
+    expect(
+      AiColumnSuggestion.safeParse({ ...ok, columns: [{ index: "A", role: "date" }] }).success,
+    ).toBe(false);
+    expect(
+      AiColumnSuggestion.safeParse({ ...ok, columns: [{ index: -1, role: "date" }] }).success,
+    ).toBe(false);
+    expect(
+      AiColumnSuggestion.safeParse({ ...ok, columns: [{ index: 0, role: "bogus" }] }).success,
+    ).toBe(false);
+    expect(
+      AiColumnSuggestion.safeParse({ ...ok, columns: [{ index: 0, role: null }] }).success,
+    ).toBe(false);
+    // 旧い形（役割 → 列の番号）は通らない
+    expect(AiColumnSuggestion.safeParse({ ...ok, columns: { date: 0 } }).success).toBe(false);
     expect(AiColumnSuggestion.safeParse({ ...ok, amountSign: "bogus" }).success).toBe(false);
   });
   it("confidence は 0〜100 の整数、reason は 200 字以内", () => {

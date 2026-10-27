@@ -28,19 +28,12 @@ const CUSTOM =
 const DICT = "日付\t内容\t金額\n2026/10/01\tテスト商事\t100\n";
 
 const GOOD = {
-  columns: {
-    date: 0,
-    content: 1,
-    amount: 2,
-    outflow: null,
-    inflow: null,
-    accountName: null,
-    categoryMajor: null,
-    categoryMinor: null,
-    memo: null,
-    externalId: 3,
-    transferFlag: null,
-  },
+  columns: [
+    { index: 0, role: "date" },
+    { index: 1, role: "content" },
+    { index: 2, role: "amount" },
+    { index: 3, role: "externalId" },
+  ],
   amountSign: "inflow_positive",
   confidence: 77,
   reason: "見出しと値の形から",
@@ -183,8 +176,11 @@ describe("POST /statements/imports/column-suggestion", () => {
   it("形の誤り（JSON でない・列の番号が範囲外・必須の役割が足りない）は invalid", async () => {
     for (const content of [
       "これは JSON ではありません",
-      JSON.stringify({ ...GOOD, columns: { ...GOOD.columns, date: 9 } }),
-      JSON.stringify({ ...GOOD, columns: { ...GOOD.columns, amount: null } }),
+      JSON.stringify({ ...GOOD, columns: [...GOOD.columns, { index: 9, role: "memo" }] }),
+      JSON.stringify({
+        ...GOOD,
+        columns: GOOD.columns.map((c) => (c.role === "amount" ? { ...c, role: "none" } : c)),
+      }),
     ]) {
       const t = await setup({ reply: async () => completion(content) });
       expect((await t.suggest(CUSTOM)).body).toEqual({ suggestion: null, unavailable: "invalid" });

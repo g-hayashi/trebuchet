@@ -14,9 +14,17 @@ export const AiSuggestion = z.object({
 });
 export type AiSuggestion = z.infer<typeof AiSuggestion>;
 
-/** 端末内の AI による列の対応の案（007/R10）。範囲・重複・必須の役割はドメインの `parseColumnSuggestion` が検査する */
+/**
+ * 端末内の AI による列の対応の案（007/R10）。列ごとに役割を 1 つ（役割に当たらない列は `none`）。
+ * 範囲・重複・必須の役割はドメインの `parseColumnSuggestion` が検査する
+ */
 export const AiColumnSuggestion = z.object({
-  columns: z.partialRecord(StatementColumnRole, z.number().int().min(0).nullable()),
+  columns: z.array(
+    z.object({
+      index: z.number().int().min(0),
+      role: z.union([StatementColumnRole, z.literal("none")]),
+    }),
+  ),
   amountSign: StatementAmountSign.nullable().optional(),
   confidence: z.number().int().min(0).max(100),
   reason: z.string().max(200),
