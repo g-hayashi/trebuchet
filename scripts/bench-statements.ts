@@ -1,14 +1,15 @@
 /**
- * SC-006（006）のベンチマーク: 合成の 500 件の明細を貼り付けてから、確認画面（プレビュー）と候補の一覧が
- * 表示されるまでが 5 秒以内か（AI による推定の時間を除く。AI（fm・外部）は呼ばない）。
- * 画面が呼ぶ順（プレビュー → 確定 → 候補を作る → 明細の一覧）に API を呼び、その合計を測る。
+ * SC-006（007）のベンチマーク: 合成の 500 件の明細の CSV（UTF-8、カンマ区切り、出金・入金の 2 列）を選んでから、
+ * 確認画面（プレビュー）が表示されるまでが 5 秒以内か（AI による列の案の時間を除く。AI（fm・外部）は呼ばない）。
+ * 画面が呼ぶ順（layout → preview → 確定 → 候補を作る → 明細の一覧）に multipart で API を呼ぶ。
+ * 判定は layout + preview の合計（SC-006）。確定・候補・一覧は参考として測る（006 の SC-006 の区間）。
  * 1 回ごとに新しい事業体を作る（確定は繰り返せないため）。事業体には、候補の突き合わせ（match）と
  * ルール（rule）が働くように、既存の仕訳 100 件とそこから作ったルールを用意する（準備の時間は測らない）。
- * 貼り付けのテキストは合成で、`work/`・`data/` は読まない。`.tmp/bench-<uuid>/` に一時的なテナントを作り、終了時に削除する。
+ * CSV は合成で、`work/`・`data/` は読まない。`.tmp/bench-<uuid>/` に一時的なテナントを作り、終了時に削除する。
  *
  *   pnpm bench:statements
  *   BENCH_STATEMENTS_LIMIT_MS=2000 BENCH_STATEMENTS_RUNS=5 pnpm bench:statements   # しきい値（既定 5000）・回数（既定 3）
- *   BENCH_STATEMENTS=1000 pnpm bench:statements                                    # 貼り付ける件数（既定 500）
+ *   BENCH_STATEMENTS=1000 pnpm bench:statements                                    # CSV の件数（既定 500）
  *
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む（bench-reports.ts と同じ）。
  */
@@ -26,6 +27,23 @@ const JOURNALS = 100;
 const BANK = "サンプル銀行";
 const CARD = "テストカードA";
 const CASH = "テスト現金";
+
+/** 列の対応（CSV の列の並びと合わせる。見出しは `csvText` の `header`） */
+const MAPPING = {
+  delimiter: ",",
+  headerRow: 0,
+  columns: {
+    date: 0,
+    content: 1,
+    outflow: 2,
+    inflow: 3,
+    accountName: 4,
+    categoryMajor: 5,
+    categoryMinor: 6,
+    memo: 7,
+    transferFlag: 8,
+  },
+} as const;
 
 // TREBUCHET_DATA_DIR を設定してから app を読み込む
 const tmp = useTempDataDir("bench");
@@ -48,6 +66,11 @@ await runBench(
       return app.request(`/api${path}`, init);
     }
 
+    /** multipart（`file` と `options` の JSON）。Content-Type は境界つきで fetch が付ける */
+    async function callForm(path: string, form: FormData): Promise<Response> {
+      return app.request(`/api${path}`, { method: "POST", headers: authHeaders, body: form });
+    }
+
     async function json<T>(res: Response, expected: number, what: string): Promise<T> {
       if (res.status !== expected) {
         throw new Error(`${what} が失敗しました: ${res.status} ${await res.text()}`);
@@ -57,14 +80,12 @@ await runBench(
 
     /** 応答を JSON として読み終えるまでの時間（ミリ秒）と本文 */
     async function timed<T>(
-      method: string,
-      path: string,
       expected: number,
       what: string,
-      body?: unknown,
+      send: () => Promise<Response>,
     ): Promise<{ ms: number; value: T }> {
       const start = performance.now();
-      const res = await call(method, path, body);
+      const res = await send();
       const value = await json<T>(res, expected, what);
       return { ms: performance.now() - start, value };
     }
@@ -77,17 +98,18 @@ await runBench(
     const amountOf = (i: number): number => 1_000 + ((i * 7_919) % 90_000) + i;
     const shopOf = (i: number): string => `ショップ${String((i % 20) + 1).padStart(3, "0")}`;
 
-    /** `MM/DD(曜)` 形式の日付（曜日は読み取りに使われない） */
-    const pasteDate = (date: string): string => `${date.slice(5, 7)}/${date.slice(8, 10)}(月)`;
     const yen = (n: number): string => n.toLocaleString("en-US");
+    /** 全項目をクォートする（フィクスチャと同じ。金額のカンマが区切りに読まれない） */
+    const quoted = (cells: string[]): string =>
+      cells.map((c) => `"${c.replaceAll('"', '""')}"`).join(",");
 
-    /** 貼り付けのテキスト（見出しつき・タブ区切り。3 口座、入金・出金・カード・振替の印を混ぜる） */
-    function pasteText(): string {
+    /** CSV（UTF-8、見出しつき、出金・入金の 2 列。3 口座、入金・出金・カード・振替の印を混ぜる） */
+    function csvText(): string {
       const header = [
-        "計算対象",
         "日付",
         "内容",
-        "金額（円）",
+        "出金額",
+        "入金額",
         "保有金融機関",
         "大項目",
         "中項目",
@@ -96,17 +118,17 @@ await runBench(
       ];
       const rows: string[][] = [header];
       for (let i = 0; i < STATEMENTS; i++) {
-        const date = pasteDate(dayOf(i));
+        const date = dayOf(i).replaceAll("-", "/");
         const n = amountOf(i);
         let row: string[];
         if (i < JOURNALS) {
           // 既存の仕訳（普通預金からの支払）と同じ日付・金額
-          row = ["1", date, shopOf(i), `-${yen(n)}`, BANK, "日用品", "消耗品費", "", "0"];
+          row = [date, shopOf(i), yen(n), "", BANK, "日用品", "消耗品費", "", "0"];
         } else if (i % 10 === 0) {
           row = [
-            "1",
             date,
             `売上入金 取引先${(i % 7) + 1}`,
+            "",
             yen(n * 3),
             BANK,
             "収入",
@@ -115,33 +137,37 @@ await runBench(
             "0",
           ];
         } else if (i % 10 === 1) {
-          row = [
-            "1",
-            date,
-            `ATM 引出 ${i}`,
-            `-${yen(n)}`,
-            BANK,
-            "現金・カード",
-            "ATM引き出し",
-            "",
-            "1",
-          ];
+          row = [date, `ATM 引出 ${i}`, yen(n), "", BANK, "現金・カード", "ATM引き出し", "", "1"];
         } else if (i % 10 === 2) {
-          row = ["1", date, `ATM 引出 ${i}`, yen(n), CASH, "現金・カード", "ATM引き出し", "", "1"];
+          row = [date, `ATM 引出 ${i}`, "", yen(n), CASH, "現金・カード", "ATM引き出し", "", "1"];
         } else if (i % 2 === 0) {
-          row = ["1", date, `${shopOf(i)} ${i}`, `-${yen(n)}`, CARD, "食費", "食料品", "", "0"];
+          row = [date, `${shopOf(i)} ${i}`, yen(n), "", CARD, "食費", "食料品", "", "0"];
         } else {
-          row = ["1", date, `${shopOf(i)} ${i}`, `-${yen(n)}`, CASH, "日用品", "雑貨", "メモ", "0"];
+          row = [date, `${shopOf(i)} ${i}`, yen(n), "", CASH, "日用品", "雑貨", "メモ", "0"];
         }
         rows.push(row);
       }
-      return `${rows.map((r) => r.join("\t")).join("\n")}\n`;
+      return `${rows.map(quoted).join("\n")}\n`;
     }
-    const text = pasteText();
+    const csv = csvText();
 
-    type Sample = { preview: number; commit: number; candidates: number; list: number };
+    /** multipart の本体（実際の画面と同じく、毎回新しい File を作る） */
+    const form = (options: unknown): FormData => {
+      const body = new FormData();
+      body.append("file", new File([csv], "statement.csv", { type: "text/csv" }));
+      body.append("options", JSON.stringify(options));
+      return body;
+    };
 
-    /** 事業体と準備（口座の対応・既存の仕訳・ルール）を作り、貼り付けから一覧までを測る */
+    type Sample = {
+      layout: number;
+      preview: number;
+      commit: number;
+      candidates: number;
+      list: number;
+    };
+
+    /** 事業体と準備（口座の対応・既存の仕訳・ルール）を作り、ファイルの選択から一覧までを測る */
     async function runOnce(label: string): Promise<Sample> {
       const { entity } = await json<{ entity: { id: string } }>(
         await call("POST", "/entities", {
@@ -213,44 +239,65 @@ await runBench(
       }
       await json(await call("POST", `${base}/inference-rules/seed`, {}), 200, "ルールの初期作成");
 
-      // ここから測る（画面の順: プレビュー → 確定 → 候補を作る → 明細の一覧）
-      const source = { kind: "paste", text, year: FISCAL_YEAR };
+      // ここから測る（画面の順: layout → preview → 確定 → 候補を作る → 明細の一覧）
+      const layout = await timed<{
+        encoding: "utf-8" | "shift_jis";
+        columnCount: number;
+        rowCount: number;
+        suggestedColumns: Record<string, number | undefined>;
+      }>(200, "layout", () =>
+        callForm(`${base}/statements/imports/layout`, form({ origin: "file" })),
+      );
+      if (layout.value.rowCount !== STATEMENTS) {
+        throw new Error(
+          `layout の行数が想定と違います: ${layout.value.rowCount}（想定 ${STATEMENTS}）`,
+        );
+      }
+      // 画面と同じく、辞書の案で必須の列がそろうこと（そろわなければ利用者が列を選ぶ手間が増える）
+      for (const role of ["date", "content", "outflow", "inflow"] as const) {
+        if (layout.value.suggestedColumns[role] !== MAPPING.columns[role]) {
+          throw new Error(
+            `layout の列の案が想定と違います: ${role} は ${layout.value.suggestedColumns[role]}（想定 ${MAPPING.columns[role]}）`,
+          );
+        }
+      }
+
+      const common = {
+        origin: "file",
+        year: FISCAL_YEAR,
+        mapping: MAPPING,
+        encoding: layout.value.encoding,
+      };
       const preview = await timed<{
         inputSha256: string;
         countNew: number;
-        unmappedAccounts: string[];
+        unmappedAccounts: unknown[];
         unreadable: unknown[];
-      }>("POST", `${base}/statements/imports/preview`, 200, "プレビュー", { source });
+      }>(200, "プレビュー", () => callForm(`${base}/statements/imports/preview`, form(common)));
       if (preview.value.countNew !== STATEMENTS || preview.value.unmappedAccounts.length > 0) {
         throw new Error(
           `プレビューが想定と違います: 新規 ${preview.value.countNew} 件（想定 ${STATEMENTS}）、未対応の口座 ${preview.value.unmappedAccounts.length}、読めない行 ${preview.value.unreadable.length}`,
         );
       }
-      const commit = await timed<{ added: number }>(
-        "POST",
-        `${base}/statements/imports`,
-        201,
-        "確定",
-        {
-          source,
-          expected: { inputSha256: preview.value.inputSha256, countNew: preview.value.countNew },
-        },
+      const commit = await timed<{ batch: unknown; added: number }>(201, "確定", () =>
+        callForm(
+          `${base}/statements/imports`,
+          form({
+            ...common,
+            expected: { inputSha256: preview.value.inputSha256, countNew: preview.value.countNew },
+            accounts: [],
+            saveSource: null,
+          }),
+        ),
       );
       if (commit.value.added !== STATEMENTS) {
         throw new Error(`取込の件数が想定と違います: ${commit.value.added}（想定 ${STATEMENTS}）`);
       }
-      const candidates = await timed(
-        "POST",
-        `${base}/statements/candidates`,
-        200,
-        "候補を作る",
-        {},
+      const candidates = await timed(200, "候補を作る", () =>
+        call("POST", `${base}/statements/candidates`, {}),
       );
-      const list = await timed<{ statements: unknown[] }>(
-        "GET",
-        `${base}/statements?status=unprocessed`,
-        200,
-        "明細の一覧",
+      const list = await timed<{ statements: unknown[] }>(200, "明細の一覧", () =>
+        call("GET", `${base}/statements?status=unprocessed`),
       );
       if (list.value.statements.length !== STATEMENTS) {
         throw new Error(
@@ -258,6 +305,7 @@ await runBench(
         );
       }
       return {
+        layout: layout.ms,
         preview: preview.ms,
         commit: commit.ms,
         candidates: candidates.ms,
@@ -266,46 +314,50 @@ await runBench(
     }
 
     console.log(
-      `明細 ${STATEMENTS} 件（既存の仕訳 ${JOURNALS} 件、${FISCAL_YEAR} 年度）を ${RUNS} 回測ります`,
+      `CSV ${STATEMENTS} 件（既存の仕訳 ${JOURNALS} 件、${FISCAL_YEAR} 年度）を ${RUNS} 回測ります`,
     );
     const samples: Sample[] = [];
     for (let i = 0; i < RUNS; i++) samples.push(await runOnce(String(i + 1)));
 
-    const total = (s: Sample): number => s.preview + s.commit + s.candidates + s.list;
+    /** SC-006: ファイルを選んでから確認画面まで */
+    const toPreview = (s: Sample): number => s.layout + s.preview;
+    const total = (s: Sample): number => toPreview(s) + s.commit + s.candidates + s.list;
     const stat = (pick: (s: Sample) => number) => {
       const values = samples.map(pick).sort((a, b) => a - b);
       const median = values[Math.floor(values.length / 2)] ?? Number.NaN;
       const max = values[values.length - 1] ?? Number.NaN;
       return { median: Number(median.toFixed(1)), max: Number(max.toFixed(1)) };
     };
-    const parts: [name: string, pick: (s: Sample) => number][] = [
-      ["preview", (s) => s.preview],
-      ["commit", (s) => s.commit],
-      ["build candidates", (s) => s.candidates],
-      ["list statements", (s) => s.list],
-      ["total (paste to list)", total],
+    const parts: [name: string, pick: (s: Sample) => number, judged: boolean][] = [
+      ["layout", (s) => s.layout, false],
+      ["preview", (s) => s.preview, false],
+      ["layout + preview (SC-006)", toPreview, true],
+      ["commit", (s) => s.commit, false],
+      ["build candidates", (s) => s.candidates, false],
+      ["list statements", (s) => s.list, false],
+      ["total (layout to list)", total, false],
     ];
     console.table(
-      parts.map(([name, pick]) => {
+      parts.map(([name, pick, judged]) => {
         const { median, max } = stat(pick);
         return {
           step: name,
           "median (ms)": median,
           "max (ms)": max,
-          result: name.startsWith("total") ? (max <= LIMIT_MS ? "OK" : "NG") : "-",
+          result: judged ? (max <= LIMIT_MS ? "OK" : "NG") : "-",
         };
       }),
     );
 
-    const worst = stat(total).max;
+    const worst = stat(toPreview).max;
     if (worst > LIMIT_MS) {
       console.error(
-        `SC-006 を満たしません: 貼り付けから候補の一覧まで ${worst} ms（しきい値 ${LIMIT_MS} ms）`,
+        `SC-006 を満たしません: ファイルを選んでから確認画面まで ${worst} ms（しきい値 ${LIMIT_MS} ms）`,
       );
       return false;
     }
     console.log(
-      `SC-006 OK: 明細 ${STATEMENTS} 件の貼り付けから候補の一覧まで ${LIMIT_MS} ms 以内（${RUNS} 回の最大値 ${worst} ms）`,
+      `SC-006 OK: 明細 ${STATEMENTS} 件の CSV を選んでから確認画面まで ${LIMIT_MS} ms 以内（${RUNS} 回の最大値 ${worst} ms。全区間の最大 ${stat(total).max} ms）`,
     );
     return true;
   },
