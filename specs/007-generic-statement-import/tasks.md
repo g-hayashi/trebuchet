@@ -108,7 +108,7 @@ description: "Task list for 007-generic-statement-import"
 
 - [X] T019 文書: `AGENTS.md` に「汎用の明細取込（007）」の節（層と場所の表、値の読み取りはプログラムだけ、列の案は端末内だけ、辞書・語の表の足し方、フィクスチャ、プロンプトなどを変えるときは `pnpm eval:columns` の前後を比べる）とコマンドの表に `pnpm eval:columns`と、006 の節の `paste.ts` の記述を直す。ADR `docs/adr/0010-generic-statement-import.md`（列の対応の保存と当てはめ、AI を列の案だけに使う理由）。`docs/requirements.md` の該当の要件の状態。006 の `spec.md` の FR-001（ファイルは対象外）に 007 で置き換えた注記
 - [X] T020 最終の全体検証（メイン）: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`、`pnpm bench:statements`。結果はファイルに書き出し、終了コードで確かめる
-- [ ] T021 利用者の端末での確認（quickstart §2）: E2E（`pnpm --filter @trebuchet/web e2e`）と手順 1〜5。実データでの確認は件数と一致・不一致だけを記録し、値・口座名・摘要を書かない
+- [X] T021 利用者の端末での確認（quickstart §2）: E2E（`pnpm --filter @trebuchet/web e2e`）と手順 1〜5。実データでの確認は件数と一致・不一致だけを記録し、値・口座名・摘要を書かない
 
 ---
 
