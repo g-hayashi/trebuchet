@@ -6,7 +6,7 @@
  * CI では実行しない（AI を呼ぶ）。`fm` が使えなければ（Apple Intelligence が無効など）何も書かずに終了コード 1 で終わる。
  *
  *   pnpm eval:columns
- *   TREBUCHET_FM_PORT=18791 pnpm eval:columns   # `fm serve` のポート（既定 18790。server と同じ）
+ *   TREBUCHET_FM_PORT=18792 pnpm eval:columns   # `fm serve` のポート（既定 18791。server の 18790 と分け、`pnpm dev` 中でも衝突しない）
  *
  * `fm serve` は評価の間だけ起動し、終了時に必ず止める。実データ（`work/`・`data/`）は読まない。
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む（bench-statements.ts と同じ）。
@@ -85,7 +85,7 @@ function report(current: SavedEval, previous: SavedEval | undefined): void {
   console.log(previous === undefined ? "  前回の結果: なし" : `  前回の結果: ${previous.at}`);
 }
 
-const fm = createFmServer({ port: positiveNumber("TREBUCHET_FM_PORT", 18790) });
+const fm = createFmServer({ port: positiveNumber("TREBUCHET_FM_PORT", 18791) });
 try {
   if (!(await fm.available())) {
     console.error("端末内の AI（fm）が使えません。結果は残しません");
