@@ -1,13 +1,22 @@
+import { createHash } from "node:crypto";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
+import type { StatementColumnMapping } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { BANK_TWO_COLUMNS } from "../../../packages/domain/test/fixtures/statements/expected.ts";
 import { errorOf } from "./helpers.ts";
 import {
   createInvoicingTestContext,
   type InvoicingTestContext,
   okBody,
 } from "./invoicing-helpers.ts";
+import {
+  readStatementFixture,
+  SIMPLE_HEADER,
+  SIMPLE_MAPPING,
+  statementForm,
+} from "./statements-helpers.ts";
 
-// 006 US1: contracts/http-api.md §2・§3.1〜§3.3。貼り付けのプレビュー → 確定 → 再取込
+// 006 US1・007 US1: contracts/http-api.md §2。multipart（file と options）の layout・preview・確定 → 再取込
 
 let tmp: TempDataDir;
 let ctx: InvoicingTestContext;
@@ -21,17 +30,44 @@ afterEach(() => tmp.cleanup());
 const accounts = () => ctx.e["statement-accounts"];
 const imports = () => ctx.e.statements.imports;
 
-const HEADER = ["日付", "内容", "金額（円）", "保有金融機関", "メモ", "振替"].join("\t");
 const line = (...cells: (string | number)[]) => cells.join("\t");
 const TEXT = [
-  HEADER,
+  SIMPLE_HEADER,
   line("05/10(日)", "ショップ001", "-1,200", "サンプル銀行", "", 0),
   line("05/10(日)", "ショップ001", "-1,200", "サンプル銀行", "", 0),
   line("05/11(月)", "売上入金", "3,000", "サンプル銀行", "メモ", 0),
   line("合計"),
 ].join("\n");
 
-const paste = (text = TEXT, year = 2026) => ({ kind: "paste" as const, text, year });
+/** 見出しの下の行がすべて読めない（日付が日付でない）テキスト */
+const UNREADABLE = [
+  SIMPLE_HEADER,
+  line("あ", "い", "う", "え", "", 0),
+  line("か", "き", "く", "け", "", 0),
+].join("\n");
+
+/** 取込の入力（ファイルのバイト列または文字列と、options の JSON になる値） */
+type Input = { file: string | Uint8Array<ArrayBuffer>; options: Record<string, unknown> };
+
+const paste = (
+  text = TEXT,
+  year = 2026,
+  mapping: StatementColumnMapping = SIMPLE_MAPPING,
+  over: Record<string, unknown> = {},
+): Input => ({ file: text, options: { origin: "paste", year, mapping, ...over } });
+
+/** 口座名の列のない銀行の CSV（CP932 の `bank-two-columns.csv`、UTF-8 の `.utf8.csv`）。口座名は固定 */
+const FIXED = "テスト銀行";
+const bankCsv = (name = "bank-two-columns.csv", over: Record<string, unknown> = {}): Input => ({
+  file: readStatementFixture(name),
+  options: {
+    origin: "file",
+    year: 2026,
+    mapping: BANK_TWO_COLUMNS.mapping,
+    fixedAccountName: FIXED,
+    ...over,
+  },
+});
 
 const mapBank = async (name = "サンプル銀行") => {
   const res = await accounts()[":name"].$put({
@@ -42,14 +78,29 @@ const mapBank = async (name = "サンプル銀行") => {
   return okBody(res);
 };
 
-const preview = (source = paste()) =>
-  imports().preview.$post({ param: ctx.param, json: { source } });
+const param = () => ctx.param;
+const init = (file: Input["file"] | undefined, options: unknown) => ({
+  init: { body: statementForm(file, options) },
+});
 
-const commit = (source: ReturnType<typeof paste>, inputSha256: string, countNew: number) =>
-  imports().$post({
-    param: ctx.param,
-    json: { source, expected: { inputSha256, countNew } },
-  });
+const layout = (input: Input, options: Record<string, unknown> = {}) =>
+  imports().layout.$post(
+    { param: param() },
+    init(input.file, { origin: input.options.origin, ...options }),
+  );
+const preview = (input = paste()) =>
+  imports().preview.$post({ param: param() }, init(input.file, input.options));
+const commit = (input: Input, inputSha256: string, countNew: number, over = {}) =>
+  imports().$post(
+    { param: param() },
+    init(input.file, {
+      ...input.options,
+      expected: { inputSha256, countNew },
+      accounts: [],
+      saveSource: null,
+      ...over,
+    }),
+  );
 
 describe("取込元の口座（§2）", () => {
   it("GET は空から始まり、PUT で用途・種類・科目を保存すると一覧に出る（rebuilt は 0）", async () => {
@@ -96,7 +147,90 @@ describe("取込元の口座（§2）", () => {
   });
 });
 
-describe("取込のプレビュー（§3.1）", () => {
+describe("表の判定（§2.1 layout）", () => {
+  it("タブ区切りの貼り付け: 区切り・見出しの行・見出し・見本・文字コード・取込元の照合なし", async () => {
+    const res = await layout(paste());
+    expect(res.status).toBe(200);
+    const body = await okBody(res);
+    expect(body).toMatchObject({
+      encoding: "utf-8",
+      delimiter: "\t",
+      headerRow: 0,
+      header: ["日付", "内容", "金額（円）", "保有金融機関", "メモ", "振替"],
+      columnCount: 6,
+      needsYear: true,
+      match: { kind: "none" },
+    });
+    expect(body.rowCount).toBeGreaterThanOrEqual(3);
+    expect(body.sampleRows.length).toBeGreaterThanOrEqual(3);
+    expect(body.sampleRows.length).toBeLessThanOrEqual(10);
+    expect(body.suggestedColumns).toMatchObject({ date: 0, content: 1, amount: 2 });
+  });
+
+  it("CP932 の CSV は自動で shift_jis と判定し、前置きの後の見出しの行を見つける", async () => {
+    const body = await okBody(await layout(bankCsv()));
+    expect(body.encoding).toBe("shift_jis");
+    expect(body.delimiter).toBe(",");
+    expect(body.headerRow).toBe(BANK_TWO_COLUMNS.mapping.headerRow);
+    expect(body.header).toEqual(["取引日", "摘要", "出金額", "入金額", "残高"]);
+    expect(body.needsYear).toBe(false);
+  });
+
+  it("UTF-8 の同じ CSV は utf-8。options.encoding を指定すると自動の判定を使わない", async () => {
+    const utf8 = await okBody(await layout(bankCsv("bank-two-columns.utf8.csv")));
+    expect(utf8.encoding).toBe("utf-8");
+    expect(utf8.header).toEqual(["取引日", "摘要", "出金額", "入金額", "残高"]);
+
+    const wrong = await layout(bankCsv("bank-two-columns.utf8.csv"), { encoding: "shift_jis" });
+    if (wrong.status === 200) {
+      const body = await okBody(wrong);
+      expect(body.encoding).toBe("shift_jis");
+      expect(body.header).not.toEqual(utf8.header);
+    } else {
+      expect(wrong.status).toBe(422);
+    }
+
+    const same = await okBody(await layout(bankCsv(), { encoding: "shift_jis" }));
+    expect(same.encoding).toBe("shift_jis");
+    expect(same.header).toEqual(utf8.header);
+  });
+
+  it("options.headerRow に null を指定すると見出しなし（header は null）", async () => {
+    const body = await okBody(await layout(bankCsv(), { headerRow: null }));
+    expect(body.headerRow).toBeNull();
+    expect(body.header).toBeNull();
+  });
+
+  it("読めない・空の入力は 422 STATEMENT_TABLE_UNREADABLE", async () => {
+    const res = await layout(paste(""));
+    expect(res.status).toBe(422);
+    expect((await errorOf(res)).code).toBe("STATEMENT_TABLE_UNREADABLE");
+  });
+
+  it("options が壊れていれば 400 VALIDATION（JSON でない・origin がない・file がない）", async () => {
+    const post = (file: string | undefined, options: unknown) =>
+      imports().layout.$post({ param: param() }, init(file, options));
+    for (const res of [
+      await post("a\tb", "{not json"),
+      await post("a\tb", { delimiter: "\t" }),
+      await post("a\tb", { origin: "file", delimiter: "|" }),
+      await post("a\tb", undefined),
+      await post(undefined, { origin: "paste" }),
+    ]) {
+      expect(res.status).toBe(400);
+      expect((await errorOf(res)).code).toBe("VALIDATION");
+    }
+  });
+
+  it("5 MB を超えるファイルは 413 FILE_TOO_LARGE", async () => {
+    const big = new Uint8Array(5 * 1024 * 1024 + 1).fill(0x61);
+    const res = await layout({ file: big, options: { origin: "file" } });
+    expect(res.status).toBe(413);
+    expect((await errorOf(res)).code).toBe("FILE_TOO_LARGE");
+  });
+});
+
+describe("取込のプレビュー（§2.2）", () => {
   it("件数・期間・合計・未対応の口座・読めない行を返す。何も保存しない", async () => {
     const res = await preview();
     expect(res.status).toBe(200);
@@ -106,7 +240,8 @@ describe("取込のプレビュー（§3.1）", () => {
     expect(body.period).toEqual({ from: "2026-05-10", to: "2026-05-11" });
     expect(body.totals).toEqual({ inflow: 3000, outflow: 2400 });
     expect(body.unmappedAccounts).toEqual([{ name: "サンプル銀行", suggestion: null }]);
-    expect(body.unreadable).toEqual([{ line: 5, reason: "列が足りません" }]);
+    expect(body.unreadable).toHaveLength(1);
+    expect(body.unreadable[0]?.line).toBe(5);
     expect(body.rows.map((r) => [r.status, r.key])).toEqual([
       ["new", "サンプル銀行|2026-05-10|-1200|ショップ#|0"],
       ["new", "サンプル銀行|2026-05-10|-1200|ショップ#|1"],
@@ -116,47 +251,143 @@ describe("取込のプレビュー（§3.1）", () => {
     expect(batches.batches).toEqual([]);
   });
 
-  it("入力のハッシュは、貼り付けのテキストと年から決まる", async () => {
+  it("CP932 の CSV（銀行・出金と入金の 2 列）の件数と合計が expected と一致する", async () => {
+    const body = await okBody(await preview(bankCsv()));
+    expect(body.countNew).toBe(BANK_TWO_COLUMNS.rowCount);
+    expect(body.totals).toEqual({
+      inflow: BANK_TWO_COLUMNS.inflowTotal,
+      outflow: BANK_TWO_COLUMNS.outflowTotal,
+    });
+    expect(body.unmappedAccounts.map((a) => a.name)).toEqual([FIXED]);
+  });
+
+  it("options.encoding の指定: 正しければ自動と同じ結果。UTF-8 の同じ内容でも同じ入力のハッシュ", async () => {
+    const auto = await okBody(await preview(bankCsv()));
+    const sjis = await okBody(
+      await preview(bankCsv("bank-two-columns.csv", { encoding: "shift_jis" })),
+    );
+    const utf8 = await okBody(await preview(bankCsv("bank-two-columns.utf8.csv")));
+    expect(sjis.inputSha256).toBe(auto.inputSha256);
+    expect(utf8.inputSha256).toBe(auto.inputSha256);
+    expect(utf8.countNew).toBe(auto.countNew);
+  });
+
+  it("文字コードを誤って指定すると文字が変わる（入力のハッシュが変わり、摘要が文字化けする）", async () => {
+    const auto = await okBody(await preview(bankCsv()));
+    const wrong = await preview(bankCsv("bank-two-columns.csv", { encoding: "utf-8" }));
+    if (wrong.status === 200) {
+      const body = await okBody(wrong);
+      expect(body.inputSha256).not.toBe(auto.inputSha256);
+      expect(body.rows.map((r) => r.content)).not.toEqual(auto.rows.map((r) => r.content));
+    } else {
+      expect(wrong.status).toBe(422);
+    }
+  });
+
+  it("入力のハッシュは、テキスト・年・対応・口座名の固定から決まる（R11）", async () => {
     const a = await okBody(await preview());
     const same = await okBody(await preview());
     const otherYear = await okBody(await preview(paste(TEXT, 2025)));
-    const otherText = await okBody(await preview(paste(`${TEXT}\n`.replace("3,000", "3,001"))));
+    const otherText = await okBody(await preview(paste(TEXT.replace("3,000", "3,001"))));
+    const noMemo = await okBody(
+      await preview(
+        paste(TEXT, 2026, {
+          ...SIMPLE_MAPPING,
+          columns: { date: 0, content: 1, amount: 2, accountName: 3, transferFlag: 5 },
+        }),
+      ),
+    );
     expect(same.inputSha256).toBe(a.inputSha256);
     expect(otherYear.inputSha256).not.toBe(a.inputSha256);
     expect(otherText.inputSha256).not.toBe(a.inputSha256);
+    expect(noMemo.inputSha256).not.toBe(a.inputSha256);
+
+    const fixedA = await okBody(await preview(bankCsv()));
+    const fixedB = await okBody(
+      await preview(bankCsv("bank-two-columns.csv", { fixedAccountName: "別の銀行" })),
+    );
+    expect(fixedB.inputSha256).not.toBe(fixedA.inputSha256);
   });
 
-  it("読めない貼り付けは 422 STATEMENT_PASTE_UNREADABLE（details.unreadable）", async () => {
-    const res = await preview(paste("あいうえお\nかきくけこ"));
+  it("入力のハッシュは options の JSON のキーの順に依らない。形は text・year・mapping・fixedAccountName の正規の JSON", async () => {
+    const reordered = {
+      mapping: {
+        amountSign: "inflow_positive",
+        columns: { transferFlag: 5, memo: 4, accountName: 3, amount: 2, content: 1, date: 0 },
+        headerRow: 0,
+        delimiter: "\t",
+      },
+      year: 2026,
+      origin: "paste",
+    };
+    const a = await okBody(await preview());
+    const res = await imports().preview.$post({ param: param() }, init(TEXT, reordered));
+    expect((await okBody(res)).inputSha256).toBe(a.inputSha256);
+
+    const canonical = JSON.stringify({
+      text: TEXT,
+      year: 2026,
+      mapping: {
+        delimiter: "\t",
+        headerRow: 0,
+        columns: { accountName: 3, amount: 2, content: 1, date: 0, memo: 4, transferFlag: 5 },
+        amountSign: "inflow_positive",
+      },
+      fixedAccountName: null,
+    });
+    expect(a.inputSha256).toBe(createHash("sha256").update(canonical).digest("hex"));
+  });
+
+  it("読めないテキストは 422 STATEMENT_TABLE_UNREADABLE（details.unreadable）", async () => {
+    const res = await preview(paste(UNREADABLE));
     expect(res.status).toBe(422);
     const e = await errorOf(res);
-    expect(e.code).toBe("STATEMENT_PASTE_UNREADABLE");
-    expect(e.details).toMatchObject({ unreadable: [{ line: 1 }, { line: 2 }] });
+    expect(e.code).toBe("STATEMENT_TABLE_UNREADABLE");
+    expect(e.details).toMatchObject({ unreadable: [{ line: 2 }, { line: 3 }] });
   });
 
-  it("必須の列が欠ければ 422（details.missingColumns）", async () => {
-    const res = await preview(paste(["日付\t内容\t保有金融機関", "05/10(日)\tA\tB"].join("\n")));
+  it("列の番号が表の列数を超えれば 422 STATEMENT_MAPPING_INVALID", async () => {
+    const res = await preview(
+      paste(TEXT, 2026, {
+        ...SIMPLE_MAPPING,
+        columns: { date: 0, content: 1, amount: 6, accountName: 3 },
+      }),
+    );
     expect(res.status).toBe(422);
-    expect((await errorOf(res)).details).toMatchObject({ missingColumns: ["金額（円）"] });
+    expect((await errorOf(res)).code).toBe("STATEMENT_MAPPING_INVALID");
   });
 
-  it("入力の形が違えば 400 VALIDATION（貼り付けが空・取り込み元の種類が違う）", async () => {
-    const empty = await imports().preview.$post({
-      param: ctx.param,
-      json: { source: { kind: "paste", text: "", year: 2026 } },
-    });
-    expect(empty.status).toBe(400);
-    const unknownKind = await imports().preview.$post({
-      param: ctx.param,
-      json: {
-        source: { kind: "mfme_fetch", jobId: "00000000-0000-7000-8000-000000000001" },
-      } as never,
-    });
-    expect(unknownKind.status).toBe(400);
+  it("口座名の列も固定の口座名もなければ 422 STATEMENT_MAPPING_INVALID（INV-50）", async () => {
+    const res = await preview(bankCsv("bank-two-columns.csv", { fixedAccountName: undefined }));
+    expect(res.status).toBe(422);
+    expect((await errorOf(res)).code).toBe("STATEMENT_MAPPING_INVALID");
+  });
+
+  it("options が壊れていれば 400 VALIDATION（JSON でない・対応が検証を通らない・year がない・file がない）", async () => {
+    const post = (file: string | undefined, options: unknown) =>
+      imports().preview.$post({ param: param() }, init(file, options));
+    const noAmount = { ...SIMPLE_MAPPING, columns: { date: 0, content: 1 } };
+    for (const res of [
+      await post(TEXT, "{not json"),
+      await post(TEXT, { origin: "paste", mapping: SIMPLE_MAPPING }),
+      await post(TEXT, { origin: "paste", year: 2026, mapping: noAmount }),
+      await post(TEXT, undefined),
+      await post(undefined, { origin: "paste", year: 2026, mapping: SIMPLE_MAPPING }),
+    ]) {
+      expect(res.status).toBe(400);
+      expect((await errorOf(res)).code).toBe("VALIDATION");
+    }
+  });
+
+  it("5 MB を超えるファイルは 413 FILE_TOO_LARGE", async () => {
+    const big = new Uint8Array(5 * 1024 * 1024 + 1).fill(0x61);
+    const res = await preview({ file: big, options: paste().options });
+    expect(res.status).toBe(413);
+    expect((await errorOf(res)).code).toBe("FILE_TOO_LARGE");
   });
 });
 
-describe("取込の確定（§3.2）→ 再取込 → 履歴（§3.3）", () => {
+describe("取込の確定（§2.3）→ 再取込 → 履歴（§2.4）", () => {
   it("未対応の口座があれば 422 STATEMENT_ACCOUNT_UNMAPPED（details.names）", async () => {
     const p = await okBody(await preview());
     const res = await commit(paste(), p.inputSha256, p.countNew);
@@ -192,10 +423,28 @@ describe("取込の確定（§3.2）→ 再取込 → 履歴（§3.3）", () => 
     expect((await okBody(second)).added).toBe(0);
   });
 
+  it("CP932 の CSV（origin: file）を取り込める。回の出所は file、件数は expected と一致する", async () => {
+    await mapBank(FIXED);
+    const p = await okBody(await preview(bankCsv()));
+    expect(p.unmappedAccounts).toEqual([]);
+    const res = await commit(bankCsv(), p.inputSha256, p.countNew);
+    expect(res.status).toBe(201);
+    const committed = await okBody(res);
+    expect(committed.added).toBe(BANK_TWO_COLUMNS.rowCount);
+    expect(committed.batch.origin).toBe("file");
+    // 文字コードを指定して取り込んでも同じ（ハッシュが同じなので確定できる）
+    const again = await commit(
+      bankCsv("bank-two-columns.csv", { encoding: "shift_jis" }),
+      p.inputSha256,
+      0,
+    );
+    expect(again.status).toBe(201);
+  });
+
   it("一部が取込済みなら、残りだけが新規になる", async () => {
     await mapBank();
     const first = paste(
-      [HEADER, line("05/10(日)", "ショップ001", "-1,200", "サンプル銀行", "", 0)].join("\n"),
+      [SIMPLE_HEADER, line("05/10(日)", "ショップ001", "-1,200", "サンプル銀行", "", 0)].join("\n"),
     );
     const p1 = await okBody(await preview(first));
     expect((await commit(first, p1.inputSha256, p1.countNew)).status).toBe(201);
@@ -211,9 +460,18 @@ describe("取込の確定（§3.2）→ 再取込 → 履歴（§3.3）", () => 
     const res = await commit(changed, p.inputSha256, p.countNew);
     expect(res.status).toBe(409);
     expect((await errorOf(res)).code).toBe("STATEMENT_PLAN_CHANGED");
-    // 年だけを変えた場合も同じ
+    // 年だけを変えた場合も、対応だけを変えた場合も同じ
     const otherYear = await commit(paste(TEXT, 2025), p.inputSha256, p.countNew);
     expect(otherYear.status).toBe(409);
+    const otherMapping = await commit(
+      paste(TEXT, 2026, {
+        ...SIMPLE_MAPPING,
+        columns: { date: 0, content: 1, amount: 2, accountName: 3, transferFlag: 5 },
+      }),
+      p.inputSha256,
+      p.countNew,
+    );
+    expect(otherMapping.status).toBe(409);
     expect((await okBody(await imports().$get({ param: ctx.param }))).batches).toEqual([]);
   });
 
@@ -225,22 +483,34 @@ describe("取込の確定（§3.2）→ 再取込 → 履歴（§3.3）", () => 
     expect((await errorOf(res)).code).toBe("STATEMENT_PLAN_CHANGED");
   });
 
-  it("読めない貼り付けの確定は 422 STATEMENT_PASTE_UNREADABLE", async () => {
+  it("読めないテキストの確定は 422 STATEMENT_TABLE_UNREADABLE", async () => {
     await mapBank();
-    const res = await commit(paste("あいうえお"), "a".repeat(64), 0);
+    const res = await commit(paste(UNREADABLE), "a".repeat(64), 0);
     expect(res.status).toBe(422);
-    expect((await errorOf(res)).code).toBe("STATEMENT_PASTE_UNREADABLE");
+    expect((await errorOf(res)).code).toBe("STATEMENT_TABLE_UNREADABLE");
   });
 
-  it("確定の入力の形が違えば（ハッシュが 64 桁の 16 進でない）400 VALIDATION", async () => {
-    const res = await commit(paste(), "xyz", 0);
-    expect(res.status).toBe(400);
+  it("確定の入力の形が違えば 400 VALIDATION（ハッシュが 64 桁の 16 進でない・expected がない）", async () => {
+    const bad = await commit(paste(), "xyz", 0);
+    expect(bad.status).toBe(400);
+    const missing = await imports().$post(
+      { param: param() },
+      init(TEXT, { ...paste().options, accounts: [], saveSource: null }),
+    );
+    expect(missing.status).toBe(400);
+    expect((await errorOf(missing)).code).toBe("VALIDATION");
+  });
+
+  it("5 MB を超えるファイルの確定は 413 FILE_TOO_LARGE", async () => {
+    const big = new Uint8Array(5 * 1024 * 1024 + 1).fill(0x61);
+    const res = await commit({ file: big, options: paste().options }, "a".repeat(64), 0);
+    expect(res.status).toBe(413);
   });
 
   it("GET /statements/imports は新しい順に回を返す", async () => {
     await mapBank();
     const a = paste(
-      [HEADER, line("05/10(日)", "ショップ001", "-1,200", "サンプル銀行", "", 0)].join("\n"),
+      [SIMPLE_HEADER, line("05/10(日)", "ショップ001", "-1,200", "サンプル銀行", "", 0)].join("\n"),
     );
     const pa = await okBody(await preview(a));
     const first = await okBody(await commit(a, pa.inputSha256, pa.countNew));

@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { PastedRow } from "../../src/statements/paste.ts";
+import type { StatementRow } from "../../src/statements/table.ts";
 import type { Result } from "../../src/types.ts";
 import {
   commitStatementImport,
   commitStatementRows,
+  detectStatementLayout,
   listStatementAccounts,
   listStatementBatches,
   previewStatementImport,
@@ -11,11 +12,13 @@ import {
   saveStatementAccount,
 } from "../../src/usecases/statements.ts";
 import { fakeStatementUnitOfWork } from "../fakes.ts";
-import { readTextFixture } from "../fixtures/mfme/load.ts";
+import { MFME_PASTE } from "../fixtures/statements/expected.ts";
+import { readStatementText } from "../fixtures/statements/load.ts";
 import { setupBase } from "../ledger-setup.ts";
-import { formatMfmePaste } from "../statements-arbitraries.ts";
+import { statementTableOf } from "../statements-arbitraries.ts";
 
-// 006 T009（R4・R14・R18、§1.1〜§1.3、FR-002〜007）。口座の対応・取込のプレビューと確定
+// 006 T009（R4・R14・R18、§1.1〜§1.3、FR-002〜007）・007 T008（H:§2.1〜2.3）。
+// 口座の対応・表の判定・取込のプレビューと確定
 
 const SHA = "a".repeat(64);
 const SHA2 = "b".repeat(64);
@@ -28,7 +31,7 @@ function setup() {
 }
 type Ctx = ReturnType<typeof setup>;
 
-const row = (over: Partial<PastedRow> = {}): PastedRow => ({
+const row = (over: Partial<StatementRow> = {}): StatementRow => ({
   accountName: "サンプル銀行",
   date: "2026-05-10",
   content: "ショップ001",
@@ -36,10 +39,11 @@ const row = (over: Partial<PastedRow> = {}): PastedRow => ({
   transferFlag: false,
   ...over,
 });
-const paste = (rows: PastedRow[]) => ({
-  kind: "paste" as const,
-  text: formatMfmePaste(rows),
-  year: 2026,
+/** 行から取込の入力（表のテキストと列の対応）を作る */
+const paste = (rows: StatementRow[], sha256 = SHA) => ({
+  ...statementTableOf(rows),
+  origin: "paste" as const,
+  sha256,
 });
 
 const mapAccount = (ctx: Ctx, name: string, over: Record<string, unknown> = {}) => {
@@ -143,29 +147,56 @@ describe("saveStatementAccount / listStatementAccounts", () => {
   });
 });
 
+describe("detectStatementLayout（007 H:§2.1）", () => {
+  it("区切り文字・見出しの行・列の案・年の要否を返す（何も書かない）", () => {
+    const text = readStatementText(MFME_PASTE.file);
+    const r = detectStatementLayout(ctx.deps, text);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value).toMatchObject({
+      delimiter: "\t",
+      headerRow: 0,
+      columnCount: 10,
+      rowCount: MFME_PASTE.rowCount,
+      needsYear: true,
+      suggestedColumns: MFME_PASTE.mapping.columns,
+    });
+    expect(r.value.sampleRows).toHaveLength(10);
+    expect(ctx.uow.statements.state.batches).toEqual([]);
+  });
+
+  it("選び直し（見出しなし）を渡せる。表がなければ STATEMENT_TABLE_UNREADABLE", () => {
+    const text = readStatementText(MFME_PASTE.file);
+    const r = detectStatementLayout(ctx.deps, text, { headerRow: null });
+    expect(r.ok && r.value.headerRow).toBeNull();
+    expectErr(detectStatementLayout(ctx.deps, "\n \n"), "STATEMENT_TABLE_UNREADABLE");
+  });
+});
+
 describe("previewStatementImport", () => {
+  const fixtureInput = (over: Record<string, unknown> = {}) => ({
+    text: readStatementText(MFME_PASTE.file),
+    origin: "paste" as const,
+    year: MFME_PASTE.year ?? 2026,
+    mapping: MFME_PASTE.mapping,
+    sha256: SHA,
+    ...over,
+  });
+
   it("件数・期間・合計・未対応の口座・読めない行を返し、何も書かない", () => {
     mapAccount(ctx, "サンプル銀行");
-    const text = readTextFixture("paste-basic.txt");
-    const r = previewStatementImport(ctx.deps, {
-      source: { kind: "paste", text, year: 2026 },
-      sha256: SHA,
-    });
+    const r = previewStatementImport(ctx.deps, fixtureInput());
     if (!r.ok) throw new Error(JSON.stringify(r.error));
     const p = r.value;
     expect(p.inputSha256).toBe(SHA);
-    expect(p.countNew).toBe(9);
-    expect(p.rows).toHaveLength(9);
-    expect(p.period).toEqual({ from: "2026-10-01", to: "2026-10-08" });
-    expect(p.totals).toEqual({
-      inflow: 330_000 + 1_500 + 45_000 + 20_000,
-      outflow: 1_200 + 45_000 + 20_000 + 3_980 * 2,
-    });
+    expect(p.countNew).toBe(MFME_PASTE.rowCount);
+    expect(p.rows).toHaveLength(MFME_PASTE.rowCount);
+    expect(p.period).toEqual({ from: "2026-10-01", to: "2026-10-12" });
+    expect(p.totals).toEqual({ inflow: MFME_PASTE.inflowTotal, outflow: MFME_PASTE.outflowTotal });
     expect(p.unmappedAccounts).toEqual([
       { name: "テストカードA", suggestion: null },
       { name: "テスト現金", suggestion: null },
     ]);
-    expect(p.unreadable).toEqual([{ line: 11, reason: expect.stringContaining("日付") }]);
+    expect(p.unreadable).toEqual([]);
     expect(p.rows[0]).toMatchObject({
       key: "サンプル銀行|2026-10-01|-1200|ショップ#|0",
       status: "new",
@@ -176,22 +207,66 @@ describe("previewStatementImport", () => {
     expect(ctx.uow.statements.state.batches).toEqual([]);
   });
 
-  it("読めない貼り付けは STATEMENT_PASTE_UNREADABLE", () => {
+  it("読めない行は unreadable に理由つきで返す（明細に加えない）", () => {
+    const table = statementTableOf([row()]);
     const r = previewStatementImport(ctx.deps, {
-      source: { kind: "paste", text: "あいうえお", year: 2026 },
-      sha256: SHA,
+      ...paste([row()]),
+      text: `${table.text}小計\t\t\t\n`,
     });
-    expectErr(r, "STATEMENT_PASTE_UNREADABLE");
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.countNew).toBe(1);
+    expect(r.value.unreadable).toEqual([{ line: 3, reason: expect.stringContaining("日付") }]);
+  });
+
+  it("1 行も読めない表は STATEMENT_TABLE_UNREADABLE（details.unreadable）", () => {
+    const r = previewStatementImport(ctx.deps, {
+      ...paste([row()]),
+      text: `${statementTableOf([row()]).text.split("\n")[0]}\nあ\tい\tう\tえ\tお\tか\tき\tく\tけ\n`,
+    });
+    const e = expectErr(r, "STATEMENT_TABLE_UNREADABLE");
+    expect(e.details?.unreadable).toEqual([{ line: 2, reason: expect.stringContaining("日付") }]);
+  });
+
+  it("列の番号が表の列数を超えれば STATEMENT_MAPPING_INVALID", () => {
+    const input = paste([row()]);
+    const r = previewStatementImport(ctx.deps, {
+      ...input,
+      mapping: { ...input.mapping, columns: { ...input.mapping.columns, memo: 20 } },
+    });
+    expectErr(r, "STATEMENT_MAPPING_INVALID");
+  });
+
+  it("accountName の役割がなく fixedAccountName もなければ STATEMENT_MAPPING_INVALID（INV-50）", () => {
+    const input = paste([row()]);
+    const { accountName: _omit, ...columns } = input.mapping.columns;
+    const noAccount = { ...input, mapping: { ...input.mapping, columns } };
+    expectErr(previewStatementImport(ctx.deps, noAccount), "STATEMENT_MAPPING_INVALID");
+    expectErr(
+      previewStatementImport(ctx.deps, { ...noAccount, fixedAccountName: "  " }),
+      "STATEMENT_MAPPING_INVALID",
+    );
+  });
+
+  it("fixedAccountName があれば、全行の口座がその名前になる", () => {
+    const input = paste([row({ accountName: "別の名前" }), row({ date: "2026-05-11" })]);
+    const { accountName: _omit, ...columns } = input.mapping.columns;
+    const r = previewStatementImport(ctx.deps, {
+      ...input,
+      mapping: { ...input.mapping, columns },
+      fixedAccountName: "テスト現金",
+    });
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.rows.map((x) => x.accountName)).toEqual(["テスト現金", "テスト現金"]);
+    expect(r.value.unmappedAccounts).toEqual([{ name: "テスト現金", suggestion: null }]);
   });
 });
 
 describe("commitStatementImport", () => {
   const rows = [row(), row({ amount: 3000, content: "売上入金" }), row({ date: "2026-05-11" })];
   const commitInput = (
-    over: { rows?: PastedRow[]; sha?: string; expectedSha?: string; countNew?: number } = {},
+    over: { rows?: StatementRow[]; sha?: string; expectedSha?: string; countNew?: number } = {},
   ) => ({
-    source: paste(over.rows ?? rows),
-    sha256: over.sha ?? SHA,
+    ...paste(over.rows ?? rows, over.sha ?? SHA),
     expected: { inputSha256: over.expectedSha ?? SHA, countNew: over.countNew ?? 3 },
   });
 
@@ -240,7 +315,7 @@ describe("commitStatementImport", () => {
   it("同じ入力の再取込は新規 0 件（INV-40）。回は 0 件でも記録する", () => {
     mapAccount(ctx, "サンプル銀行");
     commitStatementImport(ctx.deps, commitInput());
-    const preview = previewStatementImport(ctx.deps, { source: paste(rows), sha256: SHA });
+    const preview = previewStatementImport(ctx.deps, paste(rows));
     expect(preview.ok && preview.value.countNew).toBe(0);
     const again = commitStatementImport(ctx.deps, commitInput({ countNew: 0 }));
     if (!again.ok) throw new Error(JSON.stringify(again.error));
@@ -282,6 +357,48 @@ describe("commitStatementImport", () => {
     expect(ctx.uow.statements.state.statements).toEqual([]);
   });
 
+  it("取込の回の origin は入力の値（file も書ける）。読めない行の数を回に残す", () => {
+    mapAccount(ctx, "サンプル銀行");
+    const input = commitInput();
+    const r = commitStatementImport(ctx.deps, {
+      ...input,
+      origin: "file",
+      text: `${input.text}小計\t\t\t\n`,
+    });
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.batch).toMatchObject({ origin: "file", countNew: 3, countUnreadable: 1 });
+  });
+
+  it("列の対応が表に合わなければ STATEMENT_MAPPING_INVALID で、何も書かない（INV-50 の前半も）", () => {
+    mapAccount(ctx, "サンプル銀行");
+    const input = commitInput();
+    const tooWide = {
+      ...input,
+      mapping: { ...input.mapping, columns: { ...input.mapping.columns, memo: 20 } },
+    };
+    expectErr(commitStatementImport(ctx.deps, tooWide), "STATEMENT_MAPPING_INVALID");
+    const { accountName: _omit, ...columns } = input.mapping.columns;
+    const noAccount = { ...input, mapping: { ...input.mapping, columns } };
+    expectErr(commitStatementImport(ctx.deps, noAccount), "STATEMENT_MAPPING_INVALID");
+    expect(ctx.uow.statements.state.batches).toEqual([]);
+    expect(ctx.uow.statements.state.statements).toEqual([]);
+  });
+
+  it("fixedAccountName の取込は、その口座の対応で確定する", () => {
+    const account = mapAccount(ctx, "テスト現金", { kind: "cash" }).account;
+    const input = commitInput({ rows: [row({ accountName: "無視される名前" })], countNew: 1 });
+    const { accountName: _omit, ...columns } = input.mapping.columns;
+    const r = commitStatementImport(ctx.deps, {
+      ...input,
+      mapping: { ...input.mapping, columns },
+      fixedAccountName: "テスト現金",
+    });
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(ctx.uow.statements.state.statements[0]).toMatchObject({
+      statementAccountId: account.id,
+    });
+  });
+
   it("途中で失敗すると、回も明細も残らない（INV-47 の取込の側）", () => {
     mapAccount(ctx, "サンプル銀行");
     ctx.uow.statements.failOnInsertStatements = true;
@@ -291,7 +408,7 @@ describe("commitStatementImport", () => {
   });
 });
 
-describe("commitStatementRows（external_id を持つ行。自動取得 US4 も使う）", () => {
+describe("commitStatementRows（external_id を持つ行。ID の列がある表）", () => {
   const original = row({ externalId: "ext-1", memo: "最初のメモ" });
   const setupStored = () => {
     mapAccount(ctx, "サンプル銀行");
@@ -354,10 +471,7 @@ describe("commitStatementRows（external_id を持つ行。自動取得 US4 も�
 
   it("貼り付け（external_id なし）は、キーが同じなら内容が違っても existing", () => {
     setupStored();
-    const r = previewStatementImport(ctx.deps, {
-      source: paste([row({ memo: "別のメモ" })]),
-      sha256: SHA2,
-    });
+    const r = previewStatementImport(ctx.deps, paste([row({ memo: "別のメモ" })], SHA2));
     expect(r.ok && r.value.rows[0]?.status).toBe("existing");
   });
 });
@@ -366,14 +480,12 @@ describe("listStatementBatches", () => {
   it("新しい順", () => {
     mapAccount(ctx, "サンプル銀行");
     const first = commitStatementImport(ctx.deps, {
-      source: paste([row()]),
-      sha256: SHA,
+      ...paste([row()]),
       expected: { inputSha256: SHA, countNew: 1 },
     });
     ctx.clock.value = "2026-11-01T00:00:00.000Z";
     const second = commitStatementImport(ctx.deps, {
-      source: paste([row({ amount: -5 })]),
-      sha256: SHA2,
+      ...paste([row({ amount: -5 })], SHA2),
       expected: { inputSha256: SHA2, countNew: 1 },
     });
     if (!first.ok || !second.ok) throw new Error("確定に失敗");

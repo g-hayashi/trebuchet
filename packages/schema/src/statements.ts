@@ -247,26 +247,6 @@ export const StatementCommitOptions = StatementPreviewOptions.extend({
 });
 export type StatementCommitOptions = z.infer<typeof StatementCommitOptions>;
 
-export const StatementImportSource = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("paste"),
-    text: z.string().min(1),
-    year: z.number().int().min(1900).max(9999),
-  }),
-]);
-export type StatementImportSource = z.infer<typeof StatementImportSource>;
-
-/** POST /statements/imports/preview */
-export const StatementImportPreviewInput = z.object({ source: StatementImportSource });
-export type StatementImportPreviewInput = z.infer<typeof StatementImportPreviewInput>;
-
-/** POST /statements/imports */
-export const StatementImportCommitInput = z.object({
-  source: StatementImportSource,
-  expected: z.object({ inputSha256: Sha256, countNew: Count }),
-});
-export type StatementImportCommitInput = z.infer<typeof StatementImportCommitInput>;
-
 export const STATEMENT_ROW_STATUSES = ["new", "existing", "changed"] as const;
 export const StatementRowStatus = z.enum(STATEMENT_ROW_STATUSES);
 export type StatementRowStatus = z.infer<typeof StatementRowStatus>;

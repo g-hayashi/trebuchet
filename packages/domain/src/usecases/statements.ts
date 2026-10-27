@@ -4,9 +4,9 @@ import type {
   StatementAccountSaved,
   StatementBatch,
   StatementChange,
+  StatementColumnMapping,
   StatementImportCommitted,
   StatementImportPreview,
-  StatementImportSource,
   StatementLinkKind,
   StatementListQuery,
   StatementOrigin,
@@ -17,7 +17,6 @@ import type {
 import { auditEntry } from "../audit.ts";
 import type { Clock, IdGenerator, StatementStore, StatementUnitOfWork } from "../ports.ts";
 import { normalizeContent } from "../statements/normalize.ts";
-import { type PastedRow, parseMfmePaste, type UnreadableRow } from "../statements/paste.ts";
 import {
   contentGroup,
   type ExistingStatement,
@@ -25,6 +24,14 @@ import {
   possibleDuplicatesOf,
   type StatementImportPlan,
 } from "../statements/plan.ts";
+import {
+  detectTableLayout,
+  readStatementTable,
+  type StatementLayoutOverride,
+  type StatementRow,
+  type StatementTableDetection,
+  type UnreadableRow,
+} from "../statements/table.ts";
 import {
   domainError,
   err,
@@ -59,7 +66,7 @@ const sameMapping = (a: StatementAccount, b: StatementAccount): boolean =>
   a.subAccountId === b.subAccountId;
 
 /**
- * 取込元の口座（MF ME の保有金融機関）の用途・種類・科目を名前で保存する（なければ追加、あれば更新）。
+ * 取込元の口座（明細の口座）の用途・種類・科目を名前で保存する（なければ追加、あれば更新）。
  * `private` は科目を持たず、ほかは科目が必須。変更は監査に残す（R18）。変更がなければ何も書かない。
  * 対応が変わったときは、その口座の未処理の明細の候補（と、振替の対の相手の候補）を作り直す（R8）。
  * 作り直した候補の数が `rebuilt`（まだ候補のない明細は作らない）
@@ -167,13 +174,22 @@ export function saveStatementAccount(
  */
 export type StatementRowsInput = {
   origin: StatementOrigin;
-  rows: PastedRow[];
+  rows: StatementRow[];
   unreadable: UnreadableRow[];
   sha256: string;
 };
 
+/**
+ * 表のテキストからの取込の入力（007 H:§2.2）。`mapping` は列の対応、`year` は年のない日付にだけ使う。
+ * `fixedAccountName` は `mapping` が `accountName` の役割を持たないとき必須（INV-50）。
+ * `origin` は取込の回の出所（貼り付け・ファイル）をそのまま書く
+ */
 export type StatementImportInput = {
-  source: Extract<StatementImportSource, { kind: "paste" }>;
+  text: string;
+  origin: StatementOrigin;
+  year: number;
+  mapping: StatementColumnMapping;
+  fixedAccountName?: string | undefined;
   sha256: string;
 };
 
@@ -185,7 +201,7 @@ export type StatementImportCommitInput = StatementImportInput & {
 export type StatementTx = Parameters<Parameters<StatementUnitOfWork["run"]>[0]>[0];
 
 /** 計画を立てる（保存済みの明細と口座を読む）。`accounts` は口座の ID の引き当てにも使う */
-function buildPlan(statements: StatementStore, rows: PastedRow[]) {
+function buildPlan(statements: StatementStore, rows: StatementRow[]) {
   const accounts = statements.listStatementAccounts();
   const nameOf = new Map(accounts.map((a) => [a.id, a.name]));
   const existing: ExistingStatement[] = statements.listStatements().map((s) => ({
@@ -232,14 +248,40 @@ export function previewStatementRows(
   return deps.uow.run((tx) => ok(toPreview(buildPlan(tx.statements, input.rows).plan, input)));
 }
 
-/** 取込のプレビュー（貼り付けのテキストから）。読めなければ `STATEMENT_PASTE_UNREADABLE` */
+/**
+ * 表のテキストと列の対応を読む（`readStatementTable`）。列の対応が表に合わなければ `STATEMENT_MAPPING_INVALID`
+ * （列の番号が列数を超える、口座名の出どころがない）、1 行も読めなければ `STATEMENT_TABLE_UNREADABLE`
+ */
+function readInput(input: StatementImportInput): Result<StatementRowsInput> {
+  const table = readStatementTable(input.text, input.mapping, {
+    year: input.year,
+    fixedAccountName: input.fixedAccountName,
+  });
+  if (!table.ok) return table;
+  return ok({ origin: input.origin, sha256: input.sha256, ...table.value });
+}
+
+/**
+ * 表の区切り文字・見出しの行・見本・列の案を判定する（007 H:§2.1）。何も書かない。
+ * 失敗は `STATEMENT_TABLE_UNREADABLE`・`STATEMENT_TABLE_TOO_LARGE`。文字コードは呼び出し側（server）が先に決める。
+ * `deps` は取込元の照合（T012）が保存済みの取込元を読むために受け取る
+ */
+export function detectStatementLayout(
+  _deps: Pick<StatementDeps, "uow">,
+  text: string,
+  override?: StatementLayoutOverride,
+): Result<StatementTableDetection> {
+  return detectTableLayout(text, override);
+}
+
+/** 取込のプレビュー（表のテキストから）。何も書かない。読めなければ `readInput` のエラー */
 export function previewStatementImport(
   deps: Pick<StatementDeps, "uow">,
   input: StatementImportInput,
 ): Result<StatementImportPreview> {
-  const parsed = parseMfmePaste(input.source.text, input.source.year);
-  if (!parsed.ok) return parsed;
-  return previewStatementRows(deps, { origin: "paste", sha256: input.sha256, ...parsed.value });
+  const rows = readInput(input);
+  if (!rows.ok) return rows;
+  return previewStatementRows(deps, rows.value);
 }
 
 const planChanged = (details: Record<string, unknown>) =>
@@ -275,7 +317,7 @@ function commitInTx(
   const { plan, accounts } = buildPlan(tx.statements, input.rows);
   if (plan.unmappedAccounts.length > 0) {
     return err(
-      domainError("STATEMENT_ACCOUNT_UNMAPPED", "対応づいていない保有金融機関があります", {
+      domainError("STATEMENT_ACCOUNT_UNMAPPED", "対応づいていない口座があります", {
         names: plan.unmappedAccounts,
       }),
     );
@@ -354,19 +396,14 @@ function commitInTx(
   return ok({ batch, added: records.length, changed: plan.countChanged });
 }
 
-/** 取込の確定（貼り付けのテキストから）。読めなければ `STATEMENT_PASTE_UNREADABLE` */
+/** 取込の確定（表のテキストから）。読めなければ `readInput` のエラー。何も書かない */
 export function commitStatementImport(
   deps: StatementDeps,
   input: StatementImportCommitInput,
 ): Result<StatementImportCommitted> {
-  const parsed = parseMfmePaste(input.source.text, input.source.year);
-  if (!parsed.ok) return parsed;
-  return commitStatementRows(deps, {
-    origin: "paste",
-    sha256: input.sha256,
-    expected: input.expected,
-    ...parsed.value,
-  });
+  const rows = readInput(input);
+  if (!rows.ok) return rows;
+  return commitStatementRows(deps, { ...rows.value, expected: input.expected });
 }
 
 /** 取込の回の一覧（新しい順） */

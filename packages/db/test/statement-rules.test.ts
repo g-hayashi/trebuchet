@@ -7,9 +7,9 @@ import {
   type InferenceRule,
   type JournalDraft,
   listRules,
-  type PastedRow,
   pauseRule,
   type Result,
+  type StatementRow,
   type StatementStore,
   type StatementUnitOfWork,
   saveStatementAccount,
@@ -64,7 +64,7 @@ const mapBank = () =>
   );
 
 let shaSeq = 0;
-const importRows = (rows: PastedRow[]) => {
+const importRows = (rows: StatementRow[]) => {
   shaSeq += 1;
   const sha256 = shaSeq.toString(16).padStart(64, "0");
   ok(
@@ -77,7 +77,7 @@ const importRows = (rows: PastedRow[]) => {
     }),
   );
 };
-const row = (content: string, date = "2026-10-10"): PastedRow => ({
+const row = (content: string, date = "2026-10-10"): StatementRow => ({
   accountName: "サンプル銀行",
   date,
   content,

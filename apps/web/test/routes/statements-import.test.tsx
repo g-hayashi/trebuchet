@@ -3,10 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Account } from "@/features/accounts/api";
 import { Route as ImportRoute } from "@/routes/e/$entityId/statements/import";
-import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
+import { type ApiCall, apiError, formFields, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-// 006 US1: 明細の取込の画面（貼り付け → プレビュー → 口座の対応 → 確定。H:§2・§3.1〜§3.3）
+// 006 US1・007 US1: 明細の取込の画面（入力 → 列の対応 → 確認 → 確定。H:§2.1〜§2.3）
 
 const BASE = "/api/entities/e1";
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -28,6 +28,40 @@ const account = (n: number, name: string, over: Partial<Account> = {}): Account 
 });
 const BANK = account(1020, "普通預金");
 const CASH = account(1010, "現金");
+
+/** 日付・内容・金額（円）・保有金融機関のタブ区切り（見出しは先頭の行）の判定 */
+const LAYOUT = {
+  encoding: "utf-8",
+  delimiter: "\t",
+  headerRow: 0,
+  header: ["日付", "内容", "金額（円）", "保有金融機関"],
+  columnCount: 4,
+  rowCount: 2,
+  sampleRows: [
+    ["05/10(日)", "ショップ001", "-1,200", "サンプル銀行"],
+    ["05/11(月)", "売上入金", "3,000", "サンプル銀行"],
+  ],
+  needsYear: true,
+  suggestedColumns: { date: 0, content: 1, amount: 2, accountName: 3 },
+  match: { kind: "none" },
+};
+
+/** 取引日・摘要・出金額・入金額のカンマ区切り。口座名の列がなく、年は日付に含まれる */
+const BANK_LAYOUT = {
+  encoding: "shift_jis",
+  delimiter: ",",
+  headerRow: 2,
+  header: ["取引日", "摘要", "出金額", "入金額"],
+  columnCount: 4,
+  rowCount: 2,
+  sampleRows: [
+    ["2026-05-10", "ショップ001", "1,200", ""],
+    ["2026-05-11", "売上入金", "", "3,000"],
+  ],
+  needsYear: false,
+  suggestedColumns: { date: 0, content: 1, outflow: 2, inflow: 3 },
+  match: { kind: "none" },
+};
 
 const row = (key: string, over: Record<string, unknown> = {}) => ({
   key,
@@ -66,8 +100,13 @@ const ACCOUNT_VIEW = (name: string, over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+const LAYOUT_PATH = `${BASE}/statements/imports/layout`;
+const PREVIEW_PATH = `${BASE}/statements/imports/preview`;
+const COMMIT_PATH = `${BASE}/statements/imports`;
+
 const baseRoutes = {
   [`GET ${BASE}/accounts`]: () => ok({ accounts: [BANK, CASH] }),
+  [`POST ${LAYOUT_PATH}`]: () => ok(LAYOUT),
 };
 
 beforeEach(() => {
@@ -86,29 +125,392 @@ const renderImport = () =>
     url: "/e/e1/statements/import",
   });
 
+type User = ReturnType<typeof userEvent.setup>;
+
 const calls = (all: ApiCall[], method: string, path: string) =>
   all.filter((c) => c.method === method && c.path === `${BASE}${path}`);
 
-const paste = async (text = TEXT) => {
+/** multipart の `options`（JSON 文字列）を読む */
+const optionsOf = (call: ApiCall | undefined) =>
+  JSON.parse(String(call?.form?.get("options") ?? "null")) as Record<string, unknown>;
+
+/** multipart の `file` の中身 */
+const fileTextOf = (call: ApiCall | undefined) =>
+  new Promise<string>((resolve, reject) => {
+    const file = call?.form?.get("file");
+    if (!(file instanceof Blob)) return reject(new Error("file がありません"));
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+
+const mappingRegion = () => screen.findByRole("region", { name: "列の対応" });
+
+/** 貼り付けて「読み取る」。列の対応の欄が出るまで待つ */
+const readPaste = async (u: User, text = TEXT) => {
   fireEvent.change(await screen.findByLabelText("貼り付けのテキスト"), { target: { value: text } });
+  await u.click(screen.getByRole("button", { name: "読み取る" }));
+  return mappingRegion();
 };
 
-describe("貼り付けとプレビュー（FR-001〜004）", () => {
-  it("テキストと対象の年（既定は今年）を送り、件数・期間・合計・読めない行・明細の一覧を示す", async () => {
-    const all = mockApi({
+const chooseSign = (u: User, label = "正の値は入金") =>
+  u.click(screen.getByRole("radio", { name: label }));
+
+const confirmButton = () => screen.getByRole("button", { name: "確認へ" });
+
+/** 貼り付け → 列の対応（案のまま。符号は入金が正）→ 確認へ → 確認の画面 */
+const toPreview = async (u: User) => {
+  await readPaste(u);
+  await chooseSign(u);
+  await u.click(confirmButton());
+};
+
+describe("入力と読み取り（US1-1。FR-001・002）", () => {
+  it("貼り付けは UTF-8 のファイルにして、origin: paste で layout に送り、見出しと見本の表を示す", async () => {
+    const all = mockApi(baseRoutes);
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+
+    const layoutCall = calls(all, "POST", "/statements/imports/layout")[0];
+    expect(formFields(layoutCall?.form)).toMatchObject({
+      file: { type: "text/plain;charset=utf-8" },
+    });
+    expect(await fileTextOf(layoutCall)).toBe(TEXT);
+    expect(optionsOf(layoutCall)).toEqual({ origin: "paste" });
+
+    const table = within(region).getByRole("table", { name: "見本の表" });
+    expect(within(table).getByRole("columnheader", { name: "保有金融機関" })).toBeInTheDocument();
+    expect(within(table).getByText("ショップ001")).toBeInTheDocument();
+    expect(within(table).getByText("売上入金")).toBeInTheDocument();
+    // 案（suggestedColumns）が列の役割の初期値
+    expect(within(region).getByLabelText("「日付」の役割")).toHaveValue("date");
+    expect(within(region).getByLabelText("「内容」の役割")).toHaveValue("content");
+    expect(within(region).getByLabelText("「金額（円）」の役割")).toHaveValue("amount");
+    expect(within(region).getByLabelText("「保有金融機関」の役割")).toHaveValue("accountName");
+  });
+
+  it("ファイルを選ぶと、origin: file でそのファイルを layout に送る", async () => {
+    const all = mockApi(baseRoutes);
+    const u = userEvent.setup();
+    renderImport();
+    await u.click(await screen.findByRole("radio", { name: "ファイル" }));
+    expect(screen.queryByLabelText("貼り付けのテキスト")).not.toBeInTheDocument();
+    const file = new File([TEXT], "bank.csv", { type: "text/csv" });
+    await u.upload(screen.getByLabelText("明細のファイル"), file);
+    await u.click(screen.getByRole("button", { name: "読み取る" }));
+    await mappingRegion();
+
+    const layoutCall = calls(all, "POST", "/statements/imports/layout")[0];
+    expect(formFields(layoutCall?.form)).toMatchObject({
+      file: { name: "bank.csv", type: "text/csv" },
+    });
+    expect(optionsOf(layoutCall)).toEqual({ origin: "file" });
+  });
+
+  it("テキストが空・ファイルが未選択なら送らずに知らせる", async () => {
+    const all = mockApi(baseRoutes);
+    const u = userEvent.setup();
+    renderImport();
+    await u.click(await screen.findByRole("button", { name: "読み取る" }));
+    expect(await screen.findByText("貼り付けのテキストを入力してください")).toBeInTheDocument();
+    await u.click(screen.getByRole("radio", { name: "ファイル" }));
+    await u.click(screen.getByRole("button", { name: "読み取る" }));
+    expect(await screen.findByText("ファイルを選んでください")).toBeInTheDocument();
+    expect(calls(all, "POST", "/statements/imports/layout")).toHaveLength(0);
+  });
+
+  it("読めない表（422）は、理由を示し、列の対応の欄を出さない", async () => {
+    mockApi({
       ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () => ok(PREVIEW),
+      [`POST ${LAYOUT_PATH}`]: () =>
+        apiError(422, "STATEMENT_TABLE_UNREADABLE", "表を読めません", {
+          missingColumns: [],
+          unreadable: [],
+        }),
     });
     const u = userEvent.setup();
     renderImport();
-    expect(await screen.findByLabelText("対象の年")).toHaveValue(2026);
-    await paste();
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
+    fireEvent.change(await screen.findByLabelText("貼り付けのテキスト"), {
+      target: { value: "x" },
+    });
+    await u.click(screen.getByRole("button", { name: "読み取る" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("表を読み取れませんでした");
+    expect(screen.queryByRole("region", { name: "列の対応" })).not.toBeInTheDocument();
+  });
+
+  it("MF ME の文言を出さない", async () => {
+    mockApi(baseRoutes);
+    renderImport();
+    await screen.findByLabelText("貼り付けのテキスト");
+    expect(document.body.textContent).not.toMatch(/MF ?ME/i);
+    expect(
+      screen.getByText(/銀行・カードの明細の表を貼り付けるか、CSV のファイルを選びます/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("読み取りの選び直し（US1-1。区切り・見出しの行・文字コード）", () => {
+  it("区切り・見出しの行（1 起点の表示 → 0 起点で送る）・文字コードを選び直すと、layout をやり直す", async () => {
+    const all = mockApi({
+      ...baseRoutes,
+      [`POST ${LAYOUT_PATH}`]: (call) =>
+        ok(optionsOf(call).delimiter === undefined ? LAYOUT : BANK_LAYOUT),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+
+    expect(within(region).getByLabelText("区切り文字")).toHaveValue("\t");
+    expect(within(region).getByLabelText("見出しの行")).toHaveValue(1);
+    expect(within(region).getByLabelText("文字コード")).toHaveValue("");
+
+    await u.selectOptions(within(region).getByLabelText("区切り文字"), "カンマ");
+    fireEvent.change(within(region).getByLabelText("見出しの行"), { target: { value: "3" } });
+    await u.selectOptions(within(region).getByLabelText("文字コード"), "CP932（shift_jis）");
+    await u.click(within(region).getByRole("button", { name: "読み直す" }));
+
+    await waitFor(() => expect(calls(all, "POST", "/statements/imports/layout")).toHaveLength(2));
+    expect(optionsOf(calls(all, "POST", "/statements/imports/layout")[1])).toEqual({
+      origin: "paste",
+      encoding: "shift_jis",
+      delimiter: ",",
+      headerRow: 2,
+    });
+    // 新しい判定の列に置き換わり、案から役割が入る
+    expect(await screen.findByLabelText("「摘要」の役割")).toHaveValue("content");
+    // 文字コードは選び直した値のまま
+    expect(screen.getByLabelText("文字コード")).toHaveValue("shift_jis");
+  });
+
+  it("見出しの行を空にすると「見出しなし」で読み直し、列は「列 1」「列 2」…と呼ぶ", async () => {
+    const all = mockApi({
+      ...baseRoutes,
+      [`POST ${LAYOUT_PATH}`]: (call) =>
+        ok(
+          optionsOf(call).headerRow === null
+            ? {
+                ...LAYOUT,
+                headerRow: null,
+                header: null,
+                columnCount: 3,
+                sampleRows: [["2026-05-10", "ショップ001", "-1,200"]],
+                suggestedColumns: {},
+              }
+            : LAYOUT,
+        ),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+    fireEvent.change(within(region).getByLabelText("見出しの行"), { target: { value: "" } });
+    await u.click(within(region).getByRole("button", { name: "読み直す" }));
+
+    expect(await screen.findByLabelText("「列 1」の役割")).toHaveValue("");
+    expect(screen.getByLabelText("「列 2」の役割")).toBeInTheDocument();
+    expect(screen.getByLabelText("「列 3」の役割")).toBeInTheDocument();
+    expect(screen.getByLabelText("見出しの行")).toHaveValue(null);
+    expect(optionsOf(calls(all, "POST", "/statements/imports/layout")[1])).toMatchObject({
+      headerRow: null,
+    });
+  });
+});
+
+describe("列の対応（US1-2・3・4・5。FR-003〜007）", () => {
+  it("日付・内容・金額がそろわない、金額の符号を選んでいない間は、理由を示して確認へ進めない", async () => {
+    mockApi(baseRoutes);
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+
+    // 案は入っているが、金額 1 列の符号は必ず選ぶ
+    expect(confirmButton()).toBeDisabled();
+    expect(within(region).getByRole("list", { name: "確認へ進めない理由" })).toHaveTextContent(
+      "金額の符号（正の値が入金か出金か）を選んでください",
+    );
+    await chooseSign(u, "正の値は出金");
+    expect(confirmButton()).toBeEnabled();
+    expect(
+      within(region).queryByRole("list", { name: "確認へ進めない理由" }),
+    ).not.toBeInTheDocument();
+
+    await u.selectOptions(within(region).getByLabelText("「内容」の役割"), "使わない");
+    expect(confirmButton()).toBeDisabled();
+    expect(within(region).getByRole("list", { name: "確認へ進めない理由" })).toHaveTextContent(
+      "「内容」の列を選んでください",
+    );
+  });
+
+  it("同じ役割を 2 つの列に選ぶと、確認へ進めない", async () => {
+    mockApi(baseRoutes);
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+    await chooseSign(u);
+    expect(confirmButton()).toBeEnabled();
+
+    await u.selectOptions(within(region).getByLabelText("「内容」の役割"), "日付");
+    expect(confirmButton()).toBeDisabled();
+    expect(within(region).getByRole("list", { name: "確認へ進めない理由" })).toHaveTextContent(
+      "「日付」が複数の列に選ばれています",
+    );
+  });
+
+  it("金額が 1 列のときは、選んだ符号の向きを mapping に入れて preview に送る", async () => {
+    const all = mockApi({ ...baseRoutes, [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW) });
+    const u = userEvent.setup();
+    renderImport();
+    await readPaste(u);
+    await chooseSign(u, "正の値は出金");
+    await u.click(confirmButton());
+    await screen.findByRole("region", { name: "プレビューの要約" });
+
+    expect(optionsOf(calls(all, "POST", "/statements/imports/preview")[0])).toEqual({
+      origin: "paste",
+      year: 2026,
+      encoding: "utf-8",
+      mapping: {
+        delimiter: "\t",
+        headerRow: 0,
+        columns: { date: 0, content: 1, amount: 2, accountName: 3 },
+        amountSign: "outflow_positive",
+      },
+    });
+    // 同じ入力（貼り付けのファイル）を送る
+    expect(await fileTextOf(calls(all, "POST", "/statements/imports/preview")[0])).toBe(TEXT);
+  });
+
+  it("出金・入金の 2 列は、符号を聞かず、出金・入金の列を mapping に入れる。年が要らなければ年の欄を出さない", async () => {
+    const all = mockApi({
+      ...baseRoutes,
+      [`POST ${LAYOUT_PATH}`]: () => ok(BANK_LAYOUT),
+      [`GET ${BASE}/statement-accounts`]: () => ok({ accounts: [ACCOUNT_VIEW("事業用の口座")] }),
+      [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+
+    expect(within(region).getByRole("radio", { name: "出金・入金の 2 列" })).toBeChecked();
+    expect(within(region).queryByRole("radio", { name: "正の値は入金" })).not.toBeInTheDocument();
+    expect(within(region).queryByLabelText("対象の年")).not.toBeInTheDocument();
+    expect(within(region).getByLabelText("「出金額」の役割")).toHaveValue("outflow");
+    expect(within(region).getByLabelText("「入金額」の役割")).toHaveValue("inflow");
+
+    await u.selectOptions(await within(region).findByLabelText("取込の口座"), "事業用の口座");
+    await u.click(confirmButton());
+    await screen.findByRole("region", { name: "プレビューの要約" });
+
+    expect(optionsOf(calls(all, "POST", "/statements/imports/preview")[0])).toEqual({
+      origin: "paste",
+      year: 2026,
+      encoding: "shift_jis",
+      fixedAccountName: "事業用の口座",
+      mapping: {
+        delimiter: ",",
+        headerRow: 2,
+        columns: { date: 0, content: 1, outflow: 2, inflow: 3 },
+      },
+    });
+  });
+
+  it("金額の列の数を切り替えると、使えない役割の選択を外す", async () => {
+    mockApi(baseRoutes);
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+    await u.click(within(region).getByRole("radio", { name: "出金・入金の 2 列" }));
+
+    expect(within(region).getByLabelText("「金額（円）」の役割")).toHaveValue("");
+    expect(confirmButton()).toBeDisabled();
+    expect(within(region).getByRole("list", { name: "確認へ進めない理由" })).toHaveTextContent(
+      "「出金」と「入金」の列を選んでください",
+    );
+    await u.selectOptions(within(region).getByLabelText("「金額（円）」の役割"), "出金");
+    expect(within(region).getByRole("list", { name: "確認へ進めない理由" })).toHaveTextContent(
+      "「入金」の列を選んでください",
+    );
+  });
+
+  it("年のない日付（needsYear）のときだけ年を聞く。既定は今年で、変えるとその年を送る", async () => {
+    const all = mockApi({ ...baseRoutes, [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW) });
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+    expect(within(region).getByLabelText("対象の年")).toHaveValue(2026);
+    fireEvent.change(within(region).getByLabelText("対象の年"), { target: { value: "2025" } });
+    await chooseSign(u);
+    await u.click(confirmButton());
+    await screen.findByRole("region", { name: "プレビューの要約" });
+    expect(optionsOf(calls(all, "POST", "/statements/imports/preview")[0])).toMatchObject({
+      year: 2025,
+    });
+  });
+
+  it("年が不正なら確認へ進めない", async () => {
+    mockApi(baseRoutes);
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+    await chooseSign(u);
+    fireEvent.change(within(region).getByLabelText("対象の年"), { target: { value: "20" } });
+    expect(confirmButton()).toBeDisabled();
+    expect(within(region).getByRole("list", { name: "確認へ進めない理由" })).toHaveTextContent(
+      "対象の年を 4 桁で入力してください",
+    );
+  });
+
+  it("口座名の列がなければ、既存の口座を選ぶか新しい名前を入れる。どちらもなければ確認へ進めない", async () => {
+    const all = mockApi({
+      ...baseRoutes,
+      [`POST ${LAYOUT_PATH}`]: () => ok(BANK_LAYOUT),
+      [`GET ${BASE}/statement-accounts`]: () => ok({ accounts: [ACCOUNT_VIEW("事業用の口座")] }),
+      [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+
+    expect(confirmButton()).toBeDisabled();
+    expect(within(region).getByRole("list", { name: "確認へ進めない理由" })).toHaveTextContent(
+      "取込の口座を選ぶか、新しい口座の名前を入れてください",
+    );
+    const select = await within(region).findByLabelText("取込の口座");
+    await u.selectOptions(select, "新しい名前を入れる");
+    expect(confirmButton()).toBeDisabled();
+    await u.type(within(region).getByLabelText("口座の名前"), "  新しいカード ");
+    expect(confirmButton()).toBeEnabled();
+    await u.click(confirmButton());
+    await screen.findByRole("region", { name: "プレビューの要約" });
+    expect(optionsOf(calls(all, "POST", "/statements/imports/preview")[0])).toMatchObject({
+      fixedAccountName: "新しいカード",
+    });
+  });
+
+  it("口座名の列を選ぶと、口座の選択を出さず、fixedAccountName を送らない", async () => {
+    const all = mockApi({ ...baseRoutes, [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW) });
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+    expect(within(region).queryByLabelText("取込の口座")).not.toBeInTheDocument();
+    await chooseSign(u);
+    await u.click(confirmButton());
+    await screen.findByRole("region", { name: "プレビューの要約" });
+    expect(optionsOf(calls(all, "POST", "/statements/imports/preview")[0])).not.toHaveProperty(
+      "fixedAccountName",
+    );
+  });
+});
+
+describe("プレビュー（FR-004〜006）", () => {
+  it("件数・期間・合計・読めない行・明細の一覧を示す", async () => {
+    mockApi({ ...baseRoutes, [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW) });
+    const u = userEvent.setup();
+    renderImport();
+    await toPreview(u);
 
     const summary = await screen.findByRole("region", { name: "プレビューの要約" });
-    expect(calls(all, "POST", "/statements/imports/preview")[0]?.body).toEqual({
-      source: { kind: "paste", text: TEXT, year: 2026 },
-    });
     expect(within(summary).getByText("2026-05-10 〜 2026-05-11")).toBeInTheDocument();
     expect(within(summary).getByText("新規").nextSibling).toHaveTextContent("3件");
     expect(within(summary).getByText("入金の合計").nextSibling).toHaveTextContent("3,000円");
@@ -122,54 +524,29 @@ describe("貼り付けとプレビュー（FR-001〜004）", () => {
     expect(within(table).getByText("売上入金")).toBeInTheDocument();
   });
 
-  it("対象の年を変えると、その年を送る", async () => {
-    const all = mockApi({
-      ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () => ok(PREVIEW),
-    });
-    const u = userEvent.setup();
-    renderImport();
-    await paste();
-    fireEvent.change(screen.getByLabelText("対象の年"), { target: { value: "2025" } });
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
-    await screen.findByRole("region", { name: "プレビューの要約" });
-    expect(calls(all, "POST", "/statements/imports/preview")[0]?.body).toMatchObject({
-      source: { year: 2025 },
-    });
-  });
-
-  it("テキストが空なら送らずに知らせる", async () => {
-    const all = mockApi(baseRoutes);
-    const u = userEvent.setup();
-    renderImport();
-    await u.click(await screen.findByRole("button", { name: "プレビュー" }));
-    expect(await screen.findByText("貼り付けのテキストを入力してください")).toBeInTheDocument();
-    expect(calls(all, "POST", "/statements/imports/preview")).toHaveLength(0);
-  });
-
-  it("読めない貼り付け（422）は、理由を示す", async () => {
+  it("読めない表（422）は、理由を示し、列の対応の欄は残る", async () => {
     mockApi({
       ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () =>
-        apiError(422, "STATEMENT_PASTE_UNREADABLE", "必須の列が足りません", {
+      [`POST ${PREVIEW_PATH}`]: () =>
+        apiError(422, "STATEMENT_TABLE_UNREADABLE", "必須の列が足りません", {
           missingColumns: ["金額（円）"],
           unreadable: [],
         }),
     });
     const u = userEvent.setup();
     renderImport();
-    await paste();
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
+    await toPreview(u);
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("貼り付けのテキストを読み取れませんでした");
+    expect(alert).toHaveTextContent("表を読み取れませんでした");
     expect(alert).toHaveTextContent("見つからない列: 金額（円）");
     expect(screen.queryByRole("region", { name: "プレビューの要約" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "列の対応" })).toBeInTheDocument();
   });
 
   it("重複の疑いと、変更ありの行（変更前後）を別に示す", async () => {
     mockApi({
       ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () =>
+      [`POST ${PREVIEW_PATH}`]: () =>
         ok({
           ...PREVIEW,
           rows: [
@@ -189,8 +566,7 @@ describe("貼り付けとプレビュー（FR-001〜004）", () => {
     });
     const u = userEvent.setup();
     renderImport();
-    await paste();
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
+    await toPreview(u);
 
     const dup = await screen.findByRole("list", { name: "重複の疑いの一覧" });
     expect(within(dup).getAllByRole("listitem")).toHaveLength(1);
@@ -218,7 +594,7 @@ describe("口座の対応（FR-003）", () => {
     let mapped = false;
     const all = mockApi({
       ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () => ok(mapped ? PREVIEW : withUnmapped),
+      [`POST ${PREVIEW_PATH}`]: () => ok(mapped ? PREVIEW : withUnmapped),
       [`PUT ${BASE}/statement-accounts/${encodeURIComponent("サンプル銀行")}`]: () => {
         mapped = true;
         return ok({ account: ACCOUNT_VIEW("サンプル銀行"), rebuilt: 0 });
@@ -226,8 +602,7 @@ describe("口座の対応（FR-003）", () => {
     });
     const u = userEvent.setup();
     renderImport();
-    await paste();
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
+    await toPreview(u);
 
     const group = await screen.findByRole("group", { name: "サンプル銀行の対応" });
     expect(screen.getByRole("button", { name: "取り込む" })).toBeDisabled();
@@ -240,14 +615,17 @@ describe("口座の対応（FR-003）", () => {
     expect(
       calls(all, "PUT", `/statement-accounts/${encodeURIComponent("サンプル銀行")}`)[0]?.body,
     ).toEqual({ usage: "business", kind: "bank", accountId: BANK.id });
-    expect(calls(all, "POST", "/statements/imports/preview")).toHaveLength(2);
+    // 同じファイルと指定で、プレビューを作り直す
+    const previews = calls(all, "POST", "/statements/imports/preview");
+    expect(previews).toHaveLength(2);
+    expect(optionsOf(previews[1])).toEqual(optionsOf(previews[0]));
     expect(screen.queryByRole("group", { name: "サンプル銀行の対応" })).not.toBeInTheDocument();
   });
 
   it("private は科目を出さず、科目なしで送る", async () => {
     const all = mockApi({
       ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () => ok(withUnmapped),
+      [`POST ${PREVIEW_PATH}`]: () => ok(withUnmapped),
       [`PUT ${BASE}/statement-accounts/${encodeURIComponent("サンプル銀行")}`]: () =>
         ok({
           account: ACCOUNT_VIEW("サンプル銀行", { usage: "private", accountId: null }),
@@ -256,8 +634,7 @@ describe("口座の対応（FR-003）", () => {
     });
     const u = userEvent.setup();
     renderImport();
-    await paste();
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
+    await toPreview(u);
     const group = await screen.findByRole("group", { name: "サンプル銀行の対応" });
     expect(within(group).getByLabelText("サンプル銀行の科目")).toBeInTheDocument();
 
@@ -279,12 +656,11 @@ describe("口座の対応（FR-003）", () => {
   it("事業用で科目を選ばずに保存しようとすると、送らずに知らせる", async () => {
     const all = mockApi({
       ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () => ok(withUnmapped),
+      [`POST ${PREVIEW_PATH}`]: () => ok(withUnmapped),
     });
     const u = userEvent.setup();
     renderImport();
-    await paste();
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
+    await toPreview(u);
     const group = await screen.findByRole("group", { name: "サンプル銀行の対応" });
     await u.click(within(group).getByRole("button", { name: "サンプル銀行の対応を保存" }));
     expect(await within(group).findByText("科目を選んでください")).toBeInTheDocument();
@@ -293,54 +669,57 @@ describe("口座の対応（FR-003）", () => {
 });
 
 describe("取込の確定（FR-007）", () => {
-  it("プレビューのハッシュと新規の件数を添えて確定し、件数を知らせて、プレビューを閉じる", async () => {
+  const COMMITTED = (added: number, changed = 0) => ({
+    batch: {
+      id: uuid(1),
+      origin: "paste",
+      sourceName: null,
+      inputSha256: SHA,
+      periodFrom: "2026-05-10",
+      periodTo: "2026-05-11",
+      countNew: 3,
+      countExisting: 0,
+      countUnreadable: 1,
+      createdAt: "2026-10-26T01:00:00.000Z",
+    },
+    added,
+    changed,
+  });
+
+  it("同じファイルと指定に、プレビューのハッシュと新規の件数を添えて確定し、件数を知らせて、プレビューを閉じる", async () => {
     const all = mockApi({
       ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () => ok(PREVIEW),
-      [`POST ${BASE}/statements/imports`]: () =>
-        ok(
-          {
-            batch: {
-              id: uuid(1),
-              origin: "paste",
-              inputSha256: SHA,
-              periodFrom: "2026-05-10",
-              periodTo: "2026-05-11",
-              countNew: 3,
-              countExisting: 0,
-              countUnreadable: 1,
-              createdAt: "2026-10-26T01:00:00.000Z",
-            },
-            added: 3,
-            changed: 0,
-          },
-          201,
-        ),
+      [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW),
+      [`POST ${COMMIT_PATH}`]: () => ok(COMMITTED(3), 201),
     });
     const u = userEvent.setup();
     renderImport();
-    await paste();
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
+    await toPreview(u);
     await u.click(await screen.findByRole("button", { name: "取り込む" }));
 
     expect(await screen.findByText("3 件を取り込みました。")).toBeInTheDocument();
-    expect(calls(all, "POST", "/statements/imports")[0]?.body).toEqual({
-      source: { kind: "paste", text: TEXT, year: 2026 },
+    const commit = calls(all, "POST", "/statements/imports")[0];
+    expect(optionsOf(commit)).toEqual({
+      ...optionsOf(calls(all, "POST", "/statements/imports/preview")[0]),
       expected: { inputSha256: SHA, countNew: 3 },
+      accounts: [],
+      saveSource: null,
     });
+    expect(await fileTextOf(commit)).toBe(TEXT);
     expect(screen.queryByRole("region", { name: "プレビューの要約" })).not.toBeInTheDocument();
+    // 取り込んだ後は入力から始め直せる
+    expect(screen.queryByRole("region", { name: "列の対応" })).not.toBeInTheDocument();
   });
 
   it("変更ありがあれば件数に添える", async () => {
     mockApi({
       ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () => ok(PREVIEW),
-      [`POST ${BASE}/statements/imports`]: () => ok({ batch: {}, added: 2, changed: 1 }, 201),
+      [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW),
+      [`POST ${COMMIT_PATH}`]: () => ok(COMMITTED(2, 1), 201),
     });
     const u = userEvent.setup();
     renderImport();
-    await paste();
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
+    await toPreview(u);
     await u.click(await screen.findByRole("button", { name: "取り込む" }));
     expect(await screen.findByText("2 件を取り込みました（変更あり 1 件）。")).toBeInTheDocument();
   });
@@ -348,13 +727,12 @@ describe("取込の確定（FR-007）", () => {
   it("新規 0 件のときは取り込めない（取込済みのみ）", async () => {
     mockApi({
       ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () =>
+      [`POST ${PREVIEW_PATH}`]: () =>
         ok({ ...PREVIEW, countNew: 0, rows: [row("k0", { status: "existing" })] }),
     });
     const u = userEvent.setup();
     renderImport();
-    await paste();
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
+    await toPreview(u);
     expect(await screen.findByRole("button", { name: "取り込む" })).toBeDisabled();
     expect(screen.getByText("新しく取り込む明細はありません。")).toBeInTheDocument();
   });
@@ -362,14 +740,13 @@ describe("取込の確定（FR-007）", () => {
   it("409 STATEMENT_PLAN_CHANGED は知らせて、プレビューを作り直す", async () => {
     const all = mockApi({
       ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () => ok(PREVIEW),
-      [`POST ${BASE}/statements/imports`]: () =>
+      [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW),
+      [`POST ${COMMIT_PATH}`]: () =>
         apiError(409, "STATEMENT_PLAN_CHANGED", "プレビューのときと内容が違います"),
     });
     const u = userEvent.setup();
     renderImport();
-    await paste();
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
+    await toPreview(u);
     await u.click(await screen.findByRole("button", { name: "取り込む" }));
 
     const alert = await screen.findByRole("alert");
@@ -380,16 +757,15 @@ describe("取込の確定（FR-007）", () => {
   it("422 STATEMENT_ACCOUNT_UNMAPPED は口座の名前を示す", async () => {
     mockApi({
       ...baseRoutes,
-      [`POST ${BASE}/statements/imports/preview`]: () => ok(PREVIEW),
-      [`POST ${BASE}/statements/imports`]: () =>
-        apiError(422, "STATEMENT_ACCOUNT_UNMAPPED", "対応づいていない保有金融機関があります", {
+      [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW),
+      [`POST ${COMMIT_PATH}`]: () =>
+        apiError(422, "STATEMENT_ACCOUNT_UNMAPPED", "対応づいていない口座があります", {
           names: ["サンプル銀行"],
         }),
     });
     const u = userEvent.setup();
     renderImport();
-    await paste();
-    await u.click(screen.getByRole("button", { name: "プレビュー" }));
+    await toPreview(u);
     await u.click(await screen.findByRole("button", { name: "取り込む" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("サンプル銀行");
   });
@@ -405,6 +781,7 @@ describe("取込の履歴（§3.3）", () => {
             {
               id: uuid(2),
               origin: "paste",
+              sourceName: null,
               inputSha256: SHA,
               periodFrom: "2026-05-10",
               periodTo: "2026-05-11",

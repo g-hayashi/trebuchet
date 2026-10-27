@@ -9,7 +9,7 @@ import { ensureSignedIn } from "./helpers/auth.ts";
 // 事業体の開始年度も 2026（1 月始まり）で、貼り付けの 10/01〜10/08 が収まる
 const PASTE = resolve(
   import.meta.dirname,
-  "../../../packages/domain/test/fixtures/mfme/paste-basic.txt",
+  "../../../packages/domain/test/fixtures/statements/mfme-paste.txt",
 );
 const YEAR = "2026";
 

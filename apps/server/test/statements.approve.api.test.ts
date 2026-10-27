@@ -6,6 +6,7 @@ import {
   type InvoicingTestContext,
   okBody,
 } from "./invoicing-helpers.ts";
+import { importStatementLines } from "./statements-helpers.ts";
 
 // 006 US2: contracts/http-api.md §4.1・§4.2・§4.4〜§4.9 と §6.3。候補 → 承認・除外・取消 → 設定
 
@@ -21,7 +22,6 @@ afterEach(() => tmp.cleanup());
 const st = () => ctx.e.statements;
 const stId = (statementId: string) => ({ param: { ...ctx.param, statementId } });
 
-const HEADER = ["日付", "内容", "金額（円）", "保有金融機関", "メモ", "振替"].join("\t");
 const line = (...cells: (string | number)[]) => cells.join("\t");
 
 const mapAccount = async (name: string, accountName: string) => {
@@ -33,17 +33,7 @@ const mapAccount = async (name: string, accountName: string) => {
 };
 
 /** 行（日付 `MM/DD(曜)`・内容・金額・口座）を貼り付けて取り込む */
-const importLines = async (...lines: string[]) => {
-  const source = { kind: "paste" as const, text: [HEADER, ...lines].join("\n"), year: 2026 };
-  const preview = await okBody(
-    await st().imports.preview.$post({ param: ctx.param, json: { source } }),
-  );
-  const res = await st().imports.$post({
-    param: ctx.param,
-    json: { source, expected: { inputSha256: preview.inputSha256, countNew: preview.countNew } },
-  });
-  expect(res.status).toBe(201);
-};
+const importLines = (...lines: string[]) => importStatementLines(st().imports, ctx.param, ...lines);
 
 const list = async (query: Record<string, string> = {}) =>
   (await okBody(await st().$get({ param: ctx.param, query }))).statements;

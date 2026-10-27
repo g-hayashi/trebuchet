@@ -6,6 +6,7 @@ import {
   type InvoicingTestContext,
   okBody,
 } from "./invoicing-helpers.ts";
+import { importStatementLines } from "./statements-helpers.ts";
 
 // 006 US3: contracts/http-api.md §5（ルール）と §4.4 の rule・learn。承認 → 学習 → 候補 → 管理
 
@@ -22,21 +23,10 @@ const st = () => ctx.e.statements;
 const rules = () => ctx.e["inference-rules"];
 const ruleId = (id: string) => ({ param: { ...ctx.param, ruleId: id } });
 
-const HEADER = ["日付", "内容", "金額（円）", "保有金融機関", "メモ", "振替"].join("\t");
 const line = (...cells: (string | number)[]) => cells.join("\t");
 const BANK = "サンプル銀行";
 
-const importLines = async (...lines: string[]) => {
-  const source = { kind: "paste" as const, text: [HEADER, ...lines].join("\n"), year: 2026 };
-  const preview = await okBody(
-    await st().imports.preview.$post({ param: ctx.param, json: { source } }),
-  );
-  const res = await st().imports.$post({
-    param: ctx.param,
-    json: { source, expected: { inputSha256: preview.inputSha256, countNew: preview.countNew } },
-  });
-  expect(res.status).toBe(201);
-};
+const importLines = (...lines: string[]) => importStatementLines(st().imports, ctx.param, ...lines);
 const list = async () =>
   (await okBody(await st().$get({ param: ctx.param, query: {} }))).statements;
 const idOf = async (content: string) => {

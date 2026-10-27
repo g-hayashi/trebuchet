@@ -6,10 +6,10 @@ import {
   getStatementSettings,
   type JournalDraft,
   listStatements,
-  type PastedRow,
   type Result,
   type StatementCandidateRecord,
   type StatementLinkRecord,
+  type StatementRow,
   saveStatementAccount,
   saveStatementSettings,
 } from "@trebuchet/domain";
@@ -63,7 +63,7 @@ const mapAccount = (name: string, over: Record<string, unknown> = {}) =>
   );
 
 let shaSeq = 0;
-const importRows = (rows: PastedRow[]) => {
+const importRows = (rows: StatementRow[]) => {
   shaSeq += 1;
   const sha256 = shaSeq.toString(16).padStart(64, "0");
   ok(
@@ -76,7 +76,7 @@ const importRows = (rows: PastedRow[]) => {
     }),
   );
 };
-const row = (over: Partial<PastedRow> = {}): PastedRow => ({
+const row = (over: Partial<StatementRow> = {}): StatementRow => ({
   accountName: "サンプル銀行",
   date: "2026-10-10",
   content: "ショップ001",

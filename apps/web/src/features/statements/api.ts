@@ -6,10 +6,16 @@ import type {
   Purpose,
   RuleStatus,
   StatementAccountInput,
-  StatementImportSource,
+  StatementCommitOptions,
+  StatementImportCommitted,
+  StatementImportPreview,
+  StatementLayoutOptions,
+  StatementPreviewOptions,
   StatementSettingsInput,
   StatementStatusFilter,
+  StatementTableLayout,
 } from "@trebuchet/schema";
+import { uploadForm } from "@/features/imports/upload";
 import { api, type QueryItem, unwrap } from "@/lib/api";
 
 // 明細の取込・候補・承認の API（006 contracts/http-api.md §2〜§4・§6.3）
@@ -33,11 +39,6 @@ export const statementKeys = {
   ruleHistory: (entityId: string, ruleId: string) =>
     ["entities", entityId, "statements", "rules", "history", ruleId] as const,
 };
-
-/** 貼り付けの取込元 */
-export type PasteSource = Extract<StatementImportSource, { kind: "paste" }>;
-/** プレビュー・確定に渡す取込元（今は貼り付けだけ。汎用の取込は 007） */
-export type ImportSource = PasteSource;
 
 /** ジョブ（評価）の状態を取り直す間隔（ミリ秒） */
 export const JOB_POLL_MS = 1000;
@@ -66,21 +67,35 @@ export const putStatementAccount = async (
 ) =>
   unwrap(await entityApi["statement-accounts"][":name"].$put({ param: { entityId, name }, json }));
 
-/** プレビュー（§3.1。POST だが何も保存しない） */
-export const postImportPreview = async (entityId: string, source: ImportSource) =>
-  unwrap(
-    await entityApi.statements.imports.preview.$post({ param: { entityId }, json: { source } }),
-  );
+// 取込の 3 つの API は multipart（`file` と `options` の JSON。007 contracts §2）。
+// hc の型つきの `form` に頼らず、002 と同じ `uploadForm` で送り、応答の型は schema の型で指定する
 
-/** 確定（§3.2）。プレビューが返したハッシュと新規の件数を添える */
+const importPath = (entityId: string, last: string) =>
+  `/api/entities/${encodeURIComponent(entityId)}/statements/imports${last}`;
+
+/** 表の判定（§2.1。何も保存しない）。区切り・見出しの行・文字コードの選び直しは `options` で渡す */
+export const postImportLayout = async (
+  entityId: string,
+  file: File,
+  options: StatementLayoutOptions,
+): Promise<StatementTableLayout> =>
+  uploadForm(importPath(entityId, "/layout"), { file, options: JSON.stringify(options) });
+
+/** プレビュー（§2.2。POST だが何も保存しない） */
+export const postImportPreview = async (
+  entityId: string,
+  file: File,
+  options: StatementPreviewOptions,
+): Promise<StatementImportPreview> =>
+  uploadForm(importPath(entityId, "/preview"), { file, options: JSON.stringify(options) });
+
+/** 確定（§2.3）。プレビューと同じファイルと指定に、プレビューが返したハッシュと新規の件数を添える */
 export const postImportCommit = async (
   entityId: string,
-  source: ImportSource,
-  expected: { inputSha256: string; countNew: number },
-) =>
-  unwrap(
-    await entityApi.statements.imports.$post({ param: { entityId }, json: { source, expected } }),
-  );
+  file: File,
+  options: StatementCommitOptions,
+): Promise<StatementImportCommitted> =>
+  uploadForm(importPath(entityId, ""), { file, options: JSON.stringify(options) });
 
 /** ジョブ（評価）の状態（§3.5）。終わる（done・failed）まで取り直す */
 export const jobQuery = (entityId: string, jobId: string) =>

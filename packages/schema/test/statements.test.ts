@@ -18,7 +18,6 @@ import {
   StatementColumnSuggestionOptions,
   StatementCommitOptions,
   StatementEncoding,
-  StatementImportCommitInput,
   StatementImportPreview,
   StatementLayoutOptions,
   StatementPreviewOptions,
@@ -39,7 +38,6 @@ describe("ErrorCode（006 のコード、contracts/http-api.md §1）", () => {
     "STATEMENT_ACCOUNT_NOT_FOUND",
     "INFERENCE_RULE_NOT_FOUND",
     "JOB_NOT_FOUND",
-    "STATEMENT_PASTE_UNREADABLE",
     "STATEMENT_ACCOUNT_UNMAPPED",
     "STATEMENT_PLAN_CHANGED",
     "STATEMENT_ALREADY_REGISTERED",
@@ -49,9 +47,11 @@ describe("ErrorCode（006 のコード、contracts/http-api.md §1）", () => {
     "JOB_RUNNING",
     "AI_NOT_CONFIGURED",
   ];
-  it("追加の13種がすべて入っている", () => {
-    expect(new Set(added).size).toBe(13);
+  it("追加の12種がすべて入っている（STATEMENT_PASTE_UNREADABLE は 007 で STATEMENT_TABLE_UNREADABLE に変えた）", () => {
+    expect(new Set(added).size).toBe(12);
     for (const code of added) expect(ErrorCode.safeParse(code).success).toBe(true);
+    expect(ErrorCode.safeParse("STATEMENT_PASTE_UNREADABLE").success).toBe(false);
+    expect(ErrorCode.safeParse("STATEMENT_TABLE_UNREADABLE").success).toBe(true);
   });
 });
 
@@ -214,24 +214,6 @@ describe("StatementSettingsInput（H:§6.3）", () => {
 });
 
 describe("取込の入出力（H:§3）", () => {
-  it("確定の入力は expected（sha256・countNew）が必須", () => {
-    const source = { kind: "paste", text: "x", year: 2026 };
-    expect(
-      StatementImportCommitInput.safeParse({
-        source,
-        expected: { inputSha256: SHA, countNew: 3 },
-      }).success,
-    ).toBe(true);
-    expect(StatementImportCommitInput.safeParse({ source }).success).toBe(false);
-    // MF ME からの取得（取りやめ）の取込元は受け付けない
-    expect(
-      StatementImportCommitInput.safeParse({
-        source: { kind: "mfme_fetch", jobId: ID },
-        expected: { inputSha256: SHA, countNew: 0 },
-      }).success,
-    ).toBe(false);
-  });
-
   it("プレビューの出力の形", () => {
     const preview = {
       inputSha256: SHA,

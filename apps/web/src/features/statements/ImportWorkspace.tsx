@@ -1,5 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { StatementAccountInput, StatementImportPreview } from "@trebuchet/schema";
+import type {
+  StatementAccountInput,
+  StatementEncoding,
+  StatementImportPreview,
+  StatementLayoutOptions,
+  StatementPreviewOptions,
+  StatementTableLayout,
+} from "@trebuchet/schema";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -15,16 +22,21 @@ import {
 import { ApiError } from "@/lib/api";
 import { AccountMappingForm } from "./AccountMappingForm";
 import {
-  type ImportSource,
   importBatchesQuery,
   postImportCommit,
+  postImportLayout,
   postImportPreview,
   putStatementAccount,
   statementKeys,
 } from "./api";
+import {
+  type ColumnMappingDraft,
+  ColumnMappingEditor,
+  type RelayoutChoice,
+} from "./ColumnMappingEditor";
 import { ImportPreview } from "./ImportPreview";
 import { ORIGIN_LABELS } from "./labels";
-import { PasteImport } from "./PasteImport";
+import { StatementInput, type StatementInputValue } from "./StatementInput";
 
 /** 取込の履歴（H:§3.3。新しい順） */
 function BatchHistory({ entityId }: { entityId: string }) {
@@ -68,59 +80,136 @@ function BatchHistory({ entityId }: { entityId: string }) {
   );
 }
 
+/** 読み取った入力。プレビューと確定は、読み取りと同じファイルを送る */
+type Input = StatementInputValue;
+
+/** プレビューを作ったときの、ファイルと指定。確定・口座の対応の後の作り直しは、これをそのまま使う */
+type Request = { file: File; options: StatementPreviewOptions };
+
 /**
- * 明細の取込の画面（US1）: 貼り付け → プレビュー → 未対応の口座の対応 → 確定。
- * 口座の対応を保存したら、同じ入力でプレビューを作り直す。確定が `STATEMENT_PLAN_CHANGED` のときも作り直す
+ * 明細の取込の画面（US1）: 入力（貼り付け・ファイル）→ 列の対応 → 確認（プレビュー・口座の対応）→ 確定。
+ * 口座の対応を保存したら、同じファイルと指定でプレビューを作り直す。確定が `STATEMENT_PLAN_CHANGED` のときも作り直す。
+ * 確定は、直近のプレビューと同じファイルと指定を送る（列の対応を触っても、プレビューのままで確定する）
  */
 export function ImportWorkspace({ entityId }: { entityId: string }) {
   const queryClient = useQueryClient();
-  const [source, setSource] = useState<ImportSource | undefined>();
+  const [input, setInput] = useState<Input | undefined>();
+  const [inputVersion, setInputVersion] = useState(0);
+  const [layout, setLayout] = useState<StatementTableLayout | undefined>();
+  const [layoutVersion, setLayoutVersion] = useState(0);
+  const [encodingOverride, setEncodingOverride] = useState<StatementEncoding | undefined>();
+  const [request, setRequest] = useState<Request | undefined>();
   const [preview, setPreview] = useState<StatementImportPreview | undefined>();
   const [notice, setNotice] = useState("");
 
+  const layoutMutation = useMutation({
+    mutationFn: ({ file, options }: { file: File; options: StatementLayoutOptions }) =>
+      postImportLayout(entityId, file, options),
+    onSuccess: (result, { options }) => {
+      setLayout(result);
+      setLayoutVersion((v) => v + 1);
+      setEncodingOverride(options.encoding);
+      setRequest(undefined);
+      setPreview(undefined);
+    },
+  });
+
   const previewMutation = useMutation({
-    mutationFn: (s: ImportSource) => postImportPreview(entityId, s),
-    onSuccess: (result, s) => {
-      setSource(s);
+    mutationFn: (r: Request) => postImportPreview(entityId, r.file, r.options),
+    onSuccess: (result, r) => {
+      setRequest(r);
       setPreview(result);
     },
     onError: () => setPreview(undefined),
   });
 
   const saveMutation = useMutation({
-    mutationFn: ({ name, input }: { name: string; input: StatementAccountInput }) =>
-      putStatementAccount(entityId, name, input),
+    mutationFn: ({ name, input: accountInput }: { name: string; input: StatementAccountInput }) =>
+      putStatementAccount(entityId, name, accountInput),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: statementKeys.accounts(entityId) });
-      if (source) previewMutation.mutate(source);
+      if (request) previewMutation.mutate(request);
     },
   });
 
   const commitMutation = useMutation({
     mutationFn: ({
-      s,
+      r,
       expected,
     }: {
-      s: ImportSource;
+      r: Request;
       expected: { inputSha256: string; countNew: number };
-    }) => postImportCommit(entityId, s, expected),
+    }) =>
+      postImportCommit(entityId, r.file, {
+        ...r.options,
+        expected,
+        accounts: [],
+        saveSource: null,
+      }),
     onSuccess: async (result) => {
       setNotice(
         `${result.added} 件を取り込みました${result.changed > 0 ? `（変更あり ${result.changed} 件）` : ""}。`,
       );
+      // 取り込んだら入力から始め直す
+      setInput(undefined);
+      setLayout(undefined);
+      setRequest(undefined);
       setPreview(undefined);
+      setInputVersion((v) => v + 1);
       await queryClient.invalidateQueries({ queryKey: statementKeys.batches(entityId) });
     },
-    onError: (e, { s }) => {
+    onError: (e, { r }) => {
       // プレビューの後に内容が変わったときは、作り直して見せる
-      if (e instanceof ApiError && e.code === "STATEMENT_PLAN_CHANGED") previewMutation.mutate(s);
+      if (e instanceof ApiError && e.code === "STATEMENT_PLAN_CHANGED") previewMutation.mutate(r);
     },
   });
 
-  const startPreview = (s: ImportSource) => {
+  const resetResults = () => {
     setNotice("");
     commitMutation.reset();
-    previewMutation.mutate(s);
+    previewMutation.reset();
+  };
+
+  const startLayout = (next: Input) => {
+    resetResults();
+    // 新しい入力の判定が終わるまで、前の入力の列の対応・プレビューは見せない
+    setLayout(undefined);
+    setRequest(undefined);
+    setPreview(undefined);
+    setInput(next);
+    layoutMutation.mutate({ file: next.file, options: { origin: next.origin } });
+  };
+
+  const relayout = (choice: RelayoutChoice) => {
+    if (!input) return;
+    resetResults();
+    layoutMutation.mutate({
+      file: input.file,
+      options: {
+        origin: input.origin,
+        delimiter: choice.delimiter,
+        headerRow: choice.headerRow,
+        ...(choice.encoding === undefined ? {} : { encoding: choice.encoding }),
+      },
+    });
+  };
+
+  const startPreview = (draft: ColumnMappingDraft) => {
+    if (!input || !layout) return;
+    resetResults();
+    previewMutation.mutate({
+      file: input.file,
+      options: {
+        origin: input.origin,
+        year: draft.year,
+        mapping: draft.mapping,
+        // 読み取りで使った文字コードを、プレビューと確定にも送る
+        encoding: layout.encoding,
+        ...(draft.fixedAccountName === undefined
+          ? {}
+          : { fixedAccountName: draft.fixedAccountName }),
+      },
+    });
   };
 
   const changedCount = preview?.rows.filter((r) => r.status === "changed").length ?? 0;
@@ -128,18 +217,38 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
   const nothingToImport = preview !== undefined && preview.countNew === 0 && changedCount === 0;
   const canCommit =
     preview !== undefined &&
-    source !== undefined &&
+    request !== undefined &&
     unmapped.length === 0 &&
     !nothingToImport &&
     !commitMutation.isPending;
 
   return (
     <div className="grid gap-8">
-      <section aria-label="貼り付け" className="grid gap-3">
-        <PasteImport pending={previewMutation.isPending} onPreview={startPreview} />
-        <ApiErrorMessage error={previewMutation.error} />
+      <section aria-label="入力" className="grid gap-3">
+        <StatementInput
+          key={inputVersion}
+          pending={layoutMutation.isPending}
+          onRead={startLayout}
+        />
+        <ApiErrorMessage error={layoutMutation.error} />
         {notice && <SaveNotice message={notice} />}
       </section>
+
+      {layout && (
+        <section aria-label="列の対応" className="grid gap-4">
+          <h2 className="text-lg font-semibold">列の対応</h2>
+          <ColumnMappingEditor
+            key={layoutVersion}
+            entityId={entityId}
+            layout={layout}
+            encodingOverride={encodingOverride}
+            pending={layoutMutation.isPending || previewMutation.isPending}
+            onRelayout={relayout}
+            onConfirm={startPreview}
+          />
+          <ApiErrorMessage error={previewMutation.error} />
+        </section>
+      )}
 
       {preview && (
         <section aria-label="プレビュー" className="grid gap-4">
@@ -150,7 +259,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
             <div className="grid gap-3">
               <h3 className="font-medium">口座の対応</h3>
               <p className="text-sm text-muted-foreground">
-                対応づいていない保有金融機関があります。用途と科目を決めると、プレビューを作り直します。
+                対応づいていない口座があります。用途と科目を決めると、プレビューを作り直します。
               </p>
               {unmapped.map(({ name }) => (
                 <AccountMappingForm
@@ -159,7 +268,9 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
                   name={name}
                   saving={saveMutation.isPending}
                   error={saveMutation.variables?.name === name ? saveMutation.error : undefined}
-                  onSave={(n, input) => saveMutation.mutate({ name: n, input })}
+                  onSave={(n, accountInput) =>
+                    saveMutation.mutate({ name: n, input: accountInput })
+                  }
                 />
               ))}
             </div>
@@ -173,9 +284,9 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
             <Button
               disabled={!canCommit}
               onClick={() =>
-                source &&
+                request &&
                 commitMutation.mutate({
-                  s: source,
+                  r: request,
                   expected: { inputSha256: preview.inputSha256, countNew: preview.countNew },
                 })
               }

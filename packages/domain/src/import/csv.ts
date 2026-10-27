@@ -15,6 +15,14 @@ export function decodeText(bytes: Uint8Array): DecodedText {
   }
 }
 
+/**
+ * 文字コードを指定してバイト列を文字列にする（利用者の選び直し。007/R1）。自動の判定はしない。
+ * 読めない並びは U+FFFD になる（例外にしない）。UTF-8 の BOM は除く
+ */
+export function decodeTextAs(bytes: Uint8Array, encoding: TextEncodingName): string {
+  return new TextDecoder(encoding).decode(bytes);
+}
+
 /** 区切りつきの分割の 1 行。line は、その行が始まる元のテキストの行の番号（1 起点。引用の中の改行も数える） */
 export type DelimitedLine = { line: number; cells: string[] };
 

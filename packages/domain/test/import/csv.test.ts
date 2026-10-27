@@ -1,5 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { parseCsv, parseDelimited, parseDelimitedLines } from "../../src/import/csv.ts";
+import {
+  decodeText,
+  decodeTextAs,
+  parseCsv,
+  parseDelimited,
+  parseDelimitedLines,
+} from "../../src/import/csv.ts";
+
+describe("decodeTextAs（文字コードの指定。007/R1）", () => {
+  // 「あ」の Shift_JIS は 0x82 0xA0、UTF-8 は 0xE3 0x81 0x82
+  const SJIS = new Uint8Array([0x82, 0xa0]);
+  const UTF8 = new TextEncoder().encode("あ");
+
+  it("指定した文字コードで読む（自動の判定を使わない）", () => {
+    expect(decodeTextAs(SJIS, "shift_jis")).toBe("あ");
+    expect(decodeTextAs(UTF8, "utf-8")).toBe("あ");
+    expect(decodeTextAs(SJIS, "utf-8")).not.toBe("あ");
+    expect(decodeTextAs(UTF8, "shift_jis")).not.toBe("あ");
+  });
+
+  it("UTF-8 の BOM は除く。decodeText の結果と同じ", () => {
+    const bom = new Uint8Array([0xef, 0xbb, 0xbf, ...UTF8]);
+    expect(decodeTextAs(bom, "utf-8")).toBe("あ");
+    expect(decodeText(bom).text).toBe("あ");
+  });
+});
 
 describe("parseDelimited（区切り文字つきの分割。007/R3）", () => {
   it("タブで分割する。カンマはそのまま値に残る", () => {

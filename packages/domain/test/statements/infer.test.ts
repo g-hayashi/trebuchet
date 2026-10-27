@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildAiPayload } from "../../src/statements/mask.ts";
-import type { PastedRow } from "../../src/statements/paste.ts";
+import type { StatementRow } from "../../src/statements/table.ts";
 import type { JournalDraft } from "../../src/types.ts";
 import { type DomainError, domainError, err, ok, type Result } from "../../src/types.ts";
 import { type InferenceDeps, inferWithAi } from "../../src/usecases/inference.ts";
@@ -13,7 +13,7 @@ import {
 } from "../../src/usecases/statements.ts";
 import { FakeSuggestionProvider, fakeStatementUnitOfWork } from "../fakes.ts";
 import { setupBase } from "../ledger-setup.ts";
-import { formatMfmePaste } from "../statements-arbitraries.ts";
+import { statementTableOf } from "../statements-arbitraries.ts";
 
 // 006 T024（R8、FR-025〜028）。端末内 → 外部の順、しきい値、外部に渡る内容、候補の保存
 
@@ -72,7 +72,7 @@ const mapBank = () => mapAccount("サンプル銀行");
 const mapPrivate = () =>
   mapAccount("テスト現金", { kind: "cash", usage: "private", accountId: undefined });
 
-const row = (over: Partial<PastedRow> = {}): PastedRow => ({
+const row = (over: Partial<StatementRow> = {}): StatementRow => ({
   accountName: "サンプル銀行",
   date: "2026-05-10",
   content: "ショップ001",
@@ -82,15 +82,14 @@ const row = (over: Partial<PastedRow> = {}): PastedRow => ({
 });
 
 /** 取り込んで候補を作る（ルールがないので none） */
-const importRows = (rows: PastedRow[]) => {
+const importRows = (rows: StatementRow[]) => {
   ctx.shaSeq += 1;
   const sha256 = ctx.shaSeq.toString(16).padStart(64, "0");
-  const source = { kind: "paste" as const, text: formatMfmePaste(rows), year: 2026 };
-  const preview = unwrap(previewStatementImport(ctx.statementDeps, { source, sha256 }));
+  const input = { ...statementTableOf(rows), origin: "paste" as const, sha256 };
+  const preview = unwrap(previewStatementImport(ctx.statementDeps, input));
   unwrap(
     commitStatementImport(ctx.statementDeps, {
-      source,
-      sha256,
+      ...input,
       expected: { inputSha256: sha256, countNew: preview.countNew },
     }),
   );

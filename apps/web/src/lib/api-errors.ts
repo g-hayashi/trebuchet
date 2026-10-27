@@ -205,11 +205,10 @@ export function describeError(error: unknown): ErrorDescription {
         details: [],
       };
     }
-    case "STATEMENT_PASTE_UNREADABLE": {
+    case "STATEMENT_TABLE_UNREADABLE": {
       const missing = asStrings(error.details?.missingColumns);
       return {
-        message:
-          "貼り付けのテキストを読み取れませんでした。MF ME の入出金の表をコピーしたものか確認してください。",
+        message: "表を読み取れませんでした。区切り文字・見出しの行・列の対応を確認してください。",
         details: missing.length > 0 ? [`見つからない列: ${missing.join("、")}`] : [],
       };
     }

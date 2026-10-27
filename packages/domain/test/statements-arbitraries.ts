@@ -1,8 +1,10 @@
+import type { StatementColumnIndexes, StatementColumnMapping } from "@trebuchet/schema";
 import fc from "fast-check";
-import type { PastedRow } from "../src/statements/paste.ts";
+import { COLUMN_ROLE_NAMES } from "../src/statements/columns.ts";
+import type { StatementRow } from "../src/statements/table.ts";
 
 /**
- * 明細の取込（006）の fast-check のジェネレーターと、貼り付けのテキストを作る補助。
+ * 明細の取込（006）の fast-check のジェネレーターと、明細の行から表のテキストを作る補助。
  * 名前はすべて合成（実在の店名・口座名・個人名を書かない）。INV-40・44 の性質テストが使う
  */
 
@@ -30,7 +32,7 @@ export const signedAmountArb: fc.Arbitrary<number> = fc
   .integer({ min: 1, max: 5_000_000 })
   .chain((n) => fc.boolean().map((negative) => (negative ? -n : n)));
 
-export const pastedRowArb: fc.Arbitrary<PastedRow> = fc.record({
+export const pastedRowArb: fc.Arbitrary<StatementRow> = fc.record({
   accountName: fc.constantFrom(...ACCOUNT_NAMES),
   date: dateIn2026Arb,
   content: fc.constantFrom(...CONTENTS),
@@ -41,7 +43,7 @@ export const pastedRowArb: fc.Arbitrary<PastedRow> = fc.record({
 /**
  * 重複する行（同じ口座・日付・金額・内容）が混ざりやすい行の集まり。日付と内容を狭めて衝突させる
  */
-export const pastedRowsArb: fc.Arbitrary<PastedRow[]> = fc.array(
+export const pastedRowsArb: fc.Arbitrary<StatementRow[]> = fc.array(
   fc.record({
     accountName: fc.constantFrom(...ACCOUNT_NAMES.slice(0, 2)),
     date: fc.constantFrom("2026-05-01", "2026-05-02", "2026-05-20"),
@@ -56,56 +58,57 @@ export const pastedRowsArb: fc.Arbitrary<PastedRow[]> = fc.array(
 export const accountsFor = (names: readonly string[] = ACCOUNT_NAMES) =>
   names.map((name) => ({ name }));
 
-const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"] as const;
+/** `statementTableOf` の列の並び（役割 → 列の番号） */
+const TABLE_ROLES = [
+  "date",
+  "content",
+  "amount",
+  "accountName",
+  "categoryMajor",
+  "categoryMinor",
+  "memo",
+  "transferFlag",
+  "externalId",
+] as const;
 
-const yen = (n: number): string => {
-  const abs = Math.abs(n).toLocaleString("en-US");
-  return n < 0 ? `-${abs}` : abs;
-};
-
-/** `MM/DD(曜)`（MF ME の表の日付） */
-export function mfmeDate(date: string): string {
-  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-  return `${String(m).padStart(2, "0")}/${String(d).padStart(2, "0")}(${weekday})`;
-}
-
-export const MFME_HEADER = [
-  "計算対象",
-  "日付",
-  "内容",
-  "金額（円）",
-  "保有金融機関",
-  "大項目",
-  "中項目",
-  "メモ",
-  "振替",
-].join("\t");
+/** `statementTableOf` が使う年（日付は年つきなので結果に影響しない） */
+export const TABLE_YEAR = 2026;
 
 /**
- * 行から MF ME の貼り付けのテキストを作る（タブ区切り、見出しつき）。
- * `parseMfmePaste(formatMfmePaste(rows), year)` が同じ行を返す（日付の年は rows の年）
+ * 明細の行から、取込の入力のうち表に関わる部分（`text`・`mapping`・`year`）を作る。
+ * タブ区切り・見出しつき・金額 1 列（入金が正）・日付は `YYYY-MM-DD`。
+ * `readStatementTable(text, mapping, { year })` が同じ行を返す。どの形の表でも読めること（INV-49）は
+ * `statement-table-arbitraries.ts` の生成器が確かめる。ここはユースケースのテストが行を渡すための簡単な入口
  */
-export function formatMfmePaste(rows: readonly PastedRow[], options: { header?: boolean } = {}) {
-  const withHeader = options.header !== false;
-  const lines = withHeader ? [MFME_HEADER] : [];
+export function statementTableOf(rows: readonly StatementRow[]): {
+  text: string;
+  mapping: StatementColumnMapping;
+  year: number;
+} {
+  const lines = [TABLE_ROLES.map((role) => COLUMN_ROLE_NAMES[role][0]).join("\t")];
   for (const r of rows) {
     lines.push(
       [
-        // 見出しなしの既定の並びは日付から始まる（計算対象の列を持たない）
-        ...(withHeader ? ["1"] : []),
-        mfmeDate(r.date),
+        r.date,
         r.content,
-        yen(r.amount),
+        String(r.amount),
         r.accountName,
         r.categoryMajor ?? "",
         r.categoryMinor ?? "",
         r.memo ?? "",
         r.transferFlag ? "1" : "0",
+        r.externalId ?? "",
       ].join("\t"),
     );
   }
-  return `${lines.join("\n")}\n`;
+  const columns: StatementColumnIndexes = Object.fromEntries(
+    TABLE_ROLES.map((role, i) => [role, i]),
+  );
+  return {
+    text: `${lines.join("\n")}\n`,
+    mapping: { delimiter: "\t", headerRow: 0, columns, amountSign: "inflow_positive" },
+    year: TABLE_YEAR,
+  };
 }
 
 /** 口座の用途（INV-42 の性質テスト） */

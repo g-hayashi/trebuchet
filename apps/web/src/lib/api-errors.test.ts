@@ -84,9 +84,9 @@ describe("describeError", () => {
 
   it("明細の取込（006）: 貼り付け・口座の対応・プレビューの変更", () => {
     const paste = describeError(
-      new ApiError(422, "STATEMENT_PASTE_UNREADABLE", "x", { missingColumns: ["金額（円）"] }),
+      new ApiError(422, "STATEMENT_TABLE_UNREADABLE", "x", { missingColumns: ["金額（円）"] }),
     );
-    expect(paste.message).toContain("貼り付けのテキストを読み取れませんでした");
+    expect(paste.message).toContain("表を読み取れませんでした");
     expect(paste.details).toEqual(["見つからない列: 金額（円）"]);
     const unmapped = describeError(
       new ApiError(422, "STATEMENT_ACCOUNT_UNMAPPED", "x", { names: ["A", "B"] }),

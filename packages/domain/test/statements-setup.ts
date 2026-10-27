@@ -1,7 +1,7 @@
 import type { Purpose } from "@trebuchet/schema";
 import type { StatementUnitOfWork } from "../src/ports.ts";
 import { journalShape } from "../src/statements/journal-shape.ts";
-import type { PastedRow } from "../src/statements/paste.ts";
+import type { StatementRow } from "../src/statements/table.ts";
 import type { JournalDraft, Result } from "../src/types.ts";
 import {
   commitStatementImport,
@@ -10,7 +10,7 @@ import {
 } from "../src/usecases/statements.ts";
 import { type FakeStatementUnitOfWork, fakeStatementUnitOfWork } from "./fakes.ts";
 import { setupBase } from "./ledger-setup.ts";
-import { formatMfmePaste } from "./statements-arbitraries.ts";
+import { statementTableOf } from "./statements-arbitraries.ts";
 
 /** Result を取り出す（失敗なら例外） */
 export const unwrap = <T>(r: Result<T>): T => {
@@ -77,20 +77,19 @@ export function setupStatements(
   };
 
   let shaSeq = 0;
-  const importRows = (rows: PastedRow[], year = 2026) => {
+  const importRows = (rows: StatementRow[], year = 2026) => {
     shaSeq += 1;
     const sha256 = shaSeq.toString(16).padStart(64, "0");
-    const source = { kind: "paste" as const, text: formatMfmePaste(rows), year };
-    const preview = unwrap(previewStatementImport(deps, { source, sha256 }));
+    const input = { ...statementTableOf(rows), year, origin: "paste" as const, sha256 };
+    const preview = unwrap(previewStatementImport(deps, input));
     unwrap(
       commitStatementImport(deps, {
-        source,
-        sha256,
+        ...input,
         expected: { inputSha256: sha256, countNew: preview.countNew },
       }),
     );
   };
-  const row = (over: Partial<PastedRow> = {}): PastedRow => ({
+  const row = (over: Partial<StatementRow> = {}): StatementRow => ({
     accountName: "サンプル銀行",
     date: "2026-05-10",
     content: "ショップ001",

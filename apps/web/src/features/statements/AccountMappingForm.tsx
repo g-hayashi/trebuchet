@@ -15,7 +15,7 @@ import { accountsQuery, subAccountsQuery } from "@/features/accounts/api";
 import { KIND_LABELS, USAGE_LABELS } from "./labels";
 
 /**
- * 取込元の口座（MF ME の保有金融機関）の対応（FR-003、R4）: 用途・種類・科目・補助科目。
+ * 取込元の口座（明細の口座名）の対応（FR-003、R4）: 用途・種類・科目・補助科目。
  * `private`（帳簿の外の口座）は科目を持たないので、科目と補助科目を出さない
  */
 export function AccountMappingForm({
@@ -26,7 +26,7 @@ export function AccountMappingForm({
   onSave,
 }: {
   entityId: string;
-  /** 保有金融機関の名前 */
+  /** 明細の口座名 */
   name: string;
   saving: boolean;
   error: unknown;

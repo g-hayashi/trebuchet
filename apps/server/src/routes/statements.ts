@@ -1,10 +1,10 @@
-import { sha256Hex } from "@trebuchet/db";
 import {
   acknowledgeChange,
   approveBulk,
   approveCandidate,
   buildCandidates,
   commitStatementImport,
+  detectStatementLayout,
   domainError,
   excludeStatement,
   getStatementSettings,
@@ -37,10 +37,10 @@ import {
   InferInput,
   SeedRulesInput,
   StatementAccountInput,
-  StatementImportCommitInput,
-  StatementImportPreviewInput,
-  type StatementImportSource,
+  StatementCommitOptions,
+  StatementLayoutOptions,
   StatementListQuery,
+  StatementPreviewOptions,
   StatementReasonInput,
   StatementSettingsInput,
 } from "@trebuchet/schema";
@@ -49,16 +49,32 @@ import { type RouteOptions, type SuggestionProviders, statementDeps } from "../d
 import { fail, respond } from "../errors.ts";
 import { type AiRuntime, LOCAL_AI_MODEL } from "../lib/ai-runtime.ts";
 import { createJobStore, type JobStore } from "../lib/jobs.ts";
+import { decodeStatementBytes, statementInputSha256 } from "../lib/statement-input.ts";
 import { todayOf } from "../lib/today.ts";
+import { readJsonField, readUpload, uploadLimit } from "../lib/upload.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 
 /**
- * 入力の SHA-256（R14。domain に暗号の関数を入れないので server で計算する）。
- * 貼り付けのテキストと対象の年から決める（年が違えば読んだ行が変わるため）
+ * 取込の `file` を文字列にし（`options.encoding` があればその文字コード。007/R1）、domain の入力を作る。
+ * 入力のハッシュは R11 の正規の JSON。5 MB 超 → 413、`file`・`options` が不正 → 400（readUpload・readJsonField が投げる）
  */
-const inputSha256 = (source: StatementImportSource): string =>
-  sha256Hex(new TextEncoder().encode(`${source.year}\n${source.text}`));
+function statementImportInput(bytes: Uint8Array, options: StatementPreviewOptions) {
+  const { text } = decodeStatementBytes(bytes, options.encoding);
+  return {
+    text,
+    origin: options.origin,
+    year: options.year,
+    mapping: options.mapping,
+    fixedAccountName: options.fixedAccountName,
+    sha256: statementInputSha256({
+      text,
+      year: options.year,
+      mapping: options.mapping,
+      fixedAccountName: options.fixedAccountName,
+    }),
+  };
+}
 
 /**
  * `/api/entities/:entityId` の下の明細の取込と AI 仕訳（006。contracts/http-api.md §2〜§6）。
@@ -89,20 +105,36 @@ export function statementRoutes({
         return respond(c, result, (saved) => c.json(saved, 200));
       })
       // §3 取込
-      .post("/statements/imports/preview", validate("json", StatementImportPreviewInput), (c) => {
-        const { source } = c.req.valid("json");
-        const result = previewStatementImport(deps(c.var.db), {
-          source,
-          sha256: inputSha256(source),
+      // multipart: file と options（JSON 文字列）。007 contracts §2。上限は 5 MB（002 と同じ）
+      .post("/statements/imports/layout", uploadLimit, async (c) => {
+        const upload = await readUpload(c);
+        const options = await readJsonField(c, "options", StatementLayoutOptions);
+        const { text, encoding } = decodeStatementBytes(upload.bytes, options.encoding);
+        const result = detectStatementLayout(deps(c.var.db), text, {
+          delimiter: options.delimiter,
+          headerRow: options.headerRow,
         });
+        // 取込元の照合（match・headerDiff）は T012。今は常に none
+        return respond(c, result, (detected) =>
+          c.json({ ...detected, encoding, match: { kind: "none" as const } }, 200),
+        );
+      })
+      .post("/statements/imports/preview", uploadLimit, async (c) => {
+        const upload = await readUpload(c);
+        const options = await readJsonField(c, "options", StatementPreviewOptions);
+        const result = previewStatementImport(
+          deps(c.var.db),
+          statementImportInput(upload.bytes, options),
+        );
         return respond(c, result, (preview) => c.json(preview, 200));
       })
-      .post("/statements/imports", validate("json", StatementImportCommitInput), (c) => {
-        const { source, expected } = c.req.valid("json");
+      .post("/statements/imports", uploadLimit, async (c) => {
+        const upload = await readUpload(c);
+        const options = await readJsonField(c, "options", StatementCommitOptions);
+        // accounts（未対応の口座の対応）・saveSource（取込元の保存）は T012・T013 で扱う
         const result = commitStatementImport(deps(c.var.db), {
-          source,
-          sha256: inputSha256(source),
-          expected,
+          ...statementImportInput(upload.bytes, options),
+          expected: options.expected,
         });
         return respond(c, result, (committed) => c.json(committed, 201));
       })
