@@ -38,7 +38,8 @@ apps/server ──→ packages/schema
 | 性能計測（SC-004 の仕訳 2,000 件、003 の SC-006 の決算書。認証つき） | `pnpm bench:reports` |
 | 性能計測（freee 取込の 500 仕訳、002 の SC-002） | `pnpm bench:import` |
 | 性能計測（バックアップ、004 の SC-005） | `pnpm bench:backup`（環境変数でしきい値と件数を変えられる。使い方は `scripts/bench-backup.ts` の先頭のコメント） |
-| 性能計測（明細 500 件の貼り付け・確認・候補、006 の SC-006。AI は呼ばない） | `pnpm bench:statements`（環境変数でしきい値・回数・件数を変えられる。使い方は `scripts/bench-statements.ts` の先頭のコメント） |
+| 性能計測（明細 500 件の CSV の読み取り・確認・候補、007 の SC-006。AI は呼ばない） | `pnpm bench:statements`（環境変数でしきい値・回数・件数を変えられる。使い方は `scripts/bench-statements.ts` の先頭のコメント） |
+| 列の案の評価（端末内の AI `fm serve` を呼ぶ。合成の例。CI に含まれない） | `pnpm eval:columns`（結果を `.tmp/eval-columns/` に残し前回と比べる。使い方は `scripts/eval-column-suggestions.ts` の先頭のコメント） |
 | バックアップ（`.tbk`）の復元（server を止めて行う） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--yes]`（`scripts/restore-backup.ts` の先頭のコメント） |
 | freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。`scripts/verify-freee-import.ts` の先頭のコメント） |
 | 青色申告決算書の照合（実データ、ローカル専用） | `pnpm verify:tax-return`（`work/` を読む。`scripts/verify-tax-return.ts` の先頭のコメント） |
@@ -172,7 +173,7 @@ apps/server ──→ packages/schema
 | 層 | 場所 |
 |---|---|
 | 入出力の型（明細・口座・候補・ルール・評価、AI の出力 `AiSuggestion`） | `packages/schema/src/statements.ts`、`ai.ts` |
-| 業務ルール（貼り付けの解析、安定したキー、正規化、仕訳の形、振替、既存の仕訳との照合、ルール、マスクと送信の内容、プロンプト、評価、状態の導出） | `packages/domain/src/statements/`（`paste.ts`、`keys.ts`、`normalize.ts`、`journal-shape.ts`、`transfer.ts`、`match-existing.ts`、`rules.ts`、`mask.ts`、`prompt.ts`、`evals.ts`、`status.ts`） |
+| 業務ルール（表の読み取り（007 で `paste.ts` を置き換えた。下の 007 の節）、安定したキー、正規化、仕訳の形、振替、既存の仕訳との照合、ルール、マスクと送信の内容、プロンプト、評価、状態の導出） | `packages/domain/src/statements/`（`table.ts`、`columns.ts`、`keys.ts`、`normalize.ts`、`journal-shape.ts`、`transfer.ts`、`match-existing.ts`、`rules.ts`、`mask.ts`、`prompt.ts`、`evals.ts`、`status.ts`） |
 | ユースケース | `packages/domain/src/usecases/statements.ts`、`statement-candidates.ts`、`statement-approval.ts`、`inference.ts`、`inference-rules.ts`、`evals.ts` |
 | 永続化（取込の回・明細・候補・結びつき・ルール・評価・操作の記録、registry の AI 設定） | `packages/db/src/statement-repository.ts`、`ai-settings-repository.ts` |
 | HTTP | `apps/server/src/routes/statements.ts`、`ai-settings.ts` |
@@ -184,11 +185,34 @@ apps/server ──→ packages/schema
 - **`inferWithAi` は 読む → AI を呼ぶ（UnitOfWork の外）→ 書く の 3 段**（006/R8）。AI の呼び出し（遅い、外部に出る）をトランザクションの中に入れない。取込と承認は 1 つの `StatementUnitOfWork` の中で書く（INV-47）。
 - **端末内のモデルは `fm serve`**（モデル名 `system`。`stream` は送らない（`stream: false` には応答しない。省くと SSE で返り、`ai-client.ts` が読み分ける）。ポート `TREBUCHET_FM_PORT`、既定 18790）。最初の推定で起動し、server の終了で止める（006/R10）。外部の AI の API キーはキーチェーン（004 と同じ `SecretStore`）に置く。`ai_settings` は registry の表で、バックアップに含めない（006/R12）。
 - **AI の設定の必須項目の検査**（外部を有効にするのに URL・モデル・API キーがそろっていなければ 422 `AI_NOT_CONFIGURED`）は `apps/server/src/routes/ai-settings.ts` にある。帳簿の業務ルールではなく、端末の設定値の検査なので server に置く。
-- **MF ME の画面からの取得（US4）は取りやめた**（2026-10-26。利用者の判断。汎用の明細取込を 007 で作る）。取込は貼り付けだけ。`apps/server` は Playwright に依存しない。
+- **MF ME の画面からの取得（US4）は取りやめた**（2026-10-26。利用者の判断。汎用の明細取込を 007 で作った）。取込は貼り付けとファイル（007）。`apps/server` は Playwright に依存しない。
 - **評価のジョブは同時に 1 つ**（409 `JOB_RUNNING`。`lib/jobs.ts` の `startTask`）。server の差し替えは `createApp({ jobs, ai: { fetch, secrets, settings, fm } })`。
 - **テストは `fm`・外部の AI を呼ばない**。偽の `SuggestionProvider`（domain）と偽の `fetch`（server）を使う。
 - **明細の承認だけが仕訳を作る**（INV-41）。仕訳の `source` は `statement`（通常どおり訂正・取消できる）。明細の状態は保存せず、結びつき・除外・仕訳の状態から導く（006/R15）。
 - **実環境の確認（貼り付けの形、`fm serve`）の結果は、値・口座名・摘要を書かない**。形だけを記録する（quickstart §3）。
+
+## 汎用の明細取込（007）
+
+仕様: `specs/007-generic-statement-import/`。列の対応の保存と当てはめ、AI を列の案だけに使う理由: [ADR 0010](docs/adr/0010-generic-statement-import.md)。006 の取込（MF ME の貼り付けに決め打ち）を、取込元を問わない読み取りに置き換えた。読み取りの後（候補・承認・ルール・評価）は 006 のまま。
+
+| 層 | 場所 |
+|---|---|
+| 入出力の型（列の役割・対応、layout、取込元、口座の案、AI の列の案 `AiColumnSuggestion`） | `packages/schema/src/statements.ts`、`ai.ts` |
+| 業務ルール（区切り文字と見出しの行の判定・値の読み取り、見出しの辞書と列の案、取込元の照合、口座の推定、列の案のプロンプトと出力の検証） | `packages/domain/src/statements/`（`table.ts`、`columns.ts`、`sources.ts`、`account-inference.ts`、`column-prompt.ts`）、区切りつきの分割は `packages/domain/src/import/csv.ts` の `parseDelimited` |
+| ユースケース | `packages/domain/src/usecases/statements.ts`、`statement-sources.ts`、`statement-columns.ts`（`suggestStatementColumns`、`evaluateColumnSuggestions`） |
+| 永続化（取込元 `statement_sources`、取込の確定と同じ UnitOfWork での保存） | `packages/db/src/statement-repository.ts` |
+| HTTP | `apps/server/src/routes/statements.ts`（`/statements/imports/layout`・`column-suggestion`・`preview`・commit、`/statement-sources`）、受け取りは `apps/server/src/lib/upload.ts`・`statement-input.ts` |
+| 端末内の AI の列の案 | `apps/server/src/lib/ai-client.ts`（`createColumnProvider`、`COLUMN_TIMEOUT_MS`） |
+| 画面 | `apps/web/src/features/statements/`（`StatementInput.tsx`、`ColumnMappingEditor.tsx`、`ColumnSuggestionNote.tsx`、`SourcePicker.tsx`、`SourceList.tsx`、`AccountMappingForm.tsx`、`ImportWorkspace.tsx`）、`apps/web/src/routes/e/$entityId/statements/import.tsx` |
+| フィクスチャ・評価・性能 | `packages/domain/test/fixtures/statements/`（`README.md`、`expected.ts`、`column-evals.ts`）、`scripts/eval-column-suggestions.ts`、`scripts/bench-statements.ts` |
+
+- **値（日付・金額・内容）の読み取りはプログラムだけ**（FR-006、INV-49）。AI の出力から値を作らない。読み取りは利用者が確かめた列の対応（`readStatementTable`）だけに基づく。金額 1 列の符号の向き（`amountSign`）は自動で決めず利用者が選ぶ。
+- **列の案の AI は端末内だけ**（FR-018、INV-48）。`createColumnProvider` に渡すのは端末内の endpoint だけで、外部の endpoint を受け取る口を持たない。外部の AI の設定にかかわらず外部へ送らず、006 の `createAiSuggester` も通さない。渡すのは見出しと先頭の明細の行 `COLUMN_PROMPT_ROWS`（5）件だけ（`buildColumnPrompt`）で、前置きの行（口座番号など）は渡さず保存もしない。AI を呼ぶのは、辞書の案で必須の役割がそろわず、保存した対応も当てはまらないときだけ。出力は `AiColumnSuggestion`（Zod）で検証し、外れたら案なし。
+- **見出しの辞書と口座の語の表は 1 か所の一覧**。新しい銀行・カードの見出しは `columns.ts` の `COLUMN_ROLE_NAMES`、口座の種類・用途を決める語は `account-inference.ts` の `ACCOUNT_CUES`・`USAGE_CUES` にだけ足す（比べるときは NFKC。辞書は完全一致、語の表は部分一致）。足したら同じ値を使うテストと `fixtures/statements/` の README を合わせる。
+- **取込元の保存は取込の確定と同じ `StatementUnitOfWork`**（INV-47）。確定しなければ保存しない。`fixed_account_name` が NULL ⇔ 対応が `accountName` の役割を持つ（INV-50）。見出しの署名が 1 件だけ一致すれば次回から列の選択を飛ばす。見出しが変われば自動では当てはめない（007/R8）。
+- **フィクスチャは合成**（`packages/domain/test/fixtures/statements/`。作り方・匿名化・検算は同じ場所の `README.md`）。実データから写してよいのは列名と書式だけ。銀行の CSV は UTF-8 の元（`bank-two-columns.utf8.csv`）から CP932 の `bank-two-columns.csv` を `iconv` で作る。変えたら README の「検算」をして `expected.ts` を直す。
+- **プロンプト・`COLUMN_PROMPT_ROWS`・`COLUMN_TIMEOUT_MS` を変えるときは、変更の前と後で `pnpm eval:columns` を実行して結果を比べる**（Constitution IV、007/R15）。`fm` を呼ぶので CI に含まれない。結果は `.tmp/eval-columns/` に件数と割合だけを残し、見出し・値を書かない。CI のテストは偽の `ColumnSuggestionProvider` で集計だけを確かめる。
+- **互換の別名を残さない**（007/R13）。`PastedRow`・`MfmePaste`・`parseMfmePaste`・`MFME_COLUMNS`・`mfme_fetch`・`STATEMENT_PASTE_UNREADABLE` は消した。入力は貼り付けもファイルも multipart の `file` と `options`。上限は 5 MB・20,000 行・50 列。
 
 ## データと一時ファイル
 
@@ -198,7 +222,7 @@ apps/server ──→ packages/schema
 
 ## 仕様と文書
 
-- Spec Kit の成果物は `specs/<NNN-feature>/`（001〜006）に置く: `spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`tasks.md`（`contracts/`、`checklists/` がある機能もある）。完了した機能の `tasks.md` と `checklists/` は記録として残す。
+- Spec Kit の成果物は `specs/<NNN-feature>/`（001〜007）に置く: `spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`tasks.md`（`contracts/`、`checklists/` がある機能もある）。完了した機能の `tasks.md` と `checklists/` は記録として残す。
 - **番号は機能ごとに振り直される**（research の R、タスクの T）。他の機能の番号を指すときは `001/R6`、`005/T024` の形で機能の番号をつける。不変条件の INV だけは通し番号（`specs/INVARIANTS.md`）。
 - Spec Kit のテンプレート、スクリプト、憲法（`.specify/memory/constitution.md`）は `.specify/` に置く。
 - Spec Kit のスキルは、Claude Code 用が `.claude/skills/speckit-*`、GitHub Copilot CLI 用が `.github/skills/speckit-*` にある。どちらも `uvx --from git+https://github.com/github/spec-kit.git@v1.2.1 specify integration upgrade <claude|copilot>` で更新する（手で片方だけを直さない）。
