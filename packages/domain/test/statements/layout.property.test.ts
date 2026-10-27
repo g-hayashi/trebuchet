@@ -138,7 +138,8 @@ function build(spec: Spec): Built {
   );
 
   const hasHeader = spec.headerKind !== "none";
-  const preamble = hasHeader ? spec.preamble : [];
+  // 見出しなしでも前置きはある（最頻値の列数を持つ最初の行より前。R2-3）
+  const preamble = spec.preamble;
   const lines: string[] = preamble.map(line);
   if (hasHeader) lines.push(line(headerCells));
   const dataLines = dataRows.map(line);

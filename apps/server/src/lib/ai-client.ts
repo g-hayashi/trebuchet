@@ -1,10 +1,12 @@
 import {
   buildPrompt,
+  COLUMN_TIMEOUT_DETAIL,
+  type ColumnSuggestionProvider,
   domainError,
   err,
   ok,
+  type Result,
   type SuggestionContext,
-  type SuggestionPayload,
   type SuggestionProvider,
 } from "@trebuchet/domain";
 
@@ -31,8 +33,15 @@ export type AiProviderOptions = {
   endpoint(): Promise<AiEndpoint | undefined>;
 };
 
+type Failure = { message: string; timeout?: boolean };
+
 const unavailable = () => err(domainError("AI_NOT_CONFIGURED", "AI を使えません"));
-const failed = (message: string) => err(domainError("VALIDATION", message));
+const failed = (message: string, timeout = false) =>
+  err(
+    timeout
+      ? domainError("VALIDATION", message, COLUMN_TIMEOUT_DETAIL)
+      : domainError("VALIDATION", message),
+  );
 
 /** `response_format` の `json_schema`（受けない接続先もある。出力は必ず検証する） */
 function responseFormat(context: SuggestionContext) {
@@ -77,26 +86,35 @@ function contentOf(text: string): unknown {
   return joined;
 }
 
-/** OpenAI 互換の `SuggestionProvider`。`suggest` は `message.content` の文字列をそのまま返す */
-export function createOpenAiProvider(options: AiProviderOptions): SuggestionProvider {
+/** Chat Completions の要求（呼び出しごとの部分）。`responseFormat` は `response_format` の値（受けない接続先には付けずに再試行する） */
+export type ChatRequest = {
+  messages: { role: "system" | "user"; content: string }[];
+  responseFormat?: object | undefined;
+};
+
+/**
+ * OpenAI 互換の Chat Completions を 1 回呼び、`message.content` の文字列をそのまま返す（検証は呼び出し側）。
+ * `response_format` を受けない接続先（400）には、付けずに 1 回だけ再試行する。時間切れは `COLUMN_TIMEOUT_DETAIL`
+ * つきの失敗（007 の列の案が `timeout` と他の失敗を見分ける）。エラーのメッセージに URL・API キー・応答の本文を出さない
+ */
+export async function chatCompletion(
+  options: { fetch: typeof fetch; timeoutMs: number },
+  endpoint: AiEndpoint,
+  request: ChatRequest,
+): Promise<Result<string>> {
   const post = async (
-    endpoint: AiEndpoint,
-    payload: SuggestionPayload,
-    context: SuggestionContext,
     withFormat: boolean,
-  ): Promise<{ response: Response } | { error: string }> => {
-    const prompt = buildPrompt(payload, context.accounts, context.taxCategories);
+  ): Promise<{ response: Response } | { error: Failure }> => {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (endpoint.apiKey !== undefined) headers.authorization = `Bearer ${endpoint.apiKey}`;
     const body = {
       model: endpoint.model,
-      messages: [
-        { role: "system", content: prompt.system },
-        { role: "user", content: prompt.user },
-      ],
+      messages: request.messages,
       // stream は送らない（fm serve は stream: false に応答しない。省くと SSE で返すので読み分ける）
       temperature: 0,
-      ...(withFormat ? { response_format: responseFormat(context) } : {}),
+      ...(withFormat && request.responseFormat !== undefined
+        ? { response_format: request.responseFormat }
+        : {}),
     };
     try {
       const response = await options.fetch(
@@ -111,36 +129,81 @@ export function createOpenAiProvider(options: AiProviderOptions): SuggestionProv
       return { response };
     } catch (e) {
       // 元のエラーのメッセージは出さない（URL・内部の事情が混じる）
-      return {
-        error: isTimeout(e) ? "AI の応答が時間内に返りませんでした" : "AI に接続できません",
-      };
+      return isTimeout(e)
+        ? { error: { message: "AI の応答が時間内に返りませんでした", timeout: true } }
+        : { error: { message: "AI に接続できません" } };
     }
   };
 
+  // instanceof Response で見分けない（@hono/node-server の serve が global.Response を置き換えるため）
+  let sent = await post(true);
+  // response_format を受けない接続先は 400 で断る。付けずに 1 回だけ再試行する
+  if ("response" in sent && sent.response.status === 400) sent = await post(false);
+  if ("error" in sent) return failed(sent.error.message, sent.error.timeout === true);
+  const res = sent.response;
+  if (!res.ok) return failed(`AI がエラーを返しました（HTTP ${res.status}）`);
+
+  let content: unknown;
+  try {
+    content = contentOf(await res.text());
+  } catch {
+    return failed("AI の応答を読めません");
+  }
+  if (typeof content !== "string") return failed("AI の応答に本文がありません");
+  return ok(content);
+}
+
+/** OpenAI 互換の `SuggestionProvider`。`suggest` は `message.content` の文字列をそのまま返す */
+export function createOpenAiProvider(options: AiProviderOptions): SuggestionProvider {
   return {
     available: options.available,
     async suggest(payload, context) {
       const endpoint = await options.endpoint();
       if (endpoint === undefined) return unavailable();
+      const prompt = buildPrompt(payload, context.accounts, context.taxCategories);
+      return chatCompletion(options, endpoint, {
+        messages: [
+          { role: "system", content: prompt.system },
+          { role: "user", content: prompt.user },
+        ],
+        responseFormat: responseFormat(context),
+      });
+    },
+  };
+}
 
-      // instanceof Response で見分けない（@hono/node-server の serve が global.Response を置き換えるため）
-      let sent = await post(endpoint, payload, context, true);
-      // response_format を受けない接続先は 400 で断る。付けずに 1 回だけ再試行する
-      if ("response" in sent && sent.response.status === 400) {
-        sent = await post(endpoint, payload, context, false);
-      }
-      if ("error" in sent) return failed(sent.error);
-      const res = sent.response;
-      if (!res.ok) return failed(`AI がエラーを返しました（HTTP ${res.status}）`);
+/** 列の案の時間切れ（007/R10）: 端末内 20 秒 */
+export const COLUMN_TIMEOUT_MS = 20_000;
 
-      let content: unknown;
-      try {
-        content = contentOf(await res.text());
-      } catch {
-        return failed("AI の応答を読めません");
-      }
-      if (typeof content !== "string") return failed("AI の応答に本文がありません");
-      return ok(content);
+export type ColumnProviderOptions = {
+  fetch: typeof fetch;
+  /** 端末内の AI が使えるか（設定で有効、かつ `fm` が使える） */
+  available(): Promise<boolean>;
+  /**
+   * 端末内の接続先（`fm serve`）。呼ぶたびに引く。使えなければ undefined。
+   * 外部の接続先・API キーを受け取る引数は持たない（FR-018）。API キーは付けない
+   */
+  localEndpoint(): Promise<{ baseUrl: string; model: string } | undefined>;
+};
+
+/** 端末内の AI だけを呼ぶ `ColumnSuggestionProvider`（007/R10）。`suggestColumns` は `message.content` の文字列を返す */
+export function createColumnProvider(options: ColumnProviderOptions): ColumnSuggestionProvider {
+  return {
+    available: options.available,
+    async suggestColumns(prompt) {
+      const local = await options.localEndpoint();
+      if (local === undefined) return unavailable();
+      return chatCompletion(
+        { fetch: options.fetch, timeoutMs: COLUMN_TIMEOUT_MS },
+        { baseUrl: local.baseUrl, model: local.model },
+        {
+          messages: prompt.messages,
+          responseFormat: {
+            type: "json_schema",
+            json_schema: { name: "column_suggestion", strict: true, schema: prompt.schema },
+          },
+        },
+      );
     },
   };
 }

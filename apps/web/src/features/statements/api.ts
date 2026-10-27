@@ -6,6 +6,8 @@ import type {
   Purpose,
   RuleStatus,
   StatementAccountInput,
+  StatementColumnSuggestionOptions,
+  StatementColumnSuggestionResponse,
   StatementCommitOptions,
   StatementImportCommitted,
   StatementImportPreview,
@@ -82,6 +84,33 @@ export const postImportLayout = async (
   options: StatementLayoutOptions,
 ): Promise<StatementTableLayout> =>
   uploadForm(importPath(entityId, "/layout"), { file, options: JSON.stringify(options) });
+
+/**
+ * 列の対応の案（007 §4.1。端末内の AI。何も保存しない）。辞書の案で必須がそろわない表だけで呼ぶ。
+ * キーは `statements` の下に置かない（仕訳が変わる操作の後に AI を呼び直さない）
+ */
+export const columnSuggestionQuery = (
+  entityId: string,
+  file: File,
+  options: StatementColumnSuggestionOptions,
+) =>
+  queryOptions({
+    queryKey: [
+      "entities",
+      entityId,
+      "statement-column-suggestion",
+      `${file.name}:${file.size}:${file.lastModified}`,
+      options,
+    ] as const,
+    queryFn: async (): Promise<StatementColumnSuggestionResponse> =>
+      uploadForm(importPath(entityId, "/column-suggestion"), {
+        file,
+        options: JSON.stringify(options),
+      }),
+    // AI は遅く、同じ表への答えは変わらない。失敗しても繰り返さない
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
 
 /** プレビュー（§2.2。POST だが何も保存しない） */
 export const postImportPreview = async (

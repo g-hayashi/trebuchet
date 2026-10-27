@@ -5,11 +5,13 @@ import type {
   StatementSource,
 } from "@trebuchet/schema";
 import type {
+  ColumnSuggestionProvider,
   StatementStore,
   SuggestionContext,
   SuggestionPayload,
   SuggestionProvider,
 } from "../../src/ports.ts";
+import type { ColumnPrompt } from "../../src/statements/column-prompt.ts";
 import {
   domainError,
   type EvalRunRecord,
@@ -285,6 +287,41 @@ export const fakeStatementUnitOfWork = (
   statements = new InMemoryStatementStore(),
 ) => fakeUnitOfWork(ledger, masters, { statements });
 export type FakeStatementUnitOfWork = ReturnType<typeof fakeStatementUnitOfWork>;
+
+/**
+ * ColumnSuggestionProvider のフェイク（007/R10）。既定は使えない。`respondWith` で応答を決め、`calls` で
+ * 渡されたプロンプトを確かめる。`throwOnCall` を立てると `suggestColumns` が例外を投げる
+ */
+export class FakeColumnSuggestionProvider implements ColumnSuggestionProvider {
+  readonly calls: ColumnPrompt[] = [];
+  availableCalls = 0;
+  throwOnCall = false;
+  private isAvailable: boolean;
+  private response: Result<unknown> = err(domainError("VALIDATION", "AI を使えません"));
+
+  constructor(options: { available?: boolean } = {}) {
+    this.isAvailable = options.available ?? false;
+  }
+
+  setAvailable(value: boolean): void {
+    this.isAvailable = value;
+  }
+
+  respondWith(response: Result<unknown>): void {
+    this.response = response;
+  }
+
+  async available(): Promise<boolean> {
+    this.availableCalls += 1;
+    return this.isAvailable;
+  }
+
+  async suggestColumns(prompt: ColumnPrompt): Promise<Result<unknown>> {
+    this.calls.push(structuredClone(prompt));
+    if (this.throwOnCall) throw new Error("boom");
+    return this.response;
+  }
+}
 
 /**
  * SuggestionProvider のフェイク。既定は使えない（`available` が false、`suggest` は失敗）。

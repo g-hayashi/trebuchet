@@ -25,6 +25,7 @@ import {
   saveStatementAccount,
   saveStatementSettings,
   seedRulesFromJournals,
+  suggestStatementColumns,
   unexcludeStatement,
   unlinkStatement,
   updateRule,
@@ -40,6 +41,7 @@ import {
   InferInput,
   SeedRulesInput,
   StatementAccountInput,
+  StatementColumnSuggestionOptions,
   StatementCommitOptions,
   StatementLayoutOptions,
   StatementListQuery,
@@ -121,6 +123,19 @@ export function statementRoutes({
           sourceId: options.sourceId,
         });
         return respond(c, result, (detected) => c.json({ ...detected, encoding }, 200));
+      })
+      // 007 §4.1 列の対応の案。端末内の AI だけを呼ぶ（外部の AI の設定は読まない。FR-018）。設定で無効なら disabled
+      .post("/statements/imports/column-suggestion", uploadLimit, async (c) => {
+        const upload = await readUpload(c);
+        const options = await readJsonField(c, "options", StatementColumnSuggestionOptions);
+        const { text } = decodeStatementBytes(upload.bytes, options.encoding);
+        const detected = detectStatementLayout(deps(c.var.db), text, {
+          delimiter: options.delimiter,
+          headerRow: options.headerRow,
+        });
+        if (!detected.ok) return fail(c, detected.error);
+        const provider = ai.settings().get().localEnabled ? ai.columns : undefined;
+        return c.json(await suggestStatementColumns({ provider }, detected.value), 200);
       })
       .post("/statements/imports/preview", uploadLimit, async (c) => {
         const upload = await readUpload(c);

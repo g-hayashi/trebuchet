@@ -1333,6 +1333,182 @@ describe("既存の取込元を選ぶ・見出しの違い（US2-2。FR-011）",
   });
 });
 
+describe("AI の案（US4。FR-016〜019）", () => {
+  const SUGGEST_PATH = `${BASE}/statements/imports/column-suggestion`;
+  /** 見出しが辞書に当たらない独自の名前（案は空） */
+  const CUSTOM_LAYOUT = {
+    ...LAYOUT,
+    header: ["発生日", "取引の内容", "増減額", "整理番号"],
+    needsYear: false,
+    sampleRows: [["2026/10/01", "テスト商事", "100", "1"]],
+    suggestedColumns: {},
+  };
+  const AI_SUGGESTION = {
+    columns: { date: 0, content: 1, amount: 2, externalId: 3 },
+    amountSign: "inflow_positive",
+    confidence: 77,
+    reason: "見出しと値の形から",
+  };
+  const customRoutes = (suggest: () => ReturnType<typeof ok> | Promise<ReturnType<typeof ok>>) => ({
+    ...baseRoutes,
+    [`POST ${LAYOUT_PATH}`]: () => ok(CUSTOM_LAYOUT),
+    [`POST ${SUGGEST_PATH}`]: suggest,
+  });
+
+  it("必須の役割がそろう表（辞書の案）では、案を要求しない", async () => {
+    const all = mockApi(baseRoutes);
+    const u = userEvent.setup();
+    renderImport();
+    await readPaste(u);
+    expect(calls(all, "POST", "/statements/imports/column-suggestion")).toHaveLength(0);
+    expect(screen.queryByText(/AI の案/)).not.toBeInTheDocument();
+  });
+
+  it("必須がそろわないときだけ、読み取りと同じファイル・文字コード・区切り・見出しの行で要求する", async () => {
+    const all = mockApi(customRoutes(() => ok({ suggestion: null })));
+    const u = userEvent.setup();
+    renderImport();
+    await readPaste(u, "発生日\t取引の内容\t増減額\t整理番号\n2026/10/01\tテスト商事\t100\t1");
+    await waitFor(() =>
+      expect(calls(all, "POST", "/statements/imports/column-suggestion")).toHaveLength(1),
+    );
+    const call = calls(all, "POST", "/statements/imports/column-suggestion")[0];
+    expect(optionsOf(call)).toEqual({
+      origin: "paste",
+      encoding: "utf-8",
+      delimiter: "\t",
+      headerRow: 0,
+    });
+    expect(await fileTextOf(call)).toContain("発生日");
+  });
+
+  it("待つ間も列を選べる。案が来たら、触っていない列にだけ入れ、「AI の案」と確信度・理由を示す。自動では進まず、符号も選ばない", async () => {
+    let resolve: (reply: ReturnType<typeof ok>) => void = () => {};
+    const pending = new Promise<ReturnType<typeof ok>>((r) => {
+      resolve = r;
+    });
+    const all = mockApi({
+      ...customRoutes(() => pending),
+      [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(
+      u,
+      "発生日\t取引の内容\t増減額\t整理番号\n2026/10/01\tテスト商事\t100\t1",
+    );
+
+    expect(await within(region).findByText("AI の案を作っています…")).toBeInTheDocument();
+    // 待っている間に、利用者が 1 列目を選ぶ（触った列は案で上書きしない）
+    await u.selectOptions(within(region).getByLabelText("「発生日」の役割"), "メモ");
+    expect(confirmButton()).toBeDisabled();
+
+    resolve(ok({ suggestion: AI_SUGGESTION }));
+    expect(
+      await within(region).findByText(/AI の案（確信度 77、見出しと値の形から）/),
+    ).toBeInTheDocument();
+    expect(within(region).queryByText("AI の案を作っています…")).not.toBeInTheDocument();
+
+    expect(within(region).getByLabelText("「発生日」の役割")).toHaveValue("memo");
+    expect(within(region).getByLabelText("「取引の内容」の役割")).toHaveValue("content");
+    expect(within(region).getByLabelText("「増減額」の役割")).toHaveValue("amount");
+    expect(within(region).getByLabelText("「整理番号」の役割")).toHaveValue("externalId");
+    // 日付の列は利用者が別の役割にしたので、日付がなく、確認へ進めない。符号も自動では選ばない
+    const reasons = within(region).getByRole("list", { name: "確認へ進めない理由" });
+    expect(reasons).toHaveTextContent("「日付」の列を選んでください");
+    expect(reasons).toHaveTextContent("金額の符号（正の値が入金か出金か）を選んでください");
+    expect(within(region).getByRole("radio", { name: "正の値は入金" })).not.toBeChecked();
+    expect(calls(all, "POST", "/statements/imports/preview")).toHaveLength(0);
+  });
+
+  it("案で必須がそろっても、確認へ進めるのは符号を選んだあと（利用者が確かめてから）", async () => {
+    const all = mockApi({
+      ...customRoutes(() => ok({ suggestion: AI_SUGGESTION })),
+      [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(
+      u,
+      "発生日\t取引の内容\t増減額\t整理番号\n2026/10/01\tテスト商事\t100\t1",
+    );
+    await waitFor(() =>
+      expect(within(region).getByLabelText("「発生日」の役割")).toHaveValue("date"),
+    );
+    // 口座名の列がないので、取込の口座も選ぶ
+    expect(confirmButton()).toBeDisabled();
+    expect(calls(all, "POST", "/statements/imports/preview")).toHaveLength(0);
+    await chooseSign(u);
+    await u.selectOptions(within(region).getByLabelText("取込の口座"), "新しい名前を入れる");
+    await u.type(within(region).getByLabelText("口座の名前"), "サンプル銀行");
+    await u.click(confirmButton());
+    await screen.findByRole("region", { name: "プレビュー" });
+    expect(optionsOf(calls(all, "POST", "/statements/imports/preview")[0])).toMatchObject({
+      mapping: { columns: { date: 0, content: 1, amount: 2, externalId: 3 } },
+    });
+  });
+
+  it("使えない理由を控えめに示す。案なしでも列を選べる", async () => {
+    const cases: [string, string][] = [
+      ["disabled", "端末内の AI は無効です"],
+      ["unavailable", "端末内の AI を使えないため、案はありません"],
+      ["timeout", "AI の応答が時間内に返らなかったため、案はありません"],
+      ["invalid", "AI の案が正しい形ではなかったため、使いませんでした"],
+    ];
+    for (const [unavailable, message] of cases) {
+      mockApi(customRoutes(() => ok({ suggestion: null, unavailable })));
+      const u = userEvent.setup();
+      const { unmount } = renderImport();
+      const region = await readPaste(
+        u,
+        "発生日\t取引の内容\t増減額\t整理番号\n2026/10/01\tテスト商事\t100\t1",
+      );
+      expect(await within(region).findByText(message, { exact: false })).toBeInTheDocument();
+      await u.selectOptions(within(region).getByLabelText("「発生日」の役割"), "日付");
+      expect(within(region).getByLabelText("「発生日」の役割")).toHaveValue("date");
+      unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("要求が失敗（サーバーの 500）しても、案なしで列を選べる", async () => {
+    mockApi(
+      customRoutes(() =>
+        ok({ error: { code: "INTERNAL", message: "サーバーでエラーが発生しました" } }, 500),
+      ),
+    );
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(
+      u,
+      "発生日\t取引の内容\t増減額\t整理番号\n2026/10/01\tテスト商事\t100\t1",
+    );
+    expect(await within(region).findByText("AI の案を作れませんでした")).toBeInTheDocument();
+    await u.selectOptions(within(region).getByLabelText("「発生日」の役割"), "日付");
+    expect(within(region).getByLabelText("「発生日」の役割")).toHaveValue("date");
+  });
+
+  it("保存した取込元が当てはまる表（2 件以上から「どれも使わず」）では要求しない", async () => {
+    const all = mockApi({
+      ...customRoutes(() => ok({ suggestion: AI_SUGGESTION })),
+      [`POST ${LAYOUT_PATH}`]: () =>
+        ok({
+          ...CUSTOM_LAYOUT,
+          match: {
+            kind: "many",
+            sources: [SOURCE(), SOURCE({ id: uuid(9002), name: "カード B" })],
+          },
+        }),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await readOnly(u);
+    await u.click(await screen.findByRole("button", { name: "どれも使わず列を選ぶ" }));
+    expect(await mappingRegion()).toBeInTheDocument();
+    expect(calls(all, "POST", "/statements/imports/column-suggestion")).toHaveLength(0);
+  });
+});
+
 describe("メニュー", () => {
   it("取込の画面から明細の一覧へ戻れる（事業体のメニューの「明細」は一覧へ進む。statements.test.tsx）", async () => {
     mockApi(baseRoutes);

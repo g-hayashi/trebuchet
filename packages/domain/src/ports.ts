@@ -27,6 +27,7 @@ import type {
   JournalSignature,
   TaxMapping,
 } from "./import/types.ts";
+import type { ColumnPrompt } from "./statements/column-prompt.ts";
 import type { AiPayload } from "./statements/mask.ts";
 import type { PromptAccount } from "./statements/prompt.ts";
 import type {
@@ -454,6 +455,17 @@ export interface SuggestionProvider {
   /** 使える（接続先・モデルなどがそろっている）か */
   available(): Promise<boolean>;
   suggest(payload: SuggestionPayload, context: SuggestionContext): Promise<Result<unknown>>;
+}
+
+/**
+ * 端末内の AI による列の対応の案の口（007/R10）。端末内の接続先だけを持つ実装を渡す（外部へ回る口を持たない。FR-018）。
+ * 出力は `unknown` で返し、ドメインの `parseColumnSuggestion` が検証する。時間切れは
+ * `COLUMN_TIMEOUT_DETAIL`（`usecases/statement-columns.ts`）を details に付けた失敗で返す
+ */
+export interface ColumnSuggestionProvider {
+  /** 使える（端末内が有効で、接続先・モデルがそろっている）か */
+  available(): Promise<boolean>;
+  suggestColumns(prompt: ColumnPrompt): Promise<Result<unknown>>;
 }
 
 /** 事業体の一覧（data/registry.sqlite） */

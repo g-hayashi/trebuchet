@@ -231,7 +231,8 @@ function hasYearlessDate(
  * 表のテキストの区切り文字と見出しの行を判定する（007/R2）。値は読まない（日付・金額の読み取りは `readStatementTable`）。
  * 1. 区切り文字: タブ・カンマ・セミコロンの候補ごとに引用つきで分割し、空でない先頭 50 行のうち、2 列以上の行の列数の最頻値を持つ行の割合で採点する
  *    （同点はタブ → カンマ → セミコロン）。どの候補も 2 列以上の行がなければ、タブで返す（利用者が選び直せる）
- * 2. 見出しの行: `findHeaderIndex`。見出しより前の行は前置きで、読まない・返さない（FR-017）。見出しなしなら全行がデータ
+ * 2. 見出しの行: `findHeaderIndex`。見出しより前の行は前置きで、読まない・返さない（FR-017）。見出しなしなら、
+ *    最頻値の列数を持つ最初の行より前が前置き（見本・行数に入れない）
  * - `override.delimiter` があれば採点しない。`override.headerRow` があれば見出しの判定をしない（その行がテキストにない・空なら
  *   `STATEMENT_TABLE_UNREADABLE`）
  * - `suggestedColumns` は見出しの案（辞書。R4）。見出しなしなら空。`sampleRows` は見出しより後の先頭 10 行
@@ -295,7 +296,16 @@ export function detectTableLayout(
 
   const headerLine = headerIndex === null ? undefined : lines[headerIndex];
   const header = headerLine === undefined ? null : headerLine.cells;
-  const dataLines = headerIndex === null ? lines : lines.slice(headerIndex + 1);
+  // 見出しなしでは、最頻値の列数を持つ最初の行より前が前置き（R2-3）。見本・行数・年の判定に入れない
+  const dataLines =
+    headerIndex === null
+      ? lines.slice(
+          Math.max(
+            0,
+            lines.findIndex((l) => l.cells.length === width),
+          ),
+        )
+      : lines.slice(headerIndex + 1);
   const suggestedColumns = header === null ? {} : suggestColumns(header);
   return ok({
     delimiter,

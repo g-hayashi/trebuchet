@@ -8,12 +8,13 @@ import {
   type StatementColumnIndexes,
   type StatementColumnMapping,
   type StatementColumnRole,
+  type StatementColumnSuggestionOptions,
   type StatementDelimiter,
   type StatementEncoding,
   type StatementSource,
   type StatementTableLayout,
 } from "@trebuchet/schema";
-import { useId, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,8 +28,14 @@ import {
 } from "@/components/ui/table";
 import { thisYear } from "@/lib/dates";
 import { statementAccountsQuery } from "./api";
+import {
+  type ColumnAiSuggestion,
+  ColumnSuggestionNote,
+  needsColumnSuggestion,
+} from "./ColumnSuggestionNote";
 import { AMOUNT_SIGN_LABELS, DELIMITER_LABELS, ENCODING_LABELS, ROLE_LABELS } from "./labels";
 import { HeaderDiff, SourceSelect } from "./SourcePicker";
+import type { StatementInputValue } from "./StatementInput";
 
 /** 「確認へ」で渡す、取込の指定（プレビューの options の元） */
 export type ColumnMappingDraft = {
@@ -84,6 +91,7 @@ export function ColumnMappingEditor({
   entityId,
   layout,
   encodingOverride,
+  input,
   pending,
   sources,
   pickedSourceId,
@@ -95,6 +103,8 @@ export function ColumnMappingEditor({
   entityId: string;
   layout: StatementTableLayout;
   encodingOverride: StatementEncoding | undefined;
+  /** 読み取った入力。AI の案の要求が同じファイルを送る */
+  input: StatementInputValue | undefined;
   pending: boolean;
   sources: StatementSource[];
   pickedSourceId: string | undefined;
@@ -131,6 +141,53 @@ export function ColumnMappingEditor({
     layout.headerRow === null ? "" : String(layout.headerRow + 1),
   );
   const [encoding, setEncoding] = useState<StatementEncoding | "">(encodingOverride ?? "");
+
+  // AI の案（US4）は、利用者がまだ触っていない列にだけ入れる
+  const touchedColumns = useRef(new Set<number>());
+  const modeTouched = useRef(false);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const applySuggestion = useCallback((suggestion: ColumnAiSuggestion) => {
+    const entries = Object.entries(suggestion.columns) as [StatementColumnRole, number][];
+    const wantsSplit = entries.some(([r]) => r === "outflow" || r === "inflow");
+    const wantsSingle = entries.some(([r]) => r === "amount");
+    const nextMode: AmountMode = modeTouched.current
+      ? modeRef.current
+      : wantsSplit
+        ? "double"
+        : wantsSingle
+          ? "single"
+          : modeRef.current;
+    setMode(nextMode);
+    const usable = rolesFor(nextMode);
+    setRoles((prev) => {
+      const next = [...prev];
+      // 利用者が選んだ・選び直した列は変えない。モードで使えなくなった役割は外す
+      for (const [i, r] of next.entries()) {
+        if (r !== "" && !usable.includes(r) && !touchedColumns.current.has(i)) next[i] = "";
+      }
+      for (const [role, index] of entries) {
+        if (index >= next.length || touchedColumns.current.has(index) || !usable.includes(role)) {
+          continue;
+        }
+        // 利用者が同じ役割を別の列に選んでいれば、案は入れない
+        if (next.some((r, i) => r === role && touchedColumns.current.has(i))) continue;
+        for (const [i, r] of next.entries()) {
+          if (r === role && i !== index) next[i] = "";
+        }
+        next[index] = role;
+      }
+      return next;
+    });
+  }, []);
+  const suggestionOptions: StatementColumnSuggestionOptions = {
+    origin: input?.origin ?? "paste",
+    encoding: layout.encoding,
+    delimiter: layout.delimiter,
+    headerRow: layout.headerRow,
+  };
+  const wantsSuggestion =
+    input !== undefined && initial === undefined && needsColumnSuggestion(layout);
 
   const columnOf = (role: StatementColumnRole) => {
     const index = roles.indexOf(role);
@@ -177,6 +234,7 @@ export function ColumnMappingEditor({
   }
 
   const changeMode = (next: AmountMode) => {
+    modeTouched.current = true;
     setMode(next);
     // 使えなくなった役割の選択を外す
     setRoles((prev) => prev.map((r) => (r !== "" && !rolesFor(next).includes(r) ? "" : r)));
@@ -211,6 +269,15 @@ export function ColumnMappingEditor({
         {layout.rowCount}{" "}
         行を読み取りました。列ごとに役割を選びます（日付・内容と、金額または出金・入金が必要です）。
       </p>
+
+      {wantsSuggestion && input && (
+        <ColumnSuggestionNote
+          entityId={entityId}
+          file={input.file}
+          options={suggestionOptions}
+          onSuggestion={applySuggestion}
+        />
+      )}
 
       {layout.headerDiff && (
         <HeaderDiff added={layout.headerDiff.added} removed={layout.headerDiff.removed} />
@@ -306,11 +373,12 @@ export function ColumnMappingEditor({
                   <NativeSelect
                     aria-label={`「${name}」の役割`}
                     value={roles[i] ?? ""}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      touchedColumns.current.add(i);
                       setRoles((prev) =>
                         prev.map((r, index) => (index === i ? (e.target.value as Role) : r)),
-                      )
-                    }
+                      );
+                    }}
                   >
                     <option value="">使わない</option>
                     {rolesFor(mode).map((role) => (

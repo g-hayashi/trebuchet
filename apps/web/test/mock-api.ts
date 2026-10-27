@@ -95,6 +95,8 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
       suggestedColumns: { date: 0, content: 1, amount: 2 },
       match: { kind: "none" },
     }),
+  // 列の対応の案（007 US4。端末内の AI）。案なし（理由もなし）
+  "POST /statements/imports/column-suggestion": () => ok({ suggestion: null }),
   // 取込元（007 US2。列の対応の保存）。保存したものはまだない
   "GET /statement-sources": () => ok({ sources: [] }),
   // ジョブ（評価）の状態は完了

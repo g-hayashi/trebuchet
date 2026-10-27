@@ -390,6 +390,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
             entityId={entityId}
             layout={layout}
             encodingOverride={encodingOverride}
+            input={input}
             pending={layoutMutation.isPending || previewMutation.isPending}
             sources={sources.data ?? []}
             pickedSourceId={pickedSourceId}

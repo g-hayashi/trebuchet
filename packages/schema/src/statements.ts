@@ -229,6 +229,27 @@ export const StatementColumnSuggestionOptions = z.object({
 });
 export type StatementColumnSuggestionOptions = z.infer<typeof StatementColumnSuggestionOptions>;
 
+export const STATEMENT_COLUMN_UNAVAILABLE = [
+  "disabled",
+  "unavailable",
+  "timeout",
+  "invalid",
+] as const;
+
+/** POST /statements/imports/column-suggestion の応答（contracts §4.1）。`unavailable` は案がないときだけ付く */
+export const StatementColumnSuggestionResponse = z.object({
+  suggestion: z
+    .object({
+      columns: StatementColumnIndexes,
+      amountSign: StatementAmountSign.nullable(),
+      confidence: z.number().int().min(0).max(100),
+      reason: z.string(),
+    })
+    .nullable(),
+  unavailable: z.enum(STATEMENT_COLUMN_UNAVAILABLE).optional(),
+});
+export type StatementColumnSuggestionResponse = z.infer<typeof StatementColumnSuggestionResponse>;
+
 /** POST /statements/imports/preview。`fixedAccountName` は mapping が accountName を持たないとき必須（INV-50。domain で検査） */
 export const StatementPreviewOptions = z.object({
   origin: StatementOrigin,

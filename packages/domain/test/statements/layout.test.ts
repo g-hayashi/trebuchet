@@ -87,6 +87,30 @@ describe("detectTableLayout: T001 のフィクスチャ", () => {
     expect(layout.sampleRows[0]).toEqual(["2026/10/01", "振込 テスト商事", "330000", "1330000"]);
   });
 
+  it("見出しなし＋前置き: 最頻値の列数を持つ最初の行より前は前置きで、見本・行数に入らない（R2-3）", () => {
+    const text =
+      "ご案内\n対象期間,作成 10/05\n2026/10/01,A,100\n2026/10/02,B,200\n2026/10/03,C,300\n";
+    const layout = detect(text);
+    expect(layout.headerRow).toBeNull();
+    expect(layout.header).toBeNull();
+    expect(layout.columnCount).toBe(3);
+    expect(layout.rowCount).toBe(3);
+    expect(layout.sampleRows).toEqual([
+      ["2026/10/01", "A", "100"],
+      ["2026/10/02", "B", "200"],
+      ["2026/10/03", "C", "300"],
+    ]);
+    // 前置きの `10/05` は年の判定に使わない
+    expect(layout.needsYear).toBe(false);
+  });
+
+  it("見出しなし（選び直し）＋前置き: 前置きは見本・行数に入らない", () => {
+    const text = "ご案内\n2026/10/01,A,100\n2026/10/02,B,200\n";
+    const layout = detect(text, { headerRow: null });
+    expect(layout.rowCount).toBe(2);
+    expect(layout.sampleRows[0]).toEqual(["2026/10/01", "A", "100"]);
+  });
+
   it("辞書にない見出し: 日付・金額に読めない行で、次の行に日付があれば見出し（案は空）", () => {
     const layout = detect(textOf(CUSTOM_HEADER));
     expect(layout.headerRow).toBe(0);
