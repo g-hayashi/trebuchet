@@ -83,8 +83,8 @@ description: "Task list for 007-generic-statement-import"
 
 **Independent Test**: 合成の口座名の一覧で、手がかりのある口座に案が入り、ない口座だけが未選択で残る（SC-004）
 
-- [ ] T014 [US3] domain（R9）: `statements/account-inference.ts` に `ACCOUNT_CUES` と `inferStatementAccount(name, categoryMajors, accounts, subAccounts)`（コード 2020・1020・1010 の科目が有効なときだけ、2 つ以上の種類が当たれば推定しない、補助科目は名前の包含が 1 つだけのとき、用途の語）。preview の `unmappedAccounts` に `suggestion`、commit の入力に `accounts`（同じ UnitOfWork で `saveStatementAccount` と同じ検査をして保存し監査に残す。`accounts` にない未対応の口座は `STATEMENT_ACCOUNT_UNMAPPED`）。テストは `packages/domain/test/statements/account-inference.test.ts`（合成の口座名 20 件以上の一覧で、手がかりの語のある口座の 9 割以上に種類・科目の案が入ること。SC-004）と import のテスト（口座の保存と取込が全部か無か）。依存: T012
-- [ ] T015 [US3] server と web: preview・commit の形のテスト（server）。web の `AccountMappingForm.tsx` を案の受け取りに（推定であることと手がかりの語を表示、用途の未選択は確定できない）、`ImportWorkspace.tsx` は口座ごとの PUT をやめ、commit の `accounts` で送る。web のテスト。E2E の口座の対応の手順を直す。依存: T013・T014
+- [X] T014 [US3] domain（R9）: `statements/account-inference.ts` に `ACCOUNT_CUES` と `inferStatementAccount(name, categoryMajors, accounts, subAccounts)`（コード 2020・1020・1010 の科目が有効なときだけ、2 つ以上の種類が当たれば推定しない、補助科目は名前の包含が 1 つだけのとき、用途の語）。preview の `unmappedAccounts` に `suggestion`、commit の入力に `accounts`（同じ UnitOfWork で `saveStatementAccount` と同じ検査をして保存し監査に残す。`accounts` にない未対応の口座は `STATEMENT_ACCOUNT_UNMAPPED`）。テストは `packages/domain/test/statements/account-inference.test.ts`（合成の口座名 20 件以上の一覧で、手がかりの語のある口座の 9 割以上に種類・科目の案が入ること。SC-004）と import のテスト（口座の保存と取込が全部か無か）。依存: T012
+- [X] T015 [US3] server と web: preview・commit の形のテスト（server）。web の `AccountMappingForm.tsx` を案の受け取りに（推定であることと手がかりの語を表示、用途の未選択は確定できない）、`ImportWorkspace.tsx` は口座ごとの PUT をやめ、commit の `accounts` で送る。web のテスト。E2E の口座の対応の手順を直す。依存: T013・T014
 
 **Checkpoint**: 新しい口座は、多くの場合に用途を選ぶだけで取り込める
 

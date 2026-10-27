@@ -239,7 +239,9 @@ describe("取込のプレビュー（§2.2）", () => {
     expect(body.countNew).toBe(3);
     expect(body.period).toEqual({ from: "2026-05-10", to: "2026-05-11" });
     expect(body.totals).toEqual({ inflow: 3000, outflow: 2400 });
-    expect(body.unmappedAccounts).toEqual([{ name: "サンプル銀行", suggestion: null }]);
+    expect(body.unmappedAccounts).toMatchObject([
+      { name: "サンプル銀行", suggestion: { kind: "bank", usage: null, cues: ["銀行"] } },
+    ]);
     expect(body.unreadable).toHaveLength(1);
     expect(body.unreadable[0]?.line).toBe(5);
     expect(body.rows.map((r) => [r.status, r.key])).toEqual([
@@ -395,6 +397,81 @@ describe("取込の確定（§2.3）→ 再取込 → 履歴（§2.4）", () => 
     const e = await errorOf(res);
     expect(e.code).toBe("STATEMENT_ACCOUNT_UNMAPPED");
     expect(e.details).toEqual({ names: ["サンプル銀行"] });
+  });
+
+  it("accounts で未対応の口座の対応を送ると、同じ確定で口座が保存されて取り込める（US3）", async () => {
+    const p = await okBody(await preview());
+    expect(p.unmappedAccounts.map((a) => a.name)).toEqual(["サンプル銀行"]);
+    const res = await commit(paste(), p.inputSha256, p.countNew, {
+      accounts: [
+        {
+          name: "サンプル銀行",
+          input: { usage: "business", kind: "bank", accountId: ctx.accountId("普通預金") },
+        },
+      ],
+    });
+    expect(res.status).toBe(201);
+    expect((await okBody(res)).added).toBe(3);
+    const list = await okBody(await accounts().$get({ param: ctx.param }));
+    expect(list.accounts).toMatchObject([
+      {
+        name: "サンプル銀行",
+        usage: "business",
+        kind: "bank",
+        accountId: ctx.accountId("普通預金"),
+      },
+    ]);
+    // 対応が保存されたので、再取込のプレビューに未対応の口座は出ない
+    expect((await okBody(await preview())).unmappedAccounts).toEqual([]);
+  });
+
+  it("accounts の違反（重複・対応済みの名前・行にない名前・形の不正）は 400 VALIDATION（details.names）。何も保存しない", async () => {
+    const p = await okBody(await preview());
+    const business = {
+      usage: "business",
+      kind: "bank",
+      accountId: ctx.accountId("普通預金"),
+    };
+    const dup = await commit(paste(), p.inputSha256, p.countNew, {
+      accounts: [
+        { name: "サンプル銀行", input: business },
+        { name: "サンプル銀行", input: business },
+      ],
+    });
+    expect(dup.status).toBe(400);
+    const dupError = await errorOf(dup);
+    expect(dupError.code).toBe("VALIDATION");
+    expect(dupError.details).toMatchObject({ names: ["サンプル銀行"] });
+
+    const extra = await commit(paste(), p.inputSha256, p.countNew, {
+      accounts: [
+        { name: "サンプル銀行", input: business },
+        { name: "行にない口座", input: { usage: "private", kind: "cash" } },
+      ],
+    });
+    expect(extra.status).toBe(400);
+    expect((await errorOf(extra)).details).toMatchObject({ names: ["行にない口座"] });
+
+    const bad = await commit(paste(), p.inputSha256, p.countNew, {
+      accounts: [
+        {
+          name: "サンプル銀行",
+          input: { usage: "private", kind: "cash", accountId: ctx.accountId("現金") },
+        },
+      ],
+    });
+    expect(bad.status).toBe(400);
+    expect((await errorOf(bad)).code).toBe("VALIDATION");
+
+    // 対応済みの名前を accounts に入れると断る
+    await mapBank();
+    const mapped = await okBody(await preview());
+    const again = await commit(paste(), mapped.inputSha256, mapped.countNew, {
+      accounts: [{ name: "サンプル銀行", input: business }],
+    });
+    expect(again.status).toBe(400);
+    expect((await errorOf(again)).details).toMatchObject({ names: ["サンプル銀行"] });
+    expect((await okBody(await preview())).countNew).toBe(3);
   });
 
   it("プレビュー → 確定 201 → 再取込のプレビューは新規 0 件 → 確定しても 0 件", async () => {

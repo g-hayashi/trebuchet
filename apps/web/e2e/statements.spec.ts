@@ -120,16 +120,18 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     );
   });
 
-  await test.step("口座の対応を決めるまで取り込めない", async () => {
+  await test.step("口座の対応（推定を初期値にする）は用途を選ぶまで取り込めない。確定で一緒に保存する（007 US3）", async () => {
+    // 用途は案があっても未選択で始まる
     await expect(importButton).toBeDisabled();
 
     const group = preview.getByRole("group", { name: `${BANK}の対応`, exact: true });
+    await expect(group.getByLabel(`${BANK}の用途`, { exact: true })).toHaveValue("");
     await group.getByLabel(`${BANK}の用途`, { exact: true }).selectOption({ label: "事業用" });
+    // 推定の種類・科目はそのままでもよいが、この確認では明示して選ぶ
     await group.getByLabel(`${BANK}の種類`, { exact: true }).selectOption({ label: "銀行" });
     await group.getByLabel(`${BANK}の科目`, { exact: true }).selectOption({ label: "普通預金" });
-    await group.getByRole("button", { name: `${BANK}の対応を保存`, exact: true }).click();
-    // 保存すると、同じ入力でプレビューを作り直し、対応づいた口座の入力が消える
-    await expect(group).toBeHidden();
+    // 保存のボタンはない。取込の画面から口座の対応を 1 件ずつ保存しない
+    await expect(group.getByRole("button")).toHaveCount(0);
     await expect(importButton).toBeEnabled();
   });
 

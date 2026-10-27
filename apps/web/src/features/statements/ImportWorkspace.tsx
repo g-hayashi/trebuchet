@@ -25,12 +25,12 @@ import {
 import { ApiError } from "@/lib/api";
 import { thisYear } from "@/lib/dates";
 import { AccountMappingForm } from "./AccountMappingForm";
+import { type AccountDraft, draftFromSuggestion, inputFromDraft } from "./account-draft";
 import {
   importBatchesQuery,
   postImportCommit,
   postImportLayout,
   postImportPreview,
-  putStatementAccount,
   statementKeys,
   statementSourcesQuery,
 } from "./api";
@@ -92,7 +92,7 @@ function BatchHistory({ entityId }: { entityId: string }) {
 type Input = StatementInputValue;
 
 /**
- * プレビューを作ったときの、ファイルと指定と取込元の保存。確定・口座の対応の後の作り直しは、これをそのまま使う。
+ * プレビューを作ったときの、ファイルと指定と取込元の保存。確定と、確定の失敗の後の作り直しは、これをそのまま使う。
  * `saveSource` は確定の options にそのまま入れる（null は保存しない。007 contracts §2.3）
  */
 type Request = {
@@ -125,7 +125,8 @@ const requestFromSource = (
  * 明細の取込の画面（US1・US2）: 入力（貼り付け・ファイル）→ 列の対応 → 確認（プレビュー・口座の対応）→ 確定。
  * 取込元（保存した列の対応）が 1 件当てはまれば列の対応を飛ばして確認へ進み、2 件以上なら取込元を選ばせる。
  * 列の対応を直す・読み直すときは自動の当てはめをしない（`manual`）。
- * 口座の対応を保存したら、同じファイルと指定でプレビューを作り直す。確定が `STATEMENT_PLAN_CHANGED` のときも作り直す。
+ * 未対応の口座の対応（推定を初期値にした口座ごとの入力）はこの画面が持ち、確定の `accounts` でまとめて送る（プレビューは作り直さない）。
+ * 確定が `STATEMENT_PLAN_CHANGED` のときはプレビューを作り直す。
  * 確定は、直近のプレビューと同じファイルと指定を送る（列の対応を触っても、プレビューのままで確定する）
  */
 export function ImportWorkspace({ entityId }: { entityId: string }) {
@@ -137,6 +138,8 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
   const [encodingOverride, setEncodingOverride] = useState<StatementEncoding | undefined>();
   const [request, setRequest] = useState<Request | undefined>();
   const [preview, setPreview] = useState<StatementImportPreview | undefined>();
+  // 未対応の口座に決めている途中の対応（名前ごと）。触っていない口座は、推定を初期値にする
+  const [accountDrafts, setAccountDrafts] = useState<Record<string, AccountDraft>>({});
   const [notice, setNotice] = useState("");
   // 取込元（US2）: 自動の当てはめをしない（列の対応を直している）か、2 件以上から選んだ取込元、手で選んだ取込元、対象の年
   const [manual, setManual] = useState(false);
@@ -183,27 +186,20 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
     },
   });
 
-  const saveMutation = useMutation({
-    mutationFn: ({ name, input: accountInput }: { name: string; input: StatementAccountInput }) =>
-      putStatementAccount(entityId, name, accountInput),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: statementKeys.accounts(entityId) });
-      if (request) previewMutation.mutate(request);
-    },
-  });
-
   const commitMutation = useMutation({
     mutationFn: ({
       r,
       expected,
+      accounts,
     }: {
       r: Request;
       expected: { inputSha256: string; countNew: number };
+      accounts: { name: string; input: StatementAccountInput }[];
     }) =>
       postImportCommit(entityId, r.file, {
         ...r.options,
         expected,
-        accounts: [],
+        accounts,
         saveSource: r.saveSource,
       }),
     onSuccess: async (result) => {
@@ -215,8 +211,11 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
       setLayout(undefined);
       setRequest(undefined);
       setPreview(undefined);
+      setAccountDrafts({});
       setInputVersion((v) => v + 1);
       await Promise.all([
+        // 口座の対応も確定で保存されたので、読み直す
+        queryClient.invalidateQueries({ queryKey: statementKeys.accounts(entityId) }),
         queryClient.invalidateQueries({ queryKey: statementKeys.batches(entityId) }),
         // 取込元を保存・更新したので、一覧を読み直す
         queryClient.invalidateQueries({ queryKey: statementKeys.sources(entityId) }),
@@ -230,6 +229,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
 
   const resetResults = () => {
     setNotice("");
+    setAccountDrafts({});
     commitMutation.reset();
     previewMutation.reset();
   };
@@ -313,13 +313,28 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
 
   const changedCount = preview?.rows.filter((r) => r.status === "changed").length ?? 0;
   const unmapped = preview?.unmappedAccounts ?? [];
+  // 口座ごとの対応。用途・種類が未選択、または private 以外で科目が未選択（input が undefined）の口座は確定できない
+  const accountInputs = unmapped.map(({ name, suggestion }) => ({
+    name,
+    draft: accountDrafts[name] ?? draftFromSuggestion(suggestion),
+  }));
+  const incompleteNames = accountInputs
+    .filter(({ draft }) => inputFromDraft(draft) === undefined)
+    .map(({ name }) => name);
   const nothingToImport = preview !== undefined && preview.countNew === 0 && changedCount === 0;
   const canCommit =
     preview !== undefined &&
     request !== undefined &&
-    unmapped.length === 0 &&
+    incompleteNames.length === 0 &&
     !nothingToImport &&
     !commitMutation.isPending;
+
+  /** 確定で送る口座の対応（そろっている口座だけ。canCommit のときは全部） */
+  const accountsToSend = () =>
+    accountInputs.flatMap(({ name, draft }) => {
+      const accountInput = inputFromDraft(draft);
+      return accountInput === undefined ? [] : [{ name, input: accountInput }];
+    });
 
   return (
     <div className="grid gap-8">
@@ -396,20 +411,23 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
             <div className="grid gap-3">
               <h3 className="font-medium">口座の対応</h3>
               <p className="text-sm text-muted-foreground">
-                対応づいていない口座があります。用途と科目を決めると、プレビューを作り直します。
+                対応づいていない口座があります。推定を確かめて用途などを決めてください。「取り込む」で、明細と一緒に口座の対応も保存します。
               </p>
-              {unmapped.map(({ name }) => (
+              {accountInputs.map(({ name, draft }, i) => (
                 <AccountMappingForm
                   key={name}
                   entityId={entityId}
                   name={name}
-                  saving={saveMutation.isPending}
-                  error={saveMutation.variables?.name === name ? saveMutation.error : undefined}
-                  onSave={(n, accountInput) =>
-                    saveMutation.mutate({ name: n, input: accountInput })
-                  }
+                  suggestion={unmapped[i]?.suggestion ?? null}
+                  value={draft}
+                  onChange={(next) => setAccountDrafts((prev) => ({ ...prev, [name]: next }))}
                 />
               ))}
+              {incompleteNames.length > 0 && (
+                <p className="text-sm text-destructive">
+                  用途・種類・科目を選んでいない口座があります: {incompleteNames.join("、")}
+                </p>
+              )}
             </div>
           )}
 
@@ -425,6 +443,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
                 commitMutation.mutate({
                   r: request,
                   expected: { inputSha256: preview.inputSha256, countNew: preview.countNew },
+                  accounts: accountsToSend(),
                 })
               }
             >

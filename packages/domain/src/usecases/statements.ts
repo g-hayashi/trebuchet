@@ -18,6 +18,7 @@ import type {
 } from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
 import type { Clock, IdGenerator, StatementStore, StatementUnitOfWork } from "../ports.ts";
+import { inferStatementAccount } from "../statements/account-inference.ts";
 import { normalizeContent } from "../statements/normalize.ts";
 import {
   contentGroup,
@@ -86,6 +87,13 @@ export function saveStatementAccount(
   name: string,
   input: StatementAccountInput,
 ): Result<StatementAccountSaved> {
+  const checked = checkStatementAccountInput(name, input);
+  if (!checked.ok) return checked;
+  return deps.uow.run((tx) => saveStatementAccountInTx(deps, tx, checked.value, input, true));
+}
+
+/** 口座の対応の入力の形の検査（名前は整えて返す。何も読まない・書かない） */
+function checkStatementAccountInput(name: string, input: StatementAccountInput): Result<string> {
   const trimmed = name.trim();
   if (trimmed === "")
     return err(validationError("口座の名前を入力してください", { field: "name" }));
@@ -96,84 +104,98 @@ export function saveStatementAccount(
   if (!isPrivate && input.accountId == null) {
     return err(validationError("科目を選んでください", { field: "accountId" }));
   }
+  return ok(trimmed);
+}
 
-  return deps.uow.run((tx) => {
-    if (input.accountId != null) {
-      const account = tx.masters.getAccount(input.accountId);
-      if (account === undefined) {
-        return err(
-          domainError("ACCOUNT_NOT_FOUND", "勘定科目が見つかりません", {
-            accountId: input.accountId,
-          }),
-        );
-      }
-      if (!account.isActive) {
-        return err(
-          domainError("ACCOUNT_INACTIVE", "使用停止の科目は選べません", {
-            accountId: input.accountId,
-          }),
-        );
-      }
-      if (
-        input.subAccountId != null &&
-        !tx.masters.listSubAccounts(input.accountId).some((s) => s.id === input.subAccountId)
-      ) {
-        return err(
-          validationError("補助科目がその科目のものではありません", {
-            field: "subAccountId",
-            subAccountId: input.subAccountId,
-          }),
-        );
-      }
+/**
+ * 口座の対応を UnitOfWork の中（`tx`）で保存する（`saveStatementAccount` と取込の確定が共有する。
+ * 入れ子の UnitOfWork にしない）。`name` は `checkStatementAccountInput` が返した整えた名前。
+ * 科目が存在・有効か、補助科目がその科目のものかを検査する（`err` は呼び出し側の `run` が巻き戻す）。
+ * `rebuild` が false なら候補を作り直さない（取込の確定は、その口座の明細がまだない）
+ */
+function saveStatementAccountInTx(
+  deps: StatementDeps,
+  tx: StatementTx,
+  trimmed: string,
+  input: StatementAccountInput,
+  rebuild: boolean,
+): Result<StatementAccountSaved> {
+  if (input.accountId != null) {
+    const account = tx.masters.getAccount(input.accountId);
+    if (account === undefined) {
+      return err(
+        domainError("ACCOUNT_NOT_FOUND", "勘定科目が見つかりません", {
+          accountId: input.accountId,
+        }),
+      );
     }
-
-    const now = deps.clock.now();
-    const previous = tx.statements.listStatementAccounts().find((a) => a.name === trimmed);
-    const account: StatementAccount = {
-      id: previous?.id ?? deps.ids.next(),
-      name: trimmed,
-      usage: input.usage,
-      kind: input.kind,
-      accountId: input.accountId ?? null,
-      subAccountId: input.subAccountId ?? null,
-      createdAt: previous?.createdAt ?? now,
-      updatedAt: now,
-    };
-    if (previous !== undefined && sameMapping(previous, account)) {
-      return ok({ account: previous, rebuilt: 0 });
+    if (!account.isActive) {
+      return err(
+        domainError("ACCOUNT_INACTIVE", "使用停止の科目は選べません", {
+          accountId: input.accountId,
+        }),
+      );
     }
-    tx.statements.upsertStatementAccount(account);
-    tx.statements.appendStatementAudit(
-      auditEntry(deps, {
-        targetType: "statement_account",
-        targetId: account.id,
-        action: previous === undefined ? "create" : "update",
-        before: previous,
-        after: account,
-        at: now,
-      }),
-    );
+    if (
+      input.subAccountId != null &&
+      !tx.masters.listSubAccounts(input.accountId).some((s) => s.id === input.subAccountId)
+    ) {
+      return err(
+        validationError("補助科目がその科目のものではありません", {
+          field: "subAccountId",
+          subAccountId: input.subAccountId,
+        }),
+      );
+    }
+  }
 
-    // 候補のある未処理の明細のうち、この口座のもの（と、振替の対として作った候補）を作り直す
-    const states = loadStatementStates(tx);
-    const candidates = new Map(
-      tx.statements.listStatementCandidates().map((c) => [c.statementId, c]),
-    );
-    const targetIds = new Set(
-      states
-        .filter(
-          ({ record, status }) =>
-            status === "unprocessed" &&
-            candidates.has(record.id) &&
-            (record.statementAccountId === account.id ||
-              candidates.get(record.id)?.method === "transfer"),
-        )
-        .map(({ record }) => record.id),
-    );
-    const rebuilt = buildCandidatesInTx(deps, tx, states, targetIds, true);
-    if (!rebuilt.ok) return rebuilt;
-    return ok({ account, rebuilt: rebuilt.value.built });
-  });
+  const now = deps.clock.now();
+  const previous = tx.statements.listStatementAccounts().find((a) => a.name === trimmed);
+  const account: StatementAccount = {
+    id: previous?.id ?? deps.ids.next(),
+    name: trimmed,
+    usage: input.usage,
+    kind: input.kind,
+    accountId: input.accountId ?? null,
+    subAccountId: input.subAccountId ?? null,
+    createdAt: previous?.createdAt ?? now,
+    updatedAt: now,
+  };
+  if (previous !== undefined && sameMapping(previous, account)) {
+    return ok({ account: previous, rebuilt: 0 });
+  }
+  tx.statements.upsertStatementAccount(account);
+  tx.statements.appendStatementAudit(
+    auditEntry(deps, {
+      targetType: "statement_account",
+      targetId: account.id,
+      action: previous === undefined ? "create" : "update",
+      before: previous,
+      after: account,
+      at: now,
+    }),
+  );
+  if (!rebuild) return ok({ account, rebuilt: 0 });
+
+  // 候補のある未処理の明細のうち、この口座のもの（と、振替の対として作った候補）を作り直す
+  const states = loadStatementStates(tx);
+  const candidates = new Map(
+    tx.statements.listStatementCandidates().map((c) => [c.statementId, c]),
+  );
+  const targetIds = new Set(
+    states
+      .filter(
+        ({ record, status }) =>
+          status === "unprocessed" &&
+          candidates.has(record.id) &&
+          (record.statementAccountId === account.id ||
+            candidates.get(record.id)?.method === "transfer"),
+      )
+      .map(({ record }) => record.id),
+  );
+  const rebuilt = buildCandidatesInTx(deps, tx, states, targetIds, true);
+  if (!rebuilt.ok) return rebuilt;
+  return ok({ account, rebuilt: rebuilt.value.built });
 }
 
 // ---- 取込（§1.2・§1.3、R14） ----
@@ -208,7 +230,15 @@ export type StatementImportCommitInput = StatementImportInput & {
   expected: { inputSha256: string; countNew: number };
   /** 取込元を保存・更新する（`id` があれば更新）。null・省略は保存しない（R7）。取込と同じ UnitOfWork で書く */
   saveSource?: { id?: string | undefined; name: string } | null | undefined;
+  /**
+   * 未対応の口座の対応（R9）。未対応の口座ぶんだけを受ける（対応のある口座・行にない名前・同じ名前が 2 回は
+   * `VALIDATION`）。取込と同じ UnitOfWork で、明細より先に保存する。省略は空
+   */
+  accounts?: readonly StatementAccountToSave[] | undefined;
 };
+
+/** 取込の確定で保存する口座の対応（`PUT /statement-accounts/:name` と同じ検査をする） */
+export type StatementAccountToSave = { name: string; input: StatementAccountInput };
 
 /** 取込と同じ UnitOfWork で保存する取込元（`commitStatementImport` が入力から作る） */
 export type StatementSourceToSave = {
@@ -242,7 +272,36 @@ function buildPlan(statements: StatementStore, rows: StatementRow[]) {
   return { plan: planStatementImport(rows, existing, accounts), accounts };
 }
 
-function toPreview(plan: StatementImportPlan, input: StatementRowsInput): StatementImportPreview {
+/**
+ * 未対応の口座ごとの案（007 R9）。口座の名前と、その口座の行の大項目の一覧から決める。何も保存しない
+ * （案は利用者が取込を確定するまで保存しない。FR-014）
+ */
+function suggestAccounts(
+  tx: StatementTx,
+  plan: StatementImportPlan,
+  rows: readonly StatementRow[],
+): StatementImportPreview["unmappedAccounts"] {
+  if (plan.unmappedAccounts.length === 0) return [];
+  const majorsOf = new Map<string, Set<string>>();
+  for (const r of rows) {
+    if (r.categoryMajor === undefined) continue;
+    const set = majorsOf.get(r.accountName) ?? new Set<string>();
+    set.add(r.categoryMajor);
+    majorsOf.set(r.accountName, set);
+  }
+  const accounts = tx.masters.listAccounts();
+  const subAccounts = tx.masters.listSubAccounts();
+  return plan.unmappedAccounts.map((name) => ({
+    name,
+    suggestion: inferStatementAccount(name, [...(majorsOf.get(name) ?? [])], accounts, subAccounts),
+  }));
+}
+
+function toPreview(
+  plan: StatementImportPlan,
+  input: StatementRowsInput,
+  unmappedAccounts: StatementImportPreview["unmappedAccounts"],
+): StatementImportPreview {
   return {
     inputSha256: input.sha256,
     period: plan.period ?? { from: "", to: "" },
@@ -258,17 +317,20 @@ function toPreview(plan: StatementImportPlan, input: StatementRowsInput): Statem
       warnings: r.warnings,
     })),
     unreadable: input.unreadable,
-    unmappedAccounts: plan.unmappedAccounts.map((name) => ({ name, suggestion: null })),
+    unmappedAccounts,
     countNew: plan.countNew,
   };
 }
 
-/** 取込のプレビュー（読み取り済みの行から）。何も書かない */
+/** 取込のプレビュー（読み取り済みの行から）。何も書かない。未対応の口座には推定の案を添える（R9） */
 export function previewStatementRows(
   deps: Pick<StatementDeps, "uow">,
   input: StatementRowsInput,
 ): Result<StatementImportPreview> {
-  return deps.uow.run((tx) => ok(toPreview(buildPlan(tx.statements, input.rows).plan, input)));
+  return deps.uow.run((tx) => {
+    const { plan } = buildPlan(tx.statements, input.rows);
+    return ok(toPreview(plan, input, suggestAccounts(tx, plan, input.rows)));
+  });
 }
 
 /**
@@ -364,6 +426,8 @@ export function commitStatementRows(
     expected: { inputSha256: string; countNew: number };
     /** 同じ UnitOfWork で保存・更新する取込元（R7）。省略は保存しない */
     source?: StatementSourceToSave | undefined;
+    /** 同じ UnitOfWork で保存する未対応の口座の対応（R9）。省略は空 */
+    accounts?: readonly StatementAccountToSave[] | undefined;
   },
 ): Result<StatementImportCommitted> {
   if (input.sha256 !== input.expected.inputSha256) {
@@ -406,19 +470,62 @@ function planSourceSave(
   });
 }
 
+/**
+ * 取込の確定の `accounts` の検査（何も書かない）。各入力の形（`saveStatementAccount` と同じ）、同じ名前が 2 回、
+ * 未対応でない名前（対応のある口座・行にない名前）はすべて `VALIDATION`。予期しない上書きを黙って無視せず断る。
+ * 名前は整えて返す
+ */
+function checkAccountsToSave(
+  unmapped: readonly string[],
+  accounts: readonly StatementAccountToSave[],
+): Result<StatementAccountToSave[]> {
+  const checked: StatementAccountToSave[] = [];
+  for (const a of accounts) {
+    const name = checkStatementAccountInput(a.name, a.input);
+    if (!name.ok) return name;
+    checked.push({ name: name.value, input: a.input });
+  }
+  const seen = new Set<string>();
+  const duplicated = checked.map((a) => a.name).filter((n) => (seen.has(n) ? true : !seen.add(n)));
+  if (duplicated.length > 0) {
+    return err(
+      validationError("同じ口座の対応が重複しています", {
+        field: "accounts",
+        names: [...new Set(duplicated)],
+      }),
+    );
+  }
+  const extra = checked.map((a) => a.name).filter((n) => !unmapped.includes(n));
+  if (extra.length > 0) {
+    return err(
+      validationError("対応づいていない口座だけを指定してください", {
+        field: "accounts",
+        names: extra,
+      }),
+    );
+  }
+  return ok(checked);
+}
+
 function commitInTx(
   deps: StatementDeps,
   tx: StatementTx,
   input: StatementRowsInput & {
     expected: { countNew: number };
     source?: StatementSourceToSave | undefined;
+    accounts?: readonly StatementAccountToSave[] | undefined;
   },
 ): Result<StatementImportCommitted> {
-  const { plan, accounts } = buildPlan(tx.statements, input.rows);
-  if (plan.unmappedAccounts.length > 0) {
+  const { plan } = buildPlan(tx.statements, input.rows);
+  const toSave = checkAccountsToSave(plan.unmappedAccounts, input.accounts ?? []);
+  if (!toSave.ok) return toSave;
+  const stillUnmapped = plan.unmappedAccounts.filter(
+    (name) => !toSave.value.some((a) => a.name === name),
+  );
+  if (stillUnmapped.length > 0) {
     return err(
       domainError("STATEMENT_ACCOUNT_UNMAPPED", "対応づいていない口座があります", {
-        names: plan.unmappedAccounts,
+        names: stillUnmapped,
       }),
     );
   }
@@ -433,7 +540,12 @@ function commitInTx(
   const sourcePlan =
     input.source === undefined ? undefined : planSourceSave(deps, tx, input.source, now);
   if (sourcePlan !== undefined && !sourcePlan.ok) return sourcePlan;
-  const accountIdOf = new Map(accounts.map((a) => [a.name, a.id]));
+  // 未対応の口座の対応は明細より先に、同じ UnitOfWork で保存する。1 つでも落ちれば `err` で全部巻き戻る
+  for (const { name, input: accountInput } of toSave.value) {
+    const saved = saveStatementAccountInTx(deps, tx, name, accountInput, false);
+    if (!saved.ok) return saved;
+  }
+  const accountIdOf = new Map(tx.statements.listStatementAccounts().map((a) => [a.name, a.id]));
   const batch: StatementBatch = {
     id: deps.ids.next(),
     origin: input.origin,
@@ -548,7 +660,12 @@ export function commitStatementImport(
       header: headerSignature(detected.value.header),
     };
   }
-  return commitStatementRows(deps, { ...rows.value, expected: input.expected, source });
+  return commitStatementRows(deps, {
+    ...rows.value,
+    expected: input.expected,
+    source,
+    accounts: input.accounts,
+  });
 }
 
 /** 取込の回の一覧（新しい順） */

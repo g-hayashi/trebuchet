@@ -2,68 +2,44 @@ import { useQuery } from "@tanstack/react-query";
 import {
   STATEMENT_ACCOUNT_KINDS,
   STATEMENT_ACCOUNT_USAGES,
-  type StatementAccountInput,
   type StatementAccountKind,
+  type StatementAccountSuggestion,
   type StatementAccountUsage,
 } from "@trebuchet/schema";
-import { useId, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
+import { useId } from "react";
 import { NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { accountsQuery, subAccountsQuery } from "@/features/accounts/api";
+import type { AccountDraft } from "./account-draft";
 import { KIND_LABELS, USAGE_LABELS } from "./labels";
 
 /**
- * 取込元の口座（明細の口座名）の対応（FR-003、R4）: 用途・種類・科目・補助科目。
+ * 取込元の口座（明細の口座名）の対応（FR-003、007 US3）: 用途・種類・科目・補助科目。
+ * 値は親（取込の画面）が持ち、確定のときに commit の `accounts` でまとめて送る。保存のボタンはない。
+ * 案（`suggestion`）があれば、推定であることと手がかりの語を示す。
  * `private`（帳簿の外の口座）は科目を持たないので、科目と補助科目を出さない
  */
 export function AccountMappingForm({
   entityId,
   name,
-  saving,
-  error,
-  onSave,
+  suggestion,
+  value,
+  onChange,
 }: {
   entityId: string;
   /** 明細の口座名 */
   name: string;
-  saving: boolean;
-  error: unknown;
-  onSave: (name: string, input: StatementAccountInput) => void;
+  suggestion: StatementAccountSuggestion | null;
+  value: AccountDraft;
+  onChange: (next: AccountDraft) => void;
 }) {
   const id = useId();
-  const [usage, setUsage] = useState<StatementAccountUsage>("business");
-  const [kind, setKind] = useState<StatementAccountKind>("bank");
-  const [accountId, setAccountId] = useState("");
-  const [subAccountId, setSubAccountId] = useState("");
-  const [accountError, setAccountError] = useState<string | undefined>();
-
   const accounts = useQuery(accountsQuery(entityId));
   const subAccounts = useQuery({
-    ...subAccountsQuery(entityId, accountId),
-    enabled: accountId !== "",
+    ...subAccountsQuery(entityId, value.accountId),
+    enabled: value.accountId !== "" && value.usage !== "private",
   });
-  const isPrivate = usage === "private";
-
-  const submit = () => {
-    if (isPrivate) {
-      setAccountError(undefined);
-      onSave(name, { usage, kind });
-      return;
-    }
-    if (accountId === "") {
-      setAccountError("科目を選んでください");
-      return;
-    }
-    setAccountError(undefined);
-    onSave(name, {
-      usage,
-      kind,
-      accountId,
-      ...(subAccountId === "" ? {} : { subAccountId }),
-    });
-  };
+  const isPrivate = value.usage === "private";
 
   return (
     <fieldset
@@ -71,16 +47,23 @@ export function AccountMappingForm({
       className="grid gap-3 rounded-md border px-3 py-3 sm:grid-cols-2 lg:grid-cols-4"
     >
       <legend className="px-1 text-sm font-medium">{name}</legend>
+      {suggestion && (
+        <p className="text-sm text-muted-foreground sm:col-span-2 lg:col-span-4">
+          {`推定: ${KIND_LABELS[suggestion.kind]}${
+            suggestion.cues.length > 0 ? `（手がかり: ${suggestion.cues.join("、")}）` : ""
+          }`}
+        </p>
+      )}
       <div className="grid content-start gap-1">
         <Label htmlFor={`${id}-usage`}>{name}の用途</Label>
         <NativeSelect
           id={`${id}-usage`}
-          value={usage}
-          onChange={(e) => {
-            setUsage(e.target.value as StatementAccountUsage);
-            setAccountError(undefined);
-          }}
+          value={value.usage}
+          onChange={(e) =>
+            onChange({ ...value, usage: e.target.value as StatementAccountUsage | "" })
+          }
         >
+          <option value="">選んでください</option>
           {STATEMENT_ACCOUNT_USAGES.map((u) => (
             <option key={u} value={u}>
               {USAGE_LABELS[u]}
@@ -92,9 +75,12 @@ export function AccountMappingForm({
         <Label htmlFor={`${id}-kind`}>{name}の種類</Label>
         <NativeSelect
           id={`${id}-kind`}
-          value={kind}
-          onChange={(e) => setKind(e.target.value as StatementAccountKind)}
+          value={value.kind}
+          onChange={(e) =>
+            onChange({ ...value, kind: e.target.value as StatementAccountKind | "" })
+          }
         >
+          <option value="">選んでください</option>
           {STATEMENT_ACCOUNT_KINDS.map((k) => (
             <option key={k} value={k}>
               {KIND_LABELS[k]}
@@ -108,14 +94,8 @@ export function AccountMappingForm({
             <Label htmlFor={`${id}-account`}>{name}の科目</Label>
             <NativeSelect
               id={`${id}-account`}
-              value={accountId}
-              aria-invalid={accountError ? true : undefined}
-              aria-describedby={`${id}-account-error`}
-              onChange={(e) => {
-                setAccountId(e.target.value);
-                setSubAccountId("");
-                setAccountError(undefined);
-              }}
+              value={value.accountId}
+              onChange={(e) => onChange({ ...value, accountId: e.target.value, subAccountId: "" })}
             >
               <option value="">選んでください</option>
               {accounts.data
@@ -126,15 +106,14 @@ export function AccountMappingForm({
                   </option>
                 ))}
             </NativeSelect>
-            <FieldError id={`${id}-account-error`} message={accountError} />
           </div>
           <div className="grid content-start gap-1">
             <Label htmlFor={`${id}-sub`}>{name}の補助科目</Label>
             <NativeSelect
               id={`${id}-sub`}
-              value={subAccountId}
-              disabled={accountId === ""}
-              onChange={(e) => setSubAccountId(e.target.value)}
+              value={value.subAccountId}
+              disabled={value.accountId === ""}
+              onChange={(e) => onChange({ ...value, subAccountId: e.target.value })}
             >
               <option value="">なし</option>
               {subAccounts.data?.map((s) => (
@@ -146,12 +125,6 @@ export function AccountMappingForm({
           </div>
         </>
       )}
-      <div className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-4">
-        <Button type="button" disabled={saving} onClick={submit} aria-label={`${name}の対応を保存`}>
-          対応を保存
-        </Button>
-      </div>
-      <ApiErrorMessage error={error} className="sm:col-span-2 lg:col-span-4" />
     </fieldset>
   );
 }

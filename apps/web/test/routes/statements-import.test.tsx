@@ -84,7 +84,7 @@ const PREVIEW = {
     row("k2", { date: "2026-05-11", amount: 3000, content: "売上入金" }),
   ],
   unreadable: [{ line: 5, reason: "列が足りません" }],
-  unmappedAccounts: [] as { name: string; suggestion: null }[],
+  unmappedAccounts: [] as { name: string; suggestion: Record<string, unknown> | null }[],
   countNew: 3,
 };
 
@@ -590,81 +590,211 @@ describe("口座の対応（FR-003）", () => {
     unmappedAccounts: [{ name: "サンプル銀行", suggestion: null }],
   };
 
-  it("未対応の口座があると対応の入力を出し、取り込めない。保存後にプレビューを作り直す", async () => {
-    let mapped = false;
+  const COMMITTED_BODY = {
+    batch: {
+      id: uuid(1),
+      origin: "paste",
+      sourceName: null,
+      inputSha256: SHA,
+      periodFrom: "2026-05-10",
+      periodTo: "2026-05-11",
+      countNew: 3,
+      countExisting: 0,
+      countUnreadable: 1,
+      createdAt: "2026-10-26T01:00:00.000Z",
+    },
+    added: 3,
+    changed: 0,
+  };
+  const suggestion = (over: Record<string, unknown> = {}) => ({
+    kind: "bank",
+    accountId: BANK.id,
+    subAccountId: null,
+    usage: null,
+    cues: ["銀行"],
+    ...over,
+  });
+  const withSuggestion = (name: string, over: Record<string, unknown> = {}) => ({
+    ...PREVIEW,
+    unmappedAccounts: [{ name, suggestion: suggestion(over) }],
+  });
+  const importButton = () => screen.getByRole("button", { name: "取り込む" });
+
+  it("案のない口座はすべて未選択で始まり、取り込めない（理由を示す）。選ぶと取り込め、確定の accounts で送る（PUT も preview のやり直しもしない）", async () => {
     const all = mockApi({
       ...baseRoutes,
-      [`POST ${PREVIEW_PATH}`]: () => ok(mapped ? PREVIEW : withUnmapped),
-      [`PUT ${BASE}/statement-accounts/${encodeURIComponent("サンプル銀行")}`]: () => {
-        mapped = true;
-        return ok({ account: ACCOUNT_VIEW("サンプル銀行"), rebuilt: 0 });
-      },
+      [`POST ${PREVIEW_PATH}`]: () => ok(withUnmapped),
+      [`POST ${COMMIT_PATH}`]: () => ok(COMMITTED_BODY, 201),
     });
     const u = userEvent.setup();
     renderImport();
     await toPreview(u);
 
     const group = await screen.findByRole("group", { name: "サンプル銀行の対応" });
-    expect(screen.getByRole("button", { name: "取り込む" })).toBeDisabled();
+    expect(within(group).getByLabelText("サンプル銀行の用途")).toHaveValue("");
+    expect(within(group).getByLabelText("サンプル銀行の種類")).toHaveValue("");
+    expect(within(group).getByLabelText("サンプル銀行の科目")).toHaveValue("");
+    expect(within(group).queryByText(/推定/)).not.toBeInTheDocument();
+    expect(importButton()).toBeDisabled();
+    expect(
+      screen.getByText("用途・種類・科目を選んでいない口座があります: サンプル銀行"),
+    ).toBeInTheDocument();
+
     await u.selectOptions(within(group).getByLabelText("サンプル銀行の用途"), "事業用");
     await u.selectOptions(within(group).getByLabelText("サンプル銀行の種類"), "銀行");
-    await u.selectOptions(await within(group).findByLabelText("サンプル銀行の科目"), "普通預金");
-    await u.click(within(group).getByRole("button", { name: "サンプル銀行の対応を保存" }));
+    expect(importButton()).toBeDisabled();
+    await u.selectOptions(within(group).getByLabelText("サンプル銀行の科目"), "普通預金");
+    expect(importButton()).toBeEnabled();
+    await u.click(importButton());
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "取り込む" })).toBeEnabled());
-    expect(
-      calls(all, "PUT", `/statement-accounts/${encodeURIComponent("サンプル銀行")}`)[0]?.body,
-    ).toEqual({ usage: "business", kind: "bank", accountId: BANK.id });
-    // 同じファイルと指定で、プレビューを作り直す
-    const previews = calls(all, "POST", "/statements/imports/preview");
-    expect(previews).toHaveLength(2);
-    expect(optionsOf(previews[1])).toEqual(optionsOf(previews[0]));
-    expect(screen.queryByRole("group", { name: "サンプル銀行の対応" })).not.toBeInTheDocument();
+    expect(await screen.findByText("3 件を取り込みました。")).toBeInTheDocument();
+    expect(optionsOf(calls(all, "POST", "/statements/imports")[0]).accounts).toEqual([
+      { name: "サンプル銀行", input: { usage: "business", kind: "bank", accountId: BANK.id } },
+    ]);
+    expect(all.filter((c) => c.method === "PUT")).toHaveLength(0);
+    expect(calls(all, "POST", "/statements/imports/preview")).toHaveLength(1);
   });
 
-  it("private は科目を出さず、科目なしで送る", async () => {
+  it("案のある口座は、種類・科目を初期値に入れ、推定であることと手がかりを示す。用途は未選択で、選ぶまで取り込めない", async () => {
     const all = mockApi({
       ...baseRoutes,
-      [`POST ${PREVIEW_PATH}`]: () => ok(withUnmapped),
-      [`PUT ${BASE}/statement-accounts/${encodeURIComponent("サンプル銀行")}`]: () =>
+      [`POST ${PREVIEW_PATH}`]: () =>
+        ok(withSuggestion("サンプルカード", { kind: "card", cues: ["カード"] })),
+      [`POST ${COMMIT_PATH}`]: () => ok(COMMITTED_BODY, 201),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await toPreview(u);
+
+    const group = await screen.findByRole("group", { name: "サンプルカードの対応" });
+    expect(within(group).getByText("推定: カード（手がかり: カード）")).toBeInTheDocument();
+    expect(within(group).getByLabelText("サンプルカードの用途")).toHaveValue("");
+    await waitFor(() =>
+      expect(within(group).getByLabelText("サンプルカードの種類")).toHaveValue("card"),
+    );
+    expect(within(group).getByLabelText("サンプルカードの科目")).toHaveValue(BANK.id);
+    expect(importButton()).toBeDisabled();
+
+    await u.selectOptions(within(group).getByLabelText("サンプルカードの用途"), "事業用");
+    expect(importButton()).toBeEnabled();
+    await u.click(importButton());
+    await screen.findByText("3 件を取り込みました。");
+    expect(optionsOf(calls(all, "POST", "/statements/imports")[0]).accounts).toEqual([
+      { name: "サンプルカード", input: { usage: "business", kind: "card", accountId: BANK.id } },
+    ]);
+  });
+
+  it("大項目の手がかりと補助科目の案を、そのまま初期値と手がかりにする", async () => {
+    const SUB = { id: uuid(9001), accountId: BANK.id, name: "メイン口座", isActive: true };
+    const all = mockApi({
+      ...baseRoutes,
+      [`GET ${BASE}/accounts/${BANK.id}/sub-accounts`]: () => ok({ subAccounts: [SUB] }),
+      [`POST ${PREVIEW_PATH}`]: () =>
+        ok(
+          withSuggestion("サンプル銀行", {
+            subAccountId: SUB.id,
+            usage: "business",
+            cues: ["銀行", "大項目: 預金"],
+          }),
+        ),
+      [`POST ${COMMIT_PATH}`]: () => ok(COMMITTED_BODY, 201),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await toPreview(u);
+
+    const group = await screen.findByRole("group", { name: "サンプル銀行の対応" });
+    expect(
+      within(group).getByText("推定: 銀行（手がかり: 銀行、大項目: 預金）"),
+    ).toBeInTheDocument();
+    // 用途の案があれば、用途も初期値に入る。補助科目は選択肢が読めたら選ばれる
+    expect(within(group).getByLabelText("サンプル銀行の用途")).toHaveValue("business");
+    await waitFor(() =>
+      expect(within(group).getByLabelText("サンプル銀行の補助科目")).toHaveValue(SUB.id),
+    );
+    await u.click(importButton());
+    await screen.findByText("3 件を取り込みました。");
+    expect(optionsOf(calls(all, "POST", "/statements/imports")[0]).accounts).toEqual([
+      {
+        name: "サンプル銀行",
+        input: { usage: "business", kind: "bank", accountId: BANK.id, subAccountId: SUB.id },
+      },
+    ]);
+  });
+
+  it("private は科目を出さず、案に科目があっても外して（科目・補助科目なしで）送る", async () => {
+    const all = mockApi({
+      ...baseRoutes,
+      [`POST ${PREVIEW_PATH}`]: () =>
+        ok(withSuggestion("サンプル銀行", { kind: "cash", accountId: CASH.id, usage: "private" })),
+      [`POST ${COMMIT_PATH}`]: () => ok(COMMITTED_BODY, 201),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await toPreview(u);
+    const group = await screen.findByRole("group", { name: "サンプル銀行の対応" });
+    expect(within(group).queryByLabelText("サンプル銀行の科目")).not.toBeInTheDocument();
+    expect(within(group).queryByLabelText("サンプル銀行の補助科目")).not.toBeInTheDocument();
+    expect(importButton()).toBeEnabled();
+    await u.click(importButton());
+    await screen.findByText("3 件を取り込みました。");
+    expect(optionsOf(calls(all, "POST", "/statements/imports")[0]).accounts).toEqual([
+      { name: "サンプル銀行", input: { usage: "private", kind: "cash" } },
+    ]);
+  });
+
+  it("事業用で科目が未選択の口座が 1 つでもあれば、取り込めない（ほかの口座がそろっていても）", async () => {
+    mockApi({
+      ...baseRoutes,
+      [`POST ${PREVIEW_PATH}`]: () =>
         ok({
-          account: ACCOUNT_VIEW("サンプル銀行", { usage: "private", accountId: null }),
-          rebuilt: 0,
+          ...PREVIEW,
+          unmappedAccounts: [
+            { name: "口座A", suggestion: suggestion({ usage: "business" }) },
+            { name: "口座B", suggestion: null },
+          ],
+        }),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await toPreview(u);
+    const a = await screen.findByRole("group", { name: "口座Aの対応" });
+    const b = await screen.findByRole("group", { name: "口座Bの対応" });
+    expect(importButton()).toBeDisabled();
+    expect(screen.getByText(/口座B/, { selector: "p" })).toBeInTheDocument();
+
+    await u.selectOptions(within(b).getByLabelText("口座Bの用途"), "事業用");
+    await u.selectOptions(within(b).getByLabelText("口座Bの種類"), "現金");
+    expect(importButton()).toBeDisabled();
+    await u.selectOptions(within(b).getByLabelText("口座Bの科目"), "現金");
+    expect(importButton()).toBeEnabled();
+
+    // 科目を外すと、また取り込めない
+    await u.selectOptions(within(a).getByLabelText("口座Aの科目"), "選んでください");
+    expect(importButton()).toBeDisabled();
+  });
+
+  it("口座の対応を変えても preview はやり直さない。確定の違反（422 / 400）は既存のエラー表示で出す", async () => {
+    const all = mockApi({
+      ...baseRoutes,
+      [`POST ${PREVIEW_PATH}`]: () => ok(withSuggestion("サンプル銀行", { usage: "business" })),
+      [`POST ${COMMIT_PATH}`]: () =>
+        apiError(400, "VALIDATION", "対応づいていない口座だけを指定してください", {
+          names: ["サンプル銀行"],
         }),
     });
     const u = userEvent.setup();
     renderImport();
     await toPreview(u);
     const group = await screen.findByRole("group", { name: "サンプル銀行の対応" });
-    expect(within(group).getByLabelText("サンプル銀行の科目")).toBeInTheDocument();
-
-    await u.selectOptions(within(group).getByLabelText("サンプル銀行の用途"), "私用（帳簿の外）");
-    expect(within(group).queryByLabelText("サンプル銀行の科目")).not.toBeInTheDocument();
-    expect(within(group).queryByLabelText("サンプル銀行の補助科目")).not.toBeInTheDocument();
     await u.selectOptions(within(group).getByLabelText("サンプル銀行の種類"), "現金");
-    await u.click(within(group).getByRole("button", { name: "サンプル銀行の対応を保存" }));
-    await waitFor(() =>
-      expect(
-        calls(all, "PUT", `/statement-accounts/${encodeURIComponent("サンプル銀行")}`),
-      ).toHaveLength(1),
+    expect(calls(all, "POST", "/statements/imports/preview")).toHaveLength(1);
+    await u.click(importButton());
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "対応づいていない口座だけを指定してください",
     );
-    expect(
-      calls(all, "PUT", `/statement-accounts/${encodeURIComponent("サンプル銀行")}`)[0]?.body,
-    ).toEqual({ usage: "private", kind: "cash" });
-  });
-
-  it("事業用で科目を選ばずに保存しようとすると、送らずに知らせる", async () => {
-    const all = mockApi({
-      ...baseRoutes,
-      [`POST ${PREVIEW_PATH}`]: () => ok(withUnmapped),
-    });
-    const u = userEvent.setup();
-    renderImport();
-    await toPreview(u);
-    const group = await screen.findByRole("group", { name: "サンプル銀行の対応" });
-    await u.click(within(group).getByRole("button", { name: "サンプル銀行の対応を保存" }));
-    expect(await within(group).findByText("科目を選んでください")).toBeInTheDocument();
-    expect(all.filter((c) => c.method === "PUT")).toHaveLength(0);
+    // 入力は残る（直して確定し直せる）
+    expect(screen.getByRole("group", { name: "サンプル銀行の対応" })).toBeInTheDocument();
   });
 });
 

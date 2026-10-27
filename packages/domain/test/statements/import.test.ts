@@ -1,3 +1,4 @@
+import type { StatementAccountInput } from "@trebuchet/schema";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { StatementRow } from "../../src/statements/table.ts";
 import type { Result } from "../../src/types.ts";
@@ -192,9 +193,28 @@ describe("previewStatementImport", () => {
     expect(p.rows).toHaveLength(MFME_PASTE.rowCount);
     expect(p.period).toEqual({ from: "2026-10-01", to: "2026-10-12" });
     expect(p.totals).toEqual({ inflow: MFME_PASTE.inflowTotal, outflow: MFME_PASTE.outflowTotal });
+    // 推定の案（007 R9）: 名前の手がかりから種類・科目。用途は名前に手がかりがないので null
     expect(p.unmappedAccounts).toEqual([
-      { name: "テストカードA", suggestion: null },
-      { name: "テスト現金", suggestion: null },
+      {
+        name: "テストカードA",
+        suggestion: {
+          kind: "card",
+          accountId: ctx.accountId("未払金"),
+          subAccountId: null,
+          usage: null,
+          cues: ["カード"],
+        },
+      },
+      {
+        name: "テスト現金",
+        suggestion: {
+          kind: "cash",
+          accountId: ctx.cash,
+          subAccountId: null,
+          usage: null,
+          cues: ["現金"],
+        },
+      },
     ]);
     expect(p.unreadable).toEqual([]);
     expect(p.rows[0]).toMatchObject({
@@ -257,7 +277,9 @@ describe("previewStatementImport", () => {
     });
     if (!r.ok) throw new Error(JSON.stringify(r.error));
     expect(r.value.rows.map((x) => x.accountName)).toEqual(["テスト現金", "テスト現金"]);
-    expect(r.value.unmappedAccounts).toEqual([{ name: "テスト現金", suggestion: null }]);
+    expect(r.value.unmappedAccounts).toMatchObject([
+      { name: "テスト現金", suggestion: { kind: "cash", cues: ["現金"] } },
+    ]);
   });
 });
 
@@ -494,5 +516,193 @@ describe("listStatementBatches", () => {
       second.value.batch.id,
       first.value.batch.id,
     ]);
+  });
+});
+
+// 007 T014（R9、FR-014、US3-4）: 未対応の口座の対応を、取込と同じ UnitOfWork で保存する
+describe("commitStatementImport の accounts（未対応の口座の対応）", () => {
+  const rows = [
+    row(),
+    row({ accountName: "テストカードA", content: "ショップ002" }),
+    row({ accountName: "テストカードA", date: "2026-05-11" }),
+  ];
+  const bankInput = (ctx: Ctx) => ({
+    name: "サンプル銀行",
+    input: { usage: "business", kind: "bank", accountId: ctx.bank } as const,
+  });
+  const cardInput = (ctx: Ctx) => ({
+    name: "テストカードA",
+    input: {
+      usage: "mixed",
+      kind: "card",
+      accountId: ctx.accountId("未払金"),
+    } as const,
+  });
+  const commit = (
+    accounts: { name: string; input: StatementAccountInput }[] | undefined,
+    countNew = 3,
+  ) =>
+    commitStatementImport(ctx.deps, {
+      ...paste(rows),
+      expected: { inputSha256: SHA, countNew },
+      ...(accounts === undefined ? {} : { accounts }),
+    });
+  const expectNothingWritten = () => {
+    const s = ctx.uow.statements;
+    expect(s.state.accounts).toEqual([]);
+    expect(s.state.batches).toEqual([]);
+    expect(s.state.statements).toEqual([]);
+    expect(s.audits).toEqual([]);
+  };
+
+  it("口座の対応を保存してから明細を書く。口座は保存した対応に結びつき、監査は口座 → 回の順", () => {
+    const r = commit([bankInput(ctx), cardInput(ctx)]);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.added).toBe(3);
+    const accounts = listStatementAccounts(ctx.deps);
+    if (!accounts.ok) throw new Error("一覧に失敗");
+    expect(accounts.value.map((a) => [a.name, a.usage, a.kind, a.accountId])).toEqual([
+      ["サンプル銀行", "business", "bank", ctx.bank],
+      ["テストカードA", "mixed", "card", ctx.accountId("未払金")],
+    ]);
+    const idOf = new Map(accounts.value.map((a) => [a.name, a.id]));
+    expect(ctx.uow.statements.state.statements.map((s) => s.statementAccountId).sort()).toEqual(
+      [idOf.get("サンプル銀行"), idOf.get("テストカードA"), idOf.get("テストカードA")].sort(),
+    );
+    expect(ctx.uow.statements.audits.map((a) => [a.targetType, a.action]).slice(0, 3)).toEqual([
+      ["statement_account", "create"],
+      ["statement_account", "create"],
+      ["statement_batch", "create"],
+    ]);
+    // 取込の後は、対応済みなので accounts なしで同じ取込ができる（新規 0 件）
+    expect(commit(undefined, 0).ok).toBe(true);
+  });
+
+  it("private の口座は科目なしで保存できる", () => {
+    const r = commit([
+      bankInput(ctx),
+      { name: "テストカードA", input: { usage: "private", kind: "card" } },
+    ]);
+    expect(r.ok).toBe(true);
+    const a = ctx.uow.statements.state.accounts.find((x) => x.name === "テストカードA");
+    expect(a).toMatchObject({ usage: "private", accountId: null });
+  });
+
+  it("accounts にない未対応の口座は STATEMENT_ACCOUNT_UNMAPPED（残りの名前だけ）で、何も書かない", () => {
+    const e = expectErr(commit([bankInput(ctx)]), "STATEMENT_ACCOUNT_UNMAPPED");
+    expect(e.details?.names).toEqual(["テストカードA"]);
+    expectNothingWritten();
+    expectErr(commit(undefined), "STATEMENT_ACCOUNT_UNMAPPED");
+    expectNothingWritten();
+  });
+
+  it("対応のある口座の名前が入っていれば VALIDATION（上書きしない）", () => {
+    mapAccount(ctx, "サンプル銀行");
+    const before = structuredClone(ctx.uow.statements.state.accounts);
+    const auditsBefore = ctx.uow.statements.audits.length;
+    const e = expectErr(
+      commit([{ name: "サンプル銀行", input: { usage: "private", kind: "bank" } }, cardInput(ctx)]),
+      "VALIDATION",
+    );
+    expect(e.details?.names).toEqual(["サンプル銀行"]);
+    expect(ctx.uow.statements.state.accounts).toEqual(before);
+    expect(ctx.uow.statements.audits).toHaveLength(auditsBefore);
+    expect(ctx.uow.statements.state.batches).toEqual([]);
+  });
+
+  it("取込の行にない名前・同じ名前が 2 回あれば VALIDATION で、何も書かない", () => {
+    expectErr(
+      commit([bankInput(ctx), cardInput(ctx), { ...bankInput(ctx), name: "どこにもない口座" }]),
+      "VALIDATION",
+    );
+    expectNothingWritten();
+    expectErr(commit([bankInput(ctx), bankInput(ctx), cardInput(ctx)]), "VALIDATION");
+    expectNothingWritten();
+  });
+
+  it("口座の対応のうち 1 つが科目の検査で落ちれば、先に保存した口座も回も明細も残らない", () => {
+    const bad = { name: "テストカードA", input: { ...cardInput(ctx).input, accountId: "nope" } };
+    const e = expectErr(commit([bankInput(ctx), bad]), "ACCOUNT_NOT_FOUND");
+    expect(e.details?.accountId).toBe("nope");
+    expectNothingWritten();
+
+    const account = ctx.masters.getAccount(ctx.accountId("未払金"));
+    if (account === undefined) throw new Error("科目がない");
+    ctx.masters.updateAccount({ ...account, isActive: false });
+    expectErr(commit([bankInput(ctx), cardInput(ctx)]), "ACCOUNT_INACTIVE");
+    expectNothingWritten();
+
+    ctx.masters.updateAccount({ ...account, isActive: true });
+    const wrongSub = {
+      name: "テストカードA",
+      input: { ...cardInput(ctx).input, subAccountId: "nope" },
+    };
+    expectErr(commit([bankInput(ctx), wrongSub]), "VALIDATION");
+    expectNothingWritten();
+  });
+
+  it("入力の形（private に科目、科目なしの business、空の名前）も VALIDATION で、何も書かない", () => {
+    expectErr(
+      commit([
+        bankInput(ctx),
+        { name: "テストカードA", input: { usage: "private", kind: "card", accountId: ctx.bank } },
+      ]),
+      "VALIDATION",
+    );
+    expectErr(
+      commit([
+        bankInput(ctx),
+        { name: "テストカードA", input: { usage: "business", kind: "card" } },
+      ]),
+      "VALIDATION",
+    );
+    expectNothingWritten();
+  });
+
+  it("明細の書き込みが途中で失敗（例外）しても、口座の対応は残らない（全部か無か）", () => {
+    ctx.uow.statements.failOnInsertStatements = true;
+    expect(() => commit([bankInput(ctx), cardInput(ctx)])).toThrow();
+    expectNothingWritten();
+  });
+
+  it("新規の件数がプレビューと違えば STATEMENT_PLAN_CHANGED で、口座の対応も残らない", () => {
+    expectErr(commit([bankInput(ctx), cardInput(ctx)], 99), "STATEMENT_PLAN_CHANGED");
+    expectNothingWritten();
+  });
+});
+
+describe("previewStatementImport の口座の案（007 R9）", () => {
+  it("大項目だけが手がかりの口座は「大項目: <名前>」。決まらない口座は null。何も保存しない", () => {
+    const r = previewStatementImport(
+      ctx.deps,
+      paste([
+        row({ accountName: "テスト口座1", categoryMajor: "クレジットカード" }),
+        row({ accountName: "テスト口座2", categoryMajor: "食費" }),
+        row({ accountName: "テストカード（事業用）" }),
+      ]),
+    );
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    const byName = new Map(r.value.unmappedAccounts.map((u) => [u.name, u.suggestion]));
+    expect(byName.get("テスト口座1")).toMatchObject({
+      kind: "card",
+      cues: ["大項目: クレジットカード"],
+    });
+    expect(byName.get("テスト口座2")).toBeNull();
+    expect(byName.get("テストカード（事業用）")).toMatchObject({ kind: "card", usage: "business" });
+    expect(ctx.uow.statements.state.accounts).toEqual([]);
+    expect(ctx.uow.statements.audits).toEqual([]);
+  });
+
+  it("同じ名前の補助科目が 1 つだけあれば、補助科目も案にする", () => {
+    const card = ctx.accountId("未払金");
+    ctx.masters.insertSubAccount({
+      id: "sub-1",
+      accountId: card,
+      name: "テストカードA",
+      isActive: true,
+    });
+    const r = previewStatementImport(ctx.deps, paste([row({ accountName: "テストカードA" })]));
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.unmappedAccounts[0]?.suggestion).toMatchObject({ subAccountId: "sub-1" });
   });
 });

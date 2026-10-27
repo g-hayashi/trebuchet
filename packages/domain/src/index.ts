@@ -52,6 +52,7 @@ export * from "./seed/freee-aliases.ts";
 export * from "./seed/tax-categories.ts";
 export * from "./seed/tax-parameters.ts";
 export * from "./seed/tax-rates.ts";
+export * from "./statements/account-inference.ts";
 export * from "./statements/columns.ts";
 export * from "./statements/evals.ts";
 export * from "./statements/journal-shape.ts";

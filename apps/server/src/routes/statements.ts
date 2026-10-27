@@ -134,10 +134,11 @@ export function statementRoutes({
       .post("/statements/imports", uploadLimit, async (c) => {
         const upload = await readUpload(c);
         const options = await readJsonField(c, "options", StatementCommitOptions);
-        // accounts（未対応の口座の対応）は T014 で扱う。saveSource は取込と同じ UnitOfWork で保存する（INV-47）
+        // accounts（未対応の口座の対応）・saveSource は取込と同じ UnitOfWork で保存する（INV-47）
         const result = commitStatementImport(deps(c.var.db), {
           ...statementImportInput(upload.bytes, options),
           expected: options.expected,
+          accounts: options.accounts,
           saveSource: options.saveSource,
         });
         return respond(c, result, (committed) => c.json(committed, 201));
