@@ -5,10 +5,12 @@ import {
   STATEMENT_DELIMITERS,
   STATEMENT_ENCODINGS,
   type StatementAmountSign,
+  type StatementColumnIndexes,
   type StatementColumnMapping,
   type StatementColumnRole,
   type StatementDelimiter,
   type StatementEncoding,
+  type StatementSource,
   type StatementTableLayout,
 } from "@trebuchet/schema";
 import { useId, useState } from "react";
@@ -26,12 +28,15 @@ import {
 import { thisYear } from "@/lib/dates";
 import { statementAccountsQuery } from "./api";
 import { AMOUNT_SIGN_LABELS, DELIMITER_LABELS, ENCODING_LABELS, ROLE_LABELS } from "./labels";
+import { HeaderDiff, SourceSelect } from "./SourcePicker";
 
 /** 「確認へ」で渡す、取込の指定（プレビューの options の元） */
 export type ColumnMappingDraft = {
   mapping: StatementColumnMapping;
   year: number;
   fixedAccountName?: string | undefined;
+  /** 取込元の保存（`id` があれば更新）。名前が空なら null（保存しない） */
+  saveSource: { id?: string | undefined; name: string } | null;
 };
 
 /** 読み取りの選び直し。`encoding` が undefined なら自動の判定 */
@@ -57,9 +62,9 @@ const rolesFor = (mode: AmountMode): StatementColumnRole[] =>
     mode === "single" ? r !== "outflow" && r !== "inflow" : r !== "amount",
   );
 
-const initialRoles = (layout: StatementTableLayout): Role[] => {
+const initialRoles = (layout: StatementTableLayout, columns: StatementColumnIndexes): Role[] => {
   const roles: Role[] = Array.from({ length: layout.columnCount }, () => "");
-  for (const [role, index] of Object.entries(layout.suggestedColumns)) {
+  for (const [role, index] of Object.entries(columns)) {
     if (index !== undefined && index < roles.length) roles[index] = role as StatementColumnRole;
   }
   return roles;
@@ -69,36 +74,57 @@ const initialRoles = (layout: StatementTableLayout): Role[] => {
  * 列の対応（US1）: 見本の表の列ごとに役割を選ぶ。金額は 1 列か出金・入金の 2 列で、1 列なら符号の向きを選ぶ。
  * 区切り・見出しの行・文字コードの選び直しは `onRelayout`（判定のやり直し）。年は年のない日付（`needsYear`）のときだけ、
  * 口座名の列がなければ取込の口座（既存の口座か新しい名前）を聞く。必須がそろわないときは理由を示して `onConfirm` を呼ばせない。
- * 判定のやり直しで `layout` が変わったら、呼び出し側が `key` を変えて作り直す
+ * 判定のやり直しで `layout` が変わったら、呼び出し側が `key` を変えて作り直す。
+ *
+ * 取込元（US2）: `initial` があれば、その取込元の対応（役割・符号・口座名・取込元の名前）から始め、保存は更新（id つき）。
+ * `sources` があれば既存の取込元を選べる（`onPickSource` で、その取込元の署名で判定をやり直す。`pickedSourceId` は選んだ取込元で、
+ * 符号・名前を引き継ぎ、保存は更新）。取込元の名前は、口座名の列がなければ取込の口座の名前が既定。空なら保存しない
  */
 export function ColumnMappingEditor({
   entityId,
   layout,
   encodingOverride,
   pending,
+  sources,
+  pickedSourceId,
+  initial,
   onRelayout,
+  onPickSource,
   onConfirm,
 }: {
   entityId: string;
   layout: StatementTableLayout;
   encodingOverride: StatementEncoding | undefined;
   pending: boolean;
+  sources: StatementSource[];
+  pickedSourceId: string | undefined;
+  /** 列の対応を直す取込元と、そのときの対象の年 */
+  initial: { source: StatementSource; year: number } | undefined;
   onRelayout: (choice: RelayoutChoice) => void;
+  onPickSource: (id: string | undefined) => void;
   onConfirm: (draft: ColumnMappingDraft) => void;
 }) {
   const id = useId();
   const accounts = useQuery(statementAccountsQuery(entityId));
+  const picked = sources.find((s) => s.id === pickedSourceId);
+  /** 初期値のもとにする取込元（直す取込元、なければ選んだ取込元の符号・名前） */
+  const base = initial?.source ?? picked;
+  const initialColumns = initial?.source.mapping.columns ?? layout.suggestedColumns;
 
-  const [roles, setRoles] = useState<Role[]>(() => initialRoles(layout));
+  const [roles, setRoles] = useState<Role[]>(() => initialRoles(layout, initialColumns));
   const [mode, setMode] = useState<AmountMode>(() =>
-    layout.suggestedColumns.outflow !== undefined || layout.suggestedColumns.inflow !== undefined
+    initialColumns.outflow !== undefined || initialColumns.inflow !== undefined
       ? "double"
       : "single",
   );
-  const [sign, setSign] = useState<StatementAmountSign | "">("");
-  const [year, setYear] = useState(String(thisYear()));
-  const [accountChoice, setAccountChoice] = useState("");
+  const [sign, setSign] = useState<StatementAmountSign | "">(base?.mapping.amountSign ?? "");
+  const [year, setYear] = useState(String(initial?.year ?? thisYear()));
+  const fixedOfBase = initial?.source.fixedAccountName ?? null;
+  const [accountChoice, setAccountChoice] = useState(
+    fixedOfBase === null ? "" : accountChoiceOf(fixedOfBase),
+  );
   const [newAccountName, setNewAccountName] = useState("");
+  const [sourceNameInput, setSourceNameInput] = useState<string | undefined>();
 
   const [delimiter, setDelimiter] = useState<StatementDelimiter>(layout.delimiter);
   const [headerRowText, setHeaderRowText] = useState(
@@ -119,6 +145,9 @@ export function ColumnMappingEditor({
       : accountChoice.startsWith("name:")
         ? accountChoice.slice("name:".length)
         : "";
+  const saveId = initial?.source.id ?? pickedSourceId;
+  const defaultSourceName = base?.name ?? (hasAccountColumn ? "" : fixedAccountName);
+  const sourceName = (sourceNameInput ?? defaultSourceName).trim();
   const headerRowNumber = headerRowText.trim() === "" ? null : Number(headerRowText);
   const headerRowValid =
     headerRowNumber === null || (Number.isInteger(headerRowNumber) && headerRowNumber >= 1);
@@ -167,6 +196,10 @@ export function ColumnMappingEditor({
       },
       year: layout.needsYear ? yearNumber : thisYear(),
       ...(hasAccountColumn ? {} : { fixedAccountName }),
+      saveSource:
+        sourceName === ""
+          ? null
+          : { ...(saveId === undefined ? {} : { id: saveId }), name: sourceName },
     });
   };
 
@@ -178,6 +211,19 @@ export function ColumnMappingEditor({
         {layout.rowCount}{" "}
         行を読み取りました。列ごとに役割を選びます（日付・内容と、金額または出金・入金が必要です）。
       </p>
+
+      {layout.headerDiff && (
+        <HeaderDiff added={layout.headerDiff.added} removed={layout.headerDiff.removed} />
+      )}
+
+      {initial === undefined && sources.length > 0 && (
+        <SourceSelect
+          sources={sources}
+          value={pickedSourceId}
+          disabled={pending}
+          onChange={onPickSource}
+        />
+      )}
 
       <fieldset className="flex flex-wrap items-end gap-4">
         <legend className="mb-1 text-sm font-medium">読み取りの設定</legend>
@@ -364,6 +410,10 @@ export function ColumnMappingEditor({
                     {a.name}
                   </option>
                 ))}
+                {/* 直す取込元の口座が、まだ口座の対応のない名前のとき（一覧にない）も選べる */}
+                {fixedOfBase !== null && !accounts.data?.some((a) => a.name === fixedOfBase) && (
+                  <option value={accountChoiceOf(fixedOfBase)}>{fixedOfBase}</option>
+                )}
                 <option value={NEW_ACCOUNT}>新しい名前を入れる</option>
               </NativeSelect>
               <p className="text-xs text-muted-foreground">
@@ -383,6 +433,21 @@ export function ColumnMappingEditor({
             )}
           </div>
         )}
+      </div>
+
+      <div className="grid gap-1">
+        <Label htmlFor={`${id}-source-name`}>取込元の名前</Label>
+        <Input
+          id={`${id}-source-name`}
+          autoComplete="off"
+          maxLength={100}
+          className="w-64"
+          value={sourceNameInput ?? defaultSourceName}
+          onChange={(e) => setSourceNameInput(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          名前をつけて取り込むと、この列の対応を保存し、次回から同じ形の明細に自動で当てはめます。空にすると保存しません。
+        </p>
       </div>
 
       {reasons.length > 0 && (

@@ -97,6 +97,15 @@ describe("describeError", () => {
     );
   });
 
+  it("取込元（007）: 名前の重複・見つからない", () => {
+    expect(describeError(new ApiError(409, "STATEMENT_SOURCE_NAME_TAKEN", "x")).message).toContain(
+      "同じ名前の取込元があります",
+    );
+    expect(describeError(new ApiError(404, "STATEMENT_SOURCE_NOT_FOUND", "x")).message).toContain(
+      "取込元が見つかりません",
+    );
+  });
+
   it("その他のコードはサーバーのメッセージをそのまま", () => {
     const e = new ApiError(404, "ACCOUNT_NOT_FOUND", "勘定科目が見つかりません");
     expect(describeError(e)).toEqual({ message: "勘定科目が見つかりません", details: [] });

@@ -105,6 +105,13 @@ describe("INV-29 全ルートの保護", () => {
       );
     }
     expect(protectedKeys.has("POST /api/entities/:entityId/statements/imports")).toBe(true);
+    for (const key of [
+      "GET /api/entities/:entityId/statement-sources",
+      "PATCH /api/entities/:entityId/statement-sources/:id",
+      "DELETE /api/entities/:entityId/statement-sources/:id",
+    ]) {
+      expect(protectedKeys.has(key), `${key} が保護されている`).toBe(true);
+    }
     for (const path of ["/imports/layout", "/imports/preview", "/imports"]) {
       const body = new FormData();
       body.append("file", new File(["a\tb"], "x.txt"));

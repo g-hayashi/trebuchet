@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { SourceList } from "@/features/statements/SourceList";
 import { StatementSettingsForm } from "@/features/statements/StatementSettingsForm";
 
 export const Route = createFileRoute("/e/$entityId/statements/settings")({
@@ -24,6 +25,7 @@ function StatementSettingsPage() {
         この事業体の、まとめて承認と外部の AI へ送る確信度のしきい値です。
       </p>
       <StatementSettingsForm entityId={entityId} />
+      <SourceList entityId={entityId} />
     </main>
   );
 }

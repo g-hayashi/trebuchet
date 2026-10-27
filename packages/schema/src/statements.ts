@@ -174,6 +174,10 @@ export const StatementSource = z.object({
 });
 export type StatementSource = z.infer<typeof StatementSource>;
 
+/** PATCH /statement-sources/:id（名前の変更。前後の空白は domain が除く） */
+export const StatementSourceRenameInput = z.object({ name: z.string().min(1).max(100) });
+export type StatementSourceRenameInput = z.infer<typeof StatementSourceRenameInput>;
+
 /** POST /statements/imports/layout の応答 */
 export const StatementTableLayout = z.object({
   encoding: StatementEncoding,
@@ -308,6 +312,8 @@ export const StatementImportCommitted = z.object({
   batch: StatementBatch,
   added: Count,
   changed: Count,
+  /** 保存・更新した取込元。保存しなかった取込は null（007 contracts §2.3） */
+  source: StatementSource.nullable(),
 });
 export type StatementImportCommitted = z.infer<typeof StatementImportCommitted>;
 

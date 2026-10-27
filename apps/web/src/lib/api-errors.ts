@@ -225,6 +225,16 @@ export function describeError(error: unknown): ErrorDescription {
           "プレビューの後に内容が変わったため、プレビューを作り直しました。内容を確かめてから、もう一度取り込んでください。",
         details: [],
       };
+    case "STATEMENT_SOURCE_NAME_TAKEN":
+      return {
+        message: "同じ名前の取込元があります。別の名前にしてください。",
+        details: [],
+      };
+    case "STATEMENT_SOURCE_NOT_FOUND":
+      return {
+        message: "取込元が見つかりません。削除された可能性があります。一覧を読み直してください。",
+        details: [],
+      };
     case "INTERNAL":
       return {
         message: "サーバーでエラーが発生しました。時間をおいて再度お試しください。",

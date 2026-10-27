@@ -95,6 +95,8 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
       suggestedColumns: { date: 0, content: 1, amount: 2 },
       match: { kind: "none" },
     }),
+  // 取込元（007 US2。列の対応の保存）。保存したものはまだない
+  "GET /statement-sources": () => ok({ sources: [] }),
   // ジョブ（評価）の状態は完了
   "GET /jobs/:jobId": () => ok({ status: "done" }),
   // 明細の一覧・しきい値の設定（US2）。一覧は空、設定は既定の値

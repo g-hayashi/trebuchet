@@ -4,6 +4,7 @@ import {
   approveCandidate,
   buildCandidates,
   commitStatementImport,
+  deleteStatementSource,
   detectStatementLayout,
   domainError,
   excludeStatement,
@@ -13,9 +14,11 @@ import {
   listRules,
   listStatementAccounts,
   listStatementBatches,
+  listStatementSources,
   listStatements,
   pauseRule,
   previewStatementImport,
+  renameStatementSource,
   resumeRule,
   ruleHistory,
   runEvaluation,
@@ -43,6 +46,7 @@ import {
   StatementPreviewOptions,
   StatementReasonInput,
   StatementSettingsInput,
+  StatementSourceRenameInput,
 } from "@trebuchet/schema";
 import { Hono } from "hono";
 import { type RouteOptions, type SuggestionProviders, statementDeps } from "../deps.ts";
@@ -110,14 +114,13 @@ export function statementRoutes({
         const upload = await readUpload(c);
         const options = await readJsonField(c, "options", StatementLayoutOptions);
         const { text, encoding } = decodeStatementBytes(upload.bytes, options.encoding);
+        // 取込元の照合（match・headerDiff）は domain。sourceId があればその取込元だけを見る（R8）
         const result = detectStatementLayout(deps(c.var.db), text, {
           delimiter: options.delimiter,
           headerRow: options.headerRow,
+          sourceId: options.sourceId,
         });
-        // 取込元の照合（match・headerDiff）は T012。今は常に none
-        return respond(c, result, (detected) =>
-          c.json({ ...detected, encoding, match: { kind: "none" as const } }, 200),
-        );
+        return respond(c, result, (detected) => c.json({ ...detected, encoding }, 200));
       })
       .post("/statements/imports/preview", uploadLimit, async (c) => {
         const upload = await readUpload(c);
@@ -131,16 +134,34 @@ export function statementRoutes({
       .post("/statements/imports", uploadLimit, async (c) => {
         const upload = await readUpload(c);
         const options = await readJsonField(c, "options", StatementCommitOptions);
-        // accounts（未対応の口座の対応）・saveSource（取込元の保存）は T012・T013 で扱う
+        // accounts（未対応の口座の対応）は T014 で扱う。saveSource は取込と同じ UnitOfWork で保存する（INV-47）
         const result = commitStatementImport(deps(c.var.db), {
           ...statementImportInput(upload.bytes, options),
           expected: options.expected,
+          saveSource: options.saveSource,
         });
         return respond(c, result, (committed) => c.json(committed, 201));
       })
       .get("/statements/imports", (c) => {
         const result = listStatementBatches(deps(c.var.db));
         return respond(c, result, (batches) => c.json({ batches }, 200));
+      })
+      // 007 §3 取込元（列の対応の保存）
+      .get("/statement-sources", (c) => {
+        const result = listStatementSources(deps(c.var.db));
+        return respond(c, result, (sources) => c.json({ sources }, 200));
+      })
+      .patch("/statement-sources/:id", validate("json", StatementSourceRenameInput), (c) => {
+        const result = renameStatementSource(
+          deps(c.var.db),
+          c.req.param("id"),
+          c.req.valid("json").name,
+        );
+        return respond(c, result, (source) => c.json({ source }, 200));
+      })
+      .delete("/statement-sources/:id", (c) => {
+        const result = deleteStatementSource(deps(c.var.db), c.req.param("id"));
+        return respond(c, result, () => c.body(null, 204));
       })
       // §3.5 ジョブの状態（評価のジョブ。メモリだけ）
       .get("/jobs/:jobId", (c) => {

@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   StatementAccountInput,
+  StatementCommitOptions,
   StatementEncoding,
   StatementImportPreview,
   StatementLayoutOptions,
+  StatementOrigin,
   StatementPreviewOptions,
+  StatementSource,
   StatementTableLayout,
 } from "@trebuchet/schema";
 import { useState } from "react";
@@ -20,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ApiError } from "@/lib/api";
+import { thisYear } from "@/lib/dates";
 import { AccountMappingForm } from "./AccountMappingForm";
 import {
   importBatchesQuery,
@@ -28,6 +32,7 @@ import {
   postImportPreview,
   putStatementAccount,
   statementKeys,
+  statementSourcesQuery,
 } from "./api";
 import {
   type ColumnMappingDraft,
@@ -36,6 +41,7 @@ import {
 } from "./ColumnMappingEditor";
 import { ImportPreview } from "./ImportPreview";
 import { ORIGIN_LABELS } from "./labels";
+import { AppliedSource, SourceChooser } from "./SourcePicker";
 import { StatementInput, type StatementInputValue } from "./StatementInput";
 
 /** 取込の履歴（H:§3.3。新しい順） */
@@ -53,6 +59,7 @@ function BatchHistory({ entityId }: { entityId: string }) {
             <TableHeader>
               <TableRow>
                 <TableHead>取込日時</TableHead>
+                <TableHead>入力</TableHead>
                 <TableHead>取込元</TableHead>
                 <TableHead>期間</TableHead>
                 <TableHead className="text-right">新規</TableHead>
@@ -65,6 +72,7 @@ function BatchHistory({ entityId }: { entityId: string }) {
                 <TableRow key={b.id}>
                   <TableCell>{new Date(b.createdAt).toLocaleString("ja-JP")}</TableCell>
                   <TableCell>{ORIGIN_LABELS[b.origin]}</TableCell>
+                  <TableCell>{b.sourceName ?? "—"}</TableCell>
                   <TableCell>
                     {b.periodFrom} 〜 {b.periodTo}
                   </TableCell>
@@ -83,11 +91,40 @@ function BatchHistory({ entityId }: { entityId: string }) {
 /** 読み取った入力。プレビューと確定は、読み取りと同じファイルを送る */
 type Input = StatementInputValue;
 
-/** プレビューを作ったときの、ファイルと指定。確定・口座の対応の後の作り直しは、これをそのまま使う */
-type Request = { file: File; options: StatementPreviewOptions };
+/**
+ * プレビューを作ったときの、ファイルと指定と取込元の保存。確定・口座の対応の後の作り直しは、これをそのまま使う。
+ * `saveSource` は確定の options にそのまま入れる（null は保存しない。007 contracts §2.3）
+ */
+type Request = {
+  file: File;
+  options: StatementPreviewOptions;
+  saveSource: StatementCommitOptions["saveSource"];
+};
+
+/** 当てはめた取込元（保存した対応）での取込の指定。取込元を更新（id つき）として確定する */
+const requestFromSource = (
+  file: File,
+  origin: StatementOrigin,
+  encoding: StatementEncoding,
+  source: StatementSource,
+  year: number,
+): Request => ({
+  file,
+  options: {
+    origin,
+    year,
+    mapping: source.mapping,
+    encoding,
+    sourceId: source.id,
+    ...(source.fixedAccountName === null ? {} : { fixedAccountName: source.fixedAccountName }),
+  },
+  saveSource: { id: source.id, name: source.name },
+});
 
 /**
- * 明細の取込の画面（US1）: 入力（貼り付け・ファイル）→ 列の対応 → 確認（プレビュー・口座の対応）→ 確定。
+ * 明細の取込の画面（US1・US2）: 入力（貼り付け・ファイル）→ 列の対応 → 確認（プレビュー・口座の対応）→ 確定。
+ * 取込元（保存した列の対応）が 1 件当てはまれば列の対応を飛ばして確認へ進み、2 件以上なら取込元を選ばせる。
+ * 列の対応を直す・読み直すときは自動の当てはめをしない（`manual`）。
  * 口座の対応を保存したら、同じファイルと指定でプレビューを作り直す。確定が `STATEMENT_PLAN_CHANGED` のときも作り直す。
  * 確定は、直近のプレビューと同じファイルと指定を送る（列の対応を触っても、プレビューのままで確定する）
  */
@@ -101,18 +138,12 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
   const [request, setRequest] = useState<Request | undefined>();
   const [preview, setPreview] = useState<StatementImportPreview | undefined>();
   const [notice, setNotice] = useState("");
-
-  const layoutMutation = useMutation({
-    mutationFn: ({ file, options }: { file: File; options: StatementLayoutOptions }) =>
-      postImportLayout(entityId, file, options),
-    onSuccess: (result, { options }) => {
-      setLayout(result);
-      setLayoutVersion((v) => v + 1);
-      setEncodingOverride(options.encoding);
-      setRequest(undefined);
-      setPreview(undefined);
-    },
-  });
+  // 取込元（US2）: 自動の当てはめをしない（列の対応を直している）か、2 件以上から選んだ取込元、手で選んだ取込元、対象の年
+  const [manual, setManual] = useState(false);
+  const [chosen, setChosen] = useState<StatementSource | undefined>();
+  const [pickedSourceId, setPickedSourceId] = useState<string | undefined>();
+  const [year, setYear] = useState(thisYear());
+  const sources = useQuery(statementSourcesQuery(entityId));
 
   const previewMutation = useMutation({
     mutationFn: (r: Request) => postImportPreview(entityId, r.file, r.options),
@@ -121,6 +152,35 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
       setPreview(result);
     },
     onError: () => setPreview(undefined),
+  });
+
+  const layoutMutation = useMutation({
+    mutationFn: ({
+      file,
+      options,
+    }: {
+      file: File;
+      options: StatementLayoutOptions;
+      /** 列の対応を直している（自動の当てはめをしない） */
+      manual: boolean;
+    }) => postImportLayout(entityId, file, options),
+    onSuccess: (result, { file, options, manual: keepManual }) => {
+      setLayout(result);
+      setLayoutVersion((v) => v + 1);
+      setEncodingOverride(options.encoding);
+      setPickedSourceId(options.sourceId);
+      setManual(keepManual);
+      setChosen(undefined);
+      setYear(thisYear());
+      setRequest(undefined);
+      setPreview(undefined);
+      // 1 件が当てはまれば、列の画面を飛ばして確認へ進む（R8）
+      if (result.match.kind === "one" && !keepManual) {
+        previewMutation.mutate(
+          requestFromSource(file, options.origin, result.encoding, result.match.source, thisYear()),
+        );
+      }
+    },
   });
 
   const saveMutation = useMutation({
@@ -144,7 +204,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
         ...r.options,
         expected,
         accounts: [],
-        saveSource: null,
+        saveSource: r.saveSource,
       }),
     onSuccess: async (result) => {
       setNotice(
@@ -156,7 +216,11 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
       setRequest(undefined);
       setPreview(undefined);
       setInputVersion((v) => v + 1);
-      await queryClient.invalidateQueries({ queryKey: statementKeys.batches(entityId) });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: statementKeys.batches(entityId) }),
+        // 取込元を保存・更新したので、一覧を読み直す
+        queryClient.invalidateQueries({ queryKey: statementKeys.sources(entityId) }),
+      ]);
     },
     onError: (e, { r }) => {
       // プレビューの後に内容が変わったときは、作り直して見せる
@@ -177,9 +241,10 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
     setRequest(undefined);
     setPreview(undefined);
     setInput(next);
-    layoutMutation.mutate({ file: next.file, options: { origin: next.origin } });
+    layoutMutation.mutate({ file: next.file, options: { origin: next.origin }, manual: false });
   };
 
+  /** 区切り・見出しの行・文字コードの選び直し。列を直している途中なので、自動の当てはめをしない */
   const relayout = (choice: RelayoutChoice) => {
     if (!input) return;
     resetResults();
@@ -190,7 +255,26 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
         delimiter: choice.delimiter,
         headerRow: choice.headerRow,
         ...(choice.encoding === undefined ? {} : { encoding: choice.encoding }),
+        ...(pickedSourceId === undefined ? {} : { sourceId: pickedSourceId }),
       },
+      manual: true,
+    });
+  };
+
+  /** 既存の取込元を選ぶ（その取込元の署名で判定をやり直す）。選ばない（undefined）は、選ぶ前の判定に戻す */
+  const pickSource = (sourceId: string | undefined) => {
+    if (!input || !layout) return;
+    resetResults();
+    layoutMutation.mutate({
+      file: input.file,
+      options: {
+        origin: input.origin,
+        delimiter: layout.delimiter,
+        headerRow: layout.headerRow,
+        ...(encodingOverride === undefined ? {} : { encoding: encodingOverride }),
+        ...(sourceId === undefined ? {} : { sourceId }),
+      },
+      manual: false,
     });
   };
 
@@ -209,7 +293,22 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
           ? {}
           : { fixedAccountName: draft.fixedAccountName }),
       },
+      saveSource: draft.saveSource,
     });
+  };
+
+  // 当てはめた取込元（1 件が当てはまった、または 2 件以上から選んだ）。直している間（manual）は当てはめない
+  const candidate = layout?.match.kind === "one" ? layout.match.source : chosen;
+  const applied = layout !== undefined && !manual ? candidate : undefined;
+  const choosing = layout?.match.kind === "many" && !manual && chosen === undefined;
+  const showEditor = layout !== undefined && applied === undefined && !choosing;
+
+  const applySource = (source: StatementSource, nextYear: number) => {
+    if (!input || !layout) return;
+    resetResults();
+    previewMutation.mutate(
+      requestFromSource(input.file, input.origin, layout.encoding, source, nextYear),
+    );
   };
 
   const changedCount = preview?.rows.filter((r) => r.status === "changed").length ?? 0;
@@ -234,16 +333,54 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
         {notice && <SaveNotice message={notice} />}
       </section>
 
-      {layout && (
+      {layout && applied && (
+        <section aria-label="取込元" className="grid gap-4">
+          <h2 className="text-lg font-semibold">取込元</h2>
+          <AppliedSource
+            key={layoutVersion}
+            source={applied}
+            needsYear={layout.needsYear}
+            year={year}
+            pending={layoutMutation.isPending || previewMutation.isPending}
+            onYearChange={(next) => {
+              setYear(next);
+              applySource(applied, next);
+            }}
+            onEditColumns={() => setManual(true)}
+          />
+          <ApiErrorMessage error={previewMutation.error} />
+        </section>
+      )}
+
+      {layout && choosing && layout.match.kind === "many" && (
+        <section aria-label="取込元" className="grid gap-4">
+          <h2 className="text-lg font-semibold">取込元</h2>
+          <SourceChooser
+            sources={layout.match.sources}
+            pending={previewMutation.isPending}
+            onChoose={(source) => {
+              setChosen(source);
+              applySource(source, year);
+            }}
+            onSkip={() => setManual(true)}
+          />
+        </section>
+      )}
+
+      {layout && showEditor && (
         <section aria-label="列の対応" className="grid gap-4">
           <h2 className="text-lg font-semibold">列の対応</h2>
           <ColumnMappingEditor
-            key={layoutVersion}
+            key={`${layoutVersion}-${candidate?.id ?? ""}`}
             entityId={entityId}
             layout={layout}
             encodingOverride={encodingOverride}
             pending={layoutMutation.isPending || previewMutation.isPending}
+            sources={sources.data ?? []}
+            pickedSourceId={pickedSourceId}
+            initial={candidate === undefined ? undefined : { source: candidate, year }}
             onRelayout={relayout}
+            onPickSource={pickSource}
             onConfirm={startPreview}
           />
           <ApiErrorMessage error={previewMutation.error} />

@@ -12,6 +12,7 @@ import type {
   StatementLayoutOptions,
   StatementPreviewOptions,
   StatementSettingsInput,
+  StatementSource,
   StatementStatusFilter,
   StatementTableLayout,
 } from "@trebuchet/schema";
@@ -29,6 +30,7 @@ const entityApi = api.api.entities[":entityId"];
 export const statementKeys = {
   accounts: (entityId: string) => ["entities", entityId, "statement-accounts"] as const,
   batches: (entityId: string) => ["entities", entityId, "statement-imports"] as const,
+  sources: (entityId: string) => ["entities", entityId, "statement-sources"] as const,
   all: (entityId: string) => ["entities", entityId, "statements"] as const,
   list: (entityId: string, filter: StatementFilter) =>
     ["entities", entityId, "statements", "list", filter] as const,
@@ -96,6 +98,27 @@ export const postImportCommit = async (
   options: StatementCommitOptions,
 ): Promise<StatementImportCommitted> =>
   uploadForm(importPath(entityId, ""), { file, options: JSON.stringify(options) });
+
+/** 取込元（列の対応の保存）の一覧（007 §3。最後に使った日時の新しい順） */
+export const statementSourcesQuery = (entityId: string) =>
+  queryOptions({
+    queryKey: statementKeys.sources(entityId),
+    // hc の JSON 型は任意の列の番号が `number | undefined` になるので、schema の型に合わせる
+    queryFn: async (): Promise<StatementSource[]> =>
+      (await unwrap(await entityApi["statement-sources"].$get({ param: { entityId } })))
+        .sources as StatementSource[],
+  });
+
+/** 取込元の名前を変える（007 §3）。重複は 409 `STATEMENT_SOURCE_NAME_TAKEN` */
+export const patchStatementSource = async (entityId: string, id: string, name: string) =>
+  unwrap(
+    await entityApi["statement-sources"][":id"].$patch({ param: { entityId, id }, json: { name } }),
+  );
+
+/** 取込元を削除する（007 §3。明細・取込の回・仕訳は変わらない） */
+export const deleteStatementSource = async (entityId: string, id: string) => {
+  await unwrap(await entityApi["statement-sources"][":id"].$delete({ param: { entityId, id } }));
+};
 
 /** ジョブ（評価）の状態（§3.5）。終わる（done・failed）まで取り直す */
 export const jobQuery = (entityId: string, jobId: string) =>

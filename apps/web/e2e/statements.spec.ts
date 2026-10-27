@@ -56,11 +56,16 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     summary.locator("div", { has: page.getByText(term, { exact: true }) });
   const importButton = preview.getByRole("button", { name: "取り込む", exact: true });
 
-  /** ファイルを選んで読み取り、列の案を確かめて、取込の口座を選び（または名前を入れ）、確認へ進む */
-  async function readFileAndConfirm(account: { newName: string } | { existing: string }) {
+  /** 取込の入力でファイルを選び、「読み取る」を押す */
+  async function readFile() {
     await input.getByRole("radio", { name: "ファイル", exact: true }).check();
     await input.getByLabel("明細のファイル", { exact: true }).setInputFiles(FIXTURE);
     await input.getByRole("button", { name: "読み取る", exact: true }).click();
+  }
+
+  /** ファイルを読み取り、列の案を確かめて、取込の口座の名前を入れ、確認へ進む（取込元の名前は口座の名前が既定） */
+  async function readFileAndConfirm(accountName: string) {
+    await readFile();
 
     await expect(columns).toBeVisible();
     // 辞書の案で、日付・内容・出金・入金が選ばれている（前置き 3 行の次の行が見出し。CP932 は自動で判定される）
@@ -87,16 +92,12 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     await expect(
       columns.getByRole("list", { name: "確認へ進めない理由", exact: true }),
     ).toContainText("取込の口座を選ぶか、新しい口座の名前を入れてください");
-    if ("newName" in account) {
-      await columns
-        .getByLabel("取込の口座", { exact: true })
-        .selectOption({ label: "新しい名前を入れる" });
-      await columns.getByLabel("口座の名前", { exact: true }).fill(account.newName);
-    } else {
-      await columns
-        .getByLabel("取込の口座", { exact: true })
-        .selectOption({ label: account.existing });
-    }
+    await columns
+      .getByLabel("取込の口座", { exact: true })
+      .selectOption({ label: "新しい名前を入れる" });
+    await columns.getByLabel("口座の名前", { exact: true }).fill(accountName);
+    // 取込元の名前の既定は、取込の口座の名前（このまま取り込むと、列の対応を取込元として保存する）
+    await expect(columns.getByLabel("取込元の名前", { exact: true })).toHaveValue(accountName);
     await expect(confirm).toBeEnabled();
     await confirm.click();
   }
@@ -107,7 +108,7 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     await page.getByRole("link", { name: "明細を取り込む", exact: true }).click();
     await expect(page.getByRole("heading", { name: "明細の取込", exact: true })).toBeVisible();
 
-    await readFileAndConfirm({ newName: BANK });
+    await readFileAndConfirm(BANK);
 
     await expect(summary).toBeVisible();
     await expect(summaryItem("期間")).toContainText("2026-10-01 〜 2026-10-31");
@@ -141,8 +142,15 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     ).toBeVisible();
     await expect(preview).toBeHidden();
 
-    // 取り込むと入力から始め直す。口座の名前は、先ほど対応づけた口座を選べる
-    await readFileAndConfirm({ existing: BANK });
+    // 取り込むと入力から始め直す。同じ形のファイルなので、保存した取込元が当てはまり、列の画面は出ない（007 US2）
+    await readFile();
+    await expect(summary).toBeVisible();
+    await expect(columns).toHaveCount(0);
+    const applied = page.getByRole("region", { name: "取込元", exact: true });
+    await expect(applied).toContainText(`取込元: ${BANK}`);
+    await expect(
+      applied.getByRole("button", { name: "列の対応を直す", exact: true }),
+    ).toBeVisible();
     await expect(summaryItem("新規")).toContainText("0件");
     await expect(summaryItem("取込済み")).toContainText(`${BANK_TWO_COLUMNS.rowCount}件`);
     await expect(preview.getByText("新しく取り込む明細はありません。")).toBeVisible();
