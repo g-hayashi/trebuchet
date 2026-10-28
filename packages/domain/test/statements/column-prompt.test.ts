@@ -6,23 +6,18 @@ import {
   parseColumnSuggestion,
 } from "../../src/statements/column-prompt.ts";
 
-// 007 T016・T022（R10）。プロンプトの形と、AI の出力（列ごとに役割 1 つ）の検証
-// （形・列の範囲・index の重複・役割の重複・必須の役割）
-
-/** 列ごとの役割の並び（添字が列の番号）から AI の出力の `columns` を作る */
-const cols = (...roles: string[]) => roles.map((role, index) => ({ index, role }));
+// 007 T016・T022（R10）。プロンプトの形と、AI の出力（列の順に役割を並べた配列）の検証
+// （形・列数との一致・役割の重複・必須の役割）
 
 const SPLIT = {
-  columns: cols("date", "content", "outflow", "inflow", "none"),
+  roles: ["date", "content", "outflow", "inflow", "none"],
   amountSign: null,
   confidence: 80,
-  reason: "見出しから判断",
 };
 const SINGLE = {
-  columns: cols("date", "content", "amount"),
+  roles: ["date", "content", "amount"],
   amountSign: "outflow_positive",
   confidence: 70,
-  reason: "金額が 1 列",
 };
 
 describe("buildColumnPrompt", () => {
@@ -42,36 +37,35 @@ describe("buildColumnPrompt", () => {
     for (const role of ["date", "content", "amount", "outflow", "inflow", "transferFlag"]) {
       expect(system).toContain(role);
     }
-    expect(system).toContain("0 起点");
     expect(system).toContain("none");
     expect(system).toContain("amountSign");
+    expect(system).toContain("roles");
+    expect(system).not.toContain("reason");
     const user = prompt.messages[1]?.content ?? "";
     expect(user).toContain("コンビニ");
     expect(user).toContain("日付");
     expect(prompt.schema).toMatchObject({ type: "object", additionalProperties: false });
   });
 
-  it("schema は列ごとに役割 1 つ（index と、役割か none の enum）。役割ごとの番号の形ではない", () => {
+  it("system の指示は短く保つ（端末内のモデルは入力が長いほど遅い。T022）", () => {
+    const system = buildColumnPrompt(layout).messages[0]?.content ?? "";
+    expect(system.length).toBeLessThan(700);
+  });
+
+  it("schema は roles（役割か none の enum の配列）・amountSign・confidence だけ。reason と index は持たない", () => {
     const schema = buildColumnPrompt(layout).schema as {
       required: string[];
+      additionalProperties: boolean;
       properties: {
-        columns: {
-          type: string;
-          items: {
-            required: string[];
-            additionalProperties: boolean;
-            properties: { index: { type: string }; role: { enum: string[] } };
-          };
-        };
-      };
+        roles: { type: string; items: { type: string; enum: string[] } };
+      } & Record<string, unknown>;
     };
-    expect(schema.required).toEqual(["columns", "amountSign", "confidence", "reason"]);
-    const columns = schema.properties.columns;
-    expect(columns.type).toBe("array");
-    expect(columns.items.required).toEqual(["index", "role"]);
-    expect(columns.items.additionalProperties).toBe(false);
-    expect(columns.items.properties.index.type).toBe("integer");
-    expect(columns.items.properties.role.enum).toEqual([...STATEMENT_COLUMN_ROLES, "none"]);
+    expect(schema.required).toEqual(["roles", "amountSign", "confidence"]);
+    expect(schema.additionalProperties).toBe(false);
+    expect(Object.keys(schema.properties).sort()).toEqual(["amountSign", "confidence", "roles"]);
+    expect(schema.properties.roles.type).toBe("array");
+    expect(schema.properties.roles.items.type).toBe("string");
+    expect(schema.properties.roles.items.enum).toEqual([...STATEMENT_COLUMN_ROLES, "none"]);
   });
 
   it("見出しがなくてもよい。列数の違う行（前置き）は数えずに飛ばす", () => {
@@ -112,7 +106,6 @@ describe("parseColumnSuggestion", () => {
         columns: { date: 0, content: 1, outflow: 2, inflow: 3 },
         amountSign: null,
         confidence: 80,
-        reason: "見出しから判断",
       },
     });
   });
@@ -136,54 +129,46 @@ describe("parseColumnSuggestion", () => {
     };
     bad("JSON ではない");
     bad(null);
-    bad({ ...SPLIT, columns: [{ index: "A", role: "date" }] });
-    bad({ ...SPLIT, columns: { date: 0, content: 1, amount: 2 } }); // 旧い形
-    bad({ ...SPLIT, columns: [...SPLIT.columns.slice(0, 4), { index: 4, role: "bogus" }] });
+    bad({ ...SPLIT, roles: [{ index: 0, role: "date" }] }); // 旧い形
+    bad({ ...SPLIT, roles: { date: 0, content: 1, amount: 2 } }); // 旧い形
+    bad({ ...SPLIT, roles: ["date", "content", "outflow", "inflow", "bogus"] });
     bad({ ...SPLIT, confidence: 101 });
-    bad({ ...SPLIT, reason: "あ".repeat(201) });
-    // 列の範囲（0〜columnCount-1）
+    // roles の長さが列数と違う
     bad(SPLIT, 3);
-    bad({ ...SPLIT, columns: [{ index: -1, role: "date" }, ...SPLIT.columns.slice(1)] });
-    // 同じ index が 2 回出れば失敗
-    bad({ ...SPLIT, columns: [...SPLIT.columns, { index: 0, role: "memo" }] });
+    bad(SPLIT, 6);
+    bad({ ...SPLIT, roles: [] }, 0);
     // 必須の役割（捨てた後も含めて）
-    bad({ ...SPLIT, columns: cols("date", "content", "outflow", "none") });
-    bad({ ...SINGLE, columns: cols("date", "none", "amount") });
-    bad({ ...SINGLE, columns: cols("none", "none", "none") });
-    bad({ ...SINGLE, columns: [] });
+    bad({ ...SPLIT, roles: ["date", "content", "outflow", "none"] }, 4);
+    bad({ ...SINGLE, roles: ["date", "none", "amount"] }, 3);
+    bad({ ...SINGLE, roles: ["none", "none", "none"] }, 3);
   });
 
   it("同じ役割が複数の列に付いたら、その役割だけ捨てて他は残す", () => {
     // memo が 2 列 → memo だけ捨てる
     const r = parseColumnSuggestion(
-      { ...SINGLE, columns: cols("date", "content", "amount", "memo", "memo") },
+      { ...SINGLE, roles: ["date", "content", "amount", "memo", "memo"] },
       5,
     );
     expect(r.ok && r.value.columns).toEqual({ date: 0, content: 1, amount: 2 });
     // 必須の役割が重複すれば捨てた結果そろわず失敗（date が 2 列）
     expect(
-      parseColumnSuggestion({ ...SINGLE, columns: cols("date", "content", "amount", "date") }, 4)
-        .ok,
+      parseColumnSuggestion({ ...SINGLE, roles: ["date", "content", "amount", "date"] }, 4).ok,
     ).toBe(false);
     // 金額が 2 列でも、出金・入金の対があればそちらを採る
     const split = parseColumnSuggestion(
-      { ...SPLIT, columns: cols("date", "content", "outflow", "inflow", "amount", "amount") },
+      { ...SPLIT, roles: ["date", "content", "outflow", "inflow", "amount", "amount"] },
       6,
     );
     expect(split.ok && split.value.columns).toEqual({ date: 0, content: 1, outflow: 2, inflow: 3 });
     // 金額が 2 列で、出金・入金の対がなければ失敗
     expect(
-      parseColumnSuggestion({ ...SINGLE, columns: cols("date", "content", "amount", "amount") }, 4)
-        .ok,
+      parseColumnSuggestion({ ...SINGLE, roles: ["date", "content", "amount", "amount"] }, 4).ok,
     ).toBe(false);
   });
 
   it("金額と出金・入金がともにあれば出金・入金の対を採り、金額と amountSign は捨てる。片方だけなら金額を採る", () => {
     const both = parseColumnSuggestion(
-      {
-        ...SINGLE,
-        columns: cols("date", "content", "amount", "outflow", "inflow"),
-      },
+      { ...SINGLE, roles: ["date", "content", "amount", "outflow", "inflow"] },
       5,
     );
     expect(both).toEqual({
@@ -192,12 +177,11 @@ describe("parseColumnSuggestion", () => {
         columns: { date: 0, content: 1, outflow: 3, inflow: 4 },
         amountSign: null,
         confidence: 70,
-        reason: "金額が 1 列",
       },
     });
     // 出金だけ（入金なし）なら金額を採り、出金は捨てる
     const half = parseColumnSuggestion(
-      { ...SINGLE, columns: cols("date", "content", "amount", "outflow") },
+      { ...SINGLE, roles: ["date", "content", "amount", "outflow"] },
       4,
     );
     expect(half.ok && half.value.columns).toEqual({ date: 0, content: 1, amount: 2 });
@@ -206,7 +190,7 @@ describe("parseColumnSuggestion", () => {
 
   it("出金・入金の対を採るとき amountSign は null にする", () => {
     const r = parseColumnSuggestion(
-      { ...SINGLE, columns: cols("date", "content", "outflow", "inflow") },
+      { ...SINGLE, roles: ["date", "content", "outflow", "inflow"] },
       4,
     );
     expect(r.ok && r.value.amountSign).toBeNull();

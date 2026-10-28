@@ -69,7 +69,7 @@
 
 multipart（§2 と同じ）。`options`: `{ origin, delimiter?, headerRow? }`
 
-`200`: `{ suggestion: { columns: Partial<Record<Role, number>>, amountSign: AmountSign | null, confidence: number, reason: string } | null, unavailable?: "disabled" | "unavailable" | "timeout" | "invalid" }`
+`200`: `{ suggestion: { columns: Partial<Record<Role, number>>, amountSign: AmountSign | null, confidence: number } | null, unavailable?: "disabled" | "unavailable" | "timeout" | "invalid" }`
 
 - 端末内の AI だけを呼ぶ。外部の AI の設定は読まない（FR-018）
 - 辞書の案で必須の役割がそろう表では呼ばない（`suggestion: null`、`unavailable` なし）

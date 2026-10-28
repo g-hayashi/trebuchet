@@ -30,68 +30,39 @@ export type ColumnPromptLayout = {
   columnCount: number;
 };
 
-/** 検証を通った案。`columns` に null の役割は入らない */
+/** 検証を通った案。`columns` に null の役割は入らない（理由は AI に書かせない） */
 export type ColumnSuggestion = {
   columns: StatementColumnIndexes;
   amountSign: StatementAmountSign | null;
   confidence: number;
-  reason: string;
 };
 
+// 出力を短くするため（端末内のモデルは出力の長さで遅くなる。T022）、指示は短く、理由・列の番号は書かせない
 const SYSTEM = [
-  "あなたは日本の銀行・クレジットカード・家計簿アプリの明細の表を読みます。",
-  "与えられた表の見出しと先頭の数行から、各列がどの役割かを推定してください。",
-  "",
-  "役割の一覧:",
-  "- date: 取引の日付",
-  "- content: 取引の内容・摘要・利用店名",
-  "- amount: 金額が 1 列にまとまっている列（入金と出金が符号で分かれる）",
-  "- outflow: 出金（支払）の金額の列。inflow とともに使う",
-  "- inflow: 入金の金額の列。outflow とともに使う",
-  "- accountName: 口座・カードの名前",
-  "- categoryMajor: 大項目（分類）",
-  "- categoryMinor: 中項目（分類）",
-  "- memo: メモ・備考",
-  "- externalId: 取引の ID",
-  "- transferFlag: 振替かどうかの印",
-  "",
-  "入力は JSON です。columns の index は列の番号（0 起点）、header は見出し（見出しがない表では null）、",
-  "samples はその列の先頭の数行の値です。",
-  "",
-  "入力の列を 1 つずつ見て、その列の役割を 1 つだけ選んでください。役割は上の一覧のどれか、",
-  "どれにも当たらない・分からない列は none です。残高の列は none にしてください。",
-  "同じ役割を複数の列に付けないでください（該当する列がない役割は、どの列にも付けません）。",
-  "",
-  "出力は次の形の JSON オブジェクトだけにしてください（前後に文章を付けない）。columns は入力の列と同じ数だけ、列の番号の順に並べます:",
-  '{"columns": [{"index": 0, "role": "date"}, {"index": 1, "role": "none"}, ...],',
-  ' "amountSign": "inflow_positive" か "outflow_positive" か null, "confidence": 0〜100 の整数, "reason": 根拠を 200 字以内で}',
-  "amount の列があるときだけ、入金が正の数なら inflow_positive、出金（支払）が正の数なら outflow_positive と",
-  "推測してかまいません（分からなければ null）。amount を使わないとき（outflow と inflow を使うとき）は null にします。",
+  "日本の銀行・カード・家計簿アプリの明細の表です。入力 JSON の columns を列の順に見て、各列の役割を 1 つ選びます。",
+  "date: 日付 / content: 内容・摘要・店名 / amount: 金額 1 列（符号で入出金）",
+  "outflow: 出金の金額 / inflow: 入金の金額 / accountName: 口座・カード名",
+  "categoryMajor: 大項目 / categoryMinor: 中項目 / memo: メモ / externalId: 取引の ID / transferFlag: 振替の印",
+  "none: 上のどれでもない・分からない（残高も none）",
+  "同じ役割は 1 列だけ。出力は JSON だけ。roles は列の数だけ、列の順:",
+  '{"roles": ["date", "content", "none"], "amountSign": null, "confidence": 80}',
+  "amountSign は amount があるときだけ、入金が正なら inflow_positive、出金が正なら outflow_positive（不明は null）。",
 ].join("\n");
 
 /** `response_format` の json_schema 用（strict。受けない接続先もあるので、出力は必ず `parseColumnSuggestion` で検証する） */
 const SCHEMA = {
   type: "object",
   properties: {
-    columns: {
+    roles: {
       type: "array",
-      items: {
-        type: "object",
-        properties: {
-          index: { type: "integer" },
-          role: { type: "string", enum: [...STATEMENT_COLUMN_ROLES, "none"] },
-        },
-        required: ["index", "role"],
-        additionalProperties: false,
-      },
+      items: { type: "string", enum: [...STATEMENT_COLUMN_ROLES, "none"] },
     },
     amountSign: {
       anyOf: [{ type: "string", enum: [...STATEMENT_AMOUNT_SIGNS] }, { type: "null" }],
     },
     confidence: { type: "integer" },
-    reason: { type: "string" },
   },
-  required: ["columns", "amountSign", "confidence", "reason"],
+  required: ["roles", "amountSign", "confidence"],
   additionalProperties: false,
 } as const;
 
@@ -133,8 +104,8 @@ export function hasRequiredColumns(columns: StatementColumnIndexes): boolean {
 }
 
 /**
- * AI の出力を検証する（INV-48 の出力側）。`AiColumnSuggestion`（Zod。列ごとに役割 1 つ）の形で、
- * 列の番号が 0〜`columnCount`−1 で重複せず、整えた後に必須の役割がそろうものだけを通す。外れれば失敗（案なし）。
+ * AI の出力を検証する（INV-48 の出力側）。`AiColumnSuggestion`（Zod。`roles` は列の順に役割 1 つずつ）の形で、
+ * `roles` の長さが `columnCount` と等しく、整えた後に必須の役割がそろうものだけを通す。外れれば失敗（案なし）。
  * 整え方（端末内のモデルは誤りやすいので、救える分は救う。R10）:
  * - 同じ役割が複数の列に付いたら、その役割だけ捨てる（ほかの役割は残す）
  * - 金額と出金・入金の対がともにあれば、出金・入金の対を採り金額を捨てる。出金・入金の片方だけなら、金額を採りその片方を捨てる
@@ -147,16 +118,11 @@ export function parseColumnSuggestion(raw: unknown, columnCount: number): Result
   const parsed = AiColumnSuggestion.safeParse(value);
   if (!parsed.success) return validation("AI の出力が決められた形ではありません");
 
-  const seen = new Set<number>();
+  if (parsed.data.roles.length !== columnCount) {
+    return validation("AI の出力の役割の数が表の列数と違います", { field: "roles" });
+  }
   const byRole = new Map<StatementColumnRole, number[]>();
-  for (const { index, role } of parsed.data.columns) {
-    if (index >= columnCount) {
-      return validation("AI の出力の列の番号が表の範囲を超えています", { field: "index" });
-    }
-    if (seen.has(index)) {
-      return validation("AI の出力が同じ列の番号を 2 回挙げています", { field: "index" });
-    }
-    seen.add(index);
+  for (const [index, role] of parsed.data.roles.entries()) {
     if (role === "none") continue;
     byRole.set(role, [...(byRole.get(role) ?? []), index]);
   }
@@ -182,6 +148,5 @@ export function parseColumnSuggestion(raw: unknown, columnCount: number): Result
     columns,
     amountSign: columns.amount === undefined ? null : (parsed.data.amountSign ?? null),
     confidence: parsed.data.confidence,
-    reason: parsed.data.reason,
   });
 }

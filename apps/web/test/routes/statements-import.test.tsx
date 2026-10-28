@@ -1347,7 +1347,6 @@ describe("AI の案（US4。FR-016〜019）", () => {
     columns: { date: 0, content: 1, amount: 2, externalId: 3 },
     amountSign: "inflow_positive",
     confidence: 77,
-    reason: "見出しと値の形から",
   };
   const customRoutes = (suggest: () => ReturnType<typeof ok> | Promise<ReturnType<typeof ok>>) => ({
     ...baseRoutes,
@@ -1382,7 +1381,7 @@ describe("AI の案（US4。FR-016〜019）", () => {
     expect(await fileTextOf(call)).toContain("発生日");
   });
 
-  it("待つ間も列を選べる。案が来たら、触っていない列にだけ入れ、「AI の案」と確信度・理由を示す。自動では進まず、符号も選ばない", async () => {
+  it("待つ間も列を選べる。案が来たら、触っていない列にだけ入れ、「AI の案」と確信度を示す。自動では進まず、符号も選ばない", async () => {
     let resolve: (reply: ReturnType<typeof ok>) => void = () => {};
     const pending = new Promise<ReturnType<typeof ok>>((r) => {
       resolve = r;
@@ -1404,9 +1403,7 @@ describe("AI の案（US4。FR-016〜019）", () => {
     expect(confirmButton()).toBeDisabled();
 
     resolve(ok({ suggestion: AI_SUGGESTION }));
-    expect(
-      await within(region).findByText(/AI の案（確信度 77、見出しと値の形から）/),
-    ).toBeInTheDocument();
+    expect(await within(region).findByText(/AI の案（確信度 77）/)).toBeInTheDocument();
     expect(within(region).queryByText("AI の案を作っています…")).not.toBeInTheDocument();
 
     expect(within(region).getByLabelText("「発生日」の役割")).toHaveValue("memo");

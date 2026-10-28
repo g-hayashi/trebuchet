@@ -76,8 +76,7 @@ export function ColumnSuggestionNote({
   if (suggestion) {
     return (
       <p className="text-sm text-muted-foreground">
-        AI の案（確信度 {suggestion.confidence}、{suggestion.reason}
-        ）を、選んでいない列に入れました。
+        AI の案（確信度 {suggestion.confidence}）を、選んでいない列に入れました。
         {suggestion.amountSign !== null &&
           `金額の符号の案: ${AMOUNT_SIGN_LABELS[suggestion.amountSign]}。`}
         確かめてから進んでください。

@@ -243,7 +243,6 @@ export const StatementColumnSuggestionResponse = z.object({
       columns: StatementColumnIndexes,
       amountSign: StatementAmountSign.nullable(),
       confidence: z.number().int().min(0).max(100),
-      reason: z.string(),
     })
     .nullable(),
   unavailable: z.enum(STATEMENT_COLUMN_UNAVAILABLE).optional(),

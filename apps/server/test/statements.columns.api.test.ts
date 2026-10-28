@@ -28,15 +28,9 @@ const CUSTOM =
 const DICT = "日付\t内容\t金額\n2026/10/01\tテスト商事\t100\n";
 
 const GOOD = {
-  columns: [
-    { index: 0, role: "date" },
-    { index: 1, role: "content" },
-    { index: 2, role: "amount" },
-    { index: 3, role: "externalId" },
-  ],
+  roles: ["date", "content", "amount", "externalId"],
   amountSign: "inflow_positive",
   confidence: 77,
-  reason: "見出しと値の形から",
 };
 
 const completion = (content: unknown) =>
@@ -92,6 +86,7 @@ describe("POST /statements/imports/column-suggestion", () => {
       amountSign: "inflow_positive",
       confidence: 77,
     });
+    expect(body.suggestion).not.toHaveProperty("reason");
     expect(body).not.toHaveProperty("unavailable");
     expect(t.calls).toHaveLength(1);
     expect(t.calls[0]?.url).toBe(LOCAL_URL);
@@ -173,13 +168,13 @@ describe("POST /statements/imports/column-suggestion", () => {
     });
   });
 
-  it("形の誤り（JSON でない・列の番号が範囲外・必須の役割が足りない）は invalid", async () => {
+  it("形の誤り（JSON でない・役割の数が列数と違う・必須の役割が足りない）は invalid", async () => {
     for (const content of [
       "これは JSON ではありません",
-      JSON.stringify({ ...GOOD, columns: [...GOOD.columns, { index: 9, role: "memo" }] }),
+      JSON.stringify({ ...GOOD, roles: [...GOOD.roles, "memo"] }),
       JSON.stringify({
         ...GOOD,
-        columns: GOOD.columns.map((c) => (c.role === "amount" ? { ...c, role: "none" } : c)),
+        roles: GOOD.roles.map((r) => (r === "amount" ? "none" : r)),
       }),
     ]) {
       const t = await setup({ reply: async () => completion(content) });

@@ -146,8 +146,11 @@ export async function chatCompletion(
   let content: unknown;
   try {
     content = contentOf(await res.text());
-  } catch {
-    return failed("AI の応答を読めません");
+  } catch (e) {
+    // fm は SSE で返すので fetch は先に解決し、時間切れは本文の読み取りの途中で来る
+    return isTimeout(e)
+      ? failed("AI の応答が時間内に返りませんでした", true)
+      : failed("AI の応答を読めません");
   }
   if (typeof content !== "string") return failed("AI の応答に本文がありません");
   return ok(content);

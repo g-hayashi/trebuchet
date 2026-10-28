@@ -22,15 +22,9 @@ const layout = (over: Partial<Layout> = {}): Layout => ({
 });
 
 const GOOD = {
-  columns: [
-    { index: 0, role: "date" },
-    { index: 1, role: "content" },
-    { index: 2, role: "amount" },
-    { index: 3, role: "none" },
-  ],
+  roles: ["date", "content", "amount", "none"],
   amountSign: "inflow_positive",
   confidence: 85,
-  reason: "値の形から",
 };
 
 const provider = (available = true) => new FakeColumnSuggestionProvider({ available });
@@ -85,7 +79,6 @@ describe("suggestStatementColumns", () => {
         columns: { date: 0, content: 1, amount: 2 },
         amountSign: "inflow_positive",
         confidence: 85,
-        reason: "値の形から",
       },
     });
     expect(p.calls).toHaveLength(1);
@@ -124,12 +117,12 @@ describe("suggestStatementColumns", () => {
     });
   });
 
-  it("形・列の範囲・必須が外れた出力は invalid", async () => {
+  it("形・列数との一致・必須が外れた出力は invalid", async () => {
     const p = provider();
     for (const raw of [
       "JSON ではない",
-      { ...GOOD, columns: [...GOOD.columns, { index: 9, role: "memo" }] },
-      { ...GOOD, columns: GOOD.columns.map((c) => (c.index === 1 ? { ...c, role: "none" } : c)) },
+      { ...GOOD, roles: [...GOOD.roles, "memo"] },
+      { ...GOOD, roles: GOOD.roles.map((r) => (r === "content" ? "none" : r)) },
     ]) {
       p.respondWith(ok(raw));
       expect(await suggestStatementColumns({ provider: p }, layout())).toEqual({

@@ -309,6 +309,37 @@ describe("createColumnProvider", () => {
     if (!r.ok) expect(r.error.details?.timeout).toBeUndefined();
   });
 
+  it("本文の読み取り（fm は SSE で返すので fetch は先に解決する）の途中の時間切れも、timeout として返す", async () => {
+    const slowBody = (name: string) => ({
+      ok: true,
+      status: 200,
+      text: async () => {
+        throw new DOMException("timed out", name);
+      },
+    });
+    for (const name of ["TimeoutError", "AbortError"]) {
+      const { fn } = fakeFetch(async () => slowBody(name) as unknown as Response);
+      const t = await columnProvider(fn).suggestColumns(COLUMN_PROMPT);
+      expect(t.ok).toBe(false);
+      if (!t.ok) {
+        expect(t.error.details).toEqual(COLUMN_TIMEOUT_DETAIL);
+        expect(t.error.message).toContain("時間内");
+      }
+    }
+    // 時間切れ以外の読み取りの失敗は、timeout にしない
+    const broken = {
+      ok: true,
+      status: 200,
+      text: async () => {
+        throw new TypeError("terminated");
+      },
+    };
+    const { fn } = fakeFetch(async () => broken as unknown as Response);
+    const r = await columnProvider(fn).suggestColumns(COLUMN_PROMPT);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.details?.timeout).toBeUndefined();
+  });
+
   it("endpoint がなければ fetch せず AI_NOT_CONFIGURED", async () => {
     const { fn, calls } = fakeFetch();
     const result = await columnProvider(fn, async () => undefined).suggestColumns(COLUMN_PROMPT);
