@@ -49,22 +49,29 @@ const SYSTEM = [
   "amountSign は amount があるときだけ、入金が正なら inflow_positive、出金が正なら outflow_positive（不明は null）。",
 ].join("\n");
 
-/** `response_format` の json_schema 用（strict。受けない接続先もあるので、出力は必ず `parseColumnSuggestion` で検証する） */
-const SCHEMA = {
-  type: "object",
-  properties: {
-    roles: {
-      type: "array",
-      items: { type: "string", enum: [...STATEMENT_COLUMN_ROLES, "none"] },
+/**
+ * `response_format` の json_schema 用（strict。受けない接続先もあるので、出力は必ず `parseColumnSuggestion` で検証する）。
+ * roles の長さは列数に固定する（長さの違いで案なしになるのを、生成の側で防ぐ）
+ */
+function schemaOf(columnCount: number) {
+  return {
+    type: "object",
+    properties: {
+      roles: {
+        type: "array",
+        items: { type: "string", enum: [...STATEMENT_COLUMN_ROLES, "none"] },
+        minItems: columnCount,
+        maxItems: columnCount,
+      },
+      amountSign: {
+        anyOf: [{ type: "string", enum: [...STATEMENT_AMOUNT_SIGNS] }, { type: "null" }],
+      },
+      confidence: { type: "integer", minimum: 0, maximum: 100 },
     },
-    amountSign: {
-      anyOf: [{ type: "string", enum: [...STATEMENT_AMOUNT_SIGNS] }, { type: "null" }],
-    },
-    confidence: { type: "integer" },
-  },
-  required: ["roles", "amountSign", "confidence"],
-  additionalProperties: false,
-} as const;
+    required: ["roles", "amountSign", "confidence"],
+    additionalProperties: false,
+  } as const;
+}
 
 /**
  * 要求を作る（INV-48）。入れるのは見出しのセルと、見出しの次から `COLUMN_PROMPT_ROWS` 行の値だけ。
@@ -87,7 +94,7 @@ export function buildColumnPrompt(layout: ColumnPromptLayout): ColumnPrompt {
       { role: "system", content: SYSTEM },
       { role: "user", content: user },
     ],
-    schema: SCHEMA,
+    schema: schemaOf(layout.columnCount),
   };
 }
 

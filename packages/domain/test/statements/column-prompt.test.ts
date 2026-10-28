@@ -68,6 +68,18 @@ describe("buildColumnPrompt", () => {
     expect(schema.properties.roles.items.enum).toEqual([...STATEMENT_COLUMN_ROLES, "none"]);
   });
 
+  it("roles の長さを列数に固定する（minItems・maxItems）。confidence は 0〜100", () => {
+    const schema = buildColumnPrompt(layout).schema as {
+      properties: {
+        roles: { minItems: number; maxItems: number };
+        confidence: { minimum: number; maximum: number };
+      };
+    };
+    expect(schema.properties.roles.minItems).toBe(layout.columnCount);
+    expect(schema.properties.roles.maxItems).toBe(layout.columnCount);
+    expect(schema.properties.confidence).toMatchObject({ minimum: 0, maximum: 100 });
+  });
+
   it("見出しがなくてもよい。列数の違う行（前置き）は数えずに飛ばす", () => {
     const prompt = buildColumnPrompt({
       header: null,
