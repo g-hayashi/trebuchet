@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { PastedRow } from "../../src/statements/paste.ts";
 import { type ExistingStatement, planStatementImport } from "../../src/statements/plan.ts";
+import type { StatementRow } from "../../src/statements/table.ts";
 import { accountsFor } from "../statements-arbitraries.ts";
 
 // 006 R3・R14（FR-004〜006）。取込の計画: 新規・取込済み・変更あり・重複の疑い・未対応の口座
 
-const row = (over: Partial<PastedRow> = {}): PastedRow => ({
+const row = (over: Partial<StatementRow> = {}): StatementRow => ({
   accountName: "サンプル銀行",
   date: "2026-05-10",
   content: "ショップ001",
@@ -14,7 +14,7 @@ const row = (over: Partial<PastedRow> = {}): PastedRow => ({
   ...over,
 });
 
-const existingOf = (r: PastedRow, key: string, over: Partial<ExistingStatement> = {}) => ({
+const existingOf = (r: StatementRow, key: string, over: Partial<ExistingStatement> = {}) => ({
   id: `id-${key}`,
   stableKey: key,
   externalId: null,
@@ -100,7 +100,7 @@ describe("planStatementImport", () => {
   describe("重複の疑い（POSSIBLE_DUPLICATE）", () => {
     const stored = (over: Partial<ExistingStatement> = {}) =>
       existingOf(row(), "サンプル銀行|2026-05-10|-1200|ショップ#|0", over);
-    const warningsOf = (r: PastedRow, existing: ExistingStatement[]) =>
+    const warningsOf = (r: StatementRow, existing: ExistingStatement[]) =>
       planStatementImport([r], existing, accounts).rows[0]?.warnings;
 
     it("口座・金額・内容が同じで日付が 3 日以内", () => {

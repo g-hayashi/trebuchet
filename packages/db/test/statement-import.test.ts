@@ -3,9 +3,9 @@ import {
   commitStatementImport,
   commitStatementRows,
   listStatementBatches,
-  type PastedRow,
   previewStatementImport,
   type StatementRecord,
+  type StatementRow,
   saveStatementAccount,
 } from "@trebuchet/domain";
 import type { StatementAccount, StatementBatch } from "@trebuchet/schema";
@@ -54,6 +54,7 @@ const account = (over: Partial<StatementAccount> = {}): StatementAccount => ({
 const batch = (over: Partial<StatementBatch> = {}): StatementBatch => ({
   id: randomUUIDv7(),
   origin: "paste",
+  sourceName: null,
   inputSha256: SHA,
   periodFrom: "2026-05-10",
   periodTo: "2026-05-11",
@@ -117,11 +118,20 @@ describe("DrizzleStatementStore（取込の回と明細）", () => {
     const a = account();
     store.upsertStatementAccount(a);
     const b1 = batch({ createdAt: "2026-10-25T09:00:00.000Z" });
-    const b2 = batch({ createdAt: "2026-10-26T09:00:00.000Z", origin: "mfme_fetch" });
+    const b2 = batch({ createdAt: "2026-10-26T09:00:00.000Z" });
     store.insertStatementBatch(b1);
     store.insertStatementBatch(b2);
     expect(store.listStatementBatches().map((x) => x.id)).toEqual([b2.id, b1.id]);
     expect(store.listStatementBatches()[1]).toEqual(b1);
+
+    // 007: origin は file も、source_name（取込元の名前の写し）も往復する
+    const b3 = batch({
+      origin: "file",
+      sourceName: "サンプル銀行",
+      createdAt: "2026-10-27T09:00:00.000Z",
+    });
+    store.insertStatementBatch(b3);
+    expect(store.listStatementBatches()[0]).toEqual(b3);
 
     const r1 = record(b1, a, {
       transferFlag: true,
@@ -164,7 +174,7 @@ describe("DrizzleStatementStore（取込の回と明細）", () => {
 });
 
 describe("取込のユースケース（実 DB）", () => {
-  const rows: PastedRow[] = [
+  const rows: StatementRow[] = [
     {
       accountName: "サンプル銀行",
       date: "2026-05-10",
@@ -194,7 +204,18 @@ describe("取込のユースケース（実 DB）", () => {
     ["05/10(日)", "ショップ001", "-1,200", "サンプル銀行", "", "0"].join("\t"),
     ["05/11(月)", "売上入金", "3,000", "サンプル銀行", "メモ", "1"].join("\t"),
   ].join("\n");
-  const source = { kind: "paste" as const, text, year: 2026 };
+  const input = {
+    text,
+    origin: "paste" as const,
+    year: 2026,
+    mapping: {
+      delimiter: "\t" as const,
+      headerRow: 0,
+      columns: { date: 0, content: 1, amount: 2, accountName: 3, memo: 4, transferFlag: 5 },
+      amountSign: "inflow_positive" as const,
+    },
+    sha256: SHA,
+  };
 
   const mapBank = () => {
     const r = saveStatementAccount(deps(), "サンプル銀行", {
@@ -208,8 +229,7 @@ describe("取込のユースケース（実 DB）", () => {
   it("確定 → 再取込は新規 0 件。明細は DB に往復する（同じ内容の 2 行は 2 件）", () => {
     mapBank();
     const first = commitStatementImport(deps(), {
-      source,
-      sha256: SHA,
+      ...input,
       expected: { inputSha256: SHA, countNew: 3 },
     });
     if (!first.ok) throw new Error(JSON.stringify(first.error));
@@ -222,7 +242,7 @@ describe("取込のユースケース（実 DB）", () => {
     ]);
     expect(stored[2]).toMatchObject({ transferFlag: true, memo: "メモ", amount: 3000 });
 
-    const again = previewStatementImport(deps(), { source, sha256: SHA });
+    const again = previewStatementImport(deps(), input);
     expect(again.ok && again.value.countNew).toBe(0);
     expect(count("statements")).toBe(3);
     expect(count("statement_batches")).toBe(1);
@@ -233,16 +253,16 @@ describe("取込のユースケース（実 DB）", () => {
 
   it("changed の行は changed_json を書く（external_id が同じで内容が違う）", () => {
     mapBank();
-    const original: PastedRow = { ...(rows[0] as PastedRow), externalId: "ext-1" };
+    const original: StatementRow = { ...(rows[0] as StatementRow), externalId: "ext-1" };
     commitStatementRows(deps(), {
-      origin: "mfme_fetch",
+      origin: "paste",
       rows: [original],
       unreadable: [],
       sha256: SHA,
       expected: { inputSha256: SHA, countNew: 1 },
     });
     const r = commitStatementRows(deps(), {
-      origin: "mfme_fetch",
+      origin: "paste",
       rows: [{ ...original, memo: "直した" }],
       unreadable: [],
       sha256: "b".repeat(64),
@@ -265,8 +285,7 @@ describe("取込のユースケース（実 DB）", () => {
     const auditBefore = count("statement_audit_log");
     expect(() =>
       commitStatementImport(deps(), {
-        source,
-        sha256: SHA,
+        ...input,
         expected: { inputSha256: SHA, countNew: 3 },
       }),
     ).toThrow("injected failure");
@@ -277,8 +296,7 @@ describe("取込のユースケース（実 DB）", () => {
 
   it("未対応の口座では何も書かない", () => {
     const r = commitStatementImport(deps(), {
-      source,
-      sha256: SHA,
+      ...input,
       expected: { inputSha256: SHA, countNew: 3 },
     });
     expect(r.ok).toBe(false);

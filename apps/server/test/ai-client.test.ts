@@ -1,8 +1,16 @@
-import type { SuggestionContext, SuggestionPayload } from "@trebuchet/domain";
+import {
+  COLUMN_TIMEOUT_DETAIL,
+  type ColumnPrompt,
+  type SuggestionContext,
+  type SuggestionPayload,
+} from "@trebuchet/domain";
 import { describe, expect, it, vi } from "vitest";
 import {
   AI_API_KEY_SECRET,
   type AiEndpoint,
+  COLUMN_TIMEOUT_MS,
+  chatCompletion,
+  createColumnProvider,
   createOpenAiProvider,
   EXTERNAL_TIMEOUT_MS,
   LOCAL_TIMEOUT_MS,
@@ -241,5 +249,114 @@ describe("createOpenAiProvider: 使えるか", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("AI_NOT_CONFIGURED");
     expect(calls).toHaveLength(0);
+  });
+});
+
+// 007/R10: 列の対応の案。端末内の endpoint だけを受け取る（外部の endpoint・API キーを受け取る引数がない。FR-018）
+
+const COLUMN_PROMPT: ColumnPrompt = {
+  messages: [
+    { role: "system", content: "列の役割を答えてください" },
+    { role: "user", content: '{"columnCount":3}' },
+  ],
+  schema: { type: "object", properties: {}, additionalProperties: false },
+};
+
+const columnProvider = (
+  f: typeof fetch,
+  localEndpoint: () => Promise<{ baseUrl: string; model: string } | undefined> = async () => ({
+    baseUrl: "http://127.0.0.1:18790",
+    model: "system",
+  }),
+) => createColumnProvider({ fetch: f, available: async () => true, localEndpoint });
+
+describe("createColumnProvider", () => {
+  it("20 秒の時間切れ。端末内の URL に、prompt の messages と schema（response_format）を API キーなしで送る", async () => {
+    expect(COLUMN_TIMEOUT_MS).toBe(20_000);
+    const { fn, calls } = fakeFetch(completion('{"ok":true}'));
+    const result = await columnProvider(fn).suggestColumns(COLUMN_PROMPT);
+    expect(result).toEqual({ ok: true, value: '{"ok":true}' });
+    const call = calls[0] as Call;
+    expect(call.url).toBe("http://127.0.0.1:18790/v1/chat/completions");
+    expect(new Headers(call.init.headers).has("authorization")).toBe(false);
+    expect(call.body.model).toBe("system");
+    expect(call.body.messages).toEqual(COLUMN_PROMPT.messages);
+    expect(call.body).not.toHaveProperty("stream");
+    expect(call.body.response_format).toMatchObject({
+      type: "json_schema",
+      json_schema: { schema: COLUMN_PROMPT.schema },
+    });
+    expect(call.init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("response_format を受けない接続先（400）には付けずに 1 回だけ再試行する", async () => {
+    const { fn, calls } = fakeFetch(new Response("", { status: 400 }), completion("{}"));
+    const result = await columnProvider(fn).suggestColumns(COLUMN_PROMPT);
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.body.response_format).toBeUndefined();
+  });
+
+  it("時間切れは COLUMN_TIMEOUT_DETAIL つきの err。ほかの失敗には付かない", async () => {
+    const timeout = fakeFetch(new DOMException("timed out", "TimeoutError"));
+    const t = await columnProvider(timeout.fn).suggestColumns(COLUMN_PROMPT);
+    expect(t.ok).toBe(false);
+    if (!t.ok) expect(t.error.details).toEqual(COLUMN_TIMEOUT_DETAIL);
+
+    const refused = fakeFetch(new TypeError("fetch failed"));
+    const r = await columnProvider(refused.fn).suggestColumns(COLUMN_PROMPT);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.details?.timeout).toBeUndefined();
+  });
+
+  it("本文の読み取り（fm は SSE で返すので fetch は先に解決する）の途中の時間切れも、timeout として返す", async () => {
+    const slowBody = (name: string) => ({
+      ok: true,
+      status: 200,
+      text: async () => {
+        throw new DOMException("timed out", name);
+      },
+    });
+    for (const name of ["TimeoutError", "AbortError"]) {
+      const { fn } = fakeFetch(async () => slowBody(name) as unknown as Response);
+      const t = await columnProvider(fn).suggestColumns(COLUMN_PROMPT);
+      expect(t.ok).toBe(false);
+      if (!t.ok) {
+        expect(t.error.details).toEqual(COLUMN_TIMEOUT_DETAIL);
+        expect(t.error.message).toContain("時間内");
+      }
+    }
+    // 時間切れ以外の読み取りの失敗は、timeout にしない
+    const broken = {
+      ok: true,
+      status: 200,
+      text: async () => {
+        throw new TypeError("terminated");
+      },
+    };
+    const { fn } = fakeFetch(async () => broken as unknown as Response);
+    const r = await columnProvider(fn).suggestColumns(COLUMN_PROMPT);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.details?.timeout).toBeUndefined();
+  });
+
+  it("endpoint がなければ fetch せず AI_NOT_CONFIGURED", async () => {
+    const { fn, calls } = fakeFetch();
+    const result = await columnProvider(fn, async () => undefined).suggestColumns(COLUMN_PROMPT);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("AI_NOT_CONFIGURED");
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("chatCompletion", () => {
+  it("本文（JSON か SSE）の content を返す", async () => {
+    const { fn } = fakeFetch(completion("hello"));
+    const result = await chatCompletion(
+      { fetch: fn, timeoutMs: 1000 },
+      { baseUrl: "https://api.example.com", model: "m", apiKey: "k" },
+      { messages: [{ role: "user", content: "hi" }] },
+    );
+    expect(result).toEqual({ ok: true, value: "hello" });
   });
 });

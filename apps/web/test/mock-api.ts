@@ -81,6 +81,24 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 明細の取込（006 US1）。取込元の口座と取込の履歴は空
   "GET /statement-accounts": () => ok({ accounts: [] }),
   "GET /statements/imports": () => ok({ batches: [] }),
+  // 明細の取込（007 US1）の表の判定。日付・内容・金額のタブ区切りで、年のない日付
+  "POST /statements/imports/layout": () =>
+    ok({
+      encoding: "utf-8",
+      delimiter: "\t",
+      headerRow: 0,
+      header: ["日付", "内容", "金額（円）"],
+      columnCount: 3,
+      rowCount: 1,
+      sampleRows: [["05/10(日)", "ショップ001", "-1,200"]],
+      needsYear: true,
+      suggestedColumns: { date: 0, content: 1, amount: 2 },
+      match: { kind: "none" },
+    }),
+  // 列の対応の案（007 US4。端末内の AI）。案なし（理由もなし）
+  "POST /statements/imports/column-suggestion": () => ok({ suggestion: null }),
+  // 取込元（007 US2。列の対応の保存）。保存したものはまだない
+  "GET /statement-sources": () => ok({ sources: [] }),
   // ジョブ（評価）の状態は完了
   "GET /jobs/:jobId": () => ok({ status: "done" }),
   // 明細の一覧・しきい値の設定（US2）。一覧は空、設定は既定の値

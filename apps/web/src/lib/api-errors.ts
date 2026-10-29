@@ -205,11 +205,10 @@ export function describeError(error: unknown): ErrorDescription {
         details: [],
       };
     }
-    case "STATEMENT_PASTE_UNREADABLE": {
+    case "STATEMENT_TABLE_UNREADABLE": {
       const missing = asStrings(error.details?.missingColumns);
       return {
-        message:
-          "貼り付けのテキストを読み取れませんでした。MF ME の入出金の表をコピーしたものか確認してください。",
+        message: "表を読み取れませんでした。区切り文字・見出しの行・列の対応を確認してください。",
         details: missing.length > 0 ? [`見つからない列: ${missing.join("、")}`] : [],
       };
     }
@@ -224,6 +223,16 @@ export function describeError(error: unknown): ErrorDescription {
       return {
         message:
           "プレビューの後に内容が変わったため、プレビューを作り直しました。内容を確かめてから、もう一度取り込んでください。",
+        details: [],
+      };
+    case "STATEMENT_SOURCE_NAME_TAKEN":
+      return {
+        message: "同じ名前の取込元があります。別の名前にしてください。",
+        details: [],
+      };
+    case "STATEMENT_SOURCE_NOT_FOUND":
+      return {
+        message: "取込元が見つかりません。削除された可能性があります。一覧を読み直してください。",
         details: [],
       };
     case "INTERNAL":

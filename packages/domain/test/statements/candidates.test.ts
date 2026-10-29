@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { matchConfidence } from "../../src/statements/match-existing.ts";
-import type { PastedRow } from "../../src/statements/paste.ts";
+import type { StatementRow } from "../../src/statements/table.ts";
 import { transferConfidence } from "../../src/statements/transfer.ts";
 import type { JournalDraft, Result, StatementCandidateRecord } from "../../src/types.ts";
 import { createJournal } from "../../src/usecases/create-journal.ts";
@@ -13,7 +13,7 @@ import {
 } from "../../src/usecases/statements.ts";
 import { fakeStatementUnitOfWork } from "../fakes.ts";
 import { setupBase } from "../ledger-setup.ts";
-import { formatMfmePaste } from "../statements-arbitraries.ts";
+import { statementTableOf } from "../statements-arbitraries.ts";
 
 // 006 T014（R5〜R8、§1.4、FR-012・013・019・021a）。候補の作成・作り直し・一覧
 
@@ -59,7 +59,7 @@ const mapCard = () =>
 const mapPrivate = () =>
   mapAccount("テスト現金", { kind: "cash", usage: "private", accountId: undefined });
 
-const row = (over: Partial<PastedRow> = {}): PastedRow => ({
+const row = (over: Partial<StatementRow> = {}): StatementRow => ({
   accountName: "サンプル銀行",
   date: "2026-05-10",
   content: "ショップ001",
@@ -68,15 +68,14 @@ const row = (over: Partial<PastedRow> = {}): PastedRow => ({
   ...over,
 });
 
-const importRows = (rows: PastedRow[]) => {
+const importRows = (rows: StatementRow[]) => {
   ctx.shaSeq += 1;
   const sha256 = ctx.shaSeq.toString(16).padStart(64, "0");
-  const source = { kind: "paste" as const, text: formatMfmePaste(rows), year: 2026 };
-  const preview = ok(previewStatementImport(ctx.deps, { source, sha256 }));
+  const input = { ...statementTableOf(rows), origin: "paste" as const, sha256 };
+  const preview = ok(previewStatementImport(ctx.deps, input));
   ok(
     commitStatementImport(ctx.deps, {
-      source,
-      sha256,
+      ...input,
       expected: { inputSha256: sha256, countNew: preview.countNew },
     }),
   );

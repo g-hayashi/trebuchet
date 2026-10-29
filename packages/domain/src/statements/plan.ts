@@ -1,7 +1,7 @@
 import { addDays } from "../dates.ts";
 import { assignKeys } from "./keys.ts";
 import { normalizeContent } from "./normalize.ts";
-import type { PastedRow } from "./paste.ts";
+import type { StatementRow } from "./table.ts";
 
 /** 取込の計画（006 R3・R14、FR-004〜006）。純関数。帳簿・DB には触れない */
 
@@ -34,7 +34,7 @@ export type StatementContent = {
 
 export type PlannedStatementRow = {
   key: string;
-  row: PastedRow;
+  row: StatementRow;
   status: PlannedRowStatus;
   /** `changed` の行が指す保存済みの明細 */
   existingId?: string;
@@ -44,7 +44,7 @@ export type PlannedStatementRow = {
 
 export type StatementImportPlan = {
   rows: PlannedStatementRow[];
-  /** `statement_accounts` にない保有金融機関の名前（重複なし、名前順） */
+  /** `statement_accounts` にない口座の名前（重複なし、名前順） */
   unmappedAccounts: string[];
   /** 入出金の合計（入金は正の合計、出金は負の合計の絶対値）。読めた行すべて */
   totals: { inflow: number; outflow: number };
@@ -58,7 +58,7 @@ export type StatementImportPlan = {
 /** 重複の疑いで見る日付の幅（日。R3） */
 const DUPLICATE_WINDOW_DAYS = 3;
 
-const contentOfRow = (row: PastedRow): StatementContent => ({
+const contentOfRow = (row: StatementRow): StatementContent => ({
   accountName: row.accountName,
   date: row.date,
   amount: row.amount,
@@ -97,7 +97,7 @@ const sameContent = (a: StatementContent, b: StatementContent): boolean =>
  * 同じ入力を取り込んだ後の 2 回目は `new` が 0 件になり、行の順を入れ替えても `new` の集合は同じ（INV-40）
  */
 export function planStatementImport(
-  rows: readonly PastedRow[],
+  rows: readonly StatementRow[],
   existing: readonly ExistingStatement[],
   accounts: readonly { name: string }[],
 ): StatementImportPlan {
@@ -195,5 +195,7 @@ export function possibleDuplicatesOf<T extends { date: string; amount: number }>
 }
 
 /** 口座・正規化した内容が同じ保存済みの明細に、重複の疑いのあるものがあるか（R3） */
-const isPossibleDuplicate = (row: PastedRow, sameContent: readonly ExistingStatement[]): boolean =>
-  possibleDuplicatesOf(row, sameContent).length > 0;
+const isPossibleDuplicate = (
+  row: StatementRow,
+  sameContent: readonly ExistingStatement[],
+): boolean => possibleDuplicatesOf(row, sameContent).length > 0;

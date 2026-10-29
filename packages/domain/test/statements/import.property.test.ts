@@ -1,11 +1,11 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import type { PastedRow } from "../../src/statements/paste.ts";
 import {
   type ExistingStatement,
   planStatementImport,
   type StatementImportPlan,
 } from "../../src/statements/plan.ts";
+import type { StatementRow } from "../../src/statements/table.ts";
 import { accountsFor, pastedRowsArb, permutationOf } from "../statements-arbitraries.ts";
 
 // 006 INV-40: 同じ入力を何回取り込んでも、2 回目以降に加わる明細は 0 件。行の順に依らない
@@ -87,7 +87,7 @@ describe("INV-40 取込の冪等", () => {
           ),
         ),
         ([rows, split, shuffled]) => {
-          const part: PastedRow[] = rows.slice(0, split);
+          const part: StatementRow[] = rows.slice(0, split);
           const stored = afterCommit(planStatementImport(part, [], accounts), []);
           const full = afterCommit(planStatementImport(shuffled, stored, accounts), stored);
           const direct = afterCommit(planStatementImport(rows, [], accounts), []);

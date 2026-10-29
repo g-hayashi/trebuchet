@@ -12,7 +12,7 @@
 - 科目のコード: 普通預金 `1020`、未払金 `2020`、事業主借 `3010`、事業主貸 `3090`（`seed/accounts.individual.ts`）。`findAccountByCode`（005 の `journal-drafts.ts`）で引く
 - `journal_lines` は `id` を持つ（明細と仕訳の行を結びつけられる）
 - 子プロセスは keychain の `spawn` だけ。Playwright は web の devDependency だけ
-- `fm`（Apple Foundation Models CLI）は `/usr/bin/fm`。`fm serve` が Chat Completions 互換の API（`POST /v1/chat/completions`、`GET /health`）を出し、`fm available` で使えるかを確かめられる。`fm respond --schema` で構造化の出力もできる
+- `fm`（Apple Foundation Models CLI）は `/usr/bin/fm`。`fm serve` が Chat Completions 互換の API（`POST /v1/chat/completions`、`GET /health`）を出し、`fm models` で使えるかを確かめられる（`✓ system` の行。`fm available` は非推奨の別名で、`pcc` が使えないと終了コードが 1 になる）。`fm respond --schema` で構造化の出力もできる
 - 最新の番号: tenant のマイグレーション 0006、registry 0002、INV-39、ADR 0008
 
 ## R1. 層の配置
@@ -92,7 +92,7 @@
 ## R10. AI の呼び出し（FR-025〜FR-027）
 
 - **Decision**: 端末内と外部の両方を、OpenAI 互換の Chat Completions（`POST {baseUrl}/v1/chat/completions`）で呼ぶ。依存は足さず `fetch` で呼ぶ
-  - 端末内: server が最初の推定のときに `fm available` で確かめ、使えれば `fm serve --host 127.0.0.1 --port <TREBUCHET_FM_PORT、既定 18790>` を子プロセスで起動し、`/health` を待つ。server の終了で止める。使えなければ（Intel の Mac、Apple Intelligence が無効など）端末内の段を飛ばす
+  - 端末内: server が最初の推定のときに `fm models` の出力（`✓ system`）で確かめ、使えれば `fm serve --host 127.0.0.1 --port <TREBUCHET_FM_PORT、既定 18790>` を子プロセスで起動し、`/health` を待つ。server の終了で止める。使えなければ（Intel の Mac、Apple Intelligence が無効など）端末内の段を飛ばす
   - 外部: 接続先の URL・モデルは端末の設定（R12）、API キーはキーチェーン（キー `trebuchet-ai-api-key`）。URL は `https://` か `http://localhost`・`127.0.0.1` だけ
   - 要求: system に「勘定科目の一覧（コードと名前。相手になりうる科目だけ）、税区分のコード、出力の形」、user に明細1件（R11 の形）。`response_format: { type: "json_schema" }` を付けるが、付けられない接続先もあるので、出力は必ず `AiSuggestion`（Zod）で検証する: `{ accountCode, taxCategory, purpose: "business" | "private", confidence: 0〜100 の整数, reason: 200 字以内 }`。形に合わない・一覧にないコードは捨てて「候補なし」（INV-46）
   - 取引先は AI に推定させない（ルールだけ）。時間切れは端末内 30 秒、外部 60 秒

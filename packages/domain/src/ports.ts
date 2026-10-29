@@ -6,6 +6,7 @@ import type {
   StatementAccount,
   StatementBatch,
   StatementSettings,
+  StatementSource,
 } from "@trebuchet/schema";
 import type {
   AppSettingKey,
@@ -26,6 +27,7 @@ import type {
   JournalSignature,
   TaxMapping,
 } from "./import/types.ts";
+import type { ColumnPrompt } from "./statements/column-prompt.ts";
 import type { AiPayload } from "./statements/mask.ts";
 import type { PromptAccount } from "./statements/prompt.ts";
 import type {
@@ -368,7 +370,19 @@ export interface StatementStore {
   /** `account.id` が保存済みなら更新、なければ追加する（名前は一意） */
   upsertStatementAccount(account: StatementAccount): void;
 
+  // ---- 取込元と列の対応（007。data-model §1.1） ----
+  /** 名前の順（文字コード順） */
+  listStatementSources(): StatementSource[];
+  /**
+   * `source.id` が保存済みなら更新（`id`・`createdAt` は変えない）、なければ追加する。
+   * 名前は一意（別の id が同じ名前なら例外）。`mapping` は JSON で、`header`（署名）は JSON 配列で保存する
+   */
+  upsertStatementSource(source: StatementSource): void;
+  /** 物理削除する（取込の回の `sourceName` は残る）。ない id は例外 */
+  deleteStatementSource(id: string): void;
+
   // ---- 取込（US1。§1.2・§1.3） ----
+  /** `batch.sourceName`（取込元の名前の写し。保存しなかった取込は null）も保存する */
   insertStatementBatch(batch: StatementBatch): void;
   /** 新しい順（作成の日時の降順） */
   listStatementBatches(): StatementBatch[];
@@ -441,6 +455,17 @@ export interface SuggestionProvider {
   /** 使える（接続先・モデルなどがそろっている）か */
   available(): Promise<boolean>;
   suggest(payload: SuggestionPayload, context: SuggestionContext): Promise<Result<unknown>>;
+}
+
+/**
+ * 端末内の AI による列の対応の案の口（007/R10）。端末内の接続先だけを持つ実装を渡す（外部へ回る口を持たない。FR-018）。
+ * 出力は `unknown` で返し、ドメインの `parseColumnSuggestion` が検証する。時間切れは
+ * `COLUMN_TIMEOUT_DETAIL`（`usecases/statement-columns.ts`）を details に付けた失敗で返す
+ */
+export interface ColumnSuggestionProvider {
+  /** 使える（端末内が有効で、接続先・モデルがそろっている）か */
+  available(): Promise<boolean>;
+  suggestColumns(prompt: ColumnPrompt): Promise<Result<unknown>>;
 }
 
 /** 事業体の一覧（data/registry.sqlite） */

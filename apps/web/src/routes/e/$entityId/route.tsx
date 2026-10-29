@@ -42,7 +42,7 @@ const NAV: { label: string; to: NavTo }[] = [
   // 請求書の一覧から、工数・請求書の作成・設定へ進む
   { label: "請求", to: "/e/$entityId/invoices" },
   { label: "定期仕訳", to: "/e/$entityId/recurring" },
-  // MF ME の明細（006）。一覧から、取込・候補の確認と承認・しきい値の設定へ進む
+  // 銀行・カードの明細（006・007）。一覧から、取込・候補の確認と承認・しきい値の設定へ進む
   { label: "明細", to: "/e/$entityId/statements" },
 ];
 

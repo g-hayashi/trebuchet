@@ -93,7 +93,7 @@ apps/
 │   ├── routes/ai-settings.ts      # 契約 §7
 │   ├── routes/journals.ts         # 仕訳の詳細に結びつく明細
 │   ├── lib/ai-client.ts           # OpenAI 互換の SuggestionProvider（端末内・外部）
-│   ├── lib/fm-server.ts           # fm available・fm serve の起動と停止
+│   ├── lib/fm-server.ts           # fm models・fm serve の起動と停止
 │   ├── lib/mfme/fetcher.ts, dom.ts  # Playwright（R13）
 │   ├── lib/jobs.ts                # 取得・評価のジョブ（in-memory、同時に1つ）
 │   ├── lib/startup.ts             # 終了時に fm serve とブラウザを止める

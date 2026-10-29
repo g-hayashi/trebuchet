@@ -15,6 +15,7 @@ import {
   TEST_HOST,
   TEST_ORIGIN,
 } from "./helpers.ts";
+import { importStatementLines } from "./statements-helpers.ts";
 
 // 006 US5: contracts/http-api.md §6.1・§6.2（評価のジョブと一覧）。偽の fetch・fm で、評価の実行 → ジョブの状態 →
 // 保存した結果の一覧までを通す。評価は候補・ルール・仕訳を書き換えない
@@ -80,18 +81,8 @@ async function setup(options: { fmAvailable?: boolean; hold?: Promise<void> } = 
   });
   expect(mapped.status).toBe(200);
 
-  const HEADER = ["日付", "内容", "金額（円）", "保有金融機関", "メモ", "振替"].join("\t");
-  const importLines = async (...lines: string[]) => {
-    const source = { kind: "paste" as const, text: [HEADER, ...lines].join("\n"), year: 2026 };
-    const preview = await okBody(
-      await e.statements.imports.preview.$post({ param, json: { source } }),
-    );
-    const res = await e.statements.imports.$post({
-      param,
-      json: { source, expected: { inputSha256: preview.inputSha256, countNew: preview.countNew } },
-    });
-    expect(res.status).toBe(201);
-  };
+  const importLines = (...lines: string[]) =>
+    importStatementLines(e.statements.imports, param, ...lines);
   const list = async () => (await okBody(await e.statements.$get({ param, query: {} }))).statements;
   const approveAll = async () => {
     for (const s of await list()) {

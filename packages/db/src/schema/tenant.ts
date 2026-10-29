@@ -956,6 +956,7 @@ const STATEMENT_AUDIT_TARGETS = [
   "statement_account",
   "inference_rule",
   "statement_settings",
+  "statement_source",
 ] as const;
 const STATEMENT_AUDIT_ACTIONS = [
   "create",
@@ -969,6 +970,7 @@ const STATEMENT_AUDIT_ACTIONS = [
   "resume",
   "edit",
   "seed",
+  "delete",
 ] as const;
 const inList = (values: readonly string[]) => sql.raw(values.map((v) => `'${v}'`).join(", "));
 
@@ -994,11 +996,31 @@ export const statementAccounts = sqliteTable(
   ],
 );
 
+/** 取込元と列の対応（007 data-model §1.1）。帳簿の記録ではないので物理削除してよい（削除は statement_audit_log に残す） */
+export const statementSources = sqliteTable(
+  "statement_sources",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull().unique(),
+    // 1 つの口座の取込元の口座の名前（外部キーにしない）。NULL はまとめの取込元
+    fixedAccountName: text("fixed_account_name"),
+    // 正規化した見出しのセルの JSON 配列。NULL は見出しなし
+    headerSignature: text("header_signature"),
+    mappingJson: text("mapping_json").notNull(),
+    lastUsedAt: text("last_used_at").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [check("statement_sources_name", sql`length(${t.name}) BETWEEN 1 AND 100`)],
+);
+
 export const statementBatches = sqliteTable(
   "statement_batches",
   {
     id: text("id").primaryKey(),
     origin: text("origin", { enum: STATEMENT_ORIGINS }).notNull(),
+    // 使った取込元の名前の写し（取込元を後で消しても残る）。NULL は取込元を保存しなかった取込（007 data-model §1.2）
+    sourceName: text("source_name"),
     inputSha256: text("input_sha256").notNull(),
     periodFrom: text("period_from").notNull(),
     periodTo: text("period_to").notNull(),

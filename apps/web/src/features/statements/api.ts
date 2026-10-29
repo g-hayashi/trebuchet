@@ -6,10 +6,19 @@ import type {
   Purpose,
   RuleStatus,
   StatementAccountInput,
-  StatementImportSource,
+  StatementColumnSuggestionOptions,
+  StatementColumnSuggestionResponse,
+  StatementCommitOptions,
+  StatementImportCommitted,
+  StatementImportPreview,
+  StatementLayoutOptions,
+  StatementPreviewOptions,
   StatementSettingsInput,
+  StatementSource,
   StatementStatusFilter,
+  StatementTableLayout,
 } from "@trebuchet/schema";
+import { uploadForm } from "@/features/imports/upload";
 import { api, type QueryItem, unwrap } from "@/lib/api";
 
 // 明細の取込・候補・承認の API（006 contracts/http-api.md §2〜§4・§6.3）
@@ -23,6 +32,7 @@ const entityApi = api.api.entities[":entityId"];
 export const statementKeys = {
   accounts: (entityId: string) => ["entities", entityId, "statement-accounts"] as const,
   batches: (entityId: string) => ["entities", entityId, "statement-imports"] as const,
+  sources: (entityId: string) => ["entities", entityId, "statement-sources"] as const,
   all: (entityId: string) => ["entities", entityId, "statements"] as const,
   list: (entityId: string, filter: StatementFilter) =>
     ["entities", entityId, "statements", "list", filter] as const,
@@ -33,11 +43,6 @@ export const statementKeys = {
   ruleHistory: (entityId: string, ruleId: string) =>
     ["entities", entityId, "statements", "rules", "history", ruleId] as const,
 };
-
-/** 貼り付けの取込元 */
-export type PasteSource = Extract<StatementImportSource, { kind: "paste" }>;
-/** プレビュー・確定に渡す取込元（今は貼り付けだけ。汎用の取込は 007） */
-export type ImportSource = PasteSource;
 
 /** ジョブ（評価）の状態を取り直す間隔（ミリ秒） */
 export const JOB_POLL_MS = 1000;
@@ -66,21 +71,83 @@ export const putStatementAccount = async (
 ) =>
   unwrap(await entityApi["statement-accounts"][":name"].$put({ param: { entityId, name }, json }));
 
-/** プレビュー（§3.1。POST だが何も保存しない） */
-export const postImportPreview = async (entityId: string, source: ImportSource) =>
-  unwrap(
-    await entityApi.statements.imports.preview.$post({ param: { entityId }, json: { source } }),
-  );
+// 取込の 3 つの API は multipart（`file` と `options` の JSON。007 contracts §2）。
+// hc の型つきの `form` に頼らず、002 と同じ `uploadForm` で送り、応答の型は schema の型で指定する
 
-/** 確定（§3.2）。プレビューが返したハッシュと新規の件数を添える */
+const importPath = (entityId: string, last: string) =>
+  `/api/entities/${encodeURIComponent(entityId)}/statements/imports${last}`;
+
+/** 表の判定（§2.1。何も保存しない）。区切り・見出しの行・文字コードの選び直しは `options` で渡す */
+export const postImportLayout = async (
+  entityId: string,
+  file: File,
+  options: StatementLayoutOptions,
+): Promise<StatementTableLayout> =>
+  uploadForm(importPath(entityId, "/layout"), { file, options: JSON.stringify(options) });
+
+/**
+ * 列の対応の案（007 §4.1。端末内の AI。何も保存しない）。辞書の案で必須がそろわない表だけで呼ぶ。
+ * キーは `statements` の下に置かない（仕訳が変わる操作の後に AI を呼び直さない）
+ */
+export const columnSuggestionQuery = (
+  entityId: string,
+  file: File,
+  options: StatementColumnSuggestionOptions,
+) =>
+  queryOptions({
+    queryKey: [
+      "entities",
+      entityId,
+      "statement-column-suggestion",
+      `${file.name}:${file.size}:${file.lastModified}`,
+      options,
+    ] as const,
+    queryFn: async (): Promise<StatementColumnSuggestionResponse> =>
+      uploadForm(importPath(entityId, "/column-suggestion"), {
+        file,
+        options: JSON.stringify(options),
+      }),
+    // AI は遅く、同じ表への答えは変わらない。失敗しても繰り返さない
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+
+/** プレビュー（§2.2。POST だが何も保存しない） */
+export const postImportPreview = async (
+  entityId: string,
+  file: File,
+  options: StatementPreviewOptions,
+): Promise<StatementImportPreview> =>
+  uploadForm(importPath(entityId, "/preview"), { file, options: JSON.stringify(options) });
+
+/** 確定（§2.3）。プレビューと同じファイルと指定に、プレビューが返したハッシュと新規の件数を添える */
 export const postImportCommit = async (
   entityId: string,
-  source: ImportSource,
-  expected: { inputSha256: string; countNew: number },
-) =>
+  file: File,
+  options: StatementCommitOptions,
+): Promise<StatementImportCommitted> =>
+  uploadForm(importPath(entityId, ""), { file, options: JSON.stringify(options) });
+
+/** 取込元（列の対応の保存）の一覧（007 §3。最後に使った日時の新しい順） */
+export const statementSourcesQuery = (entityId: string) =>
+  queryOptions({
+    queryKey: statementKeys.sources(entityId),
+    // hc の JSON 型は任意の列の番号が `number | undefined` になるので、schema の型に合わせる
+    queryFn: async (): Promise<StatementSource[]> =>
+      (await unwrap(await entityApi["statement-sources"].$get({ param: { entityId } })))
+        .sources as StatementSource[],
+  });
+
+/** 取込元の名前を変える（007 §3）。重複は 409 `STATEMENT_SOURCE_NAME_TAKEN` */
+export const patchStatementSource = async (entityId: string, id: string, name: string) =>
   unwrap(
-    await entityApi.statements.imports.$post({ param: { entityId }, json: { source, expected } }),
+    await entityApi["statement-sources"][":id"].$patch({ param: { entityId, id }, json: { name } }),
   );
+
+/** 取込元を削除する（007 §3。明細・取込の回・仕訳は変わらない） */
+export const deleteStatementSource = async (entityId: string, id: string) => {
+  await unwrap(await entityApi["statement-sources"][":id"].$delete({ param: { entityId, id } }));
+};
 
 /** ジョブ（評価）の状態（§3.5）。終わる（done・failed）まで取り直す */
 export const jobQuery = (entityId: string, jobId: string) =>

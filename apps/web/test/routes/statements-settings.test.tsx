@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@/routes/e/$entityId/statements/settings";
@@ -101,5 +101,136 @@ describe("明細の設定", () => {
     await u.click(await screen.findByRole("button", { name: "保存" }));
     expect(await screen.findByText("しきい値は 0〜100 の整数にしてください")).toBeInTheDocument();
     expect(screen.queryByText("保存しました。")).not.toBeInTheDocument();
+  });
+});
+
+// 007 US2: 取込元（列の対応の保存）の一覧・名前の変更・削除（H:§3）
+describe("取込元", () => {
+  const source = (n: number, name: string, over: Record<string, unknown> = {}) => ({
+    id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    name,
+    fixedAccountName: null,
+    mapping: {
+      delimiter: "\t",
+      headerRow: 0,
+      columns: { date: 0, content: 1, amount: 2, accountName: 3 },
+      amountSign: "inflow_positive",
+    },
+    header: ["日付", "内容", "金額", "保有金融機関"],
+    lastUsedAt: "2026-10-20T01:00:00.000Z",
+    createdAt: "2026-09-01T00:00:00.000Z",
+    updatedAt: "2026-10-20T01:00:00.000Z",
+    ...over,
+  });
+  const A = source(1, "MF ME");
+  const B = source(2, "テスト銀行 CSV", { fixedAccountName: "テスト銀行" });
+  const SOURCES = "GET /api/entities/e1/statement-sources";
+  const sourcesRegion = () => screen.findByRole("region", { name: "取込元" });
+
+  it("名前・種類（まとめ / 1 つの口座）・最後に使った日時を一覧にする", async () => {
+    openSettings({ [SOURCES]: () => ok({ sources: [A, B] }) });
+    const table = await within(await sourcesRegion()).findByRole("table", { name: "取込元の一覧" });
+    const rows = within(table).getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("MF ME");
+    expect(rows[1]).toHaveTextContent("まとめ");
+    expect(rows[2]).toHaveTextContent("テスト銀行 CSV");
+    expect(rows[2]).toHaveTextContent("1 つの口座");
+    expect(rows[2]).toHaveTextContent("テスト銀行");
+    expect(rows[1]).toHaveTextContent(new Date(A.lastUsedAt).toLocaleString("ja-JP"));
+  });
+
+  it("保存した取込元がなければその旨を示す", async () => {
+    openSettings();
+    expect(await screen.findByText("保存した取込元はまだありません。")).toBeInTheDocument();
+  });
+
+  it("名前を変えると PATCH で送り、一覧を読み直す", async () => {
+    const u = user();
+    let name = "MF ME";
+    const all = openSettings({
+      [SOURCES]: () => ok({ sources: [{ ...A, name }] }),
+      [`PATCH /api/entities/e1/statement-sources/${A.id}`]: (call) => {
+        name = (call.body as { name: string }).name;
+        return ok({ source: { ...A, name } });
+      },
+    });
+    const region = await sourcesRegion();
+    await u.click(await within(region).findByRole("button", { name: "「MF ME」の名前を変更" }));
+    const input = within(region).getByLabelText("「MF ME」の新しい名前");
+    expect(input).toHaveValue("MF ME");
+    await u.clear(input);
+    await u.type(input, "マネーフォワード");
+    await u.click(within(region).getByRole("button", { name: "「MF ME」の名前を保存" }));
+
+    expect(await within(region).findByText("マネーフォワード")).toBeInTheDocument();
+    expect(
+      all.find((c) => c.method === "PATCH" && c.path.endsWith(`/statement-sources/${A.id}`))?.body,
+    ).toEqual({ name: "マネーフォワード" });
+    // 編集の欄は閉じる
+    expect(within(region).queryByLabelText("「MF ME」の新しい名前")).not.toBeInTheDocument();
+  });
+
+  it("名前の変更が重複（409）なら知らせ、欄は開いたまま。空の名前は送らない", async () => {
+    const u = user();
+    const all = openSettings({
+      [SOURCES]: () => ok({ sources: [A, B] }),
+      [`PATCH /api/entities/e1/statement-sources/${A.id}`]: () =>
+        apiError(409, "STATEMENT_SOURCE_NAME_TAKEN", "同じ名前の取込元があります"),
+    });
+    const region = await sourcesRegion();
+    await u.click(await within(region).findByRole("button", { name: "「MF ME」の名前を変更" }));
+    const input = within(region).getByLabelText("「MF ME」の新しい名前");
+    await u.clear(input);
+    expect(within(region).getByRole("button", { name: "「MF ME」の名前を保存" })).toBeDisabled();
+    await u.type(input, "テスト銀行 CSV");
+    await u.click(within(region).getByRole("button", { name: "「MF ME」の名前を保存" }));
+    expect(await within(region).findByRole("alert")).toHaveTextContent(
+      "同じ名前の取込元があります",
+    );
+    expect(input).toBeInTheDocument();
+    expect(all.filter((c) => c.method === "PATCH")).toHaveLength(1);
+  });
+
+  it("名前の変更をやめると、欄を閉じて何も送らない", async () => {
+    const u = user();
+    const all = openSettings({ [SOURCES]: () => ok({ sources: [A] }) });
+    const region = await sourcesRegion();
+    await u.click(await within(region).findByRole("button", { name: "「MF ME」の名前を変更" }));
+    await u.click(within(region).getByRole("button", { name: "やめる" }));
+    expect(within(region).queryByLabelText("「MF ME」の新しい名前")).not.toBeInTheDocument();
+    expect(all.filter((c) => c.method === "PATCH")).toHaveLength(0);
+  });
+
+  it("削除は確認してから DELETE。確認の文言で、明細と仕訳は変わらないと説明する", async () => {
+    const u = user();
+    let sources = [A, B];
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const all = openSettings({
+      [SOURCES]: () => ok({ sources }),
+      [`DELETE /api/entities/e1/statement-sources/${A.id}`]: () => {
+        sources = [B];
+        return { status: 204, body: undefined };
+      },
+    });
+    const region = await sourcesRegion();
+    await u.click(await within(region).findByRole("button", { name: "「MF ME」を削除" }));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(String(confirm.mock.calls[0]?.[0])).toContain("MF ME");
+    expect(String(confirm.mock.calls[0]?.[0])).toContain("明細");
+    expect(String(confirm.mock.calls[0]?.[0])).toContain("仕訳");
+    await waitFor(() =>
+      expect(within(region).queryByRole("button", { name: "「MF ME」を削除" })).toBeNull(),
+    );
+    expect(all.filter((c) => c.method === "DELETE")).toHaveLength(1);
+    expect(within(region).getByText("テスト銀行 CSV")).toBeInTheDocument();
+  });
+
+  it("確認で取りやめれば、DELETE を送らない", async () => {
+    const u = user();
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const all = openSettings({ [SOURCES]: () => ok({ sources: [A] }) });
+    const region = await sourcesRegion();
+    await u.click(await within(region).findByRole("button", { name: "「MF ME」を削除" }));
+    expect(all.filter((c) => c.method === "DELETE")).toHaveLength(0);
   });
 });

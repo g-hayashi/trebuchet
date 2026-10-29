@@ -1,10 +1,17 @@
-import type { StatementAccount, StatementBatch, StatementSettings } from "@trebuchet/schema";
 import type {
+  StatementAccount,
+  StatementBatch,
+  StatementSettings,
+  StatementSource,
+} from "@trebuchet/schema";
+import type {
+  ColumnSuggestionProvider,
   StatementStore,
   SuggestionContext,
   SuggestionPayload,
   SuggestionProvider,
 } from "../../src/ports.ts";
+import type { ColumnPrompt } from "../../src/statements/column-prompt.ts";
 import {
   domainError,
   type EvalRunRecord,
@@ -32,6 +39,7 @@ type StatementState = {
   ruleHistory: InferenceRuleHistoryRecord[];
   settings: StatementSettings | undefined;
   evalRuns: EvalRunRecord[];
+  sources: StatementSource[];
 };
 
 /**
@@ -50,6 +58,7 @@ export class InMemoryStatementStore implements StatementStore {
     ruleHistory: [],
     settings: undefined,
     evalRuns: [],
+    sources: [],
   };
   /** true なら insertStatements で、1 行目を書いた後に例外を投げる（ロールバックの確認用） */
   failOnInsertStatements = false;
@@ -76,6 +85,32 @@ export class InMemoryStatementStore implements StatementStore {
     const index = this.state.accounts.findIndex((a) => a.id === account.id);
     if (index < 0) this.state.accounts.push(copy);
     else this.state.accounts[index] = copy;
+  }
+
+  listStatementSources(): StatementSource[] {
+    return structuredClone(this.state.sources).sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+    );
+  }
+
+  upsertStatementSource(source: StatementSource): void {
+    if (this.state.sources.some((s) => s.name === source.name && s.id !== source.id)) {
+      throw new Error("UNIQUE constraint failed: statement_sources.name");
+    }
+    const copy = structuredClone(source);
+    const index = this.state.sources.findIndex((s) => s.id === source.id);
+    if (index < 0) this.state.sources.push(copy);
+    else
+      this.state.sources[index] = {
+        ...copy,
+        createdAt: (this.state.sources[index] as StatementSource).createdAt,
+      };
+  }
+
+  deleteStatementSource(id: string): void {
+    const index = this.state.sources.findIndex((s) => s.id === id);
+    if (index < 0) throw new Error(`statement source not found: ${id}`);
+    this.state.sources.splice(index, 1);
   }
 
   insertStatementBatch(batch: StatementBatch): void {
@@ -252,6 +287,41 @@ export const fakeStatementUnitOfWork = (
   statements = new InMemoryStatementStore(),
 ) => fakeUnitOfWork(ledger, masters, { statements });
 export type FakeStatementUnitOfWork = ReturnType<typeof fakeStatementUnitOfWork>;
+
+/**
+ * ColumnSuggestionProvider のフェイク（007/R10）。既定は使えない。`respondWith` で応答を決め、`calls` で
+ * 渡されたプロンプトを確かめる。`throwOnCall` を立てると `suggestColumns` が例外を投げる
+ */
+export class FakeColumnSuggestionProvider implements ColumnSuggestionProvider {
+  readonly calls: ColumnPrompt[] = [];
+  availableCalls = 0;
+  throwOnCall = false;
+  private isAvailable: boolean;
+  private response: Result<unknown> = err(domainError("VALIDATION", "AI を使えません"));
+
+  constructor(options: { available?: boolean } = {}) {
+    this.isAvailable = options.available ?? false;
+  }
+
+  setAvailable(value: boolean): void {
+    this.isAvailable = value;
+  }
+
+  respondWith(response: Result<unknown>): void {
+    this.response = response;
+  }
+
+  async available(): Promise<boolean> {
+    this.availableCalls += 1;
+    return this.isAvailable;
+  }
+
+  async suggestColumns(prompt: ColumnPrompt): Promise<Result<unknown>> {
+    this.calls.push(structuredClone(prompt));
+    if (this.throwOnCall) throw new Error("boom");
+    return this.response;
+  }
+}
 
 /**
  * SuggestionProvider のフェイク。既定は使えない（`available` が false、`suggest` は失敗）。

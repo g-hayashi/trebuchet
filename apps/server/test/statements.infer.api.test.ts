@@ -15,6 +15,7 @@ import {
   TEST_HOST,
   TEST_ORIGIN,
 } from "./helpers.ts";
+import { importStatementLines } from "./statements-helpers.ts";
 
 // 006 §4.3: POST /statements/infer。偽の fetch・キーチェーン・fm で、設定 → 呼び出し → 候補の保存までを通す
 
@@ -84,22 +85,11 @@ async function setup(options: { fmAvailable?: boolean; reply?: (code: string) =>
     json: { usage: "business", kind: "bank", accountId: accountId("普通預金") },
   });
   expect(mapped.status).toBe(200);
-  const source = {
-    kind: "paste" as const,
-    text: [
-      ["日付", "内容", "金額（円）", "保有金融機関", "メモ", "振替"].join("\t"),
-      ["05/10(日)", "文房具", "-1,200", BANK, "", 0].join("\t"),
-    ].join("\n"),
-    year: 2026,
-  };
-  const preview = await okBody(
-    await e.statements.imports.preview.$post({ param, json: { source } }),
-  );
-  const committed = await e.statements.imports.$post({
+  await importStatementLines(
+    e.statements.imports,
     param,
-    json: { source, expected: { inputSha256: preview.inputSha256, countNew: preview.countNew } },
-  });
-  expect(committed.status).toBe(201);
+    ["05/10(日)", "文房具", "-1,200", BANK, "", 0].join("\t"),
+  );
   const statements = (await okBody(await e.statements.$get({ param, query: {} }))).statements;
   const statementId = statements[0]?.id ?? "";
 

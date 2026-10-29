@@ -1,29 +1,57 @@
 import { spawn as nodeSpawn } from "node:child_process";
 
 // 端末内の AI（Apple のオンデバイスモデル）を OpenAI 互換の API で出す `fm serve` の管理（006 R10）。
-// 最初の推定のときに `fm available` で確かめ、使えれば `fm serve` を子プロセスで起動して `/health` を待つ。
+// 最初の推定のときに `fm models` の出力で確かめ、使えれば `fm serve` を子プロセスで起動して `/health` を待つ。
+// `fm models` は `✓ system ()` のようにモデルごとに 1 行を出す。`pcc` が使えないだけでも終了コードは 1 になるので、
+// 終了コードではなく `system` の行の `✓` を見る（`fm available` は非推奨の別名）。
 // server の終了で止める。使えなければ（Intel の Mac、Apple Intelligence が無効など）端末内の段を飛ばす
 
 /** 子プロセス。テストは偽物を渡す */
 export type FmChild = {
-  /** 終了（または起動の失敗）を知らせる。失敗は `null` */
+  /** 終了（または起動の失敗）を知らせる。失敗は `null`。stdout を受け取る子は、stdout を読み終えてから呼ぶ */
   onExit(listener: (code: number | null) => void): void;
+  /** stdout を受け取る（`captureStdout` を付けて起動した子だけ） */
+  onStdout(listener: (chunk: string) => void): void;
   kill(): void;
 };
-export type FmSpawn = (command: string, args: string[]) => FmChild;
+export type FmSpawn = (
+  command: string,
+  args: string[],
+  options?: { captureStdout?: boolean },
+) => FmChild;
 
-const defaultSpawn: FmSpawn = (command, args) => {
-  const child = nodeSpawn(command, args, { stdio: "ignore" });
+const defaultSpawn: FmSpawn = (command, args, options) => {
+  const capture = options?.captureStdout === true;
+  const child = nodeSpawn(command, args, {
+    stdio: capture ? ["ignore", "pipe", "ignore"] : "ignore",
+  });
+  child.stdout?.setEncoding("utf8");
   return {
     onExit(listener) {
-      child.once("exit", (code) => listener(code));
+      // stdout を読み切ってから知らせるため、capture のときは close を待つ
+      child.once(capture ? "close" : "exit", (code) => listener(code));
       child.once("error", () => listener(null));
+    },
+    onStdout(listener) {
+      child.stdout?.on("data", (chunk: string) => listener(chunk));
     },
     kill: () => {
       child.kill();
     },
   };
 };
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI のエスケープを除く
+const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+
+/** `fm models` の出力で、`model` の行が使える（`✓`）か。ANSI の色は除いて見る */
+export function modelAvailable(output: string, model: string): boolean {
+  const plain = output.replace(ANSI, "");
+  return plain.split(/\r?\n/).some((line) => {
+    const m = /^\s*✓\s+(\S+)/u.exec(line);
+    return m?.[1] === model;
+  });
+}
 
 export type FmServerOptions = {
   spawn?: FmSpawn;
@@ -35,15 +63,17 @@ export type FmServerOptions = {
   /** `/health` を待つ上限（既定 30 秒） */
   healthTimeoutMs?: number;
   pollMs?: number;
-  /** `fm available` を待つ上限（既定 10 秒） */
+  /** `fm models` を待つ上限（既定 10 秒） */
   availableTimeoutMs?: number;
+  /** 使えるかを見るモデル名（既定 `system`。`ai-runtime.ts` の `LOCAL_AI_MODEL` と同じ） */
+  model?: string;
   /** 起動に失敗してから、次に試すまでの間（既定 60 秒。1 件ごとに待たせない） */
   retryAfterMs?: number;
   now?: () => number;
 };
 
 export type FmServer = {
-  /** `fm available` が 0 で終わるか。最初の結果を覚える */
+  /** `fm models` の出力に、使えるモデル（`✓ system`）の行があるか。最初の結果を覚える */
   available(): Promise<boolean>;
   /** 使えれば `fm serve` を（なければ）起動し、接続先（`http://127.0.0.1:<port>`）を返す。使えなければ undefined */
   ensureStarted(): Promise<string | undefined>;
@@ -57,6 +87,7 @@ export function createFmServer(options: FmServerOptions = {}): FmServer {
   const spawn = options.spawn ?? defaultSpawn;
   const fetchFn = options.fetch ?? ((...args) => globalThis.fetch(...args));
   const command = options.command ?? "fm";
+  const model = options.model ?? "system";
   const port = options.port ?? 18790;
   const healthTimeoutMs = options.healthTimeoutMs ?? 30_000;
   const pollMs = options.pollMs ?? 250;
@@ -77,16 +108,21 @@ export function createFmServer(options: FmServerOptions = {}): FmServer {
         proc?.kill();
         resolve(false);
       }, availableTimeoutMs);
+      let stdout = "";
       try {
-        proc = spawn(command, ["available"]);
+        proc = spawn(command, ["models"], { captureStdout: true });
       } catch {
         clearTimeout(timer);
         resolve(false);
         return;
       }
+      proc.onStdout((chunk) => {
+        stdout += chunk;
+      });
       proc.onExit((code) => {
         clearTimeout(timer);
-        resolve(code === 0);
+        // 終了コードは見ない（pcc が使えないだけで 1 になる）。起動の失敗（null）は使えない
+        resolve(code !== null && modelAvailable(stdout, model));
       });
     });
 

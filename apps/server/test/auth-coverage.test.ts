@@ -97,6 +97,34 @@ describe("INV-29 全ルートの保護", () => {
     expect(failures).toEqual([]);
   });
 
+  it("明細の取込（007）の layout・preview・確定は列挙に入り、保護されている。multipart でも未サインインは 401", async () => {
+    const protectedKeys = new Set(protectedRoutes().map((r) => `${r.method} ${r.path}`));
+    for (const path of ["layout", "preview"]) {
+      expect(protectedKeys.has(`POST /api/entities/:entityId/statements/imports/${path}`)).toBe(
+        true,
+      );
+    }
+    expect(protectedKeys.has("POST /api/entities/:entityId/statements/imports")).toBe(true);
+    for (const key of [
+      "GET /api/entities/:entityId/statement-sources",
+      "PATCH /api/entities/:entityId/statement-sources/:id",
+      "DELETE /api/entities/:entityId/statement-sources/:id",
+    ]) {
+      expect(protectedKeys.has(key), `${key} が保護されている`).toBe(true);
+    }
+    for (const path of ["/imports/layout", "/imports/preview", "/imports"]) {
+      const body = new FormData();
+      body.append("file", new File(["a\tb"], "x.txt"));
+      body.append("options", JSON.stringify({ origin: "paste" }));
+      const res = await app.request(`/api/entities/${SAMPLE_UUID}/statements${path}`, {
+        method: "POST",
+        headers: { Host: TEST_HOST, Origin: TEST_ORIGIN },
+        body,
+      });
+      expect(res.status, path).toBe(401);
+    }
+  });
+
   it("存在しない事業体の ID でも 404 ではなく 401（認証がテナントの解決より先）", async () => {
     const res = await app.request(`/api/entities/${SAMPLE_UUID}/accounts`, {
       headers: { Host: TEST_HOST },

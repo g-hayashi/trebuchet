@@ -1,4 +1,4 @@
-# 不変条件の索引（INV-1〜47）
+# 不変条件の索引（INV-1〜50）
 
 不変条件の番号は機能をまたいで通し番号。**正本は各機能の `data-model.md` §4**（検証の手段もそこにある）。この表は索引で、説明は一行に要約している。食い違いがあれば `data-model.md` が正しい。テストは fast-check の性質テストか統合テスト（[AGENTS.md](../AGENTS.md)「開発の進め方」）。
 
@@ -78,3 +78,11 @@
 | INV-45 | AI への送信の内容（`buildAiPayload`）のマスクした項目に 4 桁以上の数字と振込の名義がなく、どこにも口座の名前・メモがない |
 | INV-46 | AI の出力から作る候補は `AiSuggestion` の検証を通り、科目・税区分が有効なものだけ。それ以外は `none` |
 | INV-47 | 取込と承認は全部か無か。明細が `registered` ⇔ 有効な結びつきの仕訳がある |
+
+## 007 汎用の明細取込（INV-48〜50）— [data-model §5](007-generic-statement-import/data-model.md)
+
+| INV | 内容 |
+|---|---|
+| INV-48 | 列の対応の案のための AI への入力（`buildColumnPrompt`）は見出しと先頭の明細の行 5 件以下だけで、前置きの行と 6 行目以降を含まない。送り先は端末内の provider だけ |
+| INV-49 | 生成したどの形の表でも、正しい対応で `readStatementTable` が返す行は元の行と同じ（件数・順・日付・内容・金額・口座） |
+| INV-50 | 取込元の `fixed_account_name` が NULL ⇔ 対応が `accountName` の役割を持つ。1 つの口座の取込元で読んだ行の口座はすべて `fixed_account_name` |

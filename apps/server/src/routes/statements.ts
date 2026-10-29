@@ -1,10 +1,11 @@
-import { sha256Hex } from "@trebuchet/db";
 import {
   acknowledgeChange,
   approveBulk,
   approveCandidate,
   buildCandidates,
   commitStatementImport,
+  deleteStatementSource,
+  detectStatementLayout,
   domainError,
   excludeStatement,
   getStatementSettings,
@@ -13,15 +14,18 @@ import {
   listRules,
   listStatementAccounts,
   listStatementBatches,
+  listStatementSources,
   listStatements,
   pauseRule,
   previewStatementImport,
+  renameStatementSource,
   resumeRule,
   ruleHistory,
   runEvaluation,
   saveStatementAccount,
   saveStatementSettings,
   seedRulesFromJournals,
+  suggestStatementColumns,
   unexcludeStatement,
   unlinkStatement,
   updateRule,
@@ -37,28 +41,46 @@ import {
   InferInput,
   SeedRulesInput,
   StatementAccountInput,
-  StatementImportCommitInput,
-  StatementImportPreviewInput,
-  type StatementImportSource,
+  StatementColumnSuggestionOptions,
+  StatementCommitOptions,
+  StatementLayoutOptions,
   StatementListQuery,
+  StatementPreviewOptions,
   StatementReasonInput,
   StatementSettingsInput,
+  StatementSourceRenameInput,
 } from "@trebuchet/schema";
 import { Hono } from "hono";
 import { type RouteOptions, type SuggestionProviders, statementDeps } from "../deps.ts";
 import { fail, respond } from "../errors.ts";
 import { type AiRuntime, LOCAL_AI_MODEL } from "../lib/ai-runtime.ts";
 import { createJobStore, type JobStore } from "../lib/jobs.ts";
+import { decodeStatementBytes, statementInputSha256 } from "../lib/statement-input.ts";
 import { todayOf } from "../lib/today.ts";
+import { readJsonField, readUpload, uploadLimit } from "../lib/upload.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 
 /**
- * 入力の SHA-256（R14。domain に暗号の関数を入れないので server で計算する）。
- * 貼り付けのテキストと対象の年から決める（年が違えば読んだ行が変わるため）
+ * 取込の `file` を文字列にし（`options.encoding` があればその文字コード。007/R1）、domain の入力を作る。
+ * 入力のハッシュは R11 の正規の JSON。5 MB 超 → 413、`file`・`options` が不正 → 400（readUpload・readJsonField が投げる）
  */
-const inputSha256 = (source: StatementImportSource): string =>
-  sha256Hex(new TextEncoder().encode(`${source.year}\n${source.text}`));
+function statementImportInput(bytes: Uint8Array, options: StatementPreviewOptions) {
+  const { text } = decodeStatementBytes(bytes, options.encoding);
+  return {
+    text,
+    origin: options.origin,
+    year: options.year,
+    mapping: options.mapping,
+    fixedAccountName: options.fixedAccountName,
+    sha256: statementInputSha256({
+      text,
+      year: options.year,
+      mapping: options.mapping,
+      fixedAccountName: options.fixedAccountName,
+    }),
+  };
+}
 
 /**
  * `/api/entities/:entityId` の下の明細の取込と AI 仕訳（006。contracts/http-api.md §2〜§6）。
@@ -89,26 +111,73 @@ export function statementRoutes({
         return respond(c, result, (saved) => c.json(saved, 200));
       })
       // §3 取込
-      .post("/statements/imports/preview", validate("json", StatementImportPreviewInput), (c) => {
-        const { source } = c.req.valid("json");
-        const result = previewStatementImport(deps(c.var.db), {
-          source,
-          sha256: inputSha256(source),
+      // multipart: file と options（JSON 文字列）。007 contracts §2。上限は 5 MB（002 と同じ）
+      .post("/statements/imports/layout", uploadLimit, async (c) => {
+        const upload = await readUpload(c);
+        const options = await readJsonField(c, "options", StatementLayoutOptions);
+        const { text, encoding } = decodeStatementBytes(upload.bytes, options.encoding);
+        // 取込元の照合（match・headerDiff）は domain。sourceId があればその取込元だけを見る（R8）
+        const result = detectStatementLayout(deps(c.var.db), text, {
+          delimiter: options.delimiter,
+          headerRow: options.headerRow,
+          sourceId: options.sourceId,
         });
+        return respond(c, result, (detected) => c.json({ ...detected, encoding }, 200));
+      })
+      // 007 §4.1 列の対応の案。端末内の AI だけを呼ぶ（外部の AI の設定は読まない。FR-018）。設定で無効なら disabled
+      .post("/statements/imports/column-suggestion", uploadLimit, async (c) => {
+        const upload = await readUpload(c);
+        const options = await readJsonField(c, "options", StatementColumnSuggestionOptions);
+        const { text } = decodeStatementBytes(upload.bytes, options.encoding);
+        const detected = detectStatementLayout(deps(c.var.db), text, {
+          delimiter: options.delimiter,
+          headerRow: options.headerRow,
+        });
+        if (!detected.ok) return fail(c, detected.error);
+        const provider = ai.settings().get().localEnabled ? ai.columns : undefined;
+        return c.json(await suggestStatementColumns({ provider }, detected.value), 200);
+      })
+      .post("/statements/imports/preview", uploadLimit, async (c) => {
+        const upload = await readUpload(c);
+        const options = await readJsonField(c, "options", StatementPreviewOptions);
+        const result = previewStatementImport(
+          deps(c.var.db),
+          statementImportInput(upload.bytes, options),
+        );
         return respond(c, result, (preview) => c.json(preview, 200));
       })
-      .post("/statements/imports", validate("json", StatementImportCommitInput), (c) => {
-        const { source, expected } = c.req.valid("json");
+      .post("/statements/imports", uploadLimit, async (c) => {
+        const upload = await readUpload(c);
+        const options = await readJsonField(c, "options", StatementCommitOptions);
+        // accounts（未対応の口座の対応）・saveSource は取込と同じ UnitOfWork で保存する（INV-47）
         const result = commitStatementImport(deps(c.var.db), {
-          source,
-          sha256: inputSha256(source),
-          expected,
+          ...statementImportInput(upload.bytes, options),
+          expected: options.expected,
+          accounts: options.accounts,
+          saveSource: options.saveSource,
         });
         return respond(c, result, (committed) => c.json(committed, 201));
       })
       .get("/statements/imports", (c) => {
         const result = listStatementBatches(deps(c.var.db));
         return respond(c, result, (batches) => c.json({ batches }, 200));
+      })
+      // 007 §3 取込元（列の対応の保存）
+      .get("/statement-sources", (c) => {
+        const result = listStatementSources(deps(c.var.db));
+        return respond(c, result, (sources) => c.json({ sources }, 200));
+      })
+      .patch("/statement-sources/:id", validate("json", StatementSourceRenameInput), (c) => {
+        const result = renameStatementSource(
+          deps(c.var.db),
+          c.req.param("id"),
+          c.req.valid("json").name,
+        );
+        return respond(c, result, (source) => c.json({ source }, 200));
+      })
+      .delete("/statement-sources/:id", (c) => {
+        const result = deleteStatementSource(deps(c.var.db), c.req.param("id"));
+        return respond(c, result, () => c.body(null, 204));
       })
       // §3.5 ジョブの状態（評価のジョブ。メモリだけ）
       .get("/jobs/:jobId", (c) => {

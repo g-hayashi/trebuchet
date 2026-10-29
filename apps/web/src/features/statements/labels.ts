@@ -5,6 +5,10 @@ import type {
   RuleStatus,
   StatementAccountKind,
   StatementAccountUsage,
+  StatementAmountSign,
+  StatementColumnRole,
+  StatementDelimiter,
+  StatementEncoding,
   StatementOrigin,
   StatementStatus,
   StatementStatusFilter,
@@ -25,7 +29,38 @@ export const KIND_LABELS: Record<StatementAccountKind, string> = {
 
 export const ORIGIN_LABELS: Record<StatementOrigin, string> = {
   paste: "貼り付け",
-  mfme_fetch: "自動取得",
+  file: "ファイル",
+};
+
+/** 列の役割（007 data-model §3）。必須は日付・内容と、金額か出金・入金 */
+export const ROLE_LABELS: Record<StatementColumnRole, string> = {
+  date: "日付",
+  content: "内容",
+  amount: "金額",
+  outflow: "出金",
+  inflow: "入金",
+  accountName: "口座名",
+  categoryMajor: "大項目",
+  categoryMinor: "中項目",
+  memo: "メモ",
+  externalId: "取引の識別",
+  transferFlag: "振替",
+};
+
+export const DELIMITER_LABELS: Record<StatementDelimiter, string> = {
+  "\t": "タブ",
+  ",": "カンマ",
+  ";": "セミコロン",
+};
+
+export const ENCODING_LABELS: Record<StatementEncoding, string> = {
+  "utf-8": "UTF-8",
+  shift_jis: "CP932（shift_jis）",
+};
+
+export const AMOUNT_SIGN_LABELS: Record<StatementAmountSign, string> = {
+  inflow_positive: "正の値は入金",
+  outflow_positive: "正の値は出金",
 };
 
 export const STATUS_LABELS: Record<StatementStatus, string> = {

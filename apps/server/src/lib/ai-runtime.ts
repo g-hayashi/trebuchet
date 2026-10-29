@@ -1,7 +1,8 @@
 import type { AiSettingsRecord } from "@trebuchet/db";
-import type { SecretStore, SuggestionProvider } from "@trebuchet/domain";
+import type { ColumnSuggestionProvider, SecretStore, SuggestionProvider } from "@trebuchet/domain";
 import {
   AI_API_KEY_SECRET,
+  createColumnProvider,
   createOpenAiProvider,
   EXTERNAL_TIMEOUT_MS,
   LOCAL_TIMEOUT_MS,
@@ -30,6 +31,8 @@ export type AiRuntime = {
   secrets: SecretStore;
   fm: FmServer;
   providers: { local: SuggestionProvider; external: SuggestionProvider };
+  /** 列の対応の案（007）。端末内の AI だけ。設定で無効なら route が使わない */
+  columns: ColumnSuggestionProvider;
 };
 
 /** API キーを引く。キーチェーンの失敗は「ない」と同じに扱う（理由は出さない） */
@@ -44,7 +47,7 @@ export async function readApiKey(secrets: SecretStore): Promise<string | undefin
 
 /**
  * 端末内・外部の SuggestionProvider を作る。設定とキーは呼ぶたびに読む（PUT がすぐ効く）。
- * 端末内: 設定で有効、かつ `fm available`。`fm serve` は最初の推定で起動する。
+ * 端末内: 設定で有効、かつ `fm models` に `✓ system` がある。`fm serve` は最初の推定で起動する。
  * 外部: 設定で有効、かつ接続先・モデル・API キーがそろっている
  */
 export function createAiRuntime(options: AiRuntimeOptions): AiRuntime {
@@ -65,15 +68,25 @@ export function createAiRuntime(options: AiRuntimeOptions): AiRuntime {
     return { baseUrl: s.externalBaseUrl, model: s.externalModel, apiKey };
   }
 
+  const localAvailable = async () =>
+    options.settings().get().localEnabled && (await options.fm.available());
+  const localEndpoint = async () => {
+    if (!options.settings().get().localEnabled) return undefined;
+    const baseUrl = await options.fm.ensureStarted();
+    return baseUrl === undefined ? undefined : { baseUrl, model: LOCAL_AI_MODEL };
+  };
+
   const local = createOpenAiProvider({
     fetch: options.fetch,
     timeoutMs: LOCAL_TIMEOUT_MS,
-    available: async () => options.settings().get().localEnabled && (await options.fm.available()),
-    endpoint: async () => {
-      if (!options.settings().get().localEnabled) return undefined;
-      const baseUrl = await options.fm.ensureStarted();
-      return baseUrl === undefined ? undefined : { baseUrl, model: LOCAL_AI_MODEL };
-    },
+    available: localAvailable,
+    endpoint: localEndpoint,
+  });
+  // 列の案は端末内の endpoint だけを渡す（外部の接続先・API キーは渡さない。007 FR-018）
+  const columns = createColumnProvider({
+    fetch: options.fetch,
+    available: localAvailable,
+    localEndpoint,
   });
 
   return {
@@ -81,5 +94,6 @@ export function createAiRuntime(options: AiRuntimeOptions): AiRuntime {
     secrets: options.secrets,
     fm: options.fm,
     providers: { local, external },
+    columns,
   };
 }

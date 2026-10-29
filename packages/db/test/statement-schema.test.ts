@@ -24,6 +24,7 @@ const NEW_TABLES = [
   "statement_settings",
   "eval_runs",
   "statement_audit_log",
+  "statement_sources",
 ];
 
 const NOW = "2026-10-25T09:00:00.000Z";
@@ -238,7 +239,7 @@ const linkRow = (statementId: string, journalId: string, lineId: string, over: R
 });
 
 describe("006 の表", () => {
-  it("新しい10表がすべて STRICT", () => {
+  it("新しい表（007 の statement_sources を含む 11 表）がすべて STRICT", () => {
     const rows = all("SELECT name, sql FROM sqlite_schema WHERE type = 'table'") as {
       name: string;
       sql: string;
@@ -289,10 +290,12 @@ describe("statement_accounts（§1.1）", () => {
 describe("statement_batches（§1.2）", () => {
   it("origin の列挙、件数は 0 以上、削除・更新できない", () => {
     expect(() => insert("statement_batches", batchRow({ origin: "csv" }))).toThrow(/CHECK/);
+    // 007: mfme_fetch は取りやめた（R13）。file を足した
+    expect(() => insert("statement_batches", batchRow({ origin: "mfme_fetch" }))).toThrow(/CHECK/);
     for (const col of ["count_new", "count_existing", "count_unreadable"]) {
       expect(() => insert("statement_batches", batchRow({ [col]: -1 })), col).toThrow(/CHECK/);
     }
-    const id = seedBatch({ origin: "mfme_fetch" });
+    const id = seedBatch({ origin: "file", source_name: "サンプル銀行" });
     expect(() => update("statement_batches", "id = ?", { count_new: 2 }, id)).toThrow(
       /append-only|cannot/,
     );
@@ -604,6 +607,80 @@ describe("statement_audit_log（§1.10）", () => {
     expect(() => run("DELETE FROM statement_audit_log WHERE id = ?", row.id)).toThrow(
       /append-only/,
     );
+  });
+});
+
+describe("007 の変更（statement_sources、作り直した表の保全）", () => {
+  const sourceRow = (over: Row = {}): Row => ({
+    id: randomUUIDv7(),
+    name: `取込元${next()}`,
+    fixed_account_name: null,
+    header_signature: null,
+    mapping_json: "{}",
+    last_used_at: NOW,
+    created_at: NOW,
+    updated_at: NOW,
+    ...over,
+  });
+
+  it("statement_sources: name は一意・1〜100 字、mapping_json は必須、物理削除できる", () => {
+    expect(() => insert("statement_sources", sourceRow({ name: "" }))).toThrow(/CHECK/);
+    expect(() => insert("statement_sources", sourceRow({ name: "あ".repeat(101) }))).toThrow(
+      /CHECK/,
+    );
+    expect(() => insert("statement_sources", sourceRow({ mapping_json: null }))).toThrow(
+      /NOT NULL/,
+    );
+    const row = sourceRow({
+      name: "あ".repeat(100),
+      fixed_account_name: "口座",
+      header_signature: "[]",
+    });
+    expect(() => insert("statement_sources", row)).not.toThrow();
+    expect(() => insert("statement_sources", sourceRow({ name: row.name }))).toThrow(/UNIQUE/);
+    expect(() => run("DELETE FROM statement_sources WHERE id = ?", row.id)).not.toThrow();
+  });
+
+  it("statement_batches.source_name は NULL 可。作り直しの後も 0008 の制約・外部キー・index が残る", () => {
+    const id = seedBatch({ source_name: null });
+    expect(all("SELECT source_name FROM statement_batches WHERE id = ?", id)[0]?.source_name).toBe(
+      null,
+    );
+    const s = seedStatement({ batch_id: id });
+    expect(() => run("DELETE FROM statement_batches WHERE id = ?", id)).toThrow(
+      /cannot be deleted/,
+    );
+    // statements.batch_id → statement_batches.id の外部キーが作り直しの後も statement_batches を指す
+    const fks = all("PRAGMA foreign_key_list(statements)").filter((r) => r.from === "batch_id");
+    expect(fks.map((r) => r.table)).toEqual(["statement_batches"]);
+    expect(() => insert("statements", statementRow(randomUUIDv7(), s.accountId))).toThrow(
+      /FOREIGN KEY/,
+    );
+    expect(all("PRAGMA foreign_key_check")).toEqual([]);
+    const indexes = all("PRAGMA index_list(statement_audit_log)").map((r) => r.name);
+    expect(indexes).toContain("statement_audit_log_target");
+  });
+
+  it("作り直した表のトリガーが 1 つずつ残っている", () => {
+    const names = all(
+      "SELECT name FROM sqlite_schema WHERE type = 'trigger' AND (tbl_name = 'statement_batches' OR tbl_name = 'statement_audit_log') ORDER BY name",
+    ).map((r) => r.name);
+    expect(names).toEqual([
+      "statement_audit_log_no_delete",
+      "statement_audit_log_no_update",
+      "statement_batches_no_delete",
+      "statement_batches_no_update",
+    ]);
+  });
+
+  it("statement_audit_log: statement_source と delete を受け付ける", () => {
+    expect(() =>
+      insert(
+        "statement_audit_log",
+        auditRow({ target_type: "statement_source", action: "delete" }),
+      ),
+    ).not.toThrow();
+    expect(() => insert("statement_audit_log", auditRow({ action: "delete" }))).not.toThrow();
   });
 });
 

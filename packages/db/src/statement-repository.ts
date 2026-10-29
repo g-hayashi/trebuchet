@@ -9,7 +9,12 @@ import type {
   StatementStore,
   StatementUnitOfWork,
 } from "@trebuchet/domain";
-import type { StatementAccount, StatementBatch, StatementSettings } from "@trebuchet/schema";
+import {
+  type StatementAccount,
+  type StatementBatch,
+  type StatementSettings,
+  StatementSource,
+} from "@trebuchet/schema";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { asTaxCategory, insertionOrder, type TenantConn } from "./internal.ts";
 import {
@@ -22,6 +27,7 @@ import {
   statementCandidates,
   statementLinks,
   statementSettings,
+  statementSources,
   statements,
 } from "./schema/tenant.ts";
 import { drizzleUnitOfWork } from "./unit-of-work.ts";
@@ -36,6 +42,34 @@ const toRecord = (row: StatementRow): StatementRecord => ({
 const toRow = (record: StatementRecord): StatementRow => ({
   ...record,
   transferFlag: record.transferFlag ? 1 : 0,
+});
+
+type SourceRow = typeof statementSources.$inferSelect;
+
+/** 保存した JSON を Zod で検証して戻す（壊れていれば例外）。見出しの署名は JSON 配列か NULL */
+const toSource = (row: SourceRow): StatementSource => ({
+  id: row.id,
+  name: row.name,
+  fixedAccountName: row.fixedAccountName,
+  mapping: StatementSource.shape.mapping.parse(JSON.parse(row.mappingJson)),
+  header:
+    row.headerSignature === null
+      ? null
+      : StatementSource.shape.header.parse(JSON.parse(row.headerSignature)),
+  lastUsedAt: row.lastUsedAt,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+});
+
+const toSourceRow = (source: StatementSource): SourceRow => ({
+  id: source.id,
+  name: source.name,
+  fixedAccountName: source.fixedAccountName,
+  headerSignature: source.header === null ? null : JSON.stringify(source.header),
+  mappingJson: JSON.stringify(source.mapping),
+  lastUsedAt: source.lastUsedAt,
+  createdAt: source.createdAt,
+  updatedAt: source.updatedAt,
 });
 
 /**
@@ -64,6 +98,30 @@ export class DrizzleStatementStore implements StatementStore {
       .values(account)
       .onConflictDoUpdate({ target: statementAccounts.id, set: changes })
       .run();
+  }
+
+  listStatementSources(): StatementSource[] {
+    return this.db
+      .select()
+      .from(statementSources)
+      .orderBy(asc(statementSources.name))
+      .all()
+      .map(toSource);
+  }
+
+  upsertStatementSource(source: StatementSource): void {
+    const row = toSourceRow(source);
+    const { id: _id, createdAt: _createdAt, ...changes } = row;
+    this.db
+      .insert(statementSources)
+      .values(row)
+      .onConflictDoUpdate({ target: statementSources.id, set: changes })
+      .run();
+  }
+
+  deleteStatementSource(id: string): void {
+    const result = this.db.delete(statementSources).where(eq(statementSources.id, id)).run();
+    if (result.changes === 0) throw new Error(`statement source not found: ${id}`);
   }
 
   insertStatementBatch(batch: StatementBatch): void {

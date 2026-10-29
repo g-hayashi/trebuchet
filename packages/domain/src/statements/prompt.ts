@@ -60,7 +60,7 @@ export function buildPrompt(
 }
 
 /** JSON の文字列（コードフェンス・前後の文章つきも）を読む。読めなければ undefined */
-function readJson(text: string): unknown {
+export function readAiJson(text: string): unknown {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end <= start) return undefined;
@@ -80,7 +80,7 @@ export function parseSuggestion(
   raw: unknown,
   accounts: readonly Pick<Account, "id" | "code" | "isActive">[],
 ): Result<ParsedSuggestion> {
-  const value = typeof raw === "string" ? readJson(raw) : raw;
+  const value = typeof raw === "string" ? readAiJson(raw) : raw;
   if (value === undefined) return validation("AI の出力を JSON として読めません");
   const parsed = AiSuggestion.safeParse(value);
   if (!parsed.success) return validation("AI の出力が決められた形ではありません");

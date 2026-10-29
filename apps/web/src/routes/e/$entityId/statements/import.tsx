@@ -21,8 +21,8 @@ function StatementImportPage() {
         </Link>
       </div>
       <p className="text-sm text-muted-foreground">
-        MF ME
-        の「入出金」の表をコピーして貼り付けると、内容を確かめてから明細として取り込めます。取り込むだけでは、帳簿（仕訳）は変わりません。
+        銀行・カードの明細の表を貼り付けるか、CSV
+        のファイルを選びます。列の対応を決めて内容を確かめてから、明細として取り込めます。取り込むだけでは、帳簿（仕訳）は変わりません。
       </p>
       <ImportWorkspace entityId={entityId} />
     </main>
