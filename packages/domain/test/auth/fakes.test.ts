@@ -11,7 +11,14 @@ const newPasskey = (id: string, rpId = "localhost") => ({
   rpId,
   transports: ["internal"],
   name: `key ${id}`,
+  prfSalt: new Uint8Array(32).fill(9),
   createdAt: T(0),
+});
+const wrap = (byte: number) => ({
+  salt: new Uint8Array(32).fill(byte),
+  iv: new Uint8Array(12).fill(byte),
+  tag: new Uint8Array(16).fill(byte),
+  wrapped: new Uint8Array(32).fill(byte),
 });
 const newSession = (
   id: string,
@@ -41,10 +48,11 @@ describe("FakeSecretStore", () => {
 describe("FakeAuthStore", () => {
   it("パスキー: 追加・取得・名前変更・利用の記録・削除", async () => {
     const s = new FakeAuthStore();
-    await s.addPasskey(newPasskey("a"));
-    await s.addPasskey(newPasskey("b", "x.ts.net"));
+    await s.initializeVault(newPasskey("a"), wrap(1), wrap(2));
+    await s.addPasskey(newPasskey("b", "x.ts.net"), wrap(3));
     expect((await s.listPasskeys()).map((p) => p.id)).toEqual(["a", "b"]);
     expect((await s.getPasskey("a"))?.lastUsedAt).toBeNull();
+    expect(Array.from((await s.getPasskey("a"))?.prfSalt ?? [])).toEqual(Array(32).fill(9));
     await s.renamePasskey("a", "新しい名前");
     await s.recordPasskeyUse("a", 7, T(5));
     const a = await s.getPasskey("a");
@@ -53,18 +61,43 @@ describe("FakeAuthStore", () => {
     expect(await s.getPasskey("a")).toBeUndefined();
   });
 
-  it("回復コード: 置き換えると有効な行は 1 つだけ", async () => {
+  it("鍵の包み: 初回の設定で passkey と recovery の包みが入り、設定は 1 回だけ", async () => {
     const s = new FakeAuthStore();
-    expect(await s.getActiveRecoveryCode()).toBeUndefined();
-    await s.replaceRecoveryCode("hash1", T(0), "revoked");
-    const first = await s.getActiveRecoveryCode();
-    expect(first?.codeHash).toBe("hash1");
-    await s.replaceRecoveryCode("hash2", T(1), "used");
-    const second = await s.getActiveRecoveryCode();
-    expect(second?.codeHash).toBe("hash2");
-    expect(second?.id).not.toBe(first?.id);
-    expect(s.recoveryCodes.filter((r) => !r.usedAt && !r.revokedAt)).toHaveLength(1);
-    expect(s.recoveryCodes.find((r) => r.codeHash === "hash1")?.usedAt).toBe(T(1));
+    expect(await s.getRecoveryWrap()).toBeUndefined();
+    await s.initializeVault(newPasskey("a"), wrap(1), wrap(2));
+    expect(await s.getPasskeyWrap("a")).toMatchObject({
+      kind: "passkey",
+      credentialId: "a",
+      createdAt: T(0),
+    });
+    expect(Array.from((await s.getPasskeyWrap("a"))?.wrapped ?? [])).toEqual(Array(32).fill(1));
+    expect(await s.getRecoveryWrap()).toMatchObject({ kind: "recovery", credentialId: null });
+    await expect(s.initializeVault(newPasskey("b"), wrap(1), wrap(2))).rejects.toThrow();
+    expect((await s.listPasskeys()).map((p) => p.id)).toEqual(["a"]);
+  });
+
+  it("鍵の包み: 設定前の addPasskey・replaceRecoveryWrap は失敗する", async () => {
+    const s = new FakeAuthStore();
+    await expect(s.addPasskey(newPasskey("a"), wrap(1))).rejects.toThrow();
+    await expect(s.replaceRecoveryWrap(wrap(2), T(0))).rejects.toThrow();
+    expect(await s.listPasskeys()).toEqual([]);
+    expect(await s.getRecoveryWrap()).toBeUndefined();
+  });
+
+  it("鍵の包み: recovery の置き換えは 1 行のまま、パスキーの削除で包みも消え、最後の 1 本は消せない", async () => {
+    const s = new FakeAuthStore();
+    await s.initializeVault(newPasskey("a"), wrap(1), wrap(2));
+    await s.addPasskey(newPasskey("b"), wrap(3));
+    const before = await s.getRecoveryWrap();
+    await s.replaceRecoveryWrap(wrap(4), T(1));
+    const after = await s.getRecoveryWrap();
+    expect(after?.id).not.toBe(before?.id);
+    expect(Array.from(after?.wrapped ?? [])).toEqual(Array(32).fill(4));
+    expect(s.keyWraps.filter((w) => w.kind === "recovery")).toHaveLength(1);
+    await s.deletePasskey("a");
+    expect(await s.getPasskeyWrap("a")).toBeUndefined();
+    await expect(s.deletePasskey("b")).rejects.toThrow();
+    expect(await s.getPasskeyWrap("b")).toBeDefined();
   });
 
   it("セッション: 作成・検索・touch・失効・一覧・掃除", async () => {

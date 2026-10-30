@@ -4,12 +4,14 @@ import type {
   AuthEvent,
   AuthEventKind,
   BackupRun,
+  KeyWrap,
   NewAuthEvent,
   NewBackupRun,
   NewPasskey,
   NewSession,
   Passkey,
   Session,
+  WrappedKey,
 } from "../../src/auth/types.ts";
 import type { AuthStore, BackupStore, SecretStore } from "../../src/ports.ts";
 
@@ -27,13 +29,13 @@ export class FakeSecretStore implements SecretStore {
   }
 }
 
-interface FakeRecoveryCode {
-  id: string;
-  codeHash: string;
-  createdAt: string;
-  usedAt: string | null;
-  revokedAt: string | null;
-}
+const copyWrap = (w: KeyWrap): KeyWrap => ({
+  ...w,
+  salt: Uint8Array.from(w.salt),
+  iv: Uint8Array.from(w.iv),
+  tag: Uint8Array.from(w.tag),
+  wrapped: Uint8Array.from(w.wrapped),
+});
 
 interface FakePairingToken {
   id: string;
@@ -47,7 +49,7 @@ interface FakePairingToken {
 /** メモリ上の AuthStore。DB の実装と同じ振る舞い（追記のみの記録、単回のトークン）を持つ */
 export class FakeAuthStore implements AuthStore {
   passkeys: Passkey[] = [];
-  recoveryCodes: FakeRecoveryCode[] = [];
+  keyWraps: KeyWrap[] = [];
   sessions: Session[] = [];
   events: AuthEvent[] = [];
   pairingTokens: FakePairingToken[] = [];
@@ -66,18 +68,37 @@ export class FakeAuthStore implements AuthStore {
     const p = this.passkeys.find((x) => x.id === id);
     return p ? { ...p } : undefined;
   }
-  async addPasskey(passkey: NewPasskey): Promise<void> {
+  /** DB の実装と同じく、パスキーと包みを同時に入れる（INV-53） */
+  private insertPasskey(passkey: NewPasskey, wrap: WrappedKey): void {
     if (this.passkeys.some((p) => p.id === passkey.id)) {
       throw new Error(`duplicate passkey: ${passkey.id}`);
     }
     this.passkeys.push({ ...passkey, lastUsedAt: null });
+    this.keyWraps.push(this.newWrap("passkey", passkey.id, wrap, passkey.createdAt));
+  }
+  private newWrap(
+    kind: KeyWrap["kind"],
+    credentialId: string | null,
+    wrap: WrappedKey,
+    createdAt: string,
+  ): KeyWrap {
+    return copyWrap({ id: this.nextId("kw"), kind, credentialId, createdAt, ...wrap });
+  }
+  async addPasskey(passkey: NewPasskey, wrap: WrappedKey): Promise<void> {
+    if (!this.keyWraps.some((w) => w.kind === "recovery")) {
+      throw new Error("vault is not initialized");
+    }
+    this.insertPasskey(passkey, wrap);
   }
   async renamePasskey(id: string, name: string): Promise<void> {
     const p = this.passkeys.find((x) => x.id === id);
     if (p) p.name = name;
   }
   async deletePasskey(id: string): Promise<void> {
+    if (!this.passkeys.some((p) => p.id === id)) return;
+    if (this.passkeys.length === 1) throw new Error("cannot delete the last passkey");
     this.passkeys = this.passkeys.filter((p) => p.id !== id);
+    this.keyWraps = this.keyWraps.filter((w) => w.credentialId !== id);
   }
   async recordPasskeyUse(id: string, counter: number, at: string): Promise<void> {
     const p = this.passkeys.find((x) => x.id === id);
@@ -87,28 +108,31 @@ export class FakeAuthStore implements AuthStore {
     }
   }
 
-  async getActiveRecoveryCode(): Promise<{ id: string; codeHash: string } | undefined> {
-    const r = this.recoveryCodes.find((x) => x.usedAt === null && x.revokedAt === null);
-    return r ? { id: r.id, codeHash: r.codeHash } : undefined;
-  }
-  async replaceRecoveryCode(
-    newCodeHash: string,
-    now: string,
-    closeAs: "used" | "revoked",
+  async initializeVault(
+    passkey: NewPasskey,
+    passkeyWrap: WrappedKey,
+    recoveryWrap: WrappedKey,
   ): Promise<void> {
-    for (const r of this.recoveryCodes) {
-      if (r.usedAt === null && r.revokedAt === null) {
-        if (closeAs === "used") r.usedAt = now;
-        else r.revokedAt = now;
-      }
+    if (this.keyWraps.some((w) => w.kind === "recovery")) {
+      throw new Error("vault is already initialized");
     }
-    this.recoveryCodes.push({
-      id: this.nextId("rc"),
-      codeHash: newCodeHash,
-      createdAt: now,
-      usedAt: null,
-      revokedAt: null,
-    });
+    this.insertPasskey(passkey, passkeyWrap);
+    this.keyWraps.push(this.newWrap("recovery", null, recoveryWrap, passkey.createdAt));
+  }
+  async getPasskeyWrap(credentialId: string): Promise<KeyWrap | undefined> {
+    const w = this.keyWraps.find((x) => x.kind === "passkey" && x.credentialId === credentialId);
+    return w ? copyWrap(w) : undefined;
+  }
+  async getRecoveryWrap(): Promise<KeyWrap | undefined> {
+    const w = this.keyWraps.find((x) => x.kind === "recovery");
+    return w ? copyWrap(w) : undefined;
+  }
+  async replaceRecoveryWrap(wrap: WrappedKey, now: string): Promise<void> {
+    if (!this.keyWraps.some((w) => w.kind === "recovery")) {
+      throw new Error("vault is not initialized");
+    }
+    this.keyWraps = this.keyWraps.filter((w) => w.kind !== "recovery");
+    this.keyWraps.push(this.newWrap("recovery", null, wrap, now));
   }
 
   async createSession(s: NewSession): Promise<void> {

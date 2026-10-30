@@ -2,11 +2,11 @@ import { randomUUIDv7 } from "node:crypto";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fc } from "@trebuchet/domain/testing";
-import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { packArchive, unpackArchive } from "../src/backup/archive.ts";
 import { decryptBackup, encryptBackup } from "../src/backup/crypto.ts";
 import { currentAppVersion, snapshotDataDir } from "../src/backup/snapshot.ts";
+import { Database } from "../src/driver.ts";
 import { openRegistry, openTenant } from "../src/tenant-store.ts";
 import { type TempDataDir, TMP_ROOT, useTempDataDir } from "../src/testing.ts";
 import {
@@ -113,18 +113,18 @@ describe("INV-25: バックアップの往復", () => {
     );
   });
 
-  it("写しの registry は、auth_events の更新・削除が失敗し、消した行の内容がファイルに残らない", async () => {
+  it("写しに、消した端末の行と auth.sqlite の認証の行の内容が残らない", async () => {
     seedEntities([{ name: "事業", kind: "individual", seed: 1, journals: 1, memo: "", note: "" }]);
     const marker = "ZZ-MARKER-0123456789";
     seedAuthRows(marker);
-    const { unpacked, restoreDir } = await roundtrip();
+    const { unpacked } = await roundtrip();
+    expect(unpacked.files.map((f) => f.path)).not.toContain("auth.sqlite");
     const registryBytes = unpacked.files.find((f) => f.path === "registry.sqlite")?.bytes;
     expect(registryBytes).toBeDefined();
     for (const needle of [
       `pk-${marker}`,
       `pubkey-${marker}`,
       `name-${marker}`,
-      `hash-${marker}`,
       `token-${marker}`,
       `agent-${marker}`,
       `detail-${marker}`,
@@ -133,17 +133,9 @@ describe("INV-25: バックアップの往復", () => {
       `summary-${marker}`,
       `pairing-${marker}`,
     ]) {
-      expect(registryBytes?.includes(Buffer.from(needle)), needle).toBe(false);
-    }
-    const reg = new Database(join(restoreDir, "registry.sqlite"));
-    try {
-      reg
-        .prepare("INSERT INTO auth_events (id, occurred_at, kind) VALUES ('e1', 'x', 'sign_in')")
-        .run();
-      expect(() => reg.prepare("UPDATE auth_events SET detail = 'y'").run()).toThrow(/append-only/);
-      expect(() => reg.prepare("DELETE FROM auth_events").run()).toThrow(/append-only/);
-    } finally {
-      reg.close();
+      for (const file of unpacked.files) {
+        expect(file.bytes.includes(Buffer.from(needle)), `${file.path}: ${needle}`).toBe(false);
+      }
     }
   });
 

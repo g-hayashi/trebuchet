@@ -160,12 +160,12 @@ importers:
       '@trebuchet/schema':
         specifier: workspace:*
         version: link:../schema
-      better-sqlite3:
-        specifier: ^13.0.3
+      better-sqlite3-multiple-ciphers:
+        specifier: 13.0.3
         version: 13.0.3
       drizzle-orm:
         specifier: ^0.45.4
-        version: 0.45.4(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)
+        version: 0.45.4(@types/better-sqlite3@9.6.0)
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^9.6.0
@@ -2275,8 +2275,8 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  better-sqlite3@13.0.3:
-    resolution: {integrity: sha512-RbOBxmLBG8uvFUc15X9+9SFemKcQ0WBuISBVkpuiaUB2qblC8UWlHEjdWVoZ8AdhSwmoEgsiXKfopX0CQxaACQ==}
+  better-sqlite3-multiple-ciphers@13.0.3:
+    resolution: {integrity: sha512-UYabM82r1J84TLWc/SszoHs6XopWpl/2HCg3Nui1JUaFXg/VLswzkPowYiRhK/4CftI8dgtikwyZQecMldrGxQ==}
     engines: {node: '>=22'}
 
   bidi-js@1.1.0:
@@ -5025,7 +5025,7 @@ snapshots:
 
   baseline-browser-mapping@2.11.29: {}
 
-  better-sqlite3@13.0.3:
+  better-sqlite3-multiple-ciphers@13.0.3:
     dependencies:
       node-addon-api: 8.9.2
 
@@ -5119,10 +5119,9 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.15
 
-  drizzle-orm@0.45.4(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3):
+  drizzle-orm@0.45.4(@types/better-sqlite3@9.6.0):
     optionalDependencies:
       '@types/better-sqlite3': 9.6.0
-      better-sqlite3: 13.0.3
 
   electron-to-chromium@1.5.459: {}
 

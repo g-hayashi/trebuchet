@@ -9,14 +9,18 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { packArchive, unpackArchive } from "../src/backup/archive.ts";
 import { type DeriveKey, decryptBackup, encryptBackup } from "../src/backup/crypto.ts";
 import { type RestoreSummary, restoreBackup } from "../src/backup/restore.ts";
 import { createSnapshotDir, currentAppVersion, snapshotDataDir } from "../src/backup/snapshot.ts";
 import type { SnapshotFile } from "../src/backup/types.ts";
-import { closeAll, openRegistry } from "../src/tenant-store.ts";
+import {
+  closeAll,
+  type DbKeyScope,
+  openEncryptedSqlite,
+  openRegistry,
+} from "../src/tenant-store.ts";
 import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
 import {
   addJournals,
@@ -76,14 +80,15 @@ function seedSource(specs: Spec[]): { id: string; name: string }[] {
 /** dir の DB を読み取り専用で開いて、全ての表の内容を返す */
 function dumpDir(dir: string, exclude: readonly string[] = []) {
   const out: Record<string, ReturnType<typeof dumpTables>> = {};
-  const open = (file: string) => new Database(file, { readonly: true, fileMustExist: true });
-  const registry = open(join(dir, "registry.sqlite"));
+  const open = (file: string, scope: DbKeyScope) =>
+    openEncryptedSqlite(file, scope, { readonly: true, fileMustExist: true });
+  const registry = open(join(dir, "registry.sqlite"), "registry");
   out.registry = dumpTables(registry, exclude);
   registry.close();
   const tenants = join(dir, "tenants");
   if (existsSync(tenants)) {
     for (const f of readdirSync(tenants).filter((n) => n.endsWith(".sqlite"))) {
-      const db = open(join(tenants, f));
+      const db = open(join(tenants, f), { tenant: f.slice(0, -".sqlite".length) });
       out[f] = dumpTables(db);
       db.close();
     }
@@ -91,8 +96,12 @@ function dumpDir(dir: string, exclude: readonly string[] = []) {
   return out;
 }
 
+/** 復元先の registry を読み取り専用で開く（DK から作った鍵で暗号化されている） */
+const openRestoredRegistry = (dir: string) =>
+  openEncryptedSqlite(join(dir, "registry.sqlite"), "registry", { readonly: true });
+
 function schemaOf(dir: string) {
-  const db = new Database(join(dir, "registry.sqlite"), { readonly: true });
+  const db = openRestoredRegistry(dir);
   try {
     return dumpSchema(db);
   } finally {
@@ -227,21 +236,16 @@ describe("restoreBackup: 空の場所への復元", () => {
       .flatMap((t) => Object.keys(t))
       .filter((n) => n === "closing_notes" || n === "import_batches");
     expect(closing.length).toBeGreaterThan(0);
-    // 端末の表の行がなく、auth_events のトリガーなどの定義が残る
-    const registry = new Database(join(dest(), "registry.sqlite"), { readonly: true });
+    // 端末の表の行がない。認証の表（auth.sqlite）はバックアップに含めない（008 の D2）
+    const registry = openRestoredRegistry(dest());
     try {
       for (const table of EXCLUDED_REGISTRY_TABLES) {
         expect(registry.prepare(`SELECT count(*) AS n FROM "${table}"`).get()).toEqual({ n: 0 });
       }
-      const triggers = registry
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'auth_events'",
-        )
-        .all();
-      expect(triggers.length).toBeGreaterThan(0);
     } finally {
       registry.close();
     }
+    expect(existsSync(join(dest(), "auth.sqlite"))).toBe(false);
     expect(schemaOf(dest())).toEqual(expectedSchema);
     // 空の場所なので、復元前のバックアップと before-restore は作らない
     if (result.ok) {
@@ -269,7 +273,7 @@ describe("restoreBackup: 空の場所への復元", () => {
     const { promise, summaries } = run();
     expect((await promise).ok).toBe(true);
     expect(summaries[0]?.entities).toEqual([]);
-    const registry = new Database(join(dest(), "registry.sqlite"), { readonly: true });
+    const registry = openRestoredRegistry(dest());
     try {
       expect(registry.prepare("SELECT count(*) AS n FROM entities").get()).toEqual({ n: 0 });
       expect(registry.prepare("SELECT count(*) AS n FROM app_settings").get()).toEqual({ n: 0 });
@@ -305,13 +309,12 @@ describe("restoreBackup: 既存の帳簿がある場所への復元", () => {
     expect(dumpDir(`${dest()}.before-restore-${stamp}`)).toEqual(before);
     // 復元後は新しい内容。app_settings だけ元の Mac のもの（mac_id を含む）を引き継ぐ
     expect(dumpDir(dest(), EXCLUDED_REGISTRY_TABLES)).toEqual(expectedNew);
-    const registry = new Database(join(dest(), "registry.sqlite"), { readonly: true });
+    const registry = openRestoredRegistry(dest());
     try {
       expect(registry.prepare("SELECT key, value FROM app_settings ORDER BY key").all()).toEqual([
         { key: "backup_folder", value: "/folder-of-this-machine" },
         { key: "mac_id", value: "mac-of-this-machine" },
       ]);
-      expect(registry.prepare("SELECT count(*) AS n FROM passkeys").get()).toEqual({ n: 0 });
       // ai_settings も app_settings と同じく、元の Mac の値のまま引き継ぐ
       expect(
         registry

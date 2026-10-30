@@ -1,45 +1,9 @@
 {
-  "id": "387caad4-c3d7-456c-b019-b5f686366197",
-  "prevId": "6e54fffb-9b85-4bd1-86b2-c2f208adf758",
+  "id": "745a59d9-f0c5-471c-9d92-12805b27a5a1",
+  "prevId": "57cee83e-b315-48f6-bc16-c9b9afcda926",
   "version": "6",
   "dialect": "sqlite",
   "tables": {
-    "app_settings": {
-      "name": "app_settings",
-      "columns": {
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "value": {
-          "name": "value",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "app_settings_key": {
-          "name": "app_settings_key",
-          "value": "\"app_settings\".\"key\" IN ('mac_id', 'remote_enabled', 'remote_host', 'backup_folder', 'backup_passphrase_set', 'backup_force_write', 'recovery_code_acknowledged')"
-        }
-      }
-    },
     "auth_events": {
       "name": "auth_events",
       "columns": {
@@ -111,109 +75,13 @@
         }
       }
     },
-    "backup_runs": {
-      "name": "backup_runs",
+    "key_wraps": {
+      "name": "key_wraps",
       "columns": {
         "id": {
           "name": "id",
           "type": "text",
           "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "started_at": {
-          "name": "started_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "finished_at": {
-          "name": "finished_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "trigger": {
-          "name": "trigger",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "error_code": {
-          "name": "error_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "file_name": {
-          "name": "file_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "size_bytes": {
-          "name": "size_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "content_sha256": {
-          "name": "content_sha256",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "summary": {
-          "name": "summary",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "backup_runs_trigger": {
-          "name": "backup_runs_trigger",
-          "value": "\"backup_runs\".\"trigger\" IN ('manual', 'auto')"
-        },
-        "backup_runs_status": {
-          "name": "backup_runs_status",
-          "value": "\"backup_runs\".\"status\" IN ('succeeded', 'skipped', 'failed')"
-        }
-      }
-    },
-    "entities": {
-      "name": "entities",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -224,99 +92,89 @@
           "notNull": true,
           "autoincrement": false
         },
-        "db_file": {
-          "name": "db_file",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "entities_db_file_unique": {
-          "name": "entities_db_file_unique",
-          "columns": [
-            "db_file"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "entities_kind": {
-          "name": "entities_kind",
-          "value": "\"entities\".\"kind\" IN ('individual', 'corporation')"
-        }
-      }
-    },
-    "pairing_tokens": {
-      "name": "pairing_tokens",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "rp_id": {
-          "name": "rp_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "used_at": {
-          "name": "used_at",
+        "credential_id": {
+          "name": "credential_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "salt": {
+          "name": "salt",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "iv": {
+          "name": "iv",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tag": {
+          "name": "tag",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "wrapped": {
+          "name": "wrapped",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {
-        "pairing_tokens_token_hash_unique": {
-          "name": "pairing_tokens_token_hash_unique",
+        "key_wraps_credential_id_unique": {
+          "name": "key_wraps_credential_id_unique",
           "columns": [
-            "token_hash"
+            "credential_id"
           ],
           "isUnique": true
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "key_wraps_credential_id_passkeys_id_fk": {
+          "name": "key_wraps_credential_id_passkeys_id_fk",
+          "tableFrom": "key_wraps",
+          "columnsFrom": [
+            "credential_id"
+          ],
+          "tableTo": "passkeys",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "key_wraps_kind": {
+          "name": "key_wraps_kind",
+          "value": "\"key_wraps\".\"kind\" IN ('passkey', 'recovery')"
+        },
+        "key_wraps_credential": {
+          "name": "key_wraps_credential",
+          "value": "(\"key_wraps\".\"kind\" = 'passkey') = (\"key_wraps\".\"credential_id\" IS NOT NULL)"
+        },
+        "key_wraps_lengths": {
+          "name": "key_wraps_lengths",
+          "value": "length(\"key_wraps\".\"salt\") = 32 AND length(\"key_wraps\".\"iv\") = 12 AND length(\"key_wraps\".\"tag\") = 16 AND length(\"key_wraps\".\"wrapped\") = 32"
+        }
+      }
     },
     "passkeys": {
       "name": "passkeys",
@@ -363,6 +221,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "prf_salt": {
+          "name": "prf_salt",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -390,53 +255,12 @@
         "passkeys_name": {
           "name": "passkeys_name",
           "value": "length(\"passkeys\".\"name\") > 0"
+        },
+        "passkeys_prf_salt": {
+          "name": "passkeys_prf_salt",
+          "value": "length(\"passkeys\".\"prf_salt\") = 32"
         }
       }
-    },
-    "recovery_codes": {
-      "name": "recovery_codes",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "code_hash": {
-          "name": "code_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "used_at": {
-          "name": "used_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "revoked_at": {
-          "name": "revoked_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "sessions": {
       "name": "sessions",

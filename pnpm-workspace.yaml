@@ -2,9 +2,9 @@ packages:
   - apps/*
   - packages/*
 
-# ビルドスクリプトは許可しない。better-sqlite3 は同梱のビルド済みバイナリで動く（ADR 0001）
+# ビルドスクリプトは許可しない。better-sqlite3-multiple-ciphers は同梱のビルド済みバイナリで動く（ADR 0001）
 allowBuilds:
-  better-sqlite3: false
+  better-sqlite3-multiple-ciphers: false
   esbuild: false
 
 minimumReleaseAgeExclude:

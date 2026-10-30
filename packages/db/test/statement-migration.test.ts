@@ -2,10 +2,9 @@ import { randomUUIDv7 } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { Database, drizzleOf } from "../src/driver.ts";
 import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 // 007 T004。0009・0010（statement_batches・statement_audit_log の作り直し）が、
@@ -34,7 +33,7 @@ beforeEach(() => {
   );
   client = new Database(join(tmp.dir, "migration.sqlite"));
   client.pragma("foreign_keys = ON");
-  migrate(drizzle({ client }), { migrationsFolder: upTo0008 });
+  migrate(drizzleOf(client, {}), { migrationsFolder: upTo0008 });
 });
 afterEach(() => {
   client.close();
@@ -83,7 +82,7 @@ describe("0009・0010 を取込済みの DB に当てる", () => {
   it("取込の回・明細・操作の記録が残り、外部キーの検査が通り、トリガーが作り直される", () => {
     const { batchId, statementId } = seedOldData();
 
-    migrate(drizzle({ client }), { migrationsFolder: FULL });
+    migrate(drizzleOf(client, {}), { migrationsFolder: FULL });
 
     // データが残る（mfme_fetch の取込は作られたことがない。R13）
     expect(one("SELECT COUNT(*) AS n FROM statement_batches").n).toBe(1);

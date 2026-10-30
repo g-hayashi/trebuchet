@@ -72,7 +72,7 @@ describe("snapshotDataDir", () => {
 describe("currentAppVersion", () => {
   it("registry と tenant のマイグレーションの適用数（1 以上の整数）", () => {
     const v = currentAppVersion();
-    expect(Number.isInteger(v.registry) && v.registry >= 3).toBe(true);
+    expect(Number.isInteger(v.registry) && v.registry >= 1).toBe(true);
     expect(Number.isInteger(v.tenant) && v.tenant >= 5).toBe(true);
   });
 });

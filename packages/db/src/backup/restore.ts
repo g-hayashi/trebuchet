@@ -11,7 +11,8 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Result } from "@trebuchet/domain";
-import Database from "better-sqlite3";
+import { Database } from "../driver.ts";
+import { type DbKeyScope, encryptSqliteFile, openEncryptedSqlite } from "../tenant-store.ts";
 import { packArchive, sha256Hex, unpackArchive } from "./archive.ts";
 import { type BackupHeader, type CryptoOptions, decryptBackup, encryptBackup } from "./crypto.ts";
 import { beforeRestoreFileName, compactStamp, writeBackupFile } from "./file.ts";
@@ -106,7 +107,10 @@ function computeDifferences(dataDir: string, archive: UnpackedArchive): RestoreE
   const diffs: RestoreEntityDiff[] = [];
   const registryFile = join(dataDir, "registry.sqlite");
   if (!existsSync(registryFile)) return diffs;
-  const registry = new Database(registryFile, { readonly: true, fileMustExist: true });
+  const registry = openEncryptedSqlite(registryFile, "registry", {
+    readonly: true,
+    fileMustExist: true,
+  });
   try {
     const existing = new Set(
       (registry.prepare("SELECT id FROM entities").all() as { id: string }[]).map((r) =>
@@ -119,7 +123,11 @@ function computeDifferences(dataDir: string, archive: UnpackedArchive): RestoreE
       const currentFile = join(dataDir, "tenants", `${id}.sqlite`);
       const backupFile = archive.files.find((f) => f.path.toLowerCase() === `tenants/${id}.sqlite`);
       if (!existsSync(currentFile) || backupFile === undefined) continue;
-      const current = new Database(currentFile, { readonly: true, fileMustExist: true });
+      const current = openEncryptedSqlite(
+        currentFile,
+        { tenant: id },
+        { readonly: true, fileMustExist: true },
+      );
       // バックアップ側はメモリに読み込んで開く（平文をディスクに書かない）
       const backup = new Database(backupFile.bytes);
       try {
@@ -146,7 +154,7 @@ type SettingRow = { key: string; value: string; updated_at: string };
 function readAppSettings(dataDir: string): SettingRow[] {
   const file = join(dataDir, "registry.sqlite");
   if (!existsSync(file)) return [];
-  const db = new Database(file, { readonly: true, fileMustExist: true });
+  const db = openEncryptedSqlite(file, "registry", { readonly: true, fileMustExist: true });
   try {
     const table = db
       .prepare(
@@ -173,7 +181,7 @@ type AiSettingsRow = {
 function readAiSettings(dataDir: string): AiSettingsRow | undefined {
   const file = join(dataDir, "registry.sqlite");
   if (!existsSync(file)) return undefined;
-  const db = new Database(file, { readonly: true, fileMustExist: true });
+  const db = openEncryptedSqlite(file, "registry", { readonly: true, fileMustExist: true });
   try {
     const table = db
       .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'ai_settings'")
@@ -361,6 +369,15 @@ export async function restoreBackup(
       })();
     } finally {
       registry.close();
+    }
+    // 展開した平文のファイルを、今の DK から作った鍵で暗号化する（008 の D2。入れ替えの前に）
+    for (const file of archive.files) {
+      const path = file.path.toLowerCase();
+      const scope: DbKeyScope =
+        path === "registry.sqlite"
+          ? "registry"
+          : { tenant: path.slice("tenants/".length, -".sqlite".length) };
+      encryptSqliteFile(join(restoreDir, path), scope);
     }
 
     let removedEmpty = false;

@@ -25,11 +25,32 @@ export interface Passkey {
   rpId: string;
   transports: string[] | null;
   name: string;
+  /** WebAuthn PRF の入力（資格情報ごとの 32 バイトの乱数。008 の D1） */
+  prfSalt: Uint8Array;
   createdAt: string;
   lastUsedAt: string | null;
 }
 
 export type NewPasskey = Omit<Passkey, "lastUsedAt">;
+
+/** 008 の D2: passkey は資格情報ごとに 1 つ、recovery は常に 1 つ（INV-53） */
+export type KeyWrapKind = "passkey" | "recovery";
+
+/** DK を AES-256-GCM で包んだもの（秘密を含まない。008 の D1）。salt 32・iv 12・tag 16・wrapped 32 バイト */
+export interface WrappedKey {
+  salt: Uint8Array;
+  iv: Uint8Array;
+  tag: Uint8Array;
+  wrapped: Uint8Array;
+}
+
+/** key_wraps の 1 行。kind が passkey ⇔ credentialId が null でない */
+export interface KeyWrap extends WrappedKey {
+  id: string;
+  kind: KeyWrapKind;
+  credentialId: string | null;
+  createdAt: string;
+}
 
 export interface Session {
   id: string;
