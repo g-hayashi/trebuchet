@@ -182,6 +182,11 @@ export class FakeAuthStore implements AuthStore {
     this.sessions = keep;
     return n;
   }
+  async deleteAllSessions(): Promise<number> {
+    const n = this.sessions.length;
+    this.sessions = [];
+    return n;
+  }
 
   async appendEvent(e: NewAuthEvent): Promise<void> {
     this.events.push({

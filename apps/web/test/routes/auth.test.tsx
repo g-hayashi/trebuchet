@@ -248,14 +248,11 @@ describe("AuthGate: 回復", () => {
     expect(callsTo(calls, "POST", "/api/auth/recovery/acknowledge")).toHaveLength(1);
   });
 
-  it("RECOVERY_INVALID と RECOVERY_LOCKED（retryAfter は秒。分で表示する）の文言", async () => {
-    let attempt = 0;
+  it("RECOVERY_INVALID の文言（008: 回復のロックはなくした）", async () => {
     mockApi({
       "GET /api/auth/status": () => ok(signedOut),
       "POST /api/auth/recovery/verify": () =>
-        attempt++ === 0
-          ? apiError(400, "RECOVERY_INVALID", "回復コードが違います")
-          : apiError(429, "RECOVERY_LOCKED", "しばらく試せません", { retryAfter: 840 }),
+        apiError(400, "RECOVERY_INVALID", "回復コードが違います"),
     });
     renderGate();
 
@@ -263,10 +260,6 @@ describe("AuthGate: 回復", () => {
     await userEvent.type(screen.getByLabelText("回復コード"), "WRONG");
     await userEvent.click(screen.getByRole("button", { name: "確認する" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("回復コードが違います");
-
-    await userEvent.click(screen.getByRole("button", { name: "確認する" }));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("14分後"));
-    expect(screen.getByRole("alert")).not.toHaveTextContent("回復コードが違います");
   });
 });
 

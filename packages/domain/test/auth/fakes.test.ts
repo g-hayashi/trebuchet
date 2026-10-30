@@ -120,6 +120,18 @@ describe("FakeAuthStore", () => {
     expect(await s.findSessionByTokenHash("h-s1")).toBeUndefined();
   });
 
+  it("セッションの全削除（008 の D3: 起動時・施錠時）は失効の有無・種類によらず全部消し、件数を返す", async () => {
+    const s = new FakeAuthStore();
+    await s.createSession(newSession("s1"));
+    await s.createSession(newSession("s2", "recovery"));
+    await s.createSession(newSession("s3"));
+    await s.revokeSession("s3", T(1));
+    expect(await s.deleteAllSessions()).toBe(3);
+    expect(await s.listActiveSessions(T(2))).toEqual([]);
+    expect(await s.findSessionByTokenHash("h-s3")).toBeUndefined();
+    expect(await s.deleteAllSessions()).toBe(0);
+  });
+
   it("パスキーによる一括失効は対象のセッションの id だけを返す", async () => {
     const s = new FakeAuthStore();
     await s.createSession(newSession("s1", "normal", "pk1"));

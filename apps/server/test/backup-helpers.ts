@@ -6,6 +6,7 @@ import {
   DrizzleAuthStore,
   DrizzleBackupStore,
   dataDir,
+  openAuth,
   openRegistry,
 } from "@trebuchet/db";
 import type { TempDataDir } from "@trebuchet/db/testing";
@@ -63,7 +64,7 @@ export function makeBackupEnv(
   const clock = mutableClock();
   const secrets = createMemorySecretStore();
   const crypto = fastCrypto();
-  const auth = () => new DrizzleAuthStore(openRegistry());
+  const auth = () => new DrizzleAuthStore(openAuth(), openRegistry);
   const backups = () => new DrizzleBackupStore(openRegistry());
   const runner = createBackupRunner({
     auth,

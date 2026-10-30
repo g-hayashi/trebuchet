@@ -1,7 +1,9 @@
 import type { Session } from "./types.ts";
 
-/** 通常のセッションは最後の操作から 8 時間で切れる（data-model §1.3） */
-export const SESSION_IDLE_MS = 8 * 60 * 60 * 1000;
+/**
+ * 通常（全権）のセッションは最後の操作から 30 分で切れる（008 の D3。最後のセッションが消えたら施錠する）
+ */
+export const SESSION_IDLE_MS = 30 * 60 * 1000;
 /** 回復用の一時セッションは作成から 10 分で切れる */
 export const RECOVERY_SESSION_MS = 10 * 60 * 1000;
 

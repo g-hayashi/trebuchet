@@ -297,8 +297,8 @@ describe("sessions", () => {
 
   it("有効なセッションだけを一覧する（失効・アイドル超過・回復の期限）", async () => {
     const now = "2026-10-20T12:00:00.000Z";
-    await store.createSession(session("ok", "t1", { now: "2026-10-20T11:00:00.000Z" }));
-    await store.createSession(session("idle", "t2", { now: "2026-10-20T03:00:00.000Z" }));
+    await store.createSession(session("ok", "t1", { now: "2026-10-20T11:45:00.000Z" }));
+    await store.createSession(session("idle", "t2", { now: "2026-10-20T11:00:00.000Z" }));
     await store.createSession(session("revoked", "t3", { now: "2026-10-20T11:00:00.000Z" }));
     await store.revokeSession("revoked", "2026-10-20T11:30:00.000Z");
     await store.createSession(
@@ -325,6 +325,17 @@ describe("sessions", () => {
     expect(await store.findSessionByTokenHash("t2")).toBeDefined();
     expect(await store.findSessionByTokenHash("t3")).toBeDefined();
     expect(await store.findSessionByTokenHash("t4")).toBeDefined();
+  });
+
+  it("全削除（008 の D3: 起動時・施錠時）は失効の有無・種類によらず全部消し、件数を返す。施錠中も使える", async () => {
+    await store.createSession(session("a", "t1"));
+    await store.createSession(session("b", "t2", { kind: "recovery" }));
+    await store.createSession(session("c", "t3"));
+    await store.revokeSession("c", T1);
+    clearDataKey();
+    expect(await store.deleteAllSessions()).toBe(3);
+    expect(db.$client.prepare("SELECT count(*) AS n FROM sessions").get()).toEqual({ n: 0 });
+    expect(await store.deleteAllSessions()).toBe(0);
   });
 });
 

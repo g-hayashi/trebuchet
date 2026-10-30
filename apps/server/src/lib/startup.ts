@@ -1,7 +1,17 @@
 import { removeStaleSnapshots } from "@trebuchet/db";
-import { type BackupSchedulerDeps, startBackupScheduler } from "./backup-scheduler.ts";
+import {
+  type BackupScheduler,
+  type BackupSchedulerDeps,
+  startBackupScheduler,
+} from "./backup-scheduler.ts";
 import type { FmServer } from "./fm-server.ts";
-import { type RecurringSchedulerDeps, startRecurringScheduler } from "./recurring-scheduler.ts";
+import {
+  type RecurringScheduler,
+  type RecurringSchedulerDeps,
+  startRecurringScheduler,
+} from "./recurring-scheduler.ts";
+import { startSessionSweeper } from "./session-sweeper.ts";
+import type { Vault } from "./vault.ts";
 
 export type BackgroundServices = {
   /** 起動時に消した、前回の異常終了で残った平文の写しの数 */
@@ -11,9 +21,10 @@ export type BackgroundServices = {
 
 /**
  * server の起動の処理（`main.ts` から呼ぶ）。
- * 前回の異常終了で残った平文の写し（`<tmpRoot>/backup-snapshot-*`）を消し、自動のバックアップと
- * 定期仕訳の自動登録（005 R18）を始める。最初の判断はすぐに行う（次の 1 時間後まで待たない）。
- * 時計は自動のバックアップと共有する
+ * 前回の異常終了で残った平文の写し（`<tmpRoot>/backup-snapshot-*`）は起動時に消す。
+ * 自動のバックアップ（004 R10）と定期仕訳の自動登録（005 R18）は、解錠で始め（最初の判断はすぐに行う）、
+ * 施錠で止める（008 の D7。施錠中は registry・事業体の DB を開けない）。
+ * 有効なセッションがなくなったら施錠する判定（008 の D3）を 1 分ごとに行う。時計は全部で共有する
  */
 export function startBackgroundServices(
   deps: BackupSchedulerDeps & {
@@ -21,18 +32,37 @@ export function startBackgroundServices(
     recurring: Omit<RecurringSchedulerDeps, "clock">;
     /** 端末内の AI（`fm serve`。006 R10）。終了時に止める。起動は最初の推定のとき */
     fm?: Pick<FmServer, "stop">;
+    vault: Vault;
   },
 ): BackgroundServices {
   const removedSnapshots = removeStaleSnapshots(deps.tmpRoot);
-  const backup = startBackupScheduler(deps);
-  const recurring = startRecurringScheduler({ ...deps.recurring, clock: deps.clock });
-  void backup.tick();
-  void recurring.tick();
+  let running: { backup: BackupScheduler; recurring: RecurringScheduler } | null = null;
+
+  function start(): void {
+    if (running !== null) return;
+    const backup = startBackupScheduler(deps);
+    const recurring = startRecurringScheduler({ ...deps.recurring, clock: deps.clock });
+    running = { backup, recurring };
+    void backup.tick();
+    void recurring.tick();
+  }
+
+  function halt(): void {
+    running?.backup.stop();
+    running?.recurring.stop();
+    running = null;
+  }
+
+  const unsubscribe = deps.vault.subscribe((unlocked) => (unlocked ? start() : halt()));
+  if (deps.vault.isUnlocked()) start();
+  const sweeper = startSessionSweeper({ store: deps.auth, vault: deps.vault, clock: deps.clock });
+
   return {
     removedSnapshots,
     stop: () => {
-      backup.stop();
-      recurring.stop();
+      unsubscribe();
+      sweeper.stop();
+      halt();
       deps.fm?.stop();
     },
   };

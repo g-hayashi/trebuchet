@@ -115,6 +115,15 @@ export function isUnlocked(): boolean {
 }
 
 /**
+ * 解錠中の DK を fn に渡して結果を返す（server が DK を包み直す・比べるときに使う）。
+ * 渡すのは保持しているバッファそのものなので、fn の外へ持ち出さず、書き換えない。施錠中は VaultLockedError
+ */
+export function withDataKey<T>(fn: (dk: Uint8Array) => T): T {
+  if (dataKey === null) throw new VaultLockedError();
+  return fn(dataKey);
+}
+
+/**
  * 暗号化した SQLite のファイルを、DK から作った鍵で開く（ハンドルは共有しない。呼び出し側が閉じる）。
  * 施錠中は VaultLockedError。鍵が合わなければ最初の読み取り（ここでは schema の読み取り）で
  * SQLITE_NOTADB を投げる（空の DB として扱わない）。ファイルがなければ暗号化した空の DB を作る

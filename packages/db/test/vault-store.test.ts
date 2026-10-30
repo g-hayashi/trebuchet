@@ -19,6 +19,7 @@ import {
   tenantDbKeyInfo,
   tenantFile,
   VaultLockedError,
+  withDataKey,
 } from "../src/tenant-store.ts";
 import { TEST_DATA_KEY, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
@@ -136,6 +137,18 @@ describe("施錠中（DK なし。INV-51）", () => {
     clearDataKey();
     setDataKey(Buffer.from(TEST_DATA_KEY));
     expect(openRegistry().select().from(registrySchema.entities).all()).toHaveLength(1);
+  });
+
+  it("withDataKey は解錠中の DK を渡して結果を返し、施錠中は VaultLockedError（fn を呼ばない）", () => {
+    expect(withDataKey((k) => Buffer.from(k).equals(Buffer.from(TEST_DATA_KEY)))).toBe(true);
+    clearDataKey();
+    let called = false;
+    expect(() =>
+      withDataKey(() => {
+        called = true;
+      }),
+    ).toThrow(VaultLockedError);
+    expect(called).toBe(false);
   });
 });
 

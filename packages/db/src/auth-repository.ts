@@ -296,6 +296,10 @@ export class DrizzleAuthStore implements AuthStore {
       .all().length;
   }
 
+  async deleteAllSessions(): Promise<number> {
+    return this.db.delete(sessions).returning({ id: sessions.id }).all().length;
+  }
+
   // 認証の記録（追記のみ）
 
   async appendEvent(e: NewAuthEvent): Promise<void> {

@@ -7,6 +7,7 @@ import {
   backupRunner,
   backupStore,
   clock as defaultClock,
+  vault as defaultVault,
   fmServer,
   type RouteOptions,
   type SuggestionProviders,
@@ -19,6 +20,7 @@ import { ChallengeStore } from "./lib/challenges.ts";
 import type { FmServer } from "./lib/fm-server.ts";
 import { createJobStore, type JobStore } from "./lib/jobs.ts";
 import { type GetRemoteSettings, getRemoteSettingsDisabled } from "./lib/origin.ts";
+import type { Vault } from "./lib/vault.ts";
 import type { WebAuthnVerifier } from "./lib/webauthn.ts";
 import { simpleWebAuthnVerifier } from "./lib/webauthn-simplewebauthn.ts";
 import { authCheck } from "./middleware/auth.ts";
@@ -86,6 +88,10 @@ export type AppOptions = {
   jobs?: JobStore;
   /** WebAuthn の検証。既定は @simplewebauthn/server。ルートのテストは偽物を渡す */
   webauthn?: WebAuthnVerifier;
+  /** 解錠中の DK（008 の D3）。既定は deps.ts の vault（背景の処理が解錠・施錠を受け取る） */
+  vault?: Vault;
+  /** 回復キーの失敗ごとの遅延（008 の D5）。既定は 1 秒待つ。テストは待たない関数を渡す */
+  recoveryDelay?: (ms: number) => Promise<void>;
   /** バックアップの依存（既定は deps.ts の実物）。テストは偽の SecretStore・実行を渡す */
   backup?: {
     runner?: BackupRunner;
@@ -106,6 +112,7 @@ export function createApp(options: AppOptions = {}) {
   const getRemoteSettings = options.getRemoteSettings ?? getRemoteSettingsDisabled;
   const store = options.store ?? authStore;
   const clock = options.clock ?? defaultClock;
+  const vault = options.vault ?? defaultVault;
   const jobs = options.jobs ?? createJobStore();
   const ai = createAiRuntime({
     fetch: options.ai?.fetch ?? ((...args) => globalThis.fetch(...args)),
@@ -117,7 +124,7 @@ export function createApp(options: AppOptions = {}) {
     .basePath("/api")
     .use(hostCheck(getRemoteSettings))
     .use(csrfCheck)
-    .use(authCheck(store, clock))
+    .use(authCheck(store, clock, vault))
     .get("/health", (c) => c.json({ ok: true }))
     .route(
       "/auth",
@@ -126,6 +133,8 @@ export function createApp(options: AppOptions = {}) {
         clock,
         webauthn: options.webauthn ?? simpleWebAuthnVerifier,
         challenges: new ChallengeStore(clock),
+        vault,
+        ...(options.recoveryDelay === undefined ? {} : { delay: options.recoveryDelay }),
       }),
     )
     .route(

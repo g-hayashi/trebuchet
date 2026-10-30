@@ -1,4 +1,5 @@
 import {
+  type AuthenticationExtensionsClientInputs,
   type AuthenticationResponseJSON,
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -12,18 +13,26 @@ const RP_NAME = "Trebuchet";
 const USER_NAME = "owner";
 
 /**
+ * PRF の入力は base64url の文字列のまま options に入れる（ライブラリの型は BufferSource）。
+ * 画面が bytes に直してから WebAuthn を呼ぶ（008 の D4、落とし穴 1）
+ */
+const prfExtensions = (prf: Record<string, unknown>) =>
+  ({ prf }) as unknown as AuthenticationExtensionsClientInputs;
+
+/**
  * @simplewebauthn/server による本物の実装（R1）。
- * attestation は none、userVerification は required（Touch ID）、residentKey は preferred
+ * attestation は none、userVerification は required（Touch ID）、residentKey は required（008 の D4）
  */
 export const simpleWebAuthnVerifier: WebAuthnVerifier = {
-  registrationOptions({ rpId, excluded }) {
+  registrationOptions({ rpId, excluded, prfSalt }) {
     return generateRegistrationOptions({
       rpName: RP_NAME,
       rpID: rpId,
       userName: USER_NAME,
       attestationType: "none",
       excludeCredentials: excluded,
-      authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
+      authenticatorSelection: { residentKey: "required", userVerification: "required" },
+      extensions: prfExtensions({ eval: { first: prfSalt } }),
     });
   },
 
@@ -45,11 +54,17 @@ export const simpleWebAuthnVerifier: WebAuthnVerifier = {
     };
   },
 
-  authenticationOptions({ rpId, allowed }) {
+  authenticationOptions({ rpId, allowed, prfSalts }) {
+    const evalByCredential = Object.fromEntries(
+      Object.entries(prfSalts ?? {}).map(([id, salt]) => [id, { first: salt }]),
+    );
     return generateAuthenticationOptions({
       rpID: rpId,
       allowCredentials: allowed,
       userVerification: "required",
+      ...(Object.keys(evalByCredential).length > 0
+        ? { extensions: prfExtensions({ evalByCredential }) }
+        : {}),
     });
   },
 

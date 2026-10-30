@@ -1,5 +1,5 @@
 import { randomUUIDv7 } from "node:crypto";
-import { DrizzleAuthStore, openRegistry } from "@trebuchet/db";
+import { DrizzleAuthStore, openAuth, openRegistry } from "@trebuchet/db";
 import type { Clock, SessionKind } from "@trebuchet/domain";
 import { testClient } from "hono/testing";
 import { app as realApp } from "../src/app.ts";
@@ -23,14 +23,14 @@ export type TestSessionOptions = {
 export type TestSession = { id: string; token: string; cookie: string };
 
 /**
- * registry にセッションを直接作る（認証の経路は通さない。R15）。
- * 呼ぶ前に useTempDataDir を使っていること（実データの registry を触らない）
+ * auth.sqlite にセッションを直接作る（認証の経路は通さない。R15）。
+ * 呼ぶ前に useTempDataDir を使っていること（実データを触らない。テスト用の DK で解錠済みになる）
  */
 export async function createTestSession(opts: TestSessionOptions = {}): Promise<TestSession> {
   if (process.env.TREBUCHET_DATA_DIR === undefined) {
     throw new Error("createTestSession: useTempDataDir を先に呼ぶこと");
   }
-  const { id, token } = await issueSession(new DrizzleAuthStore(openRegistry()), {
+  const { id, token } = await issueSession(new DrizzleAuthStore(openAuth(), openRegistry), {
     id: randomUUIDv7(),
     now: opts.now ?? new Date().toISOString(),
     kind: opts.kind ?? "normal",

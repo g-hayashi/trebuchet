@@ -526,11 +526,13 @@ export interface AuthStore {
   listActiveSessions(now: string): Promise<Session[]>;
   /** 失効済みで before より古いものを消す。消した件数を返す */
   deleteStaleSessions(before: string): Promise<number>;
+  /** 全部消す（008 の D3: 起動時と施錠時。施錠中も使える）。消した件数を返す */
+  deleteAllSessions(): Promise<number>;
   // 認証の記録（追記のみ）
   appendEvent(event: NewAuthEvent): Promise<void>;
   /** 新しい順 */
   listEvents(limit: number): Promise<AuthEvent[]>;
-  /** recoveryLocked の入力 */
+  /** since 以降の、kinds の記録（新しい順） */
   listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]>;
   // ペアリングのトークン（ハッシュは hashToken）
   createPairingToken(token: {

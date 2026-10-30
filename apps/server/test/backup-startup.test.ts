@@ -1,8 +1,10 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
+import { clearDataKey } from "@trebuchet/db";
+import { TEST_DATA_KEY, type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startBackgroundServices } from "../src/lib/startup.ts";
+import { createVault, type Vault } from "../src/lib/vault.ts";
 import { type BackupEnv, configure, makeBackupEnv } from "./backup-helpers.ts";
 
 // T012: server の起動の処理（main.ts が呼ぶ）。古い平文の写しの掃除と、自動のバックアップの開始
@@ -21,6 +23,7 @@ afterEach(() => {
 const deps = (
   runner: BackupEnv["runner"] | { start: ReturnType<typeof vi.fn> },
   entities: () => string[] = () => [],
+  vault: Vault = createVault({ store: env.auth }),
 ) => ({
   runner: runner as BackupEnv["runner"],
   auth: env.auth,
@@ -35,6 +38,58 @@ const deps = (
     },
     ids: { next: () => "id" },
   },
+  vault,
+});
+
+describe("背景の処理を解錠に結びつける（008 の D7）", () => {
+  it("施錠中に起動すると、バックアップも定期仕訳も判断しない。解錠で始め、施錠で止める", async () => {
+    clearDataKey();
+    const vault = createVault({ store: env.auth });
+    const entities = vi.fn(() => [] as string[]);
+    const services = startBackgroundServices(deps({ start: vi.fn() }, entities, vault));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(entities).not.toHaveBeenCalled();
+
+    vault.unlock(Buffer.from(TEST_DATA_KEY));
+    await vi.waitFor(() => expect(entities).toHaveBeenCalledTimes(1));
+    // 解錠の知らせが重なっても二重に始めない
+    vault.unlock(Buffer.from(TEST_DATA_KEY));
+
+    await vault.lock();
+    vault.unlock(Buffer.from(TEST_DATA_KEY));
+    await vi.waitFor(() => expect(entities).toHaveBeenCalledTimes(2));
+    services.stop();
+    await vault.lock();
+    vault.unlock(Buffer.from(TEST_DATA_KEY));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(entities).toHaveBeenCalledTimes(2);
+  });
+
+  it("施錠すると間隔の判定も止まる（タイマーが残らない）", async () => {
+    vi.useFakeTimers();
+    const vault = createVault({ store: env.auth });
+    const entities = vi.fn(() => [] as string[]);
+    const services = startBackgroundServices({
+      ...deps({ start: vi.fn() }, entities, vault),
+      intervalMs: 1000,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(entities).toHaveBeenCalledTimes(1);
+    await vault.lock();
+    await vi.advanceTimersByTimeAsync(5 * 60 * 60 * 1000);
+    expect(entities).toHaveBeenCalledTimes(1);
+    services.stop();
+  });
+
+  it("有効なセッションがなくなったら、間隔の判定で施錠する（離席の後。D3）", async () => {
+    vi.useFakeTimers();
+    const vault = createVault({ store: env.auth });
+    const services = startBackgroundServices(deps({ start: vi.fn() }, () => [], vault));
+    expect(vault.isUnlocked()).toBe(true);
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    expect(vault.isUnlocked()).toBe(false);
+    services.stop();
+  });
 });
 
 describe("startBackgroundServices", () => {

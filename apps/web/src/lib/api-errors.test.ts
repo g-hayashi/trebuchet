@@ -66,11 +66,6 @@ describe("describeError", () => {
     );
   });
 
-  it("RECOVERY_LOCKED は retryAfter（秒）を分に切り上げて示す", () => {
-    const e = new ApiError(429, "RECOVERY_LOCKED", "しばらく試せません", { retryAfter: 61 });
-    expect(describeError(e).message).toContain("約2分後");
-  });
-
   it("認証のエラーは日本語の文言にする", () => {
     const code = (c: ConstructorParameters<typeof ApiError>[1]) =>
       describeError(new ApiError(400, c, "x")).message;

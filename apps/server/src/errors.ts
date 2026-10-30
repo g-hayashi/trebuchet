@@ -1,3 +1,4 @@
+import { VaultLockedError } from "@trebuchet/db";
 import type { DomainError, Result } from "@trebuchet/domain";
 import { RepositoryConflictError } from "@trebuchet/domain";
 import type { ErrorCode, ErrorDetails, ErrorResponse } from "@trebuchet/schema";
@@ -48,8 +49,10 @@ const ERROR_STATUS = {
   ALREADY_REGISTERED: 409,
   WEBAUTHN_FAILED: 400,
   RECOVERY_INVALID: 400,
-  RECOVERY_LOCKED: 429,
   LAST_PASSKEY: 409,
+  LOCKED: 401,
+  PRF_UNSUPPORTED: 400,
+  REAUTH_REQUIRED: 403,
   PASSPHRASE_TOO_SHORT: 422,
   PASSPHRASE_MISMATCH: 422,
   PASSPHRASE_WRONG: 422,
@@ -149,8 +152,16 @@ export function validationError(
   return { code: "VALIDATION", message: "入力が正しくありません", details };
 }
 
+/** 401 LOCKED（セッションはあるが施錠中。画面は解錠の画面に戻る。008 の D5・D6） */
+export const lockedError = (): DomainError => ({
+  code: "LOCKED",
+  message: "施錠されています。パスキーか回復キーで解錠してください",
+});
+
 export const onError: ErrorHandler = (e, c) => {
   if (e instanceof DomainException) return fail(c, e.error);
+  // 検査（middleware/auth.ts）の後に施錠された要求が registry・事業体の DB を開こうとした（008 の D5）
+  if (e instanceof VaultLockedError) return fail(c, lockedError());
   if (e instanceof RepositoryConflictError) {
     return fail(c, { code: "VERSION_CONFLICT", message: e.message });
   }

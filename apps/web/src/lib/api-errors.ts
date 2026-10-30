@@ -149,17 +149,6 @@ export function describeError(error: unknown): ErrorDescription {
       };
     case "RECOVERY_INVALID":
       return { message: "回復コードが違います。", details: [] };
-    case "RECOVERY_LOCKED": {
-      // retryAfter は秒。画面には分で（切り上げ）示す
-      const seconds = asNumber(error.details?.retryAfter);
-      const minutes = seconds === undefined ? undefined : Math.max(1, Math.ceil(seconds / 60));
-      return {
-        message: `回復コードの失敗が続いたため、しばらく試せません。${
-          minutes === undefined ? "しばらく" : `約${minutes}分`
-        }後にもう一度お試しください。`,
-        details: [],
-      };
-    }
     case "LAST_PASSKEY":
       return {
         message:

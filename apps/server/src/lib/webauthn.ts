@@ -44,14 +44,21 @@ type VerifyBase = {
 };
 
 export interface WebAuthnVerifier {
+  /**
+   * 登録の options。residentKey・userVerification は required。
+   * `prfSalt`（base64url）を `extensions.prf.eval.first` に入れる（008 の D4。画面が bytes に直す）
+   */
   registrationOptions(input: {
     rpId: string;
     excluded: CredentialRef[];
+    prfSalt: string;
   }): Promise<PublicKeyCredentialCreationOptionsJSON>;
   verifyRegistration(input: VerifyBase): Promise<VerifiedRegistration | null>;
+  /** 認証の options。`prfSalts`（資格情報の ID → base64url）を `extensions.prf.evalByCredential` に入れる */
   authenticationOptions(input: {
     rpId: string;
     allowed: CredentialRef[];
+    prfSalts?: Record<string, string>;
   }): Promise<PublicKeyCredentialRequestOptionsJSON>;
   verifyAuthentication(
     input: VerifyBase & { credential: StoredCredential },

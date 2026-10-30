@@ -1,12 +1,13 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import {
   type AppVersion,
   type BackupHeaderInput,
   currentAppVersion,
+  type DbKeyScope,
   dataDir,
   encryptBackup,
+  openEncryptedSqlite,
   packArchive,
   type Snapshot,
 } from "@trebuchet/db";
@@ -85,10 +86,10 @@ const inspect = (body: FormData, target = app, headers?: Record<string, string>)
     headers: headers ?? { Host: TEST_HOST, Origin: TEST_ORIGIN, Cookie: cookie },
   });
 
-/** registry（セッションを除く）と全事業体の DB の全ての表の内容 */
+/** registry（セッションを除く）と全事業体の DB の全ての表の内容（DK から作った鍵で開く。008 の D2） */
 function dumpAll(): unknown {
-  const dump = (path: string, skip: string[]) => {
-    const db = new DatabaseSync(path, { readOnly: true });
+  const dump = (path: string, skip: string[], scope: DbKeyScope) => {
+    const db = openEncryptedSqlite(path, scope, { readonly: true, fileMustExist: true });
     try {
       const tables = (
         db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as {
@@ -105,11 +106,11 @@ function dumpAll(): unknown {
   };
   const tenantsDir = join(dataDir(), "tenants");
   return {
-    registry: dump(join(dataDir(), "registry.sqlite"), ["sessions"]),
+    registry: dump(join(dataDir(), "registry.sqlite"), ["sessions"], "registry"),
     tenants: readdirSync(tenantsDir)
       .filter((n) => n.endsWith(".sqlite"))
       .sort()
-      .map((n) => [n, dump(join(tenantsDir, n), [])]),
+      .map((n) => [n, dump(join(tenantsDir, n), [], { tenant: n.replace(/\.sqlite$/, "") })]),
   };
 }
 
