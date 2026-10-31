@@ -4,8 +4,6 @@ import type { BackupAlertReason, BackupRunStatus, BackupTrigger } from "@trebuch
 export const ALERT_MESSAGES: Record<BackupAlertReason, string> = {
   STALE: "バックアップが成功していません。しばらく前から確認できていません。",
   LAST_RUN_FAILED: "直近のバックアップに失敗しました。原因を確かめてください。",
-  PASSPHRASE_NEEDED:
-    "バックアップのパスフレーズが使えません。自動のバックアップを止めています。パスフレーズを入力し直してください。",
 };
 
 export const TRIGGER_LABELS: Record<BackupTrigger, string> = { manual: "手動", auto: "自動" };
@@ -21,7 +19,6 @@ const FAILURE_REASONS: Record<string, string> = {
   FOLDER_NOT_FOUND: "置き場所のフォルダが見つかりません",
   WRITE_FAILED: "書き込みに失敗しました",
   VERIFY_FAILED: "書いたファイルを読み戻せませんでした",
-  PASSPHRASE_MISSING: "パスフレーズが見つかりません",
   SNAPSHOT_FAILED: "帳簿の写しを作れませんでした",
 };
 

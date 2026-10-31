@@ -11,11 +11,12 @@ import { packArchive } from "../src/backup/archive.ts";
 import { encryptBackup } from "../src/backup/crypto.ts";
 import { createSnapshotDir, currentAppVersion, snapshotDataDir } from "../src/backup/snapshot.ts";
 import { closeAll, openRegistry } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
-import { seedEntities } from "./backup-fixtures.ts";
+import { TEST_DATA_KEY, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { recoveryFixture, seedEntities } from "./backup-fixtures.ts";
 
-const PASS = "terminal passphrase 日本語";
-const ENV_PASS = "passphrase-from-env";
+/** 端末から入力する回復キー（バックアップの recovery の包みを開く。DK はテスト用の固定の DK） */
+const recovery = recoveryFixture(TEST_DATA_KEY);
+const ENV_KEY = "KEY-FROM-ENV";
 
 let tmp: TempDataDir;
 let server: Server | undefined;
@@ -32,7 +33,7 @@ afterEach(async () => {
 const dataDir = () => join(tmp.dir, "dest", "data");
 const backupFile = () => join(tmp.dir, "backup.tbk");
 
-/** 実際の鍵導出（Argon2id）で .tbk を作る。src は tmp.dir/src */
+/** DK と recovery の包みで .tbk を作る。src は tmp.dir/src */
 async function makeBackup(appVersion = currentAppVersion()): Promise<void> {
   const src = join(tmp.dir, "src");
   mkdirSync(src, { recursive: true });
@@ -44,10 +45,11 @@ async function makeBackup(appVersion = currentAppVersion()): Promise<void> {
   process.env.TREBUCHET_DATA_DIR = tmp.dir;
   const snapDir = createSnapshotDir(join(tmp.dir, "scratch"));
   try {
-    const bytes = await encryptBackup(packArchive(snapshotDataDir(src, snapDir)), PASS, {
+    const bytes = encryptBackup(packArchive(snapshotDataDir(src, snapDir)), TEST_DATA_KEY, {
       appVersion,
       macId: "mac-src",
       createdAt: "2026-10-31T09:00:00.000Z",
+      recoveryWrap: recovery.wrap,
     });
     writeFileSync(backupFile(), bytes);
   } finally {
@@ -59,20 +61,20 @@ type Harness = {
   deps: RestoreCliDeps;
   out: string[];
   err: string[];
-  calls: { passphrase: number; confirm: number; server: number };
+  calls: { recoveryKey: number; confirm: number; server: number };
 };
 
 function harness(overrides: Partial<RestoreCliDeps> = {}): Harness {
   const out: string[] = [];
   const err: string[] = [];
-  const calls = { passphrase: 0, confirm: 0, server: 0 };
+  const calls = { recoveryKey: 0, confirm: 0, server: 0 };
   const deps: RestoreCliDeps = {
-    env: { TREBUCHET_PASSPHRASE: ENV_PASS, PASSPHRASE: ENV_PASS },
+    env: { TREBUCHET_RECOVERY_KEY: ENV_KEY, RECOVERY_KEY: ENV_KEY },
     defaultDataDir: join(tmp.dir, "must-not-be-used"),
     tmpRoot: join(tmp.dir, "scratch"),
-    readPassphrase: async () => {
-      calls.passphrase += 1;
-      return PASS;
+    readRecoveryKey: async () => {
+      calls.recoveryKey += 1;
+      return recovery.text;
     },
     confirm: async () => {
       calls.confirm += 1;
@@ -99,18 +101,20 @@ const siblings = () => {
 };
 
 describe("restore-backup（使い方と終了コード）", () => {
-  it("--file がないと 2（パスフレーズも server も確かめない）", async () => {
+  it("--file がないと 2（回復キーも server も確かめない）", async () => {
     const h = harness();
     expect(await runRestoreCli(["--data-dir", dataDir()], h.deps)).toBe(2);
-    expect(h.calls).toEqual({ passphrase: 0, confirm: 0, server: 0 });
+    expect(h.calls).toEqual({ recoveryKey: 0, confirm: 0, server: 0 });
     expect(h.err.join("\n")).toContain("--file");
   });
 
-  it("未知の引数（--passphrase を含む）は 2 で、パスフレーズを使わない", async () => {
-    const h = harness();
-    expect(await runRestoreCli(args("--passphrase", ENV_PASS), h.deps)).toBe(2);
-    expect(h.calls.passphrase).toBe(0);
-    expect(h.out.join("\n") + h.err.join("\n")).not.toContain(ENV_PASS);
+  it("未知の引数（--recovery-key・--passphrase を含む）は 2 で、回復キーを引数では受け取らない", async () => {
+    for (const flag of ["--recovery-key", "--passphrase"]) {
+      const h = harness();
+      expect(await runRestoreCli(args(flag, recovery.text), h.deps)).toBe(2);
+      expect(h.calls.recoveryKey).toBe(0);
+      expect(h.out.join("\n") + h.err.join("\n")).not.toContain(recovery.text);
+    }
   });
 
   it("pnpm が渡す先頭の `--` を無視する", async () => {
@@ -118,10 +122,10 @@ describe("restore-backup（使い方と終了コード）", () => {
     expect(await runRestoreCli(["--", ...args()], h.deps)).toBe(3);
   });
 
-  it("server が動いていると 3（パスフレーズを尋ねず、何も作らない）", async () => {
+  it("server が動いていると 3（回復キーを尋ねず、何も作らない）", async () => {
     const h = harness({ isServerRunning: async () => true });
     expect(await runRestoreCli(args("--yes"), h.deps)).toBe(3);
-    expect(h.calls.passphrase).toBe(0);
+    expect(h.calls.recoveryKey).toBe(0);
     expect(siblings()).toEqual([]);
   });
 
@@ -164,19 +168,21 @@ describe("restore-backup（使い方と終了コード）", () => {
     expect(siblings()).toEqual([]);
   });
 
-  it("成功は 0。要約を表示し、--yes なら確認しない。パスフレーズは端末の入力だけを使い、出力に出さない", async () => {
+  it("成功は 0。要約を表示し、--yes なら確認しない。回復キーは端末の入力だけを使い、出力に出さない", async () => {
     await makeBackup();
     const h = harness();
     expect(await runRestoreCli(args("--yes"), h.deps)).toBe(0);
-    expect(h.calls).toEqual({ passphrase: 1, confirm: 0, server: 1 });
+    expect(h.calls).toEqual({ recoveryKey: 1, confirm: 0, server: 1 });
     const text = h.out.join("\n");
     expect(text).toContain("作成日時");
     expect(text).toContain("2026-10-31T09:00:00.000Z");
     expect(text).toContain("mac-src");
     expect(text).toContain("事業");
-    expect(text).toContain("復元しました。アプリを起動し、パスキーを登録してください");
-    expect(text + h.err.join("\n")).not.toContain(PASS);
-    expect(text + h.err.join("\n")).not.toContain(ENV_PASS);
+    expect(text).toContain(
+      "復元しました。アプリを起動し、回復キーで解錠して、新しいパスキーを登録してください",
+    );
+    expect(text + h.err.join("\n")).not.toContain(recovery.text);
+    expect(text + h.err.join("\n")).not.toContain(ENV_KEY);
     expect(siblings()).toEqual(["data"]);
   });
 
@@ -195,12 +201,13 @@ describe("restore-backup（使い方と終了コード）", () => {
     expect(siblings()).toEqual(["data"]);
   });
 
-  it("誤ったパスフレーズは 1 で、決められた文言を出し、何も作らない", async () => {
+  it("誤った回復キーは 1 で、決められた文言を出し、何も作らない", async () => {
     await makeBackup();
-    const h = harness({ readPassphrase: async () => "wrong passphrase" });
+    const wrong = recoveryFixture(TEST_DATA_KEY).text;
+    const h = harness({ readRecoveryKey: async () => wrong });
     expect(await runRestoreCli(args("--yes"), h.deps)).toBe(1);
-    expect(h.err.join("\n")).toContain("パスフレーズが違うか、ファイルが壊れています");
-    expect(h.err.join("\n")).not.toContain("wrong passphrase");
+    expect(h.err.join("\n")).toContain("回復キーが違うか、ファイルが壊れています");
+    expect(h.err.join("\n")).not.toContain(wrong);
     expect(siblings()).toEqual([]);
   });
 
@@ -218,6 +225,6 @@ describe("restore-backup（使い方と終了コード）", () => {
   it("存在しない --file は 2", async () => {
     const h = harness();
     expect(await runRestoreCli(args("--yes"), h.deps)).toBe(2);
-    expect(h.calls.passphrase).toBe(0);
+    expect(h.calls.recoveryKey).toBe(0);
   });
 });

@@ -3,19 +3,16 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { FilePicker } from "@/features/imports/FilePicker";
 import { formatDateTime } from "@/lib/format";
 import { inspectBackup } from "./api";
 
 /**
- * 復元の前の検査（FR-024・027、research R13）。ファイルとパスフレーズを送り、要約を表示する。
- * 画面からは復元しない（server を止めてコマンドで行う）
+ * 復元の前の検査（FR-024・027、research R13）。ファイルを送り、解錠中の鍵で復号した要約を表示する
+ * （008 の D9。パスフレーズの入力はない）。画面からは復元しない（server を止めてコマンドで行う）
  */
 export function InspectBackup() {
   const [file, setFile] = useState<File>();
-  const [passphrase, setPassphrase] = useState("");
   const inspect = useMutation({ mutationFn: inspectBackup });
   const result = inspect.data;
 
@@ -24,7 +21,9 @@ export function InspectBackup() {
       <CardHeader>
         <CardTitle>復元</CardTitle>
         <CardDescription>
-          バックアップのファイルを検査して、中身を確かめます。検査では帳簿は変わりません。復元そのものは、このあとの手順でコマンドから行います。
+          バックアップのファイルを検査して、中身を確かめます。この Mac
+          のデータ鍵で取ったバックアップだけを検査できます。検査では帳簿は変わりません。復元そのものは、このあとの手順でコマンドから行います（新しい
+          Mac では回復キーで復元します）。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
@@ -33,8 +32,8 @@ export function InspectBackup() {
           className="grid max-w-xl gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (file === undefined || passphrase === "") return;
-            inspect.mutate({ file, passphrase });
+            if (file === undefined) return;
+            inspect.mutate({ file });
           }}
         >
           <FilePicker
@@ -45,22 +44,9 @@ export function InspectBackup() {
               inspect.reset();
             }}
           />
-          <div className="grid gap-2">
-            <Label htmlFor="backup-inspect-passphrase">バックアップのパスフレーズ</Label>
-            <Input
-              id="backup-inspect-passphrase"
-              type="password"
-              autoComplete="off"
-              value={passphrase}
-              onChange={(event) => setPassphrase(event.currentTarget.value)}
-            />
-          </div>
           <ApiErrorMessage error={inspect.error} />
           <div>
-            <Button
-              type="submit"
-              disabled={file === undefined || passphrase === "" || inspect.isPending}
-            >
+            <Button type="submit" disabled={file === undefined || inspect.isPending}>
               検査
             </Button>
           </div>
@@ -98,12 +84,14 @@ export function InspectBackup() {
               <ol className="list-decimal pl-5">
                 <li>server を止める（`pnpm dev` を終了する）。</li>
                 <li>
-                  次のコマンドを実行し、パスフレーズを入力する。
+                  次のコマンドを実行し、回復キーを入力する（標準入力から。画面には出ない）。
                   <pre className="mt-1 overflow-x-auto rounded-md bg-muted px-3 py-2">
                     pnpm restore -- --file &lt;path&gt; [--data-dir &lt;dir&gt;]
                   </pre>
                 </li>
-                <li>起動してパスキーを登録し、バックアップの置き場所などの設定をし直す。</li>
+                <li>
+                  起動して回復キーで解錠し、新しいパスキーを登録する。バックアップの置き場所などの設定をし直す。
+                </li>
               </ol>
             </section>
           </>

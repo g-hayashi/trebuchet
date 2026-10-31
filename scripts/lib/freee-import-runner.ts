@@ -7,7 +7,7 @@
  *
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む。
  */
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { createImportUnitOfWork } from "../../packages/db/src/import-repository.ts";
@@ -15,9 +15,11 @@ import { DrizzleLedgerRepository } from "../../packages/db/src/ledger-repository
 import { DrizzleMasterRepository } from "../../packages/db/src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../../packages/db/src/registry-repository.ts";
 import {
+  clearDataKey,
   closeAll,
   openRegistry,
   openTenant,
+  setDataKey,
   TMP_ROOT,
 } from "../../packages/db/src/tenant-store.ts";
 import { decodeText, parseCsv } from "../../packages/domain/src/import/csv.ts";
@@ -284,8 +286,15 @@ export function runFreeeImport(args: ImportArgs, options: ImportOptions): Import
   if (!reuse) rmSync(DATA_DIR, { recursive: true, force: true });
   else if (!existsSync(DATA_DIR))
     throw new StopError(`${DATA_DIR} がありません（--keep で実行したあとに --continue を使う）`);
+  else
+    throw new StopError(
+      "--continue は使えません（008: 一時のデータ場所の DB は実行ごとの鍵で暗号化し、鍵を残さないため、前の実行の DB を開けません）",
+    );
   mkdirSync(DATA_DIR, { recursive: true });
   process.env.TREBUCHET_DATA_DIR = DATA_DIR;
+  // 008: 一時のデータ場所の DB も DK で暗号化する。DK は実行ごとの乱数で、メモリーだけに置く
+  // （ディスク・環境変数に出さない。INV-51）。前の実行の DB は開けないので、--continue は使えない
+  setDataKey(randomBytes(32));
 
   const ids = benchIds;
   const clock = benchClock;
@@ -474,8 +483,9 @@ export function runFreeeImport(args: ImportArgs, options: ImportOptions): Import
   return { matched: reconciled.allMatched, context };
 }
 
-/** DB を閉じ、`keep` でなければ一時のデータ場所を消す */
+/** DB を閉じて施錠し（DK を消す）、`keep` でなければ一時のデータ場所を消す */
 export function finishFreeeImport(keep: boolean): void {
   closeAll();
+  clearDataKey();
   if (!keep) rmSync(DATA_DIR, { recursive: true, force: true });
 }

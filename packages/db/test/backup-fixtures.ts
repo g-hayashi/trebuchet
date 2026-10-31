@@ -1,12 +1,21 @@
 import { randomUUIDv7 } from "node:crypto";
 import { type EntityKind, type NewJournal, ok, validateJournal } from "@trebuchet/domain";
 import { balancedLinesArb, dateInPeriodArb, fc } from "@trebuchet/domain/testing";
-import type Database from "better-sqlite3";
 import { DrizzleClosingStore } from "../src/closing-repository.ts";
+import type { Database } from "../src/driver.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { openRegistry, openTenant } from "../src/tenant-store.ts";
+import { generateRecoveryKey } from "../src/recovery-key.ts";
+import { openAuth, openRegistry, openTenant } from "../src/tenant-store.ts";
 import { createTestEntity, NOW } from "../src/testing.ts";
+import { wrapDataKey } from "../src/vault-crypto.ts";
+
+/** 回復キー（本文）と、それで DK を包んだ recovery の包み。テストが DK ごとに作る */
+export function recoveryFixture(dk: Uint8Array) {
+  const key = generateRecoveryKey();
+  const wrap = wrapDataKey(dk, key.secret, "recovery", null);
+  return { text: key.text, wrap };
+}
 
 /** 合成の事業体 1 件の指定。seed と journals から仕訳を決定的に作る */
 export type EntitySpec = {
@@ -78,24 +87,27 @@ export function addJournals(entityId: string, count: number, seed: number, memo 
   });
 }
 
-/** registry の端末に結びつく 7 表（バックアップから除く）に、marker を含む行を入れる */
+/**
+ * 端末に結びつく行（バックアップから除く）に marker を入れる: auth.sqlite の認証の表（バックアップに
+ * 含めないファイル）と、registry の端末の 4 表
+ */
 export function seedAuthRows(marker: string): void {
-  const db = openRegistry().$client;
+  const auth = openAuth().$client;
   const now = clock.now();
-  db.prepare(
-    "INSERT INTO passkeys (id, public_key, counter, rp_id, name, created_at) VALUES (?, ?, 0, 'localhost', ?, ?)",
-  ).run(`pk-${marker}`, Buffer.from(`pubkey-${marker}`), `name-${marker}`, now);
-  db.prepare("INSERT INTO recovery_codes (id, code_hash, created_at) VALUES (?, ?, ?)").run(
-    `rc-${marker}`,
-    `hash-${marker}`,
-    now,
-  );
-  db.prepare(
-    "INSERT INTO sessions (id, token_hash, kind, rp_id, user_agent, created_at, last_seen_at) VALUES (?, ?, 'normal', 'localhost', ?, ?, ?)",
-  ).run(`ss-${marker}`, `token-${marker}`, `agent-${marker}`, now, now);
-  db.prepare(
-    "INSERT INTO auth_events (id, occurred_at, kind, detail) VALUES (?, ?, 'sign_in', ?)",
-  ).run(`ev-${marker}`, now, `detail-${marker}`);
+  auth
+    .prepare(
+      "INSERT INTO passkeys (id, public_key, counter, rp_id, name, prf_salt, created_at) VALUES (?, ?, 0, 'localhost', ?, ?, ?)",
+    )
+    .run(`pk-${marker}`, Buffer.from(`pubkey-${marker}`), `name-${marker}`, Buffer.alloc(32), now);
+  auth
+    .prepare(
+      "INSERT INTO sessions (id, token_hash, kind, rp_id, user_agent, created_at, last_seen_at) VALUES (?, ?, 'normal', 'localhost', ?, ?, ?)",
+    )
+    .run(`ss-${marker}`, `token-${marker}`, `agent-${marker}`, now, now);
+  auth
+    .prepare("INSERT INTO auth_events (id, occurred_at, kind, detail) VALUES (?, ?, 'sign_in', ?)")
+    .run(`ev-${marker}`, now, `detail-${marker}`);
+  const db = openRegistry().$client;
   db.prepare("INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)").run(
     "backup_folder",
     `/folder-${marker}`,
@@ -119,10 +131,6 @@ export function seedAuthRows(marker: string): void {
 }
 
 export const EXCLUDED_REGISTRY_TABLES = [
-  "passkeys",
-  "recovery_codes",
-  "sessions",
-  "auth_events",
   "app_settings",
   "backup_runs",
   "pairing_tokens",

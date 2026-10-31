@@ -22,7 +22,7 @@ export const apiError = (
   details?: Record<string, unknown>,
 ): ApiReply => ({ status, body: { error: { code, message, ...(details && { details }) } } });
 
-/** 認証の状態（004）の既定の応答。登録済み・サインイン済み。個別のテストは同じキーで上書きできる */
+/** 認証の状態（004・008）の既定の応答。設定済み・解錠済み。個別のテストは同じキーで上書きできる */
 export const DEFAULT_AUTH_STATUS = {
   registered: true,
   signedIn: true,
@@ -54,6 +54,9 @@ const DEFAULT_AI_SETTINGS = {
 
 const DEFAULT_ROUTES: Record<string, Handler> = {
   "GET /api/auth/status": () => ok(DEFAULT_AUTH_STATUS),
+  // 再認証（008）。パスキーの追加・削除と回復キーの再発行の前に、画面が呼ぶ。成功する
+  "POST /api/auth/reauth/options": () => ok({ challenge: "reauth" }),
+  "POST /api/auth/reauth/verify": () => ({ status: 204, body: undefined }),
   // 全画面の上部の知らせ（004）が読む。設定済みで、知らせなし
   "GET /api/backup/status": () => ok(DEFAULT_BACKUP_STATUS),
   // AI の設定（006 US5）。端末内だけを使い、外部は未設定
@@ -127,7 +130,7 @@ function defaultEntityHandler(method: string, entityPath: string): Handler | und
 
 /**
  * fetch を差し替え、"GET /api/..." の形のキーで応答を返す。受けた呼び出しを順に記録して返す。
- * `GET /api/auth/status` は、指定がなければ登録済み・サインイン済みの応答を返す。
+ * `GET /api/auth/status` は、指定がなければ設定済み・解錠済みの応答を返す。
  * 後片付けは vi.unstubAllGlobals() で行う
  */
 export function mockApi(given: Record<string, Handler>): ApiCall[] {

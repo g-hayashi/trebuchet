@@ -13,7 +13,7 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { authKeys, revokeSession, sessionsQuery } from "./api";
 
-/** サインイン中のセッション（FR-013）。現在のセッションに印を付け、他のセッションを失効できる */
+/** 解錠中のセッション（FR-013）。現在のセッションに印を付け、他のセッションを失効できる */
 export function SessionList() {
   const queryClient = useQueryClient();
   const { data: sessions, isPending, error } = useQuery(sessionsQuery());
@@ -30,7 +30,7 @@ export function SessionList() {
       <CardHeader>
         <CardTitle>セッション</CardTitle>
         <CardDescription>
-          サインイン中の端末です。心当たりのないセッションは失効してください。
+          解錠中の端末です。心当たりのないセッションは失効してください。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">

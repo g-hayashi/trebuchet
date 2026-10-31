@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type BackupStatus, PASSPHRASE_MIN_LENGTH } from "@trebuchet/schema";
-import { useId, useState } from "react";
+import type { BackupStatus } from "@trebuchet/schema";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -20,13 +20,12 @@ import {
   backupKeys,
   backupRunsQuery,
   backupStatusQuery,
-  changeBackupPassphrase,
   runBackup,
   saveBackupSettings,
 } from "./api";
 import { describeFailure, formatBytes, STATUS_LABELS, TRIGGER_LABELS } from "./labels";
 
-/** 状態と実行の履歴を取り直す（設定・変更・実行のあと） */
+/** 状態と実行の履歴を取り直す（設定・実行のあと） */
 function useRefreshBackup() {
   const queryClient = useQueryClient();
   return async () => {
@@ -35,7 +34,7 @@ function useRefreshBackup() {
   };
 }
 
-/** バックアップの設定の画面の中身（FR-014・015・019・020・023） */
+/** バックアップの設定の画面の中身（FR-014・015・019・020）。鍵はデータ鍵から作る（008 の D9） */
 export function BackupSettings() {
   const { data: status, isPending, error } = useQuery(backupStatusQuery());
   return (
@@ -46,65 +45,9 @@ export function BackupSettings() {
         <>
           <RunCard status={status} />
           <SettingsCard status={status} />
-          {status.configured && <PassphraseCard status={status} />}
         </>
       )}
       <HistoryCard />
-    </>
-  );
-}
-
-/** パスフレーズを2回入力する欄。短さと不一致は入力の補助として示すだけで、最終の判定はサーバー */
-function PassphraseFields({
-  idPrefix,
-  labels,
-  passphrase,
-  confirm,
-  onPassphrase,
-  onConfirm,
-}: {
-  idPrefix: string;
-  labels: { passphrase: string; confirm: string };
-  passphrase: string;
-  confirm: string;
-  onPassphrase: (value: string) => void;
-  onConfirm: (value: string) => void;
-}) {
-  const short = passphrase.length > 0 && passphrase.length < PASSPHRASE_MIN_LENGTH;
-  const mismatch = confirm.length > 0 && confirm !== passphrase;
-  return (
-    <>
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}-passphrase`}>{labels.passphrase}</Label>
-        <Input
-          id={`${idPrefix}-passphrase`}
-          type="password"
-          autoComplete="new-password"
-          value={passphrase}
-          onChange={(event) => onPassphrase(event.currentTarget.value)}
-        />
-        {short && (
-          <p role="status" className="text-sm text-destructive">
-            パスフレーズは{PASSPHRASE_MIN_LENGTH}文字以上にしてください（今は{passphrase.length}
-            文字）。
-          </p>
-        )}
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}-confirm`}>{labels.confirm}</Label>
-        <Input
-          id={`${idPrefix}-confirm`}
-          type="password"
-          autoComplete="new-password"
-          value={confirm}
-          onChange={(event) => onConfirm(event.currentTarget.value)}
-        />
-        {mismatch && (
-          <p role="status" className="text-sm text-destructive">
-            確認の入力が一致しません。
-          </p>
-        )}
-      </div>
     </>
   );
 }
@@ -117,7 +60,7 @@ function RunCard({ status }: { status: BackupStatus }) {
       <CardHeader>
         <CardTitle>バックアップ</CardTitle>
         <CardDescription>
-          帳簿のデータを暗号化して、置き場所に保存します。自動でも定期的に取ります。
+          帳簿のデータを暗号化して、置き場所に保存します。自動でも定期的に取ります（解錠している間だけ）。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
@@ -132,7 +75,7 @@ function RunCard({ status }: { status: BackupStatus }) {
           </dl>
         ) : (
           <p className="text-sm text-muted-foreground">
-            まだ設定されていません。下で置き場所とパスフレーズを決めてください。
+            まだ設定されていません。下で置き場所を決めてください。
           </p>
         )}
         {status.running && (
@@ -154,21 +97,17 @@ function RunCard({ status }: { status: BackupStatus }) {
   );
 }
 
-/** 置き場所とパスフレーズの設定（FR-014）。パスフレーズを失うと復元できないことへの同意が要る */
+/**
+ * 置き場所の設定（FR-014）。バックアップの鍵は、この Mac のデータ鍵から作る（008 の D9）。パスフレーズは要らない。
+ * Mac を失ったときは、回復キーで復元する
+ */
 function SettingsCard({ status }: { status: BackupStatus }) {
   const refresh = useRefreshBackup();
-  const checkId = useId();
   const [folder, setFolder] = useState<string>();
-  const [passphrase, setPassphrase] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [acknowledged, setAcknowledged] = useState(false);
   const [saved, setSaved] = useState(false);
   const save = useMutation({
     mutationFn: saveBackupSettings,
     onSuccess: async () => {
-      setPassphrase("");
-      setConfirm("");
-      setAcknowledged(false);
       setSaved(true);
       await refresh();
     },
@@ -177,25 +116,21 @@ function SettingsCard({ status }: { status: BackupStatus }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>置き場所とパスフレーズの設定</CardTitle>
+        <CardTitle>置き場所の設定</CardTitle>
         <CardDescription>
-          バックアップは、パスフレーズで暗号化して置き場所に保存します。保存すると、すぐに最初のバックアップを取ります。
+          バックアップは、この Mac
+          のデータ鍵で暗号化して置き場所に保存します。保存すると、すぐに最初のバックアップを取ります。Mac
+          を失ったときは、初回の設定で控えた回復キーで、新しい Mac に復元できます。
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form
-          aria-label="置き場所とパスフレーズの設定"
+          aria-label="置き場所の設定"
           className="grid max-w-xl gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!acknowledged) return;
             setSaved(false);
-            save.mutate({
-              folder: folder ?? status.folder ?? "",
-              passphrase,
-              passphraseConfirm: confirm,
-              acknowledged: true,
-            });
+            save.mutate({ folder: folder ?? status.folder ?? "" });
           }}
         >
           <div className="grid gap-2">
@@ -208,121 +143,12 @@ function SettingsCard({ status }: { status: BackupStatus }) {
               onChange={(event) => setFolder(event.currentTarget.value)}
             />
           </div>
-          <PassphraseFields
-            idPrefix="backup-settings"
-            labels={{ passphrase: "パスフレーズ", confirm: "パスフレーズ（確認）" }}
-            passphrase={passphrase}
-            confirm={confirm}
-            onPassphrase={setPassphrase}
-            onConfirm={setConfirm}
-          />
-          <div className="flex items-start gap-2 text-sm">
-            <input
-              id={checkId}
-              type="checkbox"
-              className="mt-1"
-              checked={acknowledged}
-              onChange={(event) => setAcknowledged(event.currentTarget.checked)}
-            />
-            <label htmlFor={checkId}>
-              パスフレーズを失うと復元できないことを理解しました（パスフレーズは、安全な場所に控えてください）
-            </label>
-          </div>
           <ApiErrorMessage error={save.error} />
           <div className="flex items-center gap-3">
-            <Button type="submit" disabled={!acknowledged || save.isPending}>
+            <Button type="submit" disabled={save.isPending}>
               保存
             </Button>
             {saved && <SaveNotice message="保存しました。最初のバックアップを始めました。" />}
-          </div>
-        </form>
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
- * パスフレーズの変更（FR-023）。キーチェーンが空のとき（`PASSPHRASE_NEEDED`）は今のパスフレーズを聞かず、
- * 入力し直してもらう。それ以外は今のパスフレーズを求める（検査はサーバー）
- */
-function PassphraseCard({ status }: { status: BackupStatus }) {
-  const refresh = useRefreshBackup();
-  const needsReenter = status.alert?.reason === "PASSPHRASE_NEEDED";
-  const [current, setCurrent] = useState("");
-  const [passphrase, setPassphrase] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [saved, setSaved] = useState(false);
-  const change = useMutation({
-    mutationFn: changeBackupPassphrase,
-    onSuccess: async () => {
-      setCurrent("");
-      setPassphrase("");
-      setConfirm("");
-      setSaved(true);
-      await refresh();
-    },
-  });
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>パスフレーズの変更</CardTitle>
-        <CardDescription>
-          変更すると、新しいパスフレーズでバックアップを取り直します。
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          aria-label="パスフレーズの変更"
-          className="grid max-w-xl gap-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setSaved(false);
-            change.mutate({
-              ...(needsReenter ? {} : { current }),
-              passphrase,
-              passphraseConfirm: confirm,
-            });
-          }}
-        >
-          <p className="text-sm">
-            <strong className="font-semibold">
-              以前のバックアップは古いパスフレーズのままです。
-            </strong>
-            古いファイルを復元するときは、古いパスフレーズが要ります。
-          </p>
-          {needsReenter ? (
-            <p className="text-sm">
-              保存してあるパスフレーズが見つかりません。パスフレーズを入力し直してください。
-            </p>
-          ) : (
-            <div className="grid gap-2">
-              <Label htmlFor="backup-current-passphrase">今のパスフレーズ</Label>
-              <Input
-                id="backup-current-passphrase"
-                type="password"
-                autoComplete="current-password"
-                value={current}
-                onChange={(event) => setCurrent(event.currentTarget.value)}
-              />
-            </div>
-          )}
-          <PassphraseFields
-            idPrefix="backup-change"
-            labels={{ passphrase: "新しいパスフレーズ", confirm: "新しいパスフレーズ（確認）" }}
-            passphrase={passphrase}
-            confirm={confirm}
-            onPassphrase={setPassphrase}
-            onConfirm={setConfirm}
-          />
-          <ApiErrorMessage error={change.error} />
-          <div className="flex items-center gap-3">
-            <Button type="submit" disabled={change.isPending}>
-              パスフレーズを変更
-            </Button>
-            {saved && (
-              <SaveNotice message="変更しました。新しいパスフレーズでバックアップを始めました。" />
-            )}
           </div>
         </form>
       </CardContent>

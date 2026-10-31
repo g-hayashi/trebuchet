@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DrizzleAuthStore } from "../src/auth-repository.ts";
 import { DrizzleBackupStore } from "../src/backup/repository.ts";
-import { closeAll, openRegistry } from "../src/tenant-store.ts";
+import { closeAll, openAuth, openRegistry } from "../src/tenant-store.ts";
 import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 // T012: backup_runs の BackupStore（app_settings は AuthStore が扱う）
@@ -108,7 +108,7 @@ describe("DrizzleBackupStore", () => {
   });
 
   it("app_settings（AuthStore）と backup_runs は別の表", async () => {
-    const auth = new DrizzleAuthStore(openRegistry());
+    const auth = new DrizzleAuthStore(openAuth(), openRegistry);
     await auth.setSetting("backup_folder", "/x", "2026-10-20T00:00:00.000Z");
     await store.recordRun(run("r1", "2026-10-20T01:00:00.000Z"));
     expect(await auth.getSetting("backup_folder")).toBe("/x");

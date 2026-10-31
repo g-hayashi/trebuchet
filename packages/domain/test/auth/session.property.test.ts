@@ -15,8 +15,8 @@ const sessionOf = (
 ) => ({ kind, createdAt: iso(createdMs), lastSeenAt: iso(seenMs), revokedAt });
 
 describe("isSessionActive（INV-28）", () => {
-  it("定数は 8 時間と 10 分", () => {
-    expect(SESSION_IDLE_MS).toBe(8 * 60 * 60 * 1000);
+  it("定数は 30 分（008 の D3）と 10 分", () => {
+    expect(SESSION_IDLE_MS).toBe(30 * 60 * 1000);
     expect(RECOVERY_SESSION_MS).toBe(10 * 60 * 1000);
   });
 
@@ -56,7 +56,7 @@ describe("isSessionActive（INV-28）", () => {
     );
   });
 
-  it("境界: ちょうど 8 時間・10 分は無効、1ms 手前は有効", () => {
+  it("境界: ちょうど 30 分・10 分は無効、1ms 手前は有効", () => {
     const t = 1_800_000_000_000;
     const n = sessionOf("normal", t, t, null);
     expect(isSessionActive(n, iso(t + SESSION_IDLE_MS - 1))).toBe(true);

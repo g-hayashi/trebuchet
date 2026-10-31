@@ -28,8 +28,8 @@ export class ApiError extends Error {
 type JsonBody<R> = R extends { json(): Promise<infer J> } ? J : never;
 
 /**
- * API が 401 UNAUTHENTICATED を返したときに window へ送るイベント（004）。
- * 認証の状態を持つ AuthGate が受けて、状態を取り直し、サインインの画面に戻す
+ * API が 401 UNAUTHENTICATED か 401 LOCKED（施錠中。008）を返したときに window へ送るイベント。
+ * 認証の状態を持つ AuthGate が受けて、状態を取り直し、解錠の画面に戻す
  */
 export const UNAUTHENTICATED_EVENT = "trebuchet:unauthenticated";
 
@@ -42,7 +42,7 @@ export async function unwrap<R extends { ok: boolean; status: number; json(): Pr
   const parsed = ErrorResponse.safeParse(body);
   if (parsed.success) {
     const { code, message, details } = parsed.data.error;
-    if (res.status === 401 && code === "UNAUTHENTICATED") {
+    if (res.status === 401 && (code === "UNAUTHENTICATED" || code === "LOCKED")) {
       window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
     }
     throw new ApiError(res.status, code, message, details);

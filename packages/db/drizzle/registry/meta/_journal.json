@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1792328884611,
+      "when": 1793424888077,
       "tag": "0000_init",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1792503102498,
-      "tag": "0001_auth_backup",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1792503102978,
-      "tag": "0002_auth_backup_integrity",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1792935452175,
-      "tag": "0003_ai_settings",
       "breakpoints": true
     }
   ]

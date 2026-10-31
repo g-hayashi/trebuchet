@@ -1,9 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import type {
-  BackupInspection,
-  BackupPassphraseInput,
-  BackupSettingsInput,
-} from "@trebuchet/schema";
+import type { BackupInspection, BackupSettingsInput } from "@trebuchet/schema";
 import { uploadForm } from "@/features/imports/upload";
 import { api, unwrap } from "@/lib/api";
 
@@ -36,11 +32,8 @@ export const backupRunsQuery = () =>
 export const saveBackupSettings = async (json: BackupSettingsInput) =>
   unwrap(await backup.settings.$put({ json }));
 
-export const changeBackupPassphrase = async (json: BackupPassphraseInput) =>
-  unwrap(await backup.passphrase.$put({ json }));
-
 export const runBackup = async () => unwrap(await backup.run.$post());
 
-/** バックアップのファイルの検査（FR-024）。ファイルはメモリだけで扱われ、帳簿は変わらない */
-export const inspectBackup = async (input: { file: File; passphrase: string }) =>
+/** バックアップのファイルの検査（FR-024）。解錠中の鍵で復号する（パスフレーズはない）。ファイルはメモリだけで扱われ、帳簿は変わらない */
+export const inspectBackup = async (input: { file: File }) =>
   uploadForm<BackupInspection>("/api/backup/inspect", input);

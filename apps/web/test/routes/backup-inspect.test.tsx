@@ -38,24 +38,24 @@ function open(inspect: Parameters<typeof mockApi>[0][string]) {
   return calls;
 }
 
-async function submit(passphrase = "correct horse battery staple") {
+async function submit() {
   const file = new File(["bytes"], "trebuchet-9f3c2b1a-20261020.tbk", {
     type: "application/octet-stream",
   });
   await userEvent.upload(await screen.findByLabelText("バックアップのファイル"), file);
-  await userEvent.type(screen.getByLabelText("バックアップのパスフレーズ"), passphrase);
   await userEvent.click(screen.getByRole("button", { name: "検査" }));
 }
 
-describe("バックアップの検査", () => {
-  it("ファイルとパスフレーズを送り、要約を表示する", async () => {
+describe("バックアップの検査（008 の D9: 解錠中の鍵で検査する。パスフレーズの入力はない）", () => {
+  it("ファイルだけを送り、要約を表示する。パスフレーズの欄はない", async () => {
     const calls = open(() => ok(inspection));
+    expect(await screen.findByLabelText("バックアップのファイル")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/パスフレーズ/)).not.toBeInTheDocument();
     await submit();
     expect(await screen.findByText("事業 A")).toBeInTheDocument();
     const sent = calls.find((c) => c.path === "/api/backup/inspect");
     expect(formFields(sent?.form)).toEqual({
       file: { name: "trebuchet-9f3c2b1a-20261020.tbk", type: "application/octet-stream", size: 5 },
-      passphrase: "correct horse battery staple",
     });
     const summary = screen.getByRole("region", { name: "検査の結果" });
     expect(summary).toHaveTextContent("9f3c2b1a-1111-4222-8333-444455556666");
@@ -71,15 +71,16 @@ describe("バックアップの検査", () => {
     const steps = await screen.findByRole("region", { name: "復元の手順" });
     expect(steps).toHaveTextContent("server を止める");
     expect(steps).toHaveTextContent("pnpm restore -- --file <path> [--data-dir <dir>]");
+    expect(steps).toHaveTextContent("回復キー");
     expect(steps).toHaveTextContent("パスキーを登録");
     expect(screen.queryByRole("button", { name: /復元/ })).not.toBeInTheDocument();
   });
 
-  it("パスフレーズが違う・ファイルが壊れているときは、区別せず同じ文言を出す。手順は出さない", async () => {
+  it("別の帳簿のバックアップ・ファイルが壊れているときは、区別せず同じ文言を出す。手順は出さない", async () => {
     open(() => apiError(422, "BACKUP_INVALID", "x"));
     await submit();
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "パスフレーズが違うか、ファイルが壊れています",
+      "このアプリのバックアップではないか、ファイルが壊れています",
     );
     expect(screen.queryByRole("region", { name: "復元の手順" })).not.toBeInTheDocument();
   });
@@ -98,11 +99,11 @@ describe("バックアップの検査", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("200 MB まで");
   });
 
-  it("ファイルかパスフレーズが空の間は検査できない。失敗の後に直して再度検査すると、前の失敗は消える", async () => {
+  it("ファイルが空の間は検査できない。失敗の後に直して再度検査すると、前の失敗は消える", async () => {
     let n = 0;
     open(() => (n++ === 0 ? apiError(422, "BACKUP_INVALID", "x") : ok(inspection)));
     expect(await screen.findByRole("button", { name: "検査" })).toBeDisabled();
-    await submit("wrong horse battery staple");
+    await submit();
     await screen.findByRole("alert");
     await userEvent.click(screen.getByRole("button", { name: "検査" }));
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());

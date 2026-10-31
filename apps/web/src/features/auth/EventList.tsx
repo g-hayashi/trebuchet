@@ -15,15 +15,15 @@ import { eventsQuery } from "./api";
 
 const KIND_LABELS: Record<AuthEventKind, string> = {
   register: "登録",
-  sign_in: "サインイン",
-  sign_in_failed: "サインインの失敗",
-  recovery_used: "回復コードの使用",
-  recovery_failed: "回復コードの失敗",
-  recovery_regenerated: "回復コードの作り直し",
+  sign_in: "解錠",
+  sign_in_failed: "解錠の失敗",
+  recovery_used: "回復キーでの解錠",
+  recovery_failed: "回復キーの失敗",
+  recovery_regenerated: "回復キーの作り直し",
   passkey_renamed: "パスキーの名前の変更",
   passkey_deleted: "パスキーの削除",
   session_revoked: "セッションの失効",
-  sign_out: "サインアウト",
+  sign_out: "施錠",
   pairing_issued: "ペアリングの発行",
   pairing_used: "ペアリングの使用",
   remote_settings_changed: "リモートの設定の変更",
@@ -36,7 +36,7 @@ export function EventList() {
     <Card>
       <CardHeader>
         <CardTitle>認証の記録</CardTitle>
-        <CardDescription>登録・サインイン・回復などの記録です（新しい順）。</CardDescription>
+        <CardDescription>登録・解錠・施錠・回復などの記録です（新しい順）。</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <ApiErrorMessage error={error} />

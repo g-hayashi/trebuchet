@@ -22,7 +22,6 @@ describe("shouldRunAutoBackup", () => {
 describe("backupAlert", () => {
   const base = {
     configured: true,
-    passphraseAvailable: true,
     lastCheck: ago(HOUR),
     lastRun: { status: "succeeded" as const },
     now: NOW,
@@ -33,22 +32,10 @@ describe("backupAlert", () => {
       backupAlert({
         ...base,
         configured: false,
-        passphraseAvailable: false,
         lastCheck: ago(100 * HOUR),
         lastRun: { status: "failed" },
       }),
     ).toBeNull();
-  });
-
-  it("パスフレーズが使えないと PASSPHRASE_NEEDED（最優先）", () => {
-    expect(
-      backupAlert({
-        ...base,
-        passphraseAvailable: false,
-        lastCheck: ago(100 * HOUR),
-        lastRun: { status: "failed" },
-      }),
-    ).toEqual({ reason: "PASSPHRASE_NEEDED" });
   });
 
   it("48時間の境界", () => {

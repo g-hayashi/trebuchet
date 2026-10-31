@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import type { SecretStore } from "@trebuchet/domain";
 
-/** バックアップのパスフレーズをキーチェーンに入れるときの名前（service）。account は `ACCOUNT` */
-export const BACKUP_PASSPHRASE_KEY = "trebuchet-backup";
+// キーチェーンは外部の AI の API キー（006）に使う。バックアップのパスフレーズは持たない（008 の D9）。
+// account は `ACCOUNT`、service は呼び出し側の名前
 
 const ACCOUNT = "trebuchet";
 const SECURITY = "/usr/bin/security";

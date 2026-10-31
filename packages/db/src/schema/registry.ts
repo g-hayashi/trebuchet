@@ -1,7 +1,10 @@
 import { sql } from "drizzle-orm";
-import { blob, check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-/** data/registry.sqlite。事業体の一覧のみ（帳簿データは持たない） */
+/**
+ * data/registry.sqlite（DK から作る鍵で暗号化。008 の D1・D2）。事業体の一覧と端末の設定
+ * （帳簿データは持たない）。認証の表は data/auth.sqlite（`schema/auth.ts`）
+ */
 export const entities = sqliteTable(
   "entities",
   {
@@ -14,91 +17,6 @@ export const entities = sqliteTable(
   (t) => [check("entities_kind", sql`${t.kind} IN ('individual', 'corporation')`)],
 );
 
-/** パスキー（WebAuthn の認証器）。物理削除。data-model §1.1 */
-export const passkeys = sqliteTable(
-  "passkeys",
-  {
-    id: text("id").primaryKey(),
-    publicKey: blob("public_key", { mode: "buffer" }).notNull(),
-    counter: integer("counter").notNull(),
-    rpId: text("rp_id").notNull(),
-    transports: text("transports"),
-    name: text("name").notNull(),
-    createdAt: text("created_at").notNull(),
-    lastUsedAt: text("last_used_at"),
-  },
-  (t) => [
-    check("passkeys_counter", sql`${t.counter} >= 0`),
-    check("passkeys_name", sql`length(${t.name}) > 0`),
-  ],
-);
-
-/**
- * 回復コード（ハッシュのみ）。data-model §1.2
- * 「有効な行は高々1つ」の部分 UNIQUE インデックスは手書きの SQL（0002）で足す
- */
-export const recoveryCodes = sqliteTable("recovery_codes", {
-  id: text("id").primaryKey(),
-  codeHash: text("code_hash").notNull(),
-  createdAt: text("created_at").notNull(),
-  usedAt: text("used_at"),
-  revokedAt: text("revoked_at"),
-});
-
-/** セッション。passkey_id は外部キーにしない。data-model §1.3 */
-export const sessions = sqliteTable(
-  "sessions",
-  {
-    id: text("id").primaryKey(),
-    tokenHash: text("token_hash").notNull().unique(),
-    kind: text("kind", { enum: ["normal", "recovery"] }).notNull(),
-    rpId: text("rp_id").notNull(),
-    passkeyId: text("passkey_id"),
-    userAgent: text("user_agent"),
-    createdAt: text("created_at").notNull(),
-    lastSeenAt: text("last_seen_at").notNull(),
-    revokedAt: text("revoked_at"),
-  },
-  (t) => [check("sessions_kind", sql`${t.kind} IN ('normal', 'recovery')`)],
-);
-
-/** 認証の監査ログ。追記のみ（トリガーは 0002）。data-model §1.4 */
-export const authEvents = sqliteTable(
-  "auth_events",
-  {
-    id: text("id").primaryKey(),
-    occurredAt: text("occurred_at").notNull(),
-    kind: text("kind", {
-      enum: [
-        "register",
-        "sign_in",
-        "sign_in_failed",
-        "recovery_used",
-        "recovery_failed",
-        "recovery_regenerated",
-        "passkey_renamed",
-        "passkey_deleted",
-        "session_revoked",
-        "sign_out",
-        "pairing_issued",
-        "pairing_used",
-        "remote_settings_changed",
-      ],
-    }).notNull(),
-    rpId: text("rp_id"),
-    passkeyId: text("passkey_id"),
-    sessionId: text("session_id"),
-    userAgent: text("user_agent"),
-    detail: text("detail"),
-  },
-  (t) => [
-    check(
-      "auth_events_kind",
-      sql`${t.kind} IN ('register', 'sign_in', 'sign_in_failed', 'recovery_used', 'recovery_failed', 'recovery_regenerated', 'passkey_renamed', 'passkey_deleted', 'session_revoked', 'sign_out', 'pairing_issued', 'pairing_used', 'remote_settings_changed')`,
-    ),
-  ],
-);
-
 /** 端末に結びつく設定（バックアップに含めない）。data-model §1.5 */
 export const appSettings = sqliteTable(
   "app_settings",
@@ -109,7 +27,6 @@ export const appSettings = sqliteTable(
         "remote_enabled",
         "remote_host",
         "backup_folder",
-        "backup_passphrase_set",
         "backup_force_write",
         "recovery_code_acknowledged",
       ],
@@ -120,7 +37,7 @@ export const appSettings = sqliteTable(
   (t) => [
     check(
       "app_settings_key",
-      sql`${t.key} IN ('mac_id', 'remote_enabled', 'remote_host', 'backup_folder', 'backup_passphrase_set', 'backup_force_write', 'recovery_code_acknowledged')`,
+      sql`${t.key} IN ('mac_id', 'remote_enabled', 'remote_host', 'backup_folder', 'backup_force_write', 'recovery_code_acknowledged')`,
     ),
   ],
 );

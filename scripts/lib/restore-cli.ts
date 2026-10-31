@@ -1,6 +1,7 @@
 /**
  * `pnpm restore -- --file <backup.tbk> [--data-dir <dir>] [--yes]` の本体（contracts/cli.md「復元のコマンド」）。
- * 端末の入力と server の確認は deps で差し替えられる（テスト用）。パスフレーズは引数・環境変数では受け取らない。
+ * 端末の入力と server の確認は deps で差し替えられる（テスト用）。回復キーは引数・環境変数では受け取らない
+ * （標準入力から読む。引数は `ps` に出る）。
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む。
  */
 import { existsSync } from "node:fs";
@@ -27,8 +28,8 @@ export type RestoreCliDeps = {
   defaultDataDir: string;
   /** 平文の写しの作業場所（`.tmp/`） */
   tmpRoot: string;
-  /** 端末から、エコーなしでパスフレーズを 1 行読む */
-  readPassphrase: () => Promise<string>;
+  /** 標準入力から回復キーを 1 行読む（端末ならエコーなし） */
+  readRecoveryKey: () => Promise<string>;
   /** 端末で y/N を尋ねる */
   confirm: (question: string) => Promise<boolean>;
   isServerRunning: () => Promise<boolean>;
@@ -54,7 +55,7 @@ export function isServerRunning(port: number = SERVER_PORT, timeoutMs = 1000): P
 const USAGE = "使い方: pnpm restore -- --file <backup.tbk> [--data-dir <dir>] [--yes]";
 
 const MESSAGES: Record<RestoreErrorCode, string> = {
-  INVALID: "パスフレーズが違うか、ファイルが壊れています",
+  INVALID: "回復キーが違うか、ファイルが壊れています",
   VERSION_MISMATCH:
     "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください",
   CANCELLED: "取り消しました",
@@ -126,18 +127,18 @@ export async function runRestoreCli(argv: string[], deps: RestoreCliDeps): Promi
     return EXIT_USAGE;
   }
 
-  let passphrase: string;
+  let recoveryKey: string;
   try {
-    passphrase = await deps.readPassphrase();
+    recoveryKey = await deps.readRecoveryKey();
   } catch {
-    deps.stderr("パスフレーズは端末から入力してください");
+    deps.stderr("回復キーを標準入力から入力してください");
     return EXIT_USAGE;
   }
 
   const restore = deps.restore ?? restoreBackup;
   const result = await restore({
     file,
-    passphrase,
+    recoveryKey,
     dataDir,
     tmpRoot: deps.tmpRoot,
     confirm: async (summary) => {
@@ -156,6 +157,6 @@ export async function runRestoreCli(argv: string[], deps: RestoreCliDeps): Promi
   if (result.value.previousDataDir !== null) {
     deps.stdout(`元のデータ場所: ${result.value.previousDataDir}`);
   }
-  deps.stdout("復元しました。アプリを起動し、パスキーを登録してください");
+  deps.stdout("復元しました。アプリを起動し、回復キーで解錠して、新しいパスキーを登録してください");
   return EXIT_OK;
 }

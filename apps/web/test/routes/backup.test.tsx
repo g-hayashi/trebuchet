@@ -62,37 +62,26 @@ function open(
   return calls;
 }
 
-const settingsForm = () => screen.findByRole("form", { name: "置き場所とパスフレーズの設定" });
-const changeForm = () => screen.findByRole("form", { name: "パスフレーズの変更" });
+const settingsForm = () => screen.findByRole("form", { name: "置き場所の設定" });
 
-describe("バックアップの設定", () => {
-  it("同意のチェックを入れるまで保存できない", async () => {
+describe("バックアップの設定（008 の D9: パスフレーズ・同意はない）", () => {
+  it("置き場所の欄だけがあり、パスフレーズ・同意・パスフレーズの変更はない", async () => {
     open({}, status({ configured: false, folder: null }));
     const form = within(await settingsForm());
-    const save = form.getByRole("button", { name: "保存" });
-    expect(save).toBeDisabled();
-    await userEvent.click(form.getByLabelText(/パスフレーズを失うと復元できない/));
-    expect(save).toBeEnabled();
+    expect(form.getByLabelText("置き場所")).toBeInTheDocument();
+    expect(form.getByRole("button", { name: "保存" })).toBeEnabled();
+    expect(screen.queryByLabelText(/パスフレーズ/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "パスフレーズの変更" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/パスフレーズ/)).not.toBeInTheDocument();
   });
 
-  it("12文字未満はその場で警告し、12文字になると消える", async () => {
+  it("鍵は端末の鍵から作ること、新しい Mac では回復キーで復元することを案内する", async () => {
     open({}, status({ configured: false, folder: null }));
-    const form = within(await settingsForm());
-    await userEvent.type(form.getByLabelText("パスフレーズ"), "short-pass1");
-    expect(form.getByText(/12文字以上/)).toBeInTheDocument();
-    await userEvent.type(form.getByLabelText("パスフレーズ"), "2");
-    expect(form.queryByText(/12文字以上にしてください/)).not.toBeInTheDocument();
+    expect((await screen.findAllByText(/回復キー/)).length).toBeGreaterThan(0);
   });
 
-  it("確認の入力が違うとその場で示す", async () => {
-    open({}, status({ configured: false, folder: null }));
-    const form = within(await settingsForm());
-    await userEvent.type(form.getByLabelText("パスフレーズ"), "correct-horse-battery");
-    await userEvent.type(form.getByLabelText("パスフレーズ（確認）"), "correct-horse");
-    expect(form.getByText(/一致しません/)).toBeInTheDocument();
-  });
-
-  it("保存で PUT /backup/settings に本文を送り、入力を消す", async () => {
+  it("保存で PUT /backup/settings に置き場所だけを送る", async () => {
     const calls = open(
       {
         "PUT /api/backup/settings": () => ok({ runId: "r9" }),
@@ -101,38 +90,20 @@ describe("バックアップの設定", () => {
     );
     const form = within(await settingsForm());
     await userEvent.type(form.getByLabelText("置き場所"), "/Users/me/backup");
-    await userEvent.type(form.getByLabelText("パスフレーズ"), "correct-horse-battery");
-    await userEvent.type(form.getByLabelText("パスフレーズ（確認）"), "correct-horse-battery");
-    await userEvent.click(form.getByLabelText(/パスフレーズを失うと復元できない/));
     await userEvent.click(form.getByRole("button", { name: "保存" }));
 
     await waitFor(() => expect(callsTo(calls, "PUT", "/api/backup/settings")).toHaveLength(1));
     expect(callsTo(calls, "PUT", "/api/backup/settings")[0]?.body).toEqual({
       folder: "/Users/me/backup",
-      passphrase: "correct-horse-battery",
-      passphraseConfirm: "correct-horse-battery",
-      acknowledged: true,
     });
-    await waitFor(() => expect(form.getByLabelText("パスフレーズ")).toHaveValue(""));
+    expect(await form.findByText(/保存しました/)).toBeInTheDocument();
   });
 
-  it("サーバーの拒否（置き場所がない・短い・不一致）の文言を表示する", async () => {
-    const replies = [
-      apiError(422, "BACKUP_FOLDER_NOT_FOUND", "x"),
-      apiError(422, "PASSPHRASE_TOO_SHORT", "x"),
-      apiError(422, "PASSPHRASE_MISMATCH", "x"),
-    ];
-    open({ "PUT /api/backup/settings": () => replies.shift() ?? ok({ runId: null }) });
+  it("サーバーの拒否（置き場所がない）の文言を表示する", async () => {
+    open({ "PUT /api/backup/settings": () => apiError(422, "BACKUP_FOLDER_NOT_FOUND", "x") });
     const form = within(await settingsForm());
-    await userEvent.click(form.getByLabelText(/パスフレーズを失うと復元できない/));
-    const save = form.getByRole("button", { name: "保存" });
-
-    await userEvent.click(save);
+    await userEvent.click(form.getByRole("button", { name: "保存" }));
     expect(await form.findByText(/置き場所のフォルダが見つからない/)).toBeInTheDocument();
-    await userEvent.click(save);
-    expect(await form.findByText(/パスフレーズは12文字以上/)).toBeInTheDocument();
-    await userEvent.click(save);
-    expect(await form.findByText(/確認用の入力が一致しません/)).toBeInTheDocument();
   });
 });
 
@@ -148,10 +119,9 @@ describe("今すぐバックアップ", () => {
     expect(await screen.findByRole("button", { name: /今すぐバックアップ/ })).toBeDisabled();
   });
 
-  it("未設定のときは押せず、パスフレーズの変更も出ない", async () => {
+  it("未設定のときは押せない", async () => {
     open({}, status({ configured: false, folder: null }));
     expect(await screen.findByRole("button", { name: /今すぐバックアップ/ })).toBeDisabled();
-    expect(screen.queryByRole("form", { name: "パスフレーズの変更" })).not.toBeInTheDocument();
   });
 
   it("実行中の再要求（BACKUP_RUNNING）の文言を表示する", async () => {
@@ -197,7 +167,7 @@ describe("実行の履歴", () => {
     open(
       {},
       status(),
-      (["FOLDER_NOT_FOUND", "WRITE_FAILED", "VERIFY_FAILED", "PASSPHRASE_MISSING"] as const).map(
+      (["FOLDER_NOT_FOUND", "WRITE_FAILED", "VERIFY_FAILED", "SNAPSHOT_FAILED"] as const).map(
         (code, i) => run({ id: `f${i}`, status: "failed", errorCode: code }),
       ),
     );
@@ -206,59 +176,7 @@ describe("実行の履歴", () => {
     expect(text).toContain("置き場所のフォルダが見つかりません");
     expect(text).toContain("書き込みに失敗しました");
     expect(text).toContain("書いたファイルを読み戻せませんでした");
-    expect(text).toContain("パスフレーズが見つかりません");
-  });
-});
-
-describe("パスフレーズの変更", () => {
-  const fill = async (form: ReturnType<typeof within>) => {
-    await userEvent.type(form.getByLabelText("新しいパスフレーズ"), "new-correct-horse");
-    await userEvent.type(form.getByLabelText("新しいパスフレーズ（確認）"), "new-correct-horse");
-  };
-
-  it("今のパスフレーズを求め、過去のファイルは古いままと示す", async () => {
-    const calls = open({ "PUT /api/backup/passphrase": () => ok({ runId: "r5" }) });
-    const form = within(await changeForm());
-    expect(form.getByText(/以前のバックアップは古いパスフレーズのままです/)).toBeInTheDocument();
-    await userEvent.type(form.getByLabelText("今のパスフレーズ"), "old-correct-horse");
-    await fill(form);
-    await userEvent.click(form.getByRole("button", { name: "パスフレーズを変更" }));
-
-    await waitFor(() => expect(callsTo(calls, "PUT", "/api/backup/passphrase")).toHaveLength(1));
-    expect(callsTo(calls, "PUT", "/api/backup/passphrase")[0]?.body).toEqual({
-      current: "old-correct-horse",
-      passphrase: "new-correct-horse",
-      passphraseConfirm: "new-correct-horse",
-    });
-  });
-
-  it("今のパスフレーズが違うときの文言", async () => {
-    open({ "PUT /api/backup/passphrase": () => apiError(422, "PASSPHRASE_WRONG", "x") });
-    const form = within(await changeForm());
-    await userEvent.type(form.getByLabelText("今のパスフレーズ"), "wrong-passphrase");
-    await fill(form);
-    await userEvent.click(form.getByRole("button", { name: "パスフレーズを変更" }));
-    expect(await form.findByText(/今のパスフレーズが違います/)).toBeInTheDocument();
-  });
-
-  it("PASSPHRASE_NEEDED のときは今のパスフレーズの欄がなく、再入力を求め、current を送らない", async () => {
-    const calls = open(
-      { "PUT /api/backup/passphrase": () => ok({ runId: "r6" }) },
-      status({ alert: { reason: "PASSPHRASE_NEEDED" } }),
-    );
-    const form = within(await changeForm());
-    expect(form.queryByLabelText("今のパスフレーズ")).not.toBeInTheDocument();
-    expect(form.getByText(/パスフレーズを入力し直して/)).toBeInTheDocument();
-    await fill(form);
-    await userEvent.click(form.getByRole("button", { name: "パスフレーズを変更" }));
-
-    await waitFor(() => expect(callsTo(calls, "PUT", "/api/backup/passphrase")).toHaveLength(1));
-    const body = callsTo(calls, "PUT", "/api/backup/passphrase")[0]?.body;
-    expect(body).toEqual({
-      passphrase: "new-correct-horse",
-      passphraseConfirm: "new-correct-horse",
-    });
-    expect(body).not.toHaveProperty("current");
+    expect(text).toContain("帳簿の写しを作れませんでした");
   });
 });
 
@@ -297,7 +215,6 @@ describe("全画面の上部の知らせ", () => {
   it.each([
     ["STALE", /バックアップが成功していません/, "/"],
     ["LAST_RUN_FAILED", /直近のバックアップに失敗しました/, "/other"],
-    ["PASSPHRASE_NEEDED", /パスフレーズが使えません/, "/other"],
   ] as const)(
     "%s の知らせを、どの画面でも出し、設定へのリンクを付ける",
     async (reason, text, url) => {

@@ -1,19 +1,12 @@
 import type { CDPSession, Page } from "@playwright/test";
 
-/** `WebAuthn.getCredentials` が返し、`WebAuthn.addCredential` に渡せる形（CDP の Credential） */
-export type StoredCredential = {
-  credentialId: string;
-  isResidentCredential: boolean;
-  rpId?: string;
-  privateKey: string;
-  userHandle?: string;
-  signCount: number;
-};
-
 /**
- * Chromium の仮想の認証器（R15）。パスキーの登録とサインインを、ブラウザの確認の画面なしで通す。
- * 認証器はページの CDP セッションに結びつく。テストごとに新しいページになるので、
- * テストをまたぐときは `credentials()` で取り出して、次のテストの `addCredentials()` で戻す
+ * Chromium の仮想の認証器（R15）。パスキーの登録と解錠を、ブラウザの確認の画面なしで通す。
+ * PRF 拡張に対応する（`hasPrf: true`）。この PRF の出力で、データ鍵を包んだものを開く（008）。
+ *
+ * 認証器はページの CDP セッションに結びつく。テストごとに新しいページ（空の認証器）になる。
+ * パスキーを書き出して次のテストで戻すやり方は使えない（`addCredential` で戻したパスキーは PRF の秘密を
+ * 持たず、PRF の出力が変わる）。テストの間は回復キーを引き継ぐ（`helpers/auth.ts` の `enterVault`）
  */
 export class VirtualAuthenticator {
   private readonly cdp: CDPSession;
@@ -37,6 +30,7 @@ export class VirtualAuthenticator {
         transport: "internal",
         hasResidentKey: true,
         hasUserVerification: true,
+        hasPrf: true,
         isUserVerified: true,
         automaticPresenceSimulation: true,
       },
@@ -44,25 +38,16 @@ export class VirtualAuthenticator {
     return authenticatorId;
   }
 
-  /** いまの認証器が持つパスキー（署名回数を含む。サインインのたびに増える） */
-  async credentials(): Promise<StoredCredential[]> {
+  /** いまの認証器が持つパスキーの数 */
+  async credentialCount(): Promise<number> {
     const { credentials } = await this.cdp.send("WebAuthn.getCredentials", {
       authenticatorId: this.authenticatorId,
     });
-    return credentials;
-  }
-
-  async addCredentials(credentials: StoredCredential[]): Promise<void> {
-    for (const credential of credentials) {
-      await this.cdp.send("WebAuthn.addCredential", {
-        authenticatorId: this.authenticatorId,
-        credential,
-      });
-    }
+    return credentials.length;
   }
 
   /**
-   * 空の認証器に取り替える（別の端末を模す）。回復コードでの登録は、サーバーが既存のパスキーを
+   * 空の認証器に取り替える（別の端末を模す）。回復キーでの登録は、server が既存のパスキーを
    * excludeCredentials に入れるので、同じ認証器のままでは登録が InvalidStateError で失敗する
    */
   async replace(): Promise<void> {

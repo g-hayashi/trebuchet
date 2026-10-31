@@ -5,27 +5,26 @@ import {
   type AuthEventKind,
   type AuthStore,
   isSessionActive,
+  type KeyWrap,
   type NewAuthEvent,
   type NewPasskey,
   type NewSession,
   type Passkey,
   type Session,
+  type WrappedKey,
 } from "@trebuchet/domain";
-import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { rowidOf } from "./internal.ts";
-import {
-  appSettings,
-  authEvents,
-  pairingTokens,
-  passkeys,
-  recoveryCodes,
-  sessions,
-} from "./schema/registry.ts";
-import type { RegistryDb } from "./tenant-store.ts";
+import { authEvents, keyWraps, passkeys, sessions } from "./schema/auth.ts";
+import { appSettings, pairingTokens } from "./schema/registry.ts";
+import type { AuthDb, RegistryDb } from "./tenant-store.ts";
 
 type PasskeyRow = typeof passkeys.$inferSelect;
+type KeyWrapRow = typeof keyWraps.$inferSelect;
 type SessionRow = typeof sessions.$inferSelect;
 type EventRow = typeof authEvents.$inferSelect;
+/** auth.sqlite、またはそのトランザクション */
+type AuthConn = Pick<AuthDb, "select" | "insert" | "delete">;
 
 function toPasskey(r: PasskeyRow): Passkey {
   return {
@@ -35,9 +34,70 @@ function toPasskey(r: PasskeyRow): Passkey {
     rpId: r.rpId,
     transports: r.transports === null ? null : (JSON.parse(r.transports) as string[]),
     name: r.name,
+    prfSalt: new Uint8Array(r.prfSalt),
     createdAt: r.createdAt,
     lastUsedAt: r.lastUsedAt,
   };
+}
+
+function toKeyWrap(r: KeyWrapRow): KeyWrap {
+  return {
+    id: r.id,
+    kind: r.kind,
+    credentialId: r.credentialId,
+    salt: new Uint8Array(r.salt),
+    iv: new Uint8Array(r.iv),
+    tag: new Uint8Array(r.tag),
+    wrapped: new Uint8Array(r.wrapped),
+    createdAt: r.createdAt,
+  };
+}
+
+function wrapRow(
+  kind: KeyWrap["kind"],
+  credentialId: string | null,
+  w: WrappedKey,
+  createdAt: string,
+): KeyWrapRow {
+  return {
+    id: randomUUID(),
+    kind,
+    credentialId,
+    salt: Buffer.from(w.salt),
+    iv: Buffer.from(w.iv),
+    tag: Buffer.from(w.tag),
+    wrapped: Buffer.from(w.wrapped),
+    createdAt,
+  };
+}
+
+function hasRecoveryWrap(conn: AuthConn): boolean {
+  return (
+    conn.select({ id: keyWraps.id }).from(keyWraps).where(eq(keyWraps.kind, "recovery")).get() !==
+    undefined
+  );
+}
+
+/** パスキーとその包みを入れる（呼び出し側のトランザクションの中で） */
+function insertPasskeyWithWrap(conn: AuthConn, p: NewPasskey, w: WrappedKey): void {
+  conn
+    .insert(passkeys)
+    .values({
+      id: p.id,
+      publicKey: Buffer.from(p.publicKey),
+      counter: p.counter,
+      rpId: p.rpId,
+      transports: p.transports === null ? null : JSON.stringify(p.transports),
+      name: p.name,
+      prfSalt: Buffer.from(p.prfSalt),
+      createdAt: p.createdAt,
+      lastUsedAt: null,
+    })
+    .run();
+  conn
+    .insert(keyWraps)
+    .values(wrapRow("passkey", p.id, w, p.createdAt))
+    .run();
 }
 
 function toSession(r: SessionRow): Session {
@@ -71,14 +131,17 @@ function toEvent(r: EventRow): AuthEvent {
 const newestFirst = [desc(authEvents.occurredAt), desc(rowidOf(authEvents))] as const;
 
 /**
- * AuthStore の Drizzle（better-sqlite3）による実装。registry の DB を使う。
- * better-sqlite3 は同期なので、各メソッドは同期に実行して Promise で返す
+ * AuthStore の Drizzle（better-sqlite3-multiple-ciphers）による実装。パスキー・包み・セッション・記録は
+ * auth.sqlite（施錠中も使える）、ペアリングのトークンと app_settings は registry（`registry()` を呼ぶたびに
+ * 開くので、施錠中は VaultLockedError）。ドライバーは同期なので、各メソッドは同期に実行して Promise で返す
  */
 export class DrizzleAuthStore implements AuthStore {
-  private readonly db: RegistryDb;
+  private readonly db: AuthDb;
+  private readonly registry: () => RegistryDb;
 
-  constructor(db: RegistryDb) {
+  constructor(db: AuthDb, registry: () => RegistryDb) {
     this.db = db;
+    this.registry = registry;
   }
 
   // パスキー
@@ -97,57 +160,71 @@ export class DrizzleAuthStore implements AuthStore {
     return row ? toPasskey(row) : undefined;
   }
 
-  async addPasskey(p: NewPasskey): Promise<void> {
-    this.db
-      .insert(passkeys)
-      .values({
-        id: p.id,
-        publicKey: Buffer.from(p.publicKey),
-        counter: p.counter,
-        rpId: p.rpId,
-        transports: p.transports === null ? null : JSON.stringify(p.transports),
-        name: p.name,
-        createdAt: p.createdAt,
-        lastUsedAt: null,
-      })
-      .run();
+  /** 設定前なら失敗。パスキーと包みを 1 トランザクションで入れる（INV-53） */
+  async addPasskey(p: NewPasskey, wrap: WrappedKey): Promise<void> {
+    this.db.transaction((tx) => {
+      if (!hasRecoveryWrap(tx)) throw new Error("vault is not initialized");
+      insertPasskeyWithWrap(tx, p, wrap);
+    });
   }
 
   async renamePasskey(id: string, name: string): Promise<void> {
     this.db.update(passkeys).set({ name }).where(eq(passkeys.id, id)).run();
   }
 
+  /** 包みは外部キー（ON DELETE CASCADE）で同時に消える。最後の 1 本は消さない（INV-53） */
   async deletePasskey(id: string): Promise<void> {
-    this.db.delete(passkeys).where(eq(passkeys.id, id)).run();
+    this.db.transaction((tx) => {
+      const exists = tx.select({ id: passkeys.id }).from(passkeys).where(eq(passkeys.id, id)).get();
+      if (exists === undefined) return;
+      const total = tx.select({ n: count() }).from(passkeys).get()?.n ?? 0;
+      if (total <= 1) throw new Error("cannot delete the last passkey");
+      tx.delete(passkeys).where(eq(passkeys.id, id)).run();
+    });
   }
 
   async recordPasskeyUse(id: string, counter: number, at: string): Promise<void> {
     this.db.update(passkeys).set({ counter, lastUsedAt: at }).where(eq(passkeys.id, id)).run();
   }
 
-  // 回復コード
+  // 鍵の包み（008 の D1・D2）
 
-  async getActiveRecoveryCode(): Promise<{ id: string; codeHash: string } | undefined> {
-    return this.db
-      .select({ id: recoveryCodes.id, codeHash: recoveryCodes.codeHash })
-      .from(recoveryCodes)
-      .where(and(isNull(recoveryCodes.usedAt), isNull(recoveryCodes.revokedAt)))
-      .get();
-  }
-
-  /** 古い有効な行を閉じてから新しい行を入れる（部分 UNIQUE インデックスの順序）。1 トランザクション */
-  async replaceRecoveryCode(
-    newCodeHash: string,
-    now: string,
-    closeAs: "used" | "revoked",
+  /** 設定済み（recovery の包みがある）なら失敗。3 行を 1 トランザクションで入れる */
+  async initializeVault(
+    passkey: NewPasskey,
+    passkeyWrap: WrappedKey,
+    recoveryWrap: WrappedKey,
   ): Promise<void> {
     this.db.transaction((tx) => {
-      tx.update(recoveryCodes)
-        .set(closeAs === "used" ? { usedAt: now } : { revokedAt: now })
-        .where(and(isNull(recoveryCodes.usedAt), isNull(recoveryCodes.revokedAt)))
+      if (hasRecoveryWrap(tx)) throw new Error("vault is already initialized");
+      insertPasskeyWithWrap(tx, passkey, passkeyWrap);
+      tx.insert(keyWraps)
+        .values(wrapRow("recovery", null, recoveryWrap, passkey.createdAt))
         .run();
-      tx.insert(recoveryCodes)
-        .values({ id: randomUUID(), codeHash: newCodeHash, createdAt: now })
+    });
+  }
+
+  async getPasskeyWrap(credentialId: string): Promise<KeyWrap | undefined> {
+    const row = this.db
+      .select()
+      .from(keyWraps)
+      .where(and(eq(keyWraps.kind, "passkey"), eq(keyWraps.credentialId, credentialId)))
+      .get();
+    return row ? toKeyWrap(row) : undefined;
+  }
+
+  async getRecoveryWrap(): Promise<KeyWrap | undefined> {
+    const row = this.db.select().from(keyWraps).where(eq(keyWraps.kind, "recovery")).get();
+    return row ? toKeyWrap(row) : undefined;
+  }
+
+  /** 古い行を消してから新しい行を入れる（部分 UNIQUE の順序）。設定前なら失敗。1 トランザクション */
+  async replaceRecoveryWrap(wrap: WrappedKey, now: string): Promise<void> {
+    this.db.transaction((tx) => {
+      if (!hasRecoveryWrap(tx)) throw new Error("vault is not initialized");
+      tx.delete(keyWraps).where(eq(keyWraps.kind, "recovery")).run();
+      tx.insert(keyWraps)
+        .values(wrapRow("recovery", null, wrap, now))
         .run();
     });
   }
@@ -219,6 +296,10 @@ export class DrizzleAuthStore implements AuthStore {
       .all().length;
   }
 
+  async deleteAllSessions(): Promise<number> {
+    return this.db.delete(sessions).returning({ id: sessions.id }).all().length;
+  }
+
   // 認証の記録（追記のみ）
 
   async appendEvent(e: NewAuthEvent): Promise<void> {
@@ -267,7 +348,7 @@ export class DrizzleAuthStore implements AuthStore {
     now: string;
     expiresAt: string;
   }): Promise<void> {
-    this.db
+    this.registry()
       .insert(pairingTokens)
       .values({
         id: t.id,
@@ -281,7 +362,7 @@ export class DrizzleAuthStore implements AuthStore {
   }
 
   async isPairingTokenValid(tokenHash: string, rpId: string, now: string): Promise<boolean> {
-    const row = this.db
+    const row = this.registry()
       .select({ id: pairingTokens.id })
       .from(pairingTokens)
       .where(
@@ -298,7 +379,7 @@ export class DrizzleAuthStore implements AuthStore {
 
   /** `UPDATE … WHERE used_at IS NULL AND now < expires_at` の結果で単回を保証する */
   async consumePairingToken(tokenHash: string, rpId: string, now: string): Promise<boolean> {
-    const rows = this.db
+    const rows = this.registry()
       .update(pairingTokens)
       .set({ usedAt: now })
       .where(
@@ -315,7 +396,7 @@ export class DrizzleAuthStore implements AuthStore {
   }
 
   async deleteExpiredPairingTokens(before: string): Promise<number> {
-    return this.db
+    return this.registry()
       .delete(pairingTokens)
       .where(lt(pairingTokens.expiresAt, before))
       .returning({ id: pairingTokens.id })
@@ -325,7 +406,7 @@ export class DrizzleAuthStore implements AuthStore {
   // アプリの設定
 
   async getSetting(key: AppSettingKey): Promise<string | undefined> {
-    return this.db
+    return this.registry()
       .select({ value: appSettings.value })
       .from(appSettings)
       .where(eq(appSettings.key, key))
@@ -333,7 +414,7 @@ export class DrizzleAuthStore implements AuthStore {
   }
 
   async setSetting(key: AppSettingKey, value: string, now: string): Promise<void> {
-    this.db
+    this.registry()
       .insert(appSettings)
       .values({ key, value, updatedAt: now })
       .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: now } })

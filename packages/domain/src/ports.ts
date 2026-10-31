@@ -13,12 +13,14 @@ import type {
   AuthEvent,
   AuthEventKind,
   BackupRun,
+  KeyWrap,
   NewAuthEvent,
   NewBackupRun,
   NewPasskey,
   NewSession,
   Passkey,
   Session,
+  WrappedKey,
 } from "./auth/types.ts";
 import type {
   AccountMapping,
@@ -483,20 +485,37 @@ export interface SecretStore {
   delete(key: string): Promise<void>;
 }
 
-/** passkeys・recovery_codes・sessions・auth_events・pairing_tokens・app_settings（registry） */
+/**
+ * passkeys・key_wraps・sessions・auth_events（auth.sqlite）と pairing_tokens・app_settings（registry）。
+ * 包みの規則（INV-53）: 設定済み（recovery の包みがある）なら recovery の包みは 1 つ、passkey の包みは
+ * パスキーと 1 対 1、パスキーは 1 本以上。破る操作は例外を投げ、何も書かない
+ */
 export interface AuthStore {
   // パスキー
   listPasskeys(): Promise<Passkey[]>;
   getPasskey(id: string): Promise<Passkey | undefined>;
-  addPasskey(passkey: NewPasskey): Promise<void>;
+  /** パスキーとその包みを 1 トランザクションで足す。設定前（recovery の包みがない）なら失敗 */
+  addPasskey(passkey: NewPasskey, wrap: WrappedKey): Promise<void>;
   renamePasskey(id: string, name: string): Promise<void>;
+  /** パスキーとその包みを 1 トランザクションで消す。最後の 1 本なら失敗 */
   deletePasskey(id: string): Promise<void>;
   /** counter と last_used_at を更新する */
   recordPasskeyUse(id: string, counter: number, at: string): Promise<void>;
-  // 回復コード（ハッシュは hashToken）
-  getActiveRecoveryCode(): Promise<{ id: string; codeHash: string } | undefined>;
-  /** 古い有効な行を closeAs で閉じて新しい行を追加する（1 トランザクション） */
-  replaceRecoveryCode(newCodeHash: string, now: string, closeAs: "used" | "revoked"): Promise<void>;
+  // 鍵の包み（008 の D1・D2）
+  /**
+   * 初回の設定: 最初のパスキー・その包み・recovery の包みを 1 トランザクションで入れる
+   * （包みの作成日時はパスキーの createdAt）。設定済みなら失敗
+   */
+  initializeVault(
+    passkey: NewPasskey,
+    passkeyWrap: WrappedKey,
+    recoveryWrap: WrappedKey,
+  ): Promise<void>;
+  getPasskeyWrap(credentialId: string): Promise<KeyWrap | undefined>;
+  /** 設定済みかの判定にも使う（行があれば設定済み） */
+  getRecoveryWrap(): Promise<KeyWrap | undefined>;
+  /** recovery の包みを 1 トランザクションで置き換える（回復キーの再発行）。設定前なら失敗 */
+  replaceRecoveryWrap(wrap: WrappedKey, now: string): Promise<void>;
   // セッション
   createSession(session: NewSession): Promise<void>;
   findSessionByTokenHash(tokenHash: string): Promise<Session | undefined>;
@@ -507,11 +526,13 @@ export interface AuthStore {
   listActiveSessions(now: string): Promise<Session[]>;
   /** 失効済みで before より古いものを消す。消した件数を返す */
   deleteStaleSessions(before: string): Promise<number>;
+  /** 全部消す（008 の D3: 起動時と施錠時。施錠中も使える）。消した件数を返す */
+  deleteAllSessions(): Promise<number>;
   // 認証の記録（追記のみ）
   appendEvent(event: NewAuthEvent): Promise<void>;
   /** 新しい順 */
   listEvents(limit: number): Promise<AuthEvent[]>;
-  /** recoveryLocked の入力 */
+  /** since 以降の、kinds の記録（新しい順） */
   listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]>;
   // ペアリングのトークン（ハッシュは hashToken）
   createPairingToken(token: {

@@ -10,7 +10,14 @@ import {
 import { NOW } from "@trebuchet/domain/testing";
 import { DrizzleMasterRepository } from "./master-repository.ts";
 import { DrizzleRegistryRepository } from "./registry-repository.ts";
-import { closeAll, openRegistry, openTenant, TMP_ROOT } from "./tenant-store.ts";
+import {
+  clearDataKey,
+  closeAll,
+  openRegistry,
+  openTenant,
+  setDataKey,
+  TMP_ROOT,
+} from "./tenant-store.ts";
 
 /** テストの「今」の時刻と日付。正本は `packages/domain/test/test-dates.ts` */
 export { NOW, TODAY } from "@trebuchet/domain/testing";
@@ -22,18 +29,26 @@ export type TempDataDir = {
 };
 
 /**
- * `.tmp/<uuid>/` を作り、TREBUCHET_DATA_DIR に設定する。
- * cleanup() で開いている DB を閉じ、ディレクトリを削除して環境変数を戻す。
+ * テスト用の固定の DK（008 の D2）。`setDataKey` は渡したバッファを施錠時に 0 で埋めるので、
+ * 渡すときは `Buffer.from(TEST_DATA_KEY)` の写しにする
+ */
+export const TEST_DATA_KEY: Readonly<Uint8Array> = Buffer.alloc(32, 0x5a);
+
+/**
+ * `.tmp/<uuid>/` を作り、TREBUCHET_DATA_DIR に設定し、テスト用の DK で解錠する。
+ * cleanup() で開いている DB を閉じて施錠し、ディレクトリを削除して環境変数を戻す。
  */
 export function useTempDataDir(prefix = "db"): TempDataDir {
   const previous = process.env.TREBUCHET_DATA_DIR;
   const dir = `${TMP_ROOT}${prefix}-${randomUUIDv7()}`;
   mkdirSync(dir, { recursive: true });
   process.env.TREBUCHET_DATA_DIR = dir;
+  setDataKey(Buffer.from(TEST_DATA_KEY));
   return {
     dir,
     cleanup() {
       closeAll();
+      clearDataKey();
       rmSync(dir, { recursive: true, force: true });
       if (previous === undefined) delete process.env.TREBUCHET_DATA_DIR;
       else process.env.TREBUCHET_DATA_DIR = previous;

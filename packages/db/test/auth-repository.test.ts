@@ -1,17 +1,25 @@
 import { createHash } from "node:crypto";
+import type { WrappedKey } from "@trebuchet/domain";
+import { fc } from "@trebuchet/domain/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { hashToken } from "../src/auth-hash.ts";
 import { DrizzleAuthStore } from "../src/auth-repository.ts";
-import { closeAll, openRegistry } from "../src/tenant-store.ts";
+import {
+  clearDataKey,
+  closeAll,
+  openAuth,
+  openRegistry,
+  VaultLockedError,
+} from "../src/tenant-store.ts";
 import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 let tmp: TempDataDir;
-let db: ReturnType<typeof openRegistry>;
+let db: ReturnType<typeof openAuth>;
 let store: DrizzleAuthStore;
 beforeEach(() => {
   tmp = useTempDataDir("auth-repository");
-  db = openRegistry();
-  store = new DrizzleAuthStore(db);
+  db = openAuth();
+  store = new DrizzleAuthStore(db, openRegistry);
 });
 afterEach(() => {
   closeAll();
@@ -29,6 +37,7 @@ const passkey = (id: string, over: Record<string, unknown> = {}) => ({
   rpId: "localhost",
   transports: ["internal", "hybrid"] as string[] | null,
   name: "MacBook",
+  prfSalt: new Uint8Array(32).fill(7),
   createdAt: T0,
   ...over,
 });
@@ -54,13 +63,21 @@ describe("hashToken", () => {
   });
 });
 
+const wrap = (byte: number): WrappedKey => ({
+  salt: new Uint8Array(32).fill(byte),
+  iv: new Uint8Array(12).fill(byte),
+  tag: new Uint8Array(16).fill(byte),
+  wrapped: new Uint8Array(32).fill(byte),
+});
+
 describe("passkeys", () => {
-  it("追加・取得・一覧の往復（公開鍵と transports を保つ）", async () => {
-    await store.addPasskey(passkey("pk1"));
-    await store.addPasskey(passkey("pk2", { createdAt: T1, transports: null }));
+  it("追加・取得・一覧の往復（公開鍵・transports・prf_salt を保つ）", async () => {
+    await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+    await store.addPasskey(passkey("pk2", { createdAt: T1, transports: null }), wrap(3));
     const got = await store.getPasskey("pk1");
     expect(got).toBeDefined();
     expect(Array.from(got?.publicKey ?? [])).toEqual([1, 2, 3, 250]);
+    expect(Array.from(got?.prfSalt ?? [])).toEqual(Array(32).fill(7));
     expect(got?.transports).toEqual(["internal", "hybrid"]);
     expect(got?.lastUsedAt).toBeNull();
     expect((await store.getPasskey("pk2"))?.transports).toBeNull();
@@ -69,7 +86,8 @@ describe("passkeys", () => {
   });
 
   it("名前の変更・counter と last_used_at の更新・削除", async () => {
-    await store.addPasskey(passkey("pk1"));
+    await store.initializeVault(passkey("pk0"), wrap(1), wrap(2));
+    await store.addPasskey(passkey("pk1"), wrap(3));
     await store.renamePasskey("pk1", "iPhone");
     await store.recordPasskeyUse("pk1", 7, T1);
     const got = await store.getPasskey("pk1");
@@ -78,53 +96,157 @@ describe("passkeys", () => {
     expect(got?.lastUsedAt).toBe(T1);
     await store.deletePasskey("pk1");
     expect(await store.getPasskey("pk1")).toBeUndefined();
-    expect(await store.listPasskeys()).toEqual([]);
+    expect((await store.listPasskeys()).map((p) => p.id)).toEqual(["pk0"]);
   });
 
-  it("同じ id の追加は失敗する", async () => {
-    await store.addPasskey(passkey("pk1"));
-    await expect(store.addPasskey(passkey("pk1"))).rejects.toThrow();
+  it("同じ id の追加は失敗し、包みも増えない", async () => {
+    await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+    await expect(store.addPasskey(passkey("pk1"), wrap(3))).rejects.toThrow();
+    expect(db.$client.prepare("SELECT count(*) AS n FROM key_wraps").get()).toEqual({ n: 2 });
   });
 });
 
-describe("recovery codes", () => {
-  it("有効な行がなければ undefined", async () => {
-    expect(await store.getActiveRecoveryCode()).toBeUndefined();
+describe("key wraps（008 の D1・D2）", () => {
+  it("設定前は recovery の包みがなく、addPasskey・replaceRecoveryWrap は失敗して何も書かない", async () => {
+    expect(await store.getRecoveryWrap()).toBeUndefined();
+    await expect(store.addPasskey(passkey("pk1"), wrap(1))).rejects.toThrow();
+    await expect(store.replaceRecoveryWrap(wrap(2), T0)).rejects.toThrow();
+    expect(await store.listPasskeys()).toEqual([]);
+    expect(db.$client.prepare("SELECT count(*) AS n FROM key_wraps").get()).toEqual({ n: 0 });
   });
 
-  it("置き換えると古い行が閉じ、有効な行は1つだけ残る（revoked）", async () => {
-    await store.replaceRecoveryCode("h1", T0, "revoked");
-    const first = await store.getActiveRecoveryCode();
-    expect(first?.codeHash).toBe("h1");
-    await store.replaceRecoveryCode("h2", T1, "revoked");
-    const second = await store.getActiveRecoveryCode();
-    expect(second?.codeHash).toBe("h2");
-    expect(second?.id).not.toBe(first?.id);
-    const rows = db.$client
-      .prepare("SELECT code_hash, used_at, revoked_at FROM recovery_codes ORDER BY created_at")
-      .all();
-    expect(rows).toEqual([
-      { code_hash: "h1", used_at: null, revoked_at: T1 },
-      { code_hash: "h2", used_at: null, revoked_at: null },
-    ]);
+  it("初回の設定でパスキー・その包み・recovery の包みが入り、バイト列を保つ", async () => {
+    await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+    const pw = await store.getPasskeyWrap("pk1");
+    expect(pw).toMatchObject({ kind: "passkey", credentialId: "pk1", createdAt: T0 });
+    expect(Array.from(pw?.salt ?? [])).toEqual(Array(32).fill(1));
+    expect(Array.from(pw?.iv ?? [])).toEqual(Array(12).fill(1));
+    expect(Array.from(pw?.tag ?? [])).toEqual(Array(16).fill(1));
+    expect(Array.from(pw?.wrapped ?? [])).toEqual(Array(32).fill(1));
+    const rw = await store.getRecoveryWrap();
+    expect(rw).toMatchObject({ kind: "recovery", credentialId: null, createdAt: T0 });
+    expect(Array.from(rw?.wrapped ?? [])).toEqual(Array(32).fill(2));
+    expect(await store.getPasskeyWrap("none")).toBeUndefined();
   });
 
-  it("closeAs が used なら used_at を付ける", async () => {
-    await store.replaceRecoveryCode("h1", T0, "revoked");
-    await store.replaceRecoveryCode("h2", T1, "used");
-    const rows = db.$client
-      .prepare("SELECT code_hash, used_at, revoked_at FROM recovery_codes ORDER BY created_at")
-      .all();
-    expect(rows).toEqual([
-      { code_hash: "h1", used_at: T1, revoked_at: null },
-      { code_hash: "h2", used_at: null, revoked_at: null },
-    ]);
-    const active = db.$client
-      .prepare(
-        "SELECT count(*) AS n FROM recovery_codes WHERE used_at IS NULL AND revoked_at IS NULL",
-      )
-      .get() as { n: number };
-    expect(active.n).toBe(1);
+  it("2 回目の設定は失敗し、パスキーも包みも足さない", async () => {
+    await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+    await expect(store.initializeVault(passkey("pk2"), wrap(3), wrap(4))).rejects.toThrow();
+    expect((await store.listPasskeys()).map((p) => p.id)).toEqual(["pk1"]);
+    expect(Array.from((await store.getRecoveryWrap())?.wrapped ?? [])).toEqual(Array(32).fill(2));
+  });
+
+  it("recovery の包みの置き換えは 1 行のまま", async () => {
+    await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+    const before = await store.getRecoveryWrap();
+    await store.replaceRecoveryWrap(wrap(5), T1);
+    const after = await store.getRecoveryWrap();
+    expect(after?.id).not.toBe(before?.id);
+    expect(after?.createdAt).toBe(T1);
+    expect(Array.from(after?.wrapped ?? [])).toEqual(Array(32).fill(5));
+    expect(
+      db.$client.prepare("SELECT count(*) AS n FROM key_wraps WHERE kind = 'recovery'").get(),
+    ).toEqual({ n: 1 });
+  });
+
+  it("パスキーの削除で包みも消え、最後の 1 本は消せない", async () => {
+    await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+    await store.addPasskey(passkey("pk2"), wrap(3));
+    await store.deletePasskey("pk1");
+    expect(await store.getPasskeyWrap("pk1")).toBeUndefined();
+    await expect(store.deletePasskey("pk2")).rejects.toThrow();
+    expect(await store.getPasskey("pk2")).toBeDefined();
+    expect(await store.getPasskeyWrap("pk2")).toBeDefined();
+    // 存在しない id の削除は何もしない
+    await store.deletePasskey("none");
+    expect((await store.listPasskeys()).map((p) => p.id)).toEqual(["pk2"]);
+  });
+
+  it("性質（INV-53）: どの操作の列でも、設定済みなら recovery は 1 行・passkey の包みはパスキーと 1 対 1・パスキーは 1 本以上。失敗した操作は何も書かない", async () => {
+    type Op =
+      | { op: "init"; id: string }
+      | { op: "add"; id: string }
+      | { op: "delete"; id: string }
+      | { op: "replace" };
+    const id = fc.constantFrom("a", "b", "c", "d");
+    const opArb: fc.Arbitrary<Op> = fc.oneof(
+      id.map((x) => ({ op: "init" as const, id: x })),
+      id.map((x) => ({ op: "add" as const, id: x })),
+      id.map((x) => ({ op: "delete" as const, id: x })),
+      fc.constant({ op: "replace" as const }),
+    );
+    const snapshot = () => ({
+      passkeys: (
+        db.$client.prepare("SELECT id FROM passkeys ORDER BY id").all() as { id: string }[]
+      ).map((r) => r.id),
+      passkeyWraps: (
+        db.$client
+          .prepare(
+            "SELECT credential_id AS id FROM key_wraps WHERE kind = 'passkey' ORDER BY credential_id",
+          )
+          .all() as { id: string }[]
+      ).map((r) => r.id),
+      recovery: (
+        db.$client.prepare("SELECT count(*) AS n FROM key_wraps WHERE kind = 'recovery'").get() as {
+          n: number;
+        }
+      ).n,
+    });
+    await fc.assert(
+      fc.asyncProperty(fc.array(opArb, { maxLength: 15 }), async (ops) => {
+        db.$client.exec("DELETE FROM key_wraps; DELETE FROM passkeys;");
+        // 期待のモデル
+        let initialized = false;
+        const model = new Set<string>();
+        for (const [i, o] of ops.entries()) {
+          let expectOk: boolean;
+          let run: () => Promise<void>;
+          if (o.op === "init") {
+            expectOk = !initialized;
+            run = () => store.initializeVault(passkey(o.id), wrap(i % 250), wrap((i + 1) % 250));
+          } else if (o.op === "add") {
+            expectOk = initialized && !model.has(o.id);
+            run = () => store.addPasskey(passkey(o.id), wrap(i % 250));
+          } else if (o.op === "delete") {
+            expectOk = !model.has(o.id) || model.size > 1;
+            run = () => store.deletePasskey(o.id);
+          } else {
+            expectOk = initialized;
+            run = () => store.replaceRecoveryWrap(wrap(i % 250), T1);
+          }
+          const ok = await run().then(
+            () => true,
+            () => false,
+          );
+          expect(ok, `${i}: ${JSON.stringify(o)}`).toBe(expectOk);
+          if (ok && o.op === "init") {
+            initialized = true;
+            model.add(o.id);
+          }
+          if (ok && o.op === "add") model.add(o.id);
+          if (ok && o.op === "delete") model.delete(o.id);
+          const s = snapshot();
+          expect(s.passkeys).toEqual([...model].sort());
+          expect(s.passkeyWraps).toEqual(s.passkeys);
+          expect(s.recovery).toBe(initialized ? 1 : 0);
+          if (initialized) expect(s.passkeys.length).toBeGreaterThanOrEqual(1);
+        }
+      }),
+    );
+  });
+});
+
+describe("施錠中", () => {
+  it("パスキー・包み・セッション・記録（auth.sqlite）は使え、registry の設定とペアリングは VaultLockedError", async () => {
+    clearDataKey();
+    await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+    expect(await store.getRecoveryWrap()).toBeDefined();
+    await store.createSession(session("s1", "th1"));
+    await store.appendEvent({ id: "e1", occurredAt: T0, kind: "sign_in" });
+    await expect(store.getSetting("mac_id")).rejects.toBeInstanceOf(VaultLockedError);
+    await expect(store.isPairingTokenValid("x", "localhost", T0)).rejects.toBeInstanceOf(
+      VaultLockedError,
+    );
   });
 });
 
@@ -175,8 +297,8 @@ describe("sessions", () => {
 
   it("有効なセッションだけを一覧する（失効・アイドル超過・回復の期限）", async () => {
     const now = "2026-10-20T12:00:00.000Z";
-    await store.createSession(session("ok", "t1", { now: "2026-10-20T11:00:00.000Z" }));
-    await store.createSession(session("idle", "t2", { now: "2026-10-20T03:00:00.000Z" }));
+    await store.createSession(session("ok", "t1", { now: "2026-10-20T11:45:00.000Z" }));
+    await store.createSession(session("idle", "t2", { now: "2026-10-20T11:00:00.000Z" }));
     await store.createSession(session("revoked", "t3", { now: "2026-10-20T11:00:00.000Z" }));
     await store.revokeSession("revoked", "2026-10-20T11:30:00.000Z");
     await store.createSession(
@@ -203,6 +325,17 @@ describe("sessions", () => {
     expect(await store.findSessionByTokenHash("t2")).toBeDefined();
     expect(await store.findSessionByTokenHash("t3")).toBeDefined();
     expect(await store.findSessionByTokenHash("t4")).toBeDefined();
+  });
+
+  it("全削除（008 の D3: 起動時・施錠時）は失効の有無・種類によらず全部消し、件数を返す。施錠中も使える", async () => {
+    await store.createSession(session("a", "t1"));
+    await store.createSession(session("b", "t2", { kind: "recovery" }));
+    await store.createSession(session("c", "t3"));
+    await store.revokeSession("c", T1);
+    clearDataKey();
+    expect(await store.deleteAllSessions()).toBe(3);
+    expect(db.$client.prepare("SELECT count(*) AS n FROM sessions").get()).toEqual({ n: 0 });
+    expect(await store.deleteAllSessions()).toBe(0);
   });
 });
 

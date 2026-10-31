@@ -1,28 +1,28 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { authKeys, signIn } from "./api";
+import { authKeys, unlockWithPasskey } from "./api";
 
-/** パスキーでのサインイン（FR-003）。成功したら状態を取り直し、AuthGate が帳簿の画面に切り替える */
+/** パスキーでの解錠（008 D4.2）。成功したら状態を取り直し、AuthGate が帳簿の画面に切り替える */
 export function SignIn({ onUseRecovery }: { onUseRecovery: () => void }) {
   const queryClient = useQueryClient();
-  const signInMutation = useMutation({
-    mutationFn: signIn,
+  const unlock = useMutation({
+    mutationFn: unlockWithPasskey,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: authKeys.status }),
   });
 
   return (
     <div className="grid gap-4">
       <div className="grid gap-1">
-        <h2 className="text-lg font-semibold">サインイン</h2>
-        <p className="text-sm text-muted-foreground">パスキーで本人を確認します。</p>
+        <h2 className="text-lg font-semibold">帳簿は施錠されています</h2>
+        <p className="text-sm text-muted-foreground">帳簿はパスキーで解錠するまで読めません。</p>
       </div>
-      <ApiErrorMessage error={signInMutation.error} />
-      <Button disabled={signInMutation.isPending} onClick={() => signInMutation.mutate()}>
-        {signInMutation.isPending ? "確認中…" : "パスキーでサインイン"}
+      <ApiErrorMessage error={unlock.error} />
+      <Button disabled={unlock.isPending} onClick={() => unlock.mutate()}>
+        {unlock.isPending ? "確認中…" : "パスキーで解錠"}
       </Button>
       <Button variant="link" onClick={onUseRecovery}>
-        回復コードを使う
+        回復キーで解錠
       </Button>
     </div>
   );

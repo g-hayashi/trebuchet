@@ -1,7 +1,6 @@
 export * from "./audit.ts";
 export * from "./auth/access.ts";
 export * from "./auth/passkeys.ts";
-export * from "./auth/recovery.ts";
 export * from "./auth/session.ts";
 export * from "./auth/types.ts";
 export * from "./backup/policy.ts";

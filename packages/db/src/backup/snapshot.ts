@@ -2,20 +2,19 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import Database from "better-sqlite3";
-import { isValidEntityId } from "../tenant-store.ts";
+import { Database } from "../driver.ts";
+import { type DbKeyScope, isValidEntityId, openEncryptedSqlite } from "../tenant-store.ts";
 import { sha256Hex } from "./archive.ts";
 import type { AppVersion, ManifestEntity, Snapshot, SnapshotFile } from "./types.ts";
 
 /** 平文の写しの作業場所の名前。`.tmp/backup-snapshot-<乱数>/` */
 export const SNAPSHOT_DIR_PREFIX = "backup-snapshot-";
 
-/** バックアップに含めない registry の表（すべて端末に結びつく。R9・FR-028） */
+/**
+ * バックアップに含めない registry の表（すべて端末に結びつく。R9・FR-028）。
+ * 認証の表は auth.sqlite（008 の D2）にあり、バックアップに含めない
+ */
 const EXCLUDED_REGISTRY_TABLES = [
-  "passkeys",
-  "recovery_codes",
-  "sessions",
-  "auth_events",
   "app_settings",
   "backup_runs",
   "pairing_tokens",
@@ -65,12 +64,23 @@ export function removeStaleSnapshots(tmpRoot: string): number {
 
 const quote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
 
-function vacuumInto(source: string, dest: string): void {
-  const db = new Database(source, { fileMustExist: true });
+/**
+ * 暗号化した元を今の DK から作った鍵で開いて VACUUM INTO で写し（写しも同じ鍵で暗号化される）、
+ * 写しの暗号を外す（`PRAGMA rekey=''`）。写しは平文の SQLite のまま .tbk の中に入れる（外側の AES-GCM が
+ * 守る。008 の D9。復元は展開した写しを、バックアップの DK から作った鍵で暗号化し直す）
+ */
+function vacuumInto(source: string, dest: string, scope: DbKeyScope): void {
+  const db = openEncryptedSqlite(source, scope, { fileMustExist: true });
   try {
     db.exec(`VACUUM INTO ${quote(dest)}`);
   } finally {
     db.close();
+  }
+  const copy = openEncryptedSqlite(dest, scope, { fileMustExist: true });
+  try {
+    copy.pragma("rekey=''");
+  } finally {
+    copy.close();
   }
 }
 
@@ -148,7 +158,7 @@ export function snapshotDataDir(dataDir: string, tmpDir: string): Snapshot {
 
     // registry を先に写す。写した後に追加された事業体は、registry にないのでどちらにも載らない
     const registryCopy = join(tmpDir, "registry.sqlite");
-    vacuumInto(registrySource, registryCopy);
+    vacuumInto(registrySource, registryCopy, "registry");
     sanitizeRegistryCopy(registryCopy, (id) =>
       existsSync(join(dataDir, "tenants", `${id}.sqlite`)),
     );
@@ -161,7 +171,7 @@ export function snapshotDataDir(dataDir: string, tmpDir: string): Snapshot {
       const source = join(dataDir, "tenants", `${entity.id}.sqlite`);
       if (!existsSync(source)) continue;
       const copy = join(tmpDir, "tenants", `${entity.id}.sqlite`);
-      vacuumInto(source, copy);
+      vacuumInto(source, copy, { tenant: entity.id });
       closeAsSingleFile(new Database(copy, { fileMustExist: true }));
       entities.push({ id: entity.id, name: entity.name, fiscalYears: fiscalYears(copy) });
       tenantFiles.push({ path: `tenants/${entity.id}.sqlite`, bytes: readFileSync(copy) });

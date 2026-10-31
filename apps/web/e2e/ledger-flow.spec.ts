@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { ensureSignedIn, ORIGIN_HEADERS } from "./helpers/auth.ts";
+import { enterVault, ORIGIN_HEADERS } from "./helpers/auth.ts";
 
 type Line = { side?: "借方" | "貸方"; account: string; amount: string; description?: string };
 
@@ -18,8 +18,8 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
   const menu = page.getByRole("navigation", { name: "事業体のメニュー" });
   let entityId = "";
 
-  await test.step("登録またはサインインする", async () => {
-    await ensureSignedIn(page);
+  await test.step("設定または解錠する", async () => {
+    await enterVault(page);
   });
 
   await test.step("事業体を作成する", async () => {

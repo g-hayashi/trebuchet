@@ -16,6 +16,7 @@ import {
   DrizzleRecurringStore,
   DrizzleRegistryRepository,
   dataDir,
+  openAuth,
   openRegistry,
   openTenant,
   type TenantDb,
@@ -50,6 +51,7 @@ import {
 import { type BackupRunner, createBackupRunner } from "./lib/backup-run.ts";
 import { createFmServer } from "./lib/fm-server.ts";
 import { createKeychainSecretStore, createMemorySecretStore } from "./lib/keychain.ts";
+import { createVault, type Vault } from "./lib/vault.ts";
 
 /** R8: 主キーは UUIDv7 */
 export const ids: IdGenerator = { next: () => randomUUIDv7() };
@@ -65,8 +67,14 @@ export type RouteOptions = { clock: Clock };
 
 export const registryRepository = () => new DrizzleRegistryRepository(openRegistry());
 
-/** 認証の情報（registry の DB）。要求のたびに今のデータの置き場所の registry を開く */
-export const authStore = (): AuthStore => new DrizzleAuthStore(openRegistry());
+/**
+ * 認証の情報（auth.sqlite。暗号化しないので施錠中も使える。008 の D2）。要求のたびに今のデータの置き場所を開く。
+ * 設定（app_settings）とペアリングだけは registry から読むので、施錠中は VaultLockedError
+ */
+export const authStore = (): AuthStore => new DrizzleAuthStore(openAuth(), openRegistry);
+
+/** 解錠中の DK（008 の D3）。app と背景の処理（main.ts）が同じものを使う */
+export const vault: Vault = createVault({ store: authStore });
 
 /** バックアップの実行の記録（registry の backup_runs） */
 export const backupStore = (): BackupStore => new DrizzleBackupStore(openRegistry());
@@ -94,7 +102,6 @@ export const fmServer = createFmServer({
 export const backupRunner: BackupRunner = createBackupRunner({
   auth: authStore,
   backups: backupStore,
-  secrets: secretStore,
   clock,
   ids,
   dataDir,

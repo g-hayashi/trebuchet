@@ -5,11 +5,12 @@ import { ApiErrorMessage } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
-import { registerRecoveryPasskey, verifyRecoveryCode } from "./api";
+import { registerRecoveryPasskey, verifyRecoveryKey } from "./api";
 
 /**
- * 回復コードでのサインイン（FR-006）。コードの入力 → 回復用の一時セッション（10分）→ 新しいパスキーの登録。
- * 回復コードは登録に成功するまで消費されないので、登録に失敗してもやり直せる
+ * 回復キーでの解錠（008 D4.3）。キーの入力 → 回復用の一時セッション（10分）→ 新しいパスキーの登録。
+ * 回復キーは登録に成功するまで替わらないので、登録に失敗してもやり直せる。
+ * 登録に成功すると、使ったキーは無効になり、新しいキーが表示される
  */
 export function Recovery({
   onIssued,
@@ -22,14 +23,14 @@ export function Recovery({
   const [code, setCode] = useState("");
 
   const verify = useMutation({
-    mutationFn: verifyRecoveryCode,
+    mutationFn: verifyRecoveryKey,
     onSuccess: () => setStep("register"),
   });
   const register = useMutation({
     mutationFn: registerRecoveryPasskey,
     onSuccess: onIssued,
     onError: (error) => {
-      // 一時セッションが切れたなら、回復コードの入力からやり直す
+      // 一時セッションが切れたなら、回復キーの入力からやり直す
       if (error instanceof ApiError && error.status === 401) setStep("code");
     },
   });
@@ -37,9 +38,9 @@ export function Recovery({
   return (
     <div className="grid gap-4">
       <div className="grid gap-1">
-        <h2 className="text-lg font-semibold">回復コードでサインイン</h2>
+        <h2 className="text-lg font-semibold">回復キーで解錠</h2>
         <p className="text-sm text-muted-foreground">
-          回復コードを確認したら、新しいパスキーを登録します。登録に成功すると、使った回復コードは無効になり、新しいコードが表示されます。
+          回復キーを確認したら、新しいパスキーを登録します。登録に成功すると、使った回復キーは無効になり、新しいキーが表示されます。
         </p>
       </div>
       {step === "code" ? (
@@ -52,7 +53,7 @@ export function Recovery({
           }}
         >
           <div className="grid gap-2">
-            <Label htmlFor="recovery-code-input">回復コード</Label>
+            <Label htmlFor="recovery-code-input">回復キー</Label>
             <Input
               id="recovery-code-input"
               autoComplete="off"
@@ -63,13 +64,13 @@ export function Recovery({
           </div>
           <ApiErrorMessage error={verify.error ?? register.error} />
           <Button type="submit" disabled={verify.isPending || code.trim() === ""}>
-            確認する
+            回復キーを確認
           </Button>
         </form>
       ) : (
         <div className="grid gap-4">
           <p role="status" className="text-sm">
-            回復コードを確認しました。10分以内に、新しいパスキーを登録してください。
+            回復キーを確認しました。10分以内に、新しいパスキーを登録してください。
           </p>
           <ApiErrorMessage error={register.error} />
           <Button disabled={register.isPending} onClick={() => register.mutate()}>
@@ -78,7 +79,7 @@ export function Recovery({
         </div>
       )}
       <Button variant="link" onClick={onCancel}>
-        サインインに戻る
+        パスキーでの解錠に戻る
       </Button>
     </div>
   );

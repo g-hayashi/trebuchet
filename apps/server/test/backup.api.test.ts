@@ -1,10 +1,9 @@
 import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
+import { TEST_DATA_KEY, type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import type { BackupStatus } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.ts";
-import { BACKUP_PASSPHRASE_KEY } from "../src/lib/keychain.ts";
 import { type BackupEnv, HOUR, makeBackupEnv } from "./backup-helpers.ts";
 import {
   createTestEntity,
@@ -15,7 +14,8 @@ import {
   testHeaders,
 } from "./helpers.ts";
 
-// T012: バックアップの HTTP（contracts/http-api.md「バックアップ」。inspect は除く）
+// バックアップの HTTP（contracts/http-api.md「バックアップ」。inspect は backup-inspect.test.ts）。
+// 008 の D9: パスフレーズ・同意・`PUT /passphrase` はなくした（鍵は DK から作る）
 
 let tmp: TempDataDir;
 let env: BackupEnv;
@@ -24,19 +24,17 @@ let cookie: string;
 beforeEach(async () => {
   tmp = useTempDataDir("server");
   await createTestEntity("事業 A");
-  env = makeBackupEnv(tmp, { passphrase: null });
+  env = makeBackupEnv(tmp);
   app = createApp({
     clock: env.clock.clock,
-    backup: { runner: env.runner, secrets: env.secrets, store: env.backups },
+    backup: { runner: env.runner, store: env.backups },
   });
   cookie = (await createTestSession({ now: env.clock.clock.now() })).cookie;
 });
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
-  tmp.cleanup();
+  await env.finish();
 });
-
-const GOOD = "correct horse battery staple";
 
 /** 時計を進める。セッションの無操作の期限で 401 にならないよう、進めた時刻のセッションに替える */
 async function advance(ms: number) {
@@ -58,17 +56,11 @@ async function call(method: string, path: string, body?: unknown) {
   });
 }
 
-const settings = (over: Record<string, unknown> = {}) => ({
-  folder: env.folder,
-  passphrase: GOOD,
-  passphraseConfirm: GOOD,
-  acknowledged: true,
-  ...over,
-});
+const settings = (over: Record<string, unknown> = {}) => ({ folder: env.folder, ...over });
 
 /** 実行中の最初のバックアップが終わるのを待つ */
 async function idle() {
-  await vi.waitFor(() => expect(env.runner.isRunning()).toBe(false));
+  await env.runner.idle();
 }
 
 const status = async (): Promise<BackupStatus> =>
@@ -130,11 +122,10 @@ describe("GET /backup/status", () => {
     expect(s.alert).toEqual({ reason: "LAST_RUN_FAILED" });
   });
 
-  it("パスフレーズが使えなければ PASSPHRASE_NEEDED（STALE・失敗より優先）", async () => {
+  it("「パスフレーズが使えない」の知らせはない（キーチェーンを見ない。STALE が優先で出る）", async () => {
     await configured();
-    await env.secrets.delete(BACKUP_PASSPHRASE_KEY);
     await advance(72 * HOUR);
-    expect((await status()).alert).toEqual({ reason: "PASSPHRASE_NEEDED" });
+    expect((await status()).alert).toEqual({ reason: "STALE" });
   });
 
   it("running は実行中だけ true", async () => {
@@ -148,42 +139,34 @@ describe("GET /backup/status", () => {
 });
 
 describe("PUT /backup/settings", () => {
-  it("設定の 11 文字は 422 PASSPHRASE_TOO_SHORT（スキーマの 400 より先）", async () => {
-    const short = "a".repeat(11);
-    const res = await call(
-      "PUT",
-      "/settings",
-      settings({ passphrase: short, passphraseConfirm: short }),
-    );
-    expect(res.status).toBe(422);
-    expect((await errorOf(res)).code).toBe("PASSPHRASE_TOO_SHORT");
-    // 他の入力が不正でも、長さを先に見る
-    const res2 = await call("PUT", "/settings", { folder: env.folder, passphrase: short });
-    expect(res2.status).toBe(422);
-    expect((await errorOf(res2)).code).toBe("PASSPHRASE_TOO_SHORT");
+  it("置き場所だけで設定でき、最初のバックアップが始まる（パスフレーズ・同意は要らない）", async () => {
+    const res = await call("PUT", "/settings", { folder: env.folder });
+    expect(res.status).toBe(200);
+    await idle();
+    expect((await status()).lastRun?.status).toBe("succeeded");
   });
 
-  it("12 文字ちょうどは受け付ける", async () => {
-    const twelve = "a".repeat(12);
+  it("置き場所がない・空は 400（スキーマ）", async () => {
+    for (const body of [{}, { folder: "" }]) {
+      const res = await call("PUT", "/settings", body);
+      expect(res.status).toBe(400);
+      expect((await errorOf(res)).code).toBe("VALIDATION");
+    }
+  });
+
+  it("古い形（passphrase など）の項目は無視し、保存しない", async () => {
     const res = await call(
       "PUT",
       "/settings",
-      settings({ passphrase: twelve, passphraseConfirm: twelve }),
+      settings({
+        passphrase: "legacy-passphrase-value",
+        passphraseConfirm: "legacy-passphrase-value",
+        acknowledged: true,
+      }),
     );
     expect(res.status).toBe(200);
     await idle();
-  });
-
-  it("確認用と違えば 422 PASSPHRASE_MISMATCH", async () => {
-    const res = await call("PUT", "/settings", settings({ passphraseConfirm: `${GOOD}x` }));
-    expect(res.status).toBe(422);
-    expect((await errorOf(res)).code).toBe("PASSPHRASE_MISMATCH");
-  });
-
-  it("acknowledged が false なら 400（スキーマ）", async () => {
-    const res = await call("PUT", "/settings", settings({ acknowledged: false }));
-    expect(res.status).toBe(400);
-    expect((await errorOf(res)).code).toBe("VALIDATION");
+    expect((await status()).folder).toBe(env.folder);
   });
 
   it("存在しないフォルダ・ファイル・相対パスは 422 BACKUP_FOLDER_NOT_FOUND。何も保存しない", async () => {
@@ -194,94 +177,22 @@ describe("PUT /backup/settings", () => {
       expect(res.status).toBe(422);
       expect((await errorOf(res)).code).toBe("BACKUP_FOLDER_NOT_FOUND");
     }
-    expect(await env.secrets.get(BACKUP_PASSPHRASE_KEY)).toBeUndefined();
     expect((await status()).configured).toBe(false);
   });
 
-  it("成功したらパスフレーズをキーチェーン（SecretStore）に保存し、設定の印と force_write を立てる", async () => {
+  it("成功したら置き場所を保存し、force_write を立てる（最初の書き込みの成功で消える）", async () => {
     const res = await call("PUT", "/settings", settings());
     expect(res.status).toBe(200);
-    expect(await env.secrets.get(BACKUP_PASSPHRASE_KEY)).toBe(GOOD);
-    expect(await env.auth().getSetting("backup_passphrase_set")).toBe("1");
+    expect(await env.auth().getSetting("backup_folder")).toBe(env.folder);
     await idle();
-    // 最初の書き込みの成功で force_write は消える
     expect(await env.auth().getSetting("backup_force_write")).toBe("0");
   });
 });
 
-describe("PUT /backup/passphrase", () => {
-  const NEW = "another long passphrase 2";
-  const change = (over: Record<string, unknown> = {}) => ({
-    current: GOOD,
-    passphrase: NEW,
-    passphraseConfirm: NEW,
-    ...over,
-  });
-
-  it("12 文字未満は 422 PASSPHRASE_TOO_SHORT、不一致は 422 PASSPHRASE_MISMATCH", async () => {
-    await configured();
-    const short = await call(
-      "PUT",
-      "/passphrase",
-      change({ passphrase: "short", passphraseConfirm: "short" }),
-    );
-    expect(short.status).toBe(422);
-    expect((await errorOf(short)).code).toBe("PASSPHRASE_TOO_SHORT");
-    const mismatch = await call("PUT", "/passphrase", change({ passphraseConfirm: `${NEW}x` }));
-    expect(mismatch.status).toBe(422);
-    expect((await errorOf(mismatch)).code).toBe("PASSPHRASE_MISMATCH");
-  });
-
-  it("current が違う・省略なら 422 PASSPHRASE_WRONG（値は変わらない）", async () => {
-    await configured();
-    for (const body of [
-      change({ current: "wrong-current-passphrase" }),
-      change({ current: undefined }),
-    ]) {
-      const res = await call("PUT", "/passphrase", body);
-      expect(res.status).toBe(422);
-      expect((await errorOf(res)).code).toBe("PASSPHRASE_WRONG");
-    }
-    expect(await env.secrets.get(BACKUP_PASSPHRASE_KEY)).toBe(GOOD);
-  });
-
-  it("current が合えば変更でき、force_write を立てて manual で書き直す（内容が同じでも）", async () => {
-    await configured();
-    const before = await status();
-    const res = await call("PUT", "/passphrase", change());
-    expect(res.status).toBe(200);
-    expect(await env.secrets.get(BACKUP_PASSPHRASE_KEY)).toBe(NEW);
-    await idle();
-    const s = await status();
-    expect(s.lastRun?.trigger).toBe("manual");
-    expect(s.lastRun?.status).toBe("succeeded");
-    expect(s.lastRun?.fileName).not.toBe(before.lastRun?.fileName);
-    expect(await env.auth().getSetting("backup_force_write")).toBe("0");
-
-    // 変えた直後の force_write は、自動の skip も止める（立っている間は書く）
-    await env.auth().setSetting("backup_force_write", "1", env.clock.clock.now());
-    env.clock.advance(1000);
-    const auto = await env.runner.start("auto");
-    if (!auto.ok) throw new Error("start failed");
-    expect((await auto.value.done).status).toBe("succeeded");
-  });
-
-  it("SecretStore が空なら current なしで変更できる。値があれば current なしは PASSPHRASE_WRONG", async () => {
-    await configured();
-    await env.secrets.delete(BACKUP_PASSPHRASE_KEY);
-    const res = await call("PUT", "/passphrase", change({ current: undefined }));
-    expect(res.status).toBe(200);
-    expect(await env.secrets.get(BACKUP_PASSPHRASE_KEY)).toBe(NEW);
-    await idle();
-    const again = await call("PUT", "/passphrase", change({ current: undefined }));
-    expect(again.status).toBe(422);
-    expect((await errorOf(again)).code).toBe("PASSPHRASE_WRONG");
-  });
-
-  it("置き場所が未設定なら 409 BACKUP_NOT_CONFIGURED", async () => {
-    const res = await call("PUT", "/passphrase", change({ current: undefined }));
-    expect(res.status).toBe(409);
-    expect((await errorOf(res)).code).toBe("BACKUP_NOT_CONFIGURED");
+describe("PUT /backup/passphrase（なくした）", () => {
+  it("ルートがなく 404 になる", async () => {
+    const res = await call("PUT", "/passphrase", { passphrase: "x".repeat(14) });
+    expect(res.status).toBe(404);
   });
 });
 
@@ -349,7 +260,6 @@ describe("認証", () => {
     for (const [method, path] of [
       ["GET", "/status"],
       ["PUT", "/settings"],
-      ["PUT", "/passphrase"],
       ["POST", "/run"],
       ["GET", "/runs"],
     ] as const) {
@@ -359,10 +269,8 @@ describe("認証", () => {
   });
 });
 
-describe("パスフレーズを出さない（FR-015）", () => {
-  it("レスポンス・ログ・backup_runs・app_settings・データ場所のファイルに含まれない", async () => {
-    const secret = "unique-passphrase-7c3e91aa-qwerty";
-    const next = "unique-passphrase-2b8f64cd-asdfgh";
+describe("鍵を出さない（INV-51）", () => {
+  it("レスポンス・ログ・backup_runs・app_settings・データ場所のファイルに DK・回復キーが含まれない", async () => {
     const logs = [vi.spyOn(console, "log"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")];
     const bodies: string[] = [];
     const record = async (res: Response) => {
@@ -370,57 +278,32 @@ describe("パスフレーズを出さない（FR-015）", () => {
       return res;
     };
 
-    await record(
-      await call("PUT", "/settings", settings({ passphrase: secret, passphraseConfirm: secret })),
-    );
+    await record(await call("PUT", "/settings", settings()));
     await idle();
     env.clock.advance(1000);
     await record(await call("GET", "/status"));
     await record(await call("GET", "/runs"));
-    // 失敗の応答（不一致・誤り）にも載らない
-    await record(
-      await call("PUT", "/passphrase", {
-        current: "x".repeat(14),
-        passphrase: next,
-        passphraseConfirm: next,
-      }),
-    );
-    await record(
-      await call("PUT", "/passphrase", {
-        current: secret,
-        passphrase: next,
-        passphraseConfirm: `${next}!`,
-      }),
-    );
-    await record(
-      await call("PUT", "/passphrase", {
-        current: secret,
-        passphrase: next,
-        passphraseConfirm: next,
-      }),
-    );
+    await record(await call("POST", "/run"));
     await idle();
     await record(await call("GET", "/status"));
     await record(await call("GET", "/runs"));
 
-    for (const text of bodies) {
-      expect(text).not.toContain(secret);
-      expect(text).not.toContain(next);
-    }
-    expect(JSON.stringify(logs.map((l) => l.mock.calls))).not.toContain("unique-passphrase");
+    const hex = Buffer.from(TEST_DATA_KEY).toString("hex");
+    const b64 = Buffer.from(TEST_DATA_KEY).toString("base64");
+    const recovery = env.recovery.text;
+    const strings = [hex, b64, recovery, recovery.replaceAll("-", "")];
+    for (const text of bodies) for (const s of strings) expect(text).not.toContain(s);
+    const logged = JSON.stringify(logs.map((l) => l.mock.calls));
+    for (const s of strings) expect(logged).not.toContain(s);
 
-    // DB の表と、データ場所・置き場所のファイル
+    // DB の表と、置き場所のファイル（データ場所の DB は暗号化・包みで、平文の鍵を持たない）
     const rows = JSON.stringify(await env.backups().listRuns(100));
-    expect(rows).not.toContain("unique-passphrase");
-    for (const key of [
-      "backup_folder",
-      "backup_passphrase_set",
-      "backup_force_write",
-      "mac_id",
-    ] as const) {
-      expect((await env.auth().getSetting(key)) ?? "").not.toContain("unique-passphrase");
+    for (const s of strings) expect(rows).not.toContain(s);
+    for (const key of ["backup_folder", "backup_force_write", "mac_id"] as const) {
+      const value = (await env.auth().getSetting(key)) ?? "";
+      for (const s of strings) expect(value).not.toContain(s);
     }
-    const needles = [Buffer.from(secret), Buffer.from(next)];
+    const needles = [Buffer.from(TEST_DATA_KEY), ...strings.map((s) => Buffer.from(s))];
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
         e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
@@ -433,16 +316,16 @@ describe("パスフレーズを出さない（FR-015）", () => {
 });
 
 describe("INV-29 の網羅", () => {
-  it("バックアップのルートが app.routes にある", () => {
+  it("バックアップのルートが app.routes にある（passphrase のルートはない）", () => {
     const keys = new Set(app.routes.map((r) => `${r.method} ${r.path}`));
     for (const key of [
       "GET /api/backup/status",
       "PUT /api/backup/settings",
-      "PUT /api/backup/passphrase",
       "POST /api/backup/run",
       "GET /api/backup/runs",
     ]) {
       expect(keys.has(key), key).toBe(true);
     }
+    expect(keys.has("PUT /api/backup/passphrase")).toBe(false);
   });
 });

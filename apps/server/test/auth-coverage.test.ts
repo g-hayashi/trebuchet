@@ -1,8 +1,10 @@
+import { existsSync } from "node:fs";
+import { clearDataKey, registryFile } from "@trebuchet/db";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { requiresAuth } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app.ts";
-import { errorOf, TEST_HOST, TEST_ORIGIN } from "./helpers.ts";
+import { createTestSession, errorOf, TEST_HOST, TEST_ORIGIN } from "./helpers.ts";
 
 // T007: INV-29。公開の完全一致の一覧以外の全ルートは、未サインインで必ず 401。
 // ルートを足したのに認証が掛かっていなければ、このテストが落ちる
@@ -51,6 +53,8 @@ describe("INV-29 全ルートの保護", () => {
     const protectedKeys = new Set(protectedRoutes().map((r) => `${r.method} ${r.path}`));
     for (const key of [
       "POST /api/auth/sign-out",
+      "POST /api/auth/reauth/options",
+      "POST /api/auth/reauth/verify",
       "GET /api/auth/passkeys",
       "POST /api/auth/passkeys/options",
       "POST /api/auth/passkeys/verify",
@@ -95,6 +99,23 @@ describe("INV-29 全ルートの保護", () => {
       if ((await errorOf(res)).code !== "UNAUTHENTICATED") failures.push(`${method} ${path} code`);
     }
     expect(failures).toEqual([]);
+  });
+
+  it("保護された全ルートが、有効なセッションでも施錠中は 401 LOCKED（008 の D5。DB を開く前に止まる）", async () => {
+    const session = await createTestSession();
+    clearDataKey();
+    const failures: string[] = [];
+    for (const { method, path } of protectedRoutes()) {
+      const res = await app.request(fillParams(path), {
+        method,
+        headers: { Host: TEST_HOST, Origin: TEST_ORIGIN, Cookie: session.cookie },
+      });
+      if (res.status !== 401 || (await errorOf(res)).code !== "LOCKED") {
+        failures.push(`${method} ${path} -> ${res.status}`);
+      }
+    }
+    expect(failures).toEqual([]);
+    expect(existsSync(registryFile())).toBe(false);
   });
 
   it("明細の取込（007）の layout・preview・確定は列挙に入り、保護されている。multipart でも未サインインは 401", async () => {

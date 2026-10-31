@@ -26,11 +26,7 @@ describe("ErrorCode（004 のコード、contracts/http-api.md）", () => {
     "ALREADY_REGISTERED",
     "WEBAUTHN_FAILED",
     "RECOVERY_INVALID",
-    "RECOVERY_LOCKED",
     "LAST_PASSKEY",
-    "PASSPHRASE_TOO_SHORT",
-    "PASSPHRASE_MISMATCH",
-    "PASSPHRASE_WRONG",
     "BACKUP_FOLDER_NOT_FOUND",
     "BACKUP_NOT_CONFIGURED",
     "BACKUP_RUNNING",
@@ -40,9 +36,20 @@ describe("ErrorCode（004 のコード、contracts/http-api.md）", () => {
     "REMOTE_NOT_CONFIGURED",
     "PAIRING_TOKEN_INVALID",
   ];
-  it("追加の19種がすべて入っている", () => {
-    expect(new Set(added).size).toBe(19);
+  it("追加の15種がすべて入っている", () => {
+    expect(new Set(added).size).toBe(15);
     for (const code of added) expect(ErrorCode.safeParse(code).success).toBe(true);
+  });
+  it("008: パスフレーズのコード（PASSPHRASE_*）はなくした（バックアップの鍵は DK から。D9）", () => {
+    for (const code of ["PASSPHRASE_TOO_SHORT", "PASSPHRASE_MISMATCH", "PASSPHRASE_WRONG"]) {
+      expect(ErrorCode.safeParse(code).success, code).toBe(false);
+    }
+  });
+  it("008: LOCKED・PRF_UNSUPPORTED・REAUTH_REQUIRED を足し、RECOVERY_LOCKED（ロック）はなくした", () => {
+    for (const code of ["LOCKED", "PRF_UNSUPPORTED", "REAUTH_REQUIRED"]) {
+      expect(ErrorCode.safeParse(code).success, code).toBe(true);
+    }
+    expect(ErrorCode.safeParse("RECOVERY_LOCKED").success).toBe(false);
   });
   it("BACKUP_TOO_NEW は作らない", () => {
     expect(ErrorCode.safeParse("BACKUP_TOO_NEW").success).toBe(false);

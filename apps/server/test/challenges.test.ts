@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { CHALLENGE_MAX, CHALLENGE_TTL_MS, ChallengeStore } from "../src/lib/challenges.ts";
-import {
-  generateRecoveryCode,
-  hashRecoveryCode,
-  normalizeRecoveryCode,
-} from "../src/lib/recovery-code.ts";
 import { makeClock } from "./helpers.ts";
 
-// T008: challenge の保持（5分・最大100件・単回）と回復コードの形
+// T008: challenge の保持（5分・最大100件・単回）。008: 登録の途中の値（PRF の salt など）を一緒に持つ
 
 const START = "2026-10-20T00:00:00.000Z";
 
@@ -45,27 +40,20 @@ describe("ChallengeStore", () => {
     expect(store.consume("register", "c1")).toBe(true);
     expect(store.consume("register", `c${CHALLENGE_MAX}`)).toBe(true);
   });
-});
 
-describe("回復コード", () => {
-  it("128 ビット（26 文字）を Crockford の base32 で 4 文字ずつ区切る", () => {
-    const code = generateRecoveryCode();
-    expect(code).toMatch(
-      /^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){5}-[0-9A-HJKMNP-TV-Z]{2}$/,
-    );
-    expect(generateRecoveryCode()).not.toBe(code);
-  });
-
-  it("先頭の文字は 3 ビット分だけ（0〜7）", () => {
-    for (let i = 0; i < 50; i++) expect("01234567").toContain(generateRecoveryCode()[0]);
-  });
-
-  it("小文字・区切りの有無・空白・I/L/O の読み替えを同じコードとして扱う", () => {
-    const code = generateRecoveryCode();
-    expect(normalizeRecoveryCode(code.toLowerCase().replaceAll("-", " "))).toBe(
-      normalizeRecoveryCode(code),
-    );
-    expect(normalizeRecoveryCode("0O-1I-1L")).toBe("00" + "11" + "11");
-    expect(hashRecoveryCode(code)).toBe(hashRecoveryCode(code.toLowerCase()));
+  it("take は一緒に入れた値を 1 回だけ返す。用途の不一致・期限切れは undefined で破棄する", () => {
+    const clock = makeClock(START);
+    const store = new ChallengeStore(clock);
+    store.issue("register", "a", { salt: 1 });
+    store.issue("register", "b", { salt: 2 });
+    store.issue("register", "c");
+    expect(store.take("register", "a")).toEqual({ data: { salt: 1 } });
+    expect(store.take("register", "a")).toBeUndefined();
+    expect(store.take("sign-in", "b")).toBeUndefined();
+    expect(store.take("register", "b")).toBeUndefined();
+    expect(store.take("register", "c")).toEqual({ data: undefined });
+    store.issue("register", "d", 4);
+    clock.advance(CHALLENGE_TTL_MS);
+    expect(store.take("register", "d")).toBeUndefined();
   });
 });

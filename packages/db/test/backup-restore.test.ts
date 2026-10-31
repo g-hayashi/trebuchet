@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -9,29 +9,40 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { packArchive, unpackArchive } from "../src/backup/archive.ts";
-import { type DeriveKey, decryptBackup, encryptBackup } from "../src/backup/crypto.ts";
+import {
+  decryptBackup,
+  decryptBackupWithRecoveryKey,
+  encryptBackup,
+} from "../src/backup/crypto.ts";
 import { type RestoreSummary, restoreBackup } from "../src/backup/restore.ts";
 import { createSnapshotDir, currentAppVersion, snapshotDataDir } from "../src/backup/snapshot.ts";
 import type { SnapshotFile } from "../src/backup/types.ts";
-import { closeAll, openRegistry } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { Database } from "../src/driver.ts";
+import { parseRecoveryKey } from "../src/recovery-key.ts";
+import {
+  closeAll,
+  createAuthFile,
+  type DbKeyScope,
+  openEncryptedSqlite,
+  openRegistry,
+  withDataKeyOverride,
+} from "../src/tenant-store.ts";
+import { TEST_DATA_KEY, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { unwrapDataKey } from "../src/vault-crypto.ts";
 import {
   addJournals,
   dumpSchema,
   dumpTables,
   EXCLUDED_REGISTRY_TABLES,
+  recoveryFixture,
   seedAuthRows,
   seedEntities,
 } from "./backup-fixtures.ts";
 
-const PASS = "correct horse battery staple 日本語";
-const crypto = {
-  deriveKey: (async (passphrase, kdf) =>
-    createHash("sha256").update(passphrase).update(kdf.salt).digest()) as DeriveKey,
-};
+/** バックアップを取った時点の回復キー（DK はテスト用の固定の DK。この Mac の帳簿と同じ） */
+const recovery = recoveryFixture(TEST_DATA_KEY);
 const NOW = new Date("2026-11-01T01:02:03.000Z");
 
 let tmp: TempDataDir;
@@ -76,14 +87,15 @@ function seedSource(specs: Spec[]): { id: string; name: string }[] {
 /** dir の DB を読み取り専用で開いて、全ての表の内容を返す */
 function dumpDir(dir: string, exclude: readonly string[] = []) {
   const out: Record<string, ReturnType<typeof dumpTables>> = {};
-  const open = (file: string) => new Database(file, { readonly: true, fileMustExist: true });
-  const registry = open(join(dir, "registry.sqlite"));
+  const open = (file: string, scope: DbKeyScope) =>
+    openEncryptedSqlite(file, scope, { readonly: true, fileMustExist: true });
+  const registry = open(join(dir, "registry.sqlite"), "registry");
   out.registry = dumpTables(registry, exclude);
   registry.close();
   const tenants = join(dir, "tenants");
   if (existsSync(tenants)) {
     for (const f of readdirSync(tenants).filter((n) => n.endsWith(".sqlite"))) {
-      const db = open(join(tenants, f));
+      const db = open(join(tenants, f), { tenant: f.slice(0, -".sqlite".length) });
       out[f] = dumpTables(db);
       db.close();
     }
@@ -91,8 +103,12 @@ function dumpDir(dir: string, exclude: readonly string[] = []) {
   return out;
 }
 
+/** 復元先の registry を読み取り専用で開く（DK から作った鍵で暗号化されている） */
+const openRestoredRegistry = (dir: string) =>
+  openEncryptedSqlite(join(dir, "registry.sqlite"), "registry", { readonly: true });
+
 function schemaOf(dir: string) {
-  const db = new Database(join(dir, "registry.sqlite"), { readonly: true });
+  const db = openRestoredRegistry(dir);
   try {
     return dumpSchema(db);
   } finally {
@@ -103,24 +119,23 @@ function schemaOf(dir: string) {
 type BuildOptions = {
   appVersion?: { registry: number; tenant: number };
   mutate?: (files: SnapshotFile[]) => void;
+  /** バックアップの DK と recovery の包み（既定はこの Mac の DK と `recovery`） */
+  dk?: Uint8Array;
+  wrap?: ReturnType<typeof recoveryFixture>["wrap"];
 };
 
 /** src から .tbk を作って backupPath() に書く */
-async function buildBackup(options: BuildOptions = {}): Promise<Buffer> {
+function buildBackup(options: BuildOptions = {}): Buffer {
   const snapDir = createSnapshotDir(scratch());
   try {
     const snap = snapshotDataDir(src(), snapDir);
     options.mutate?.(snap.files);
-    const bytes = await encryptBackup(
-      packArchive(snap),
-      PASS,
-      {
-        appVersion: options.appVersion ?? currentAppVersion(),
-        macId: "mac-from-source",
-        createdAt: "2026-10-31T09:00:00.000Z",
-      },
-      crypto,
-    );
+    const bytes = encryptBackup(packArchive(snap), options.dk ?? TEST_DATA_KEY, {
+      appVersion: options.appVersion ?? currentAppVersion(),
+      macId: "mac-from-source",
+      createdAt: "2026-10-31T09:00:00.000Z",
+      recoveryWrap: options.wrap ?? recovery.wrap,
+    });
     writeFileSync(backupPath(), bytes);
     return bytes;
   } finally {
@@ -134,7 +149,7 @@ function run(overrides: Overrides = {}) {
   const summaries: RestoreSummary[] = [];
   const promise = restoreBackup({
     file: backupPath(),
-    passphrase: PASS,
+    recoveryKey: recovery.text,
     dataDir: dest(),
     tmpRoot: scratch(),
     confirm: (s) => {
@@ -142,10 +157,43 @@ function run(overrides: Overrides = {}) {
       return true;
     },
     now: () => NOW,
-    crypto,
     ...overrides,
   });
   return { promise, summaries };
+}
+
+/** 復元で作られた auth.sqlite（暗号化しない）の表の件数と recovery の包み */
+function readAuth(dir: string) {
+  const db = new Database(join(dir, "auth.sqlite"), { readonly: true, fileMustExist: true });
+  try {
+    const count = (table: string) =>
+      (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n;
+    const wraps = db
+      .prepare("SELECT kind, credential_id, salt, iv, tag, wrapped FROM key_wraps")
+      .all() as {
+      kind: string;
+      credential_id: string | null;
+      salt: Buffer;
+      iv: Buffer;
+      tag: Buffer;
+      wrapped: Buffer;
+    }[];
+    return {
+      passkeys: count("passkeys"),
+      sessions: count("sessions"),
+      wraps,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+/** 回復キーで復元後の auth.sqlite の recovery の包みを開いた DK */
+function dkFromRestoredAuth(dir: string, recoveryText: string): Buffer | null {
+  const wrap = readAuth(dir).wraps[0];
+  const secret = parseRecoveryKey(recoveryText);
+  if (wrap === undefined || secret === null) return null;
+  return unwrapDataKey(wrap, secret, "recovery", null);
 }
 
 /** tmp.dir の下の全ファイルとフォルダの相対パス（`.tbk` の作業ファイルを除く観点で呼び出し側が比べる） */
@@ -165,8 +213,21 @@ function listAll(dir: string, base = dir): string[] {
 const siblings = (pattern: RegExp) =>
   readdirSync(join(tmp.dir, "dest")).filter((n) => pattern.test(n));
 
-/** 既存の帳簿のある dest を作る（別の事業体と認証の行つき） */
-function seedDest(): { id: string; name: string } {
+/**
+ * 既存の帳簿のある dest を作る（別の事業体と認証の行つき）。`auth.sqlite` には recovery の包み
+ * （既定は `recovery`。`wrap: null` なら auth.sqlite を作らない）を入れる。`dk` を渡すと、その DK で帳簿を暗号化する
+ */
+function seedDest(
+  options: { dk?: Uint8Array; wrap?: ReturnType<typeof recoveryFixture>["wrap"] | null } = {},
+): { id: string; name: string } {
+  const seed = () => seedDestLedger();
+  const made = options.dk === undefined ? seed() : withDataKeyOverride(options.dk, seed);
+  const wrap = options.wrap === undefined ? recovery.wrap : options.wrap;
+  if (wrap !== null) createAuthFile(join(dest(), "auth.sqlite"), wrap, "2026-10-30T00:00:00.000Z");
+  return made;
+}
+
+function seedDestLedger(): { id: string; name: string } {
   const [e] = withDataDir(dest(), () => {
     openRegistry();
     const made = seedEntities([
@@ -227,21 +288,24 @@ describe("restoreBackup: 空の場所への復元", () => {
       .flatMap((t) => Object.keys(t))
       .filter((n) => n === "closing_notes" || n === "import_batches");
     expect(closing.length).toBeGreaterThan(0);
-    // 端末の表の行がなく、auth_events のトリガーなどの定義が残る
-    const registry = new Database(join(dest(), "registry.sqlite"), { readonly: true });
+    // 端末の表の行がない
+    const registry = openRestoredRegistry(dest());
     try {
       for (const table of EXCLUDED_REGISTRY_TABLES) {
         expect(registry.prepare(`SELECT count(*) AS n FROM "${table}"`).get()).toEqual({ n: 0 });
       }
-      const triggers = registry
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'auth_events'",
-        )
-        .all();
-      expect(triggers.length).toBeGreaterThan(0);
     } finally {
       registry.close();
     }
+    // 認証の表はバックアップに含めない。auth.sqlite は recovery の包みだけで作り直す（008 の D9）
+    const auth = readAuth(dest());
+    expect(auth.passkeys).toBe(0);
+    expect(auth.sessions).toBe(0);
+    expect(auth.wraps.map((w) => [w.kind, w.credential_id])).toEqual([["recovery", null]]);
+    // その包みは、バックアップを取った時点の回復キーで、同じ DK に開く
+    expect(dkFromRestoredAuth(dest(), recovery.text)?.equals(Buffer.from(TEST_DATA_KEY))).toBe(
+      true,
+    );
     expect(schemaOf(dest())).toEqual(expectedSchema);
     // 空の場所なので、復元前のバックアップと before-restore は作らない
     if (result.ok) {
@@ -269,7 +333,7 @@ describe("restoreBackup: 空の場所への復元", () => {
     const { promise, summaries } = run();
     expect((await promise).ok).toBe(true);
     expect(summaries[0]?.entities).toEqual([]);
-    const registry = new Database(join(dest(), "registry.sqlite"), { readonly: true });
+    const registry = openRestoredRegistry(dest());
     try {
       expect(registry.prepare("SELECT count(*) AS n FROM entities").get()).toEqual({ n: 0 });
       expect(registry.prepare("SELECT count(*) AS n FROM app_settings").get()).toEqual({ n: 0 });
@@ -305,13 +369,12 @@ describe("restoreBackup: 既存の帳簿がある場所への復元", () => {
     expect(dumpDir(`${dest()}.before-restore-${stamp}`)).toEqual(before);
     // 復元後は新しい内容。app_settings だけ元の Mac のもの（mac_id を含む）を引き継ぐ
     expect(dumpDir(dest(), EXCLUDED_REGISTRY_TABLES)).toEqual(expectedNew);
-    const registry = new Database(join(dest(), "registry.sqlite"), { readonly: true });
+    const registry = openRestoredRegistry(dest());
     try {
       expect(registry.prepare("SELECT key, value FROM app_settings ORDER BY key").all()).toEqual([
         { key: "backup_folder", value: "/folder-of-this-machine" },
         { key: "mac_id", value: "mac-of-this-machine" },
       ]);
-      expect(registry.prepare("SELECT count(*) AS n FROM passkeys").get()).toEqual({ n: 0 });
       // ai_settings も app_settings と同じく、元の Mac の値のまま引き継ぐ
       expect(
         registry
@@ -333,9 +396,9 @@ describe("restoreBackup: 既存の帳簿がある場所への復元", () => {
       registry.close();
     }
 
-    // 復元前のバックアップを同じパスフレーズで復号できる（中身は元の帳簿）
+    // 復元前のバックアップを同じ DK・同じ回復キーで復号できる（中身は元の帳簿）
     const bytes = readFileSync(result.value.beforeRestoreBackup ?? "");
-    const decrypted = await decryptBackup(bytes, PASS, currentAppVersion(), crypto);
+    const decrypted = decryptBackup(bytes, TEST_DATA_KEY, currentAppVersion());
     expect(decrypted.ok).toBe(true);
     if (!decrypted.ok) return;
     expect(decrypted.value.header.macId).toBe("mac-of-this-machine");
@@ -344,8 +407,9 @@ describe("restoreBackup: 既存の帳簿がある場所への復元", () => {
     if (unpacked.ok) {
       expect(unpacked.value.manifest.entities.map((e) => e.name)).toEqual(["既存の事業"]);
     }
-    // 復元前のバックアップは別の誤ったパスフレーズでは開かない
-    expect((await decryptBackup(bytes, "wrong", currentAppVersion(), crypto)).ok).toBe(false);
+    // 復元前のバックアップは別の DK では開かない。ヘッダーの包みは今の回復キーで開く
+    expect(decryptBackup(bytes, randomBytes(32), currentAppVersion()).ok).toBe(false);
+    expect(decryptBackupWithRecoveryKey(bytes, recovery.text, currentAppVersion()).ok).toBe(true);
 
     // 平文の展開先と平文の写しが残らない
     expect(siblings(/\.restore-/)).toEqual([]);
@@ -505,14 +569,16 @@ describe("restoreBackup: 検査の失敗は何も作らない", () => {
     },
   );
 
-  it("誤ったパスフレーズは何も作らず、帳簿が変わらない（SC-004）", async () => {
+  it("誤った回復キー・形の違うキーは何も作らず、帳簿が変わらない（SC-004、INV-54）", async () => {
     seedSource([{ name: "事業A", journals: 2, seed: 1 }]);
     seedDest();
     await buildBackup();
     const before = snapshotOfTmp();
     const dump = dumpDir(dest());
-    const result = await run({ passphrase: "wrong passphrase" }).promise;
-    expect(result).toEqual({ ok: false, error: "INVALID" });
+    for (const recoveryKey of [recoveryFixture(TEST_DATA_KEY).text, "wrong key", ""]) {
+      const result = await run({ recoveryKey }).promise;
+      expect(result).toEqual({ ok: false, error: "INVALID" });
+    }
     expect(snapshotOfTmp()).toEqual(before);
     expect(dumpDir(dest())).toEqual(dump);
   });
@@ -550,11 +616,82 @@ describe("restoreBackup: 検査の失敗は何も作らない", () => {
     expect(snapshotOfTmp()).toEqual(before);
   });
 
-  it("パスフレーズはエラーの値にも例外のメッセージにも出ない", async () => {
+  it("回復キーはエラーの値にも要約にも出ない", async () => {
     seedSource([{ name: "事業A", journals: 1, seed: 1 }]);
     await buildBackup();
-    const result = await run({ passphrase: `${PASS}-bad` }).promise;
-    expect(JSON.stringify(result)).not.toContain(PASS);
+    const bad = recoveryFixture(TEST_DATA_KEY).text;
+    expect(JSON.stringify(await run({ recoveryKey: bad }).promise)).not.toContain(bad);
+    const ok = run();
+    const result = await ok.promise;
+    expect(JSON.stringify(result) + JSON.stringify(ok.summaries)).not.toContain(recovery.text);
+  });
+});
+
+describe("restoreBackup: 鍵（008 の D9）", () => {
+  it("新しい Mac（別の DK の空の場所）でも、バックアップの回復キーだけで復元でき、帳簿は取った DK で暗号化される", async () => {
+    seedSource([{ name: "事業A", journals: 4, seed: 1 }]);
+    const expected = dumpDir(src(), EXCLUDED_REGISTRY_TABLES);
+    const otherDk = randomBytes(32);
+    const otherRecovery = recoveryFixture(otherDk);
+    buildBackup({ dk: otherDk, wrap: otherRecovery.wrap });
+    mkdirSync(dest(), { recursive: true });
+
+    // この Mac の DK（テスト用の固定の DK）ではなく、バックアップの DK で復元される
+    const result = await run({ recoveryKey: otherRecovery.text }).promise;
+    expect(result.ok).toBe(true);
+    expect(withDataKeyOverride(otherDk, () => dumpDir(dest(), EXCLUDED_REGISTRY_TABLES))).toEqual(
+      expected,
+    );
+    expect(() => dumpDir(dest())).toThrow(); // この Mac の DK では開かない
+    expect(dkFromRestoredAuth(dest(), otherRecovery.text)?.equals(otherDk)).toBe(true);
+    // この Mac の回復キーでは、バックアップの DK は開かない
+    expect(await run({ recoveryKey: recovery.text }).promise).toEqual({
+      ok: false,
+      error: "INVALID",
+    });
+  });
+
+  it("回復キーを再発行した後でも、古いバックアップを今の回復キーで復元でき、今の包みが残る", async () => {
+    seedSource([{ name: "事業A", journals: 2, seed: 1 }]);
+    const expected = dumpDir(src(), EXCLUDED_REGISTRY_TABLES);
+    const reissued = recoveryFixture(TEST_DATA_KEY); // 再発行後のキー（DK は同じ）
+    buildBackup(); // ヘッダーの包みは古い `recovery`
+    seedDest({ wrap: reissued.wrap }); // 今の auth.sqlite の recovery は再発行後
+
+    // 古いキーは、ヘッダーの包みで開く
+    expect((await run({ recoveryKey: recovery.text }).promise).ok).toBe(true);
+    expect(dkFromRestoredAuth(dest(), recovery.text)?.equals(Buffer.from(TEST_DATA_KEY))).toBe(
+      true,
+    );
+
+    // 今のキーは、ヘッダーの包みでは開かず、今の auth.sqlite の包みで開く
+    rmSync(dest(), { recursive: true, force: true });
+    seedDest({ wrap: reissued.wrap });
+    const result = await run({ recoveryKey: reissued.text }).promise;
+    expect(result.ok).toBe(true);
+    expect(dumpDir(dest(), EXCLUDED_REGISTRY_TABLES)).toEqual(expected);
+    expect(dkFromRestoredAuth(dest(), reissued.text)?.equals(Buffer.from(TEST_DATA_KEY))).toBe(
+      true,
+    );
+    expect(dkFromRestoredAuth(dest(), recovery.text)).toBeNull();
+  });
+
+  it("今の帳簿が別の DK で読めないとき、復元前のバックアップは作らず、元のデータ場所は before-restore に残す", async () => {
+    seedSource([{ name: "事業A", journals: 2, seed: 1 }]);
+    const expected = dumpDir(src(), EXCLUDED_REGISTRY_TABLES);
+    buildBackup();
+    seedDest({ dk: randomBytes(32), wrap: null }); // 別の DK の帳簿で、開く包みもない
+
+    const { promise, summaries } = run();
+    const result = await promise;
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(summaries[0]?.hasExistingLedger).toBe(true);
+    expect(summaries[0]?.differences).toEqual([]);
+    expect(result.value.beforeRestoreBackup).toBeNull();
+    expect(result.value.previousDataDir).toBe(`${dest()}.before-restore-20261101-010203`);
+    expect(existsSync(join(result.value.previousDataDir ?? "", "registry.sqlite"))).toBe(true);
+    expect(dumpDir(dest(), EXCLUDED_REGISTRY_TABLES)).toEqual(expected);
   });
 });
 

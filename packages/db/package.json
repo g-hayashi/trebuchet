@@ -9,12 +9,12 @@
   },
   "scripts": {
     "typecheck": "tsc -p .",
-    "db:generate": "drizzle-kit generate --config drizzle.tenant.config.ts && drizzle-kit generate --config drizzle.registry.config.ts"
+    "db:generate": "drizzle-kit generate --config drizzle.tenant.config.ts && drizzle-kit generate --config drizzle.registry.config.ts && drizzle-kit generate --config drizzle.auth.config.ts"
   },
   "dependencies": {
     "@trebuchet/domain": "workspace:*",
     "@trebuchet/schema": "workspace:*",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3-multiple-ciphers": "13.0.3",
     "drizzle-orm": "^0.45.4"
   },
   "devDependencies": {

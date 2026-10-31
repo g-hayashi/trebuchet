@@ -16,18 +16,17 @@ export function shouldRunAutoBackup(lastCheck: LastCheck, now: string): boolean 
 }
 
 /**
- * 全画面の知らせ。優先順は PASSPHRASE_NEEDED → STALE → LAST_RUN_FAILED。
+ * 全画面の知らせ。優先順は STALE → LAST_RUN_FAILED（バックアップの鍵は DK から作るので、
+ * 「パスフレーズが使えない」の知らせはない。008 の D9）。
  * 設定済みで一度も実行がなければ null。`now` は ISO 8601。
  */
 export function backupAlert(input: {
   configured: boolean;
-  passphraseAvailable: boolean;
   lastCheck: LastCheck;
   lastRun: Pick<BackupRun, "status"> | null | undefined;
   now: string;
 }): { reason: BackupAlertReason } | null {
   if (!input.configured) return null;
-  if (!input.passphraseAvailable) return { reason: "PASSPHRASE_NEEDED" };
   if (
     input.lastCheck !== null &&
     input.lastCheck !== undefined &&

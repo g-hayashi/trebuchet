@@ -2,11 +2,10 @@ import { randomUUIDv7 } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { openTenant, type TenantDb, tenantFile } from "../src/tenant-store.ts";
+import { drizzleOf } from "../src/driver.ts";
+import { openEncryptedSqlite, openTenant, type TenantDb, tenantFile } from "../src/tenant-store.ts";
 import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 let tmp: TempDataDir;
@@ -263,9 +262,9 @@ describe("既存の DB への 0002 の適用", () => {
     const entityId = randomUUIDv7();
     const file = tenantFile(entityId);
     mkdirSync(join(file, ".."), { recursive: true });
-    const client = new Database(file);
+    const client = openEncryptedSqlite(file, { tenant: entityId });
     client.pragma("foreign_keys = ON");
-    migrate(drizzle({ client }), { migrationsFolder: migrationsUpTo0001(tmp.dir) });
+    migrate(drizzleOf(client, {}), { migrationsFolder: migrationsUpTo0001(tmp.dir) });
     const periodId = randomUUIDv7();
     client
       .prepare(

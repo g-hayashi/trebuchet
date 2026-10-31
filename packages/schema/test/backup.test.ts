@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   BackupInspection,
-  BackupPassphraseInput,
   BackupRun,
   BackupRunStatus,
   BackupSettingsInput,
@@ -11,68 +10,18 @@ import {
 
 const ID = "0190f3a0-0000-7000-8000-000000000001";
 const NOW = "2026-10-20T00:00:00.000Z";
-const PASS12 = "a".repeat(12);
 
 describe("BackupSettingsInput", () => {
-  const ok = {
-    folder: "/Users/x/Backups",
-    passphrase: PASS12,
-    passphraseConfirm: PASS12,
-    acknowledged: true,
-  };
-  it("12文字は可、11文字は拒否", () => {
-    expect(BackupSettingsInput.safeParse(ok).success).toBe(true);
-    const p11 = "a".repeat(11);
-    expect(
-      BackupSettingsInput.safeParse({ ...ok, passphrase: p11, passphraseConfirm: p11 }).success,
-    ).toBe(false);
-  });
-  it("日本語のパスフレーズも文字数で数える", () => {
-    const p = "あ".repeat(12);
-    expect(
-      BackupSettingsInput.safeParse({ ...ok, passphrase: p, passphraseConfirm: p }).success,
-    ).toBe(true);
-  });
-  it("acknowledged が false・欠落は拒否", () => {
-    expect(BackupSettingsInput.safeParse({ ...ok, acknowledged: false }).success).toBe(false);
-    const { acknowledged: _, ...rest } = ok;
-    expect(BackupSettingsInput.safeParse(rest).success).toBe(false);
+  it("置き場所だけを受け取る（バックアップの鍵は DK から。パスフレーズ・同意は持たない。008 の D9）", () => {
+    expect(BackupSettingsInput.safeParse({ folder: "/Users/x/Backups" }).success).toBe(true);
   });
   it("空の folder は拒否", () => {
-    expect(BackupSettingsInput.safeParse({ ...ok, folder: "" }).success).toBe(false);
+    expect(BackupSettingsInput.safeParse({ folder: "" }).success).toBe(false);
+    expect(BackupSettingsInput.safeParse({}).success).toBe(false);
   });
-  it.each(["\n", "\r", "\r\n"])("パスフレーズに改行（%j）を含むものを拒否する", (nl) => {
-    const p = `${"a".repeat(12)}${nl}b`;
-    expect(
-      BackupSettingsInput.safeParse({ ...ok, passphrase: p, passphraseConfirm: p }).success,
-    ).toBe(false);
-  });
-  it("不一致は schema では検査しない（server が PASSPHRASE_MISMATCH にする）", () => {
-    expect(
-      BackupSettingsInput.safeParse({ ...ok, passphraseConfirm: "b".repeat(12) }).success,
-    ).toBe(true);
-  });
-});
-
-describe("BackupPassphraseInput", () => {
-  const ok = { passphrase: PASS12, passphraseConfirm: PASS12 };
-  it("current なしは可、current ありも可", () => {
-    expect(BackupPassphraseInput.safeParse(ok).success).toBe(true);
-    expect(BackupPassphraseInput.safeParse({ ...ok, current: "old-pass-phrase" }).success).toBe(
-      true,
-    );
-  });
-  it("12文字は可、11文字は拒否", () => {
-    const p11 = "a".repeat(11);
-    expect(
-      BackupPassphraseInput.safeParse({ passphrase: p11, passphraseConfirm: p11 }).success,
-    ).toBe(false);
-  });
-  it.each(["\n", "\r"])("パスフレーズに改行（%j）を含むものを拒否する", (nl) => {
-    const p = `${"a".repeat(12)}${nl}b`;
-    expect(BackupPassphraseInput.safeParse({ passphrase: p, passphraseConfirm: p }).success).toBe(
-      false,
-    );
+  it("パスフレーズの項目は無視される（値に残らない）", () => {
+    const parsed = BackupSettingsInput.parse({ folder: "/x", passphrase: "a".repeat(12) });
+    expect(Object.keys(parsed)).toEqual(["folder"]);
   });
 });
 
@@ -147,7 +96,7 @@ describe("BackupStatus", () => {
       }).success,
     ).toBe(true);
   });
-  it.each(["STALE", "LAST_RUN_FAILED", "PASSPHRASE_NEEDED"])("alert の reason %s", (reason) => {
+  it.each(["STALE", "LAST_RUN_FAILED"])("alert の reason %s", (reason) => {
     expect(
       BackupStatus.safeParse({
         configured: true,
@@ -160,18 +109,21 @@ describe("BackupStatus", () => {
       }).success,
     ).toBe(true);
   });
-  it("alert の reason が範囲外なら拒否", () => {
-    expect(
-      BackupStatus.safeParse({
-        configured: true,
-        folder: "/x",
-        lastSuccess: null,
-        lastCheck: null,
-        lastRun: null,
-        alert: { reason: "OTHER" },
-        running: false,
-      }).success,
-    ).toBe(false);
+  it("alert の reason が範囲外（PASSPHRASE_NEEDED を含む）なら拒否", () => {
+    for (const reason of ["OTHER", "PASSPHRASE_NEEDED"]) {
+      expect(
+        BackupStatus.safeParse({
+          configured: true,
+          folder: "/x",
+          lastSuccess: null,
+          lastCheck: null,
+          lastRun: null,
+          alert: { reason },
+          running: false,
+        }).success,
+        reason,
+      ).toBe(false);
+    }
   });
 });
 

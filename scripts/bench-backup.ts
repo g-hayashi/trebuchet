@@ -3,7 +3,8 @@
  * （snapshotDataDir → packArchive → encryptBackup → writeBackupFile〔読み戻しの復号と展開の検証を含む〕）が
  * 30 秒以内に終わり、その間の event loop の遅延の p99 が 200 ms 以下か（画面と API の応答が止まらないか）を測る。
  * `.tmp/` の下に一時のデータ場所とバックアップの置き場所を作り、終了時に削除する。
- * 暗号化は本物の Argon2id（memory 65536 KiB、passes 3）。結果の数値はコミットしない。
+ * 暗号化の鍵は DK から HKDF で作る（008 の D9。Argon2id は使わない）。DK は useTempDataDir のテスト用の固定の DK、
+ * ヘッダーの recovery の包みはそのための合成の回復キー。結果の数値はコミットしない。
  *
  *   pnpm bench:backup
  *   BENCH_BACKUP_LIMIT_MS=30000 BENCH_BACKUP_LOOP_P99_MS=200 pnpm bench:backup   # しきい値の変更
@@ -25,8 +26,10 @@ import {
 } from "../packages/db/src/backup/snapshot.ts";
 import { DrizzleLedgerRepository } from "../packages/db/src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../packages/db/src/master-repository.ts";
+import { generateRecoveryKey } from "../packages/db/src/recovery-key.ts";
 import { openTenant } from "../packages/db/src/tenant-store.ts";
-import { TMP_ROOT, useTempDataDir } from "../packages/db/src/testing.ts";
+import { TEST_DATA_KEY, TMP_ROOT, useTempDataDir } from "../packages/db/src/testing.ts";
+import { wrapDataKey } from "../packages/db/src/vault-crypto.ts";
 import { type JournalLine, ok, type ValidLine } from "../packages/domain/src/types.ts";
 import { createNextFiscalPeriod } from "../packages/domain/src/usecases/masters.ts";
 import {
@@ -43,7 +46,6 @@ const JOURNALS_PER_YEAR = Math.floor(positiveNumber("BENCH_BACKUP_JOURNALS", 3_0
 const LIMIT_MS = positiveNumber("BENCH_BACKUP_LIMIT_MS", 30_000);
 const LOOP_P99_LIMIT_MS = positiveNumber("BENCH_BACKUP_LOOP_P99_MS", 200);
 const FIRST_YEAR = 2024;
-const PASSPHRASE = "bench-backup-passphrase-0123456789";
 const MAC_ID = "benchmac0000";
 
 const tmp = useTempDataDir("bench-backup");
@@ -152,17 +154,21 @@ await runBench(
       const snapshot = await phase("snapshot", () => snapshotDataDir(tmp.dir, snapshotDir));
       const archive = await phase("pack", () => packArchive(snapshot));
       const at = new Date();
-      const encrypted = await phase("encrypt (Argon2id + AES-GCM)", () =>
-        encryptBackup(archive, PASSPHRASE, {
+      const recovery = generateRecoveryKey();
+      const recoveryWrap = wrapDataKey(TEST_DATA_KEY, recovery.secret, "recovery", null);
+      recovery.secret.fill(0);
+      const encrypted = await phase("encrypt (HKDF + AES-GCM)", () =>
+        encryptBackup(archive, TEST_DATA_KEY, {
           appVersion,
           macId: MAC_ID,
           createdAt: at.toISOString(),
+          recoveryWrap,
         }),
       );
       fileSize = encrypted.length;
       await phase("write + verify", () =>
         writeBackupFile(outDir, backupFileName(MAC_ID, at), encrypted, async (readBack) => {
-          const check = await decryptBackup(readBack, PASSPHRASE, appVersion);
+          const check = decryptBackup(readBack, TEST_DATA_KEY, appVersion);
           return check.ok && unpackArchive(check.value.archive).ok;
         }),
       );

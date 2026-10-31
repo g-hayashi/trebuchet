@@ -37,7 +37,7 @@ async function setup(options: { fmAvailable?: boolean; reply?: (code: string) =>
   const accountId = await accountLookup(entityId);
   const session = await createTestSession({ now: NOW });
   const codeOf = async (name: string) => {
-    const client = testClient(createApp(), undefined, undefined, {
+    const client = testClient(createApp({ clock: { now: () => NOW } }), undefined, undefined, {
       headers: { Host: TEST_HOST, Origin: TEST_ORIGIN, Cookie: session.cookie },
     });
     const res = await client.api.entities[":entityId"].accounts.$get({ param: { entityId } });

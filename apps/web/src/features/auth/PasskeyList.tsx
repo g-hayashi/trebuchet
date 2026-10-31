@@ -38,7 +38,7 @@ export function PasskeyList() {
     onSuccess: async () => {
       setDeleting(undefined);
       await refresh();
-      // 削除したパスキーのセッションとサインインの記録が変わる
+      // 削除したパスキーのセッションと認証の記録が変わる
       await queryClient.invalidateQueries({ queryKey: authKeys.sessions });
       await queryClient.invalidateQueries({ queryKey: authKeys.events });
     },
@@ -66,7 +66,8 @@ export function PasskeyList() {
       <CardHeader>
         <CardTitle>パスキー</CardTitle>
         <CardDescription>
-          サインインに使うパスキーです。この Mac（localhost）の最後の1つは削除できません。
+          帳簿の解錠に使うパスキーです。追加と削除では、パスキーでもう一度確認します。この
+          Mac（localhost）の最後の1つは削除できません。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">

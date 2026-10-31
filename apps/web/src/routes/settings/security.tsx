@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { authKeys, regenerateRecoveryCode, signOut } from "@/features/auth/api";
+import { authKeys, clearLedgerData, lockVault, regenerateRecoveryKey } from "@/features/auth/api";
 import { EventList } from "@/features/auth/EventList";
 import { PasskeyList } from "@/features/auth/PasskeyList";
 import { RecoveryCodePanel } from "@/features/auth/RecoveryCodePanel";
@@ -22,23 +22,23 @@ function SecurityPage() {
       <RecoveryCard />
       <SessionList />
       <EventList />
-      <SignOutCard />
+      <LockCard />
     </main>
   );
 }
 
-/** 回復コードの再発行（FR-007）。新しいコードを一度だけ表示し、控えたと確認する */
+/** 回復キーの再発行（008 D4.4）。パスキーで再認証してから、新しいキーを一度だけ表示し、保管したと確認する */
 function RecoveryCard() {
   const queryClient = useQueryClient();
   const [code, setCode] = useState<string>();
-  const regenerate = useMutation({ mutationFn: regenerateRecoveryCode, onSuccess: setCode });
+  const regenerate = useMutation({ mutationFn: regenerateRecoveryKey, onSuccess: setCode });
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>回復コード</CardTitle>
+        <CardTitle>回復キー</CardTitle>
         <CardDescription>
-          作り直すと、古い回復コードは使えなくなります。新しいコードは一度だけ表示されます。
+          作り直すと、古い回復キーは使えなくなります。新しいキーは一度だけ表示されます。作り直す前に、パスキーでもう一度確認します。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
@@ -51,7 +51,7 @@ function RecoveryCard() {
                 disabled={regenerate.isPending}
                 onClick={() => regenerate.mutate()}
               >
-                回復コードを作り直す
+                回復キーを作り直す
               </Button>
             </div>
           </>
@@ -69,31 +69,34 @@ function RecoveryCard() {
   );
 }
 
-function SignOutCard() {
+/** 施錠（008 D4.5）。全セッションを終え、帳簿を閉じる。解錠にはパスキーか回復キーが要る */
+function LockCard() {
   const queryClient = useQueryClient();
-  const signOutMutation = useMutation({
-    mutationFn: signOut,
+  const lockMutation = useMutation({
+    mutationFn: lockVault,
     onSuccess: async () => {
-      // 帳簿のデータを画面に残さない。認証の状態を取り直すと、AuthGate がサインインの画面にする
-      queryClient.removeQueries({ predicate: ({ queryKey }) => queryKey[0] !== "auth" });
+      // 帳簿のデータを画面に残さない。認証の状態を取り直すと、AuthGate が解錠の画面にする
+      clearLedgerData(queryClient);
       await queryClient.invalidateQueries({ queryKey: authKeys.status });
     },
   });
   return (
     <Card>
       <CardHeader>
-        <CardTitle>サインアウト</CardTitle>
-        <CardDescription>この端末のセッションを終えます。</CardDescription>
+        <CardTitle>施錠</CardTitle>
+        <CardDescription>
+          帳簿を閉じ、すべてのセッションを終えます。解錠にはパスキーか回復キーが要ります。
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <ApiErrorMessage error={signOutMutation.error} />
+        <ApiErrorMessage error={lockMutation.error} />
         <div>
           <Button
             variant="outline"
-            disabled={signOutMutation.isPending}
-            onClick={() => signOutMutation.mutate()}
+            disabled={lockMutation.isPending}
+            onClick={() => lockMutation.mutate()}
           >
-            サインアウト
+            施錠
           </Button>
         </div>
       </CardContent>

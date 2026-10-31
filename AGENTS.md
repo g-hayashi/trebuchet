@@ -40,8 +40,8 @@ apps/server ──→ packages/schema
 | 性能計測（バックアップ、004 の SC-005） | `pnpm bench:backup`（環境変数でしきい値と件数を変えられる。使い方は `scripts/bench-backup.ts` の先頭のコメント） |
 | 性能計測（明細 500 件の CSV の読み取り・確認・候補、007 の SC-006。AI は呼ばない） | `pnpm bench:statements`（環境変数でしきい値・回数・件数を変えられる。使い方は `scripts/bench-statements.ts` の先頭のコメント） |
 | 列の案の評価（端末内の AI `fm serve` を呼ぶ。合成の例。CI に含まれない） | `pnpm eval:columns`（結果を `.tmp/eval-columns/` に残し前回と比べる。使い方は `scripts/eval-column-suggestions.ts` の先頭のコメント） |
-| バックアップ（`.tbk`）の復元（server を止めて行う） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--yes]`（`scripts/restore-backup.ts` の先頭のコメント） |
-| freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。`scripts/verify-freee-import.ts` の先頭のコメント） |
+| バックアップ（`.tbk`）の復元（server を止めて行う） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--yes]`（回復キーを標準入力から読む。`scripts/restore-backup.ts` の先頭のコメント） |
+| freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。`scripts/verify-freee-import.ts` の先頭のコメント。`--continue` は 008 以降使えない: 実行ごとに乱数の DK で作るため） |
 | 青色申告決算書の照合（実データ、ローカル専用） | `pnpm verify:tax-return`（`work/` を読む。`scripts/verify-tax-return.ts` の先頭のコメント） |
 | E2E（Playwright、Chromium） | `pnpm --filter @trebuchet/web e2e` |
 | web のビルド（`routeTree.gen.ts` を再生成する） | `pnpm --filter @trebuchet/web build` |
@@ -120,15 +120,15 @@ apps/server ──→ packages/schema
 
 ## 認証とバックアップ（004）
 
-仕様: `specs/004-auth-backup/`。設計判断: [ADR 0006](docs/adr/0006-passkey-sessions.md)（パスキー、セッション、回復コード、Host → CSRF → 認証）、[ADR 0007](docs/adr/0007-backup-format.md)（形式、スナップショット、キーチェーン、復元）。
+仕様: `specs/004-auth-backup/`。設計判断: [ADR 0006](docs/adr/0006-passkey-sessions.md)（パスキー、Host → CSRF → 認証。セッションと回復コードは 008 で置き換わった）、[ADR 0007](docs/adr/0007-backup-format.md)（形式、スナップショット、復元。鍵とパスフレーズは 008 で置き換わった）。鍵まわりは下の 008 の節と [ADR 0011](docs/adr/0011-passkey-prf-vault.md)。
 
 | 層 | 場所 |
 |---|---|
-| 業務ルール（パスキー・セッションの判定、回復コード、公開の手続きの一覧 `requiresAuth`、バックアップの要否・世代の選び方・警告） | `packages/domain/src/auth/`、`packages/domain/src/backup/` |
-| 永続化（認証の表、トークンのハッシュ `hashToken`） | `packages/db/src/auth-hash.ts`、`auth-repository.ts` |
+| 業務ルール（パスキー・セッションの判定、公開の手続きの一覧 `requiresAuth`、バックアップの要否・世代の選び方・警告） | `packages/domain/src/auth/`、`packages/domain/src/backup/` |
+| 永続化（認証の表、セッションのトークンのハッシュ `hashToken`） | `packages/db/src/auth-hash.ts`、`auth-repository.ts` |
 | バックアップの形式と復元 | `packages/db/src/backup/`（`snapshot.ts`、`archive.ts`、`crypto.ts`、`file.ts`、`repository.ts`、`restore.ts`） |
 | HTTP の検査（Host → CSRF → 認証の順） | `apps/server/src/middleware/`（`host.ts`、`csrf.ts`、`auth.ts`） |
-| server の部品 | `apps/server/src/lib/`（`origin.ts`、`session.ts`、`webauthn.ts`、`challenges.ts`、`recovery-code.ts`、`keychain.ts`、`backup-run.ts`、`backup-scheduler.ts`、`startup.ts`） |
+| server の部品 | `apps/server/src/lib/`（`origin.ts`、`session.ts`、`webauthn.ts`、`challenges.ts`、`keychain.ts`（006 の外部 AI の API キー用）、`backup-run.ts`、`backup-scheduler.ts`、`startup.ts`。解錠まわりは 008 の節） |
 | HTTP のルート | `apps/server/src/routes/auth.ts`、`backup.ts` |
 | 画面 | `apps/web/src/features/auth/`、`features/backup/`、`apps/web/src/routes/settings/`（`security.tsx`、`backup.tsx`） |
 | E2E の仮想の認証器 | `apps/web/e2e/helpers/`（`virtual-authenticator.ts`、`auth.ts`） |
@@ -138,10 +138,10 @@ apps/server ──→ packages/schema
 - **許す Host・オリジン・RP ID の決定は `apps/server/src/lib/origin.ts` の 1 か所**。別の場所で名前の一覧を書かない。
 - **全 `/api` に Host → CSRF → 認証の順で検査を掛ける**。CSRF は `hono/csrf` を使わず自前。公開の手続きは `requiresAuth`（domain）の完全一致の一覧だけ。`apps/server/test/auth-coverage.test.ts`（INV-29）が、一覧にないルートは未サインインで 401 になることを確かめる。
 - **認証を無効にする設定・環境変数・テスト用の分岐を本番のコードに作らない**。
-- **パスフレーズ・回復コード・トークンを平文でログ・データ場所・リポジトリに置かない**。トークンと回復コードは DB にハッシュだけを保存する（ハッシュは db の `hashToken` に一本化）。バックアップのパスフレーズはキーチェーンに置く。
-- **キーチェーンは `/usr/bin/security -i` の標準入力に 1 行を流す**（引数は `ps` に出る。004/R12）。テストはキーチェーンに触れず、`SecretStore` の偽物を使う。
+- **DK・DB の鍵・回復キー・セッションのトークンを平文でログ・データ場所・リポジトリに置かない**。セッションのトークンは DB にハッシュだけを保存する（ハッシュは db の `hashToken` に一本化）。回復キーはハッシュも保存しない（008）。バックアップの鍵は DK から作り、パスフレーズはない。
+- **キーチェーン（`SecretStore`）は 006 の外部の AI の API キーだけに使う**。`/usr/bin/security -i` の標準入力に 1 行を流す（引数は `ps` に出る。004/R12）。テストはキーチェーンに触れず、`SecretStore` の偽物を使う。
 - **平文の写しは `.tmp/` の下に作り、`finally` で必ず消す**。server の起動時に、前回の異常終了で残った `.tmp/backup-snapshot-*/` を消す。
-- バックアップには、端末に結びつく設定（`app_settings`）と認証の表を含めない。復元した帳簿は、次の起動でパスキーの登録から始まる。
+- バックアップには、端末に結びつく設定（`app_settings`）と認証の表（`auth.sqlite`）を含めない。復元した帳簿は、次の起動で回復キーで解錠し、パスキーを登録するところから始まる。
 - **US4（Tailscale によるリモートの利用: `pnpm start`、server の静的配信、ペアリング）は保留**（2026-10-24）。未実装なので、これらのコマンドや場所を前提にしない。
 
 ## 請求と定期仕訳（005）
@@ -213,6 +213,34 @@ apps/server ──→ packages/schema
 - **フィクスチャは合成**（`packages/domain/test/fixtures/statements/`。作り方・匿名化・検算は同じ場所の `README.md`）。実データから写してよいのは列名と書式だけ。銀行の CSV は UTF-8 の元（`bank-two-columns.utf8.csv`）から CP932 の `bank-two-columns.csv` を `iconv` で作る。変えたら README の「検算」をして `expected.ts` を直す。
 - **プロンプト・`COLUMN_PROMPT_ROWS`・`COLUMN_TIMEOUT_MS` を変えるときは、変更の前と後で `pnpm eval:columns` を実行して結果を比べる**（Constitution IV、007/R15）。`fm` を呼ぶので CI に含まれない。結果は `.tmp/eval-columns/` に件数と割合だけを残し、見出し・値を書かない。CI のテストは偽の `ColumnSuggestionProvider` で集計だけを確かめる。
 - **互換の別名を残さない**（007/R13）。`PastedRow`・`MfmePaste`・`parseMfmePaste`・`MFME_COLUMNS`・`mfme_fetch`・`STATEMENT_PASTE_UNREADABLE` は消した。入力は貼り付けもファイルも multipart の `file` と `options`。上限は 5 MB・20,000 行・50 列。
+
+## パスキーと回復キーによる DB の暗号化（008）
+
+設計: `specs/008-passkey-vault/design.md`（D1〜D12。spec・plan・research はない）。判断の記録: [ADR 0011](docs/adr/0011-passkey-prf-vault.md)。004 の認証とバックアップの鍵まわりを置き換えた（回復コード、バックアップのパスフレーズ、キーチェーンの経路は消えた）。
+
+| 層 | 場所 |
+|---|---|
+| ファイル | `data/auth.sqlite`（平文。`passkeys`（`prf_salt` つき）、`key_wraps`、`sessions`、`auth_events`）、`data/registry.sqlite` と `data/tenants/<id>.sqlite`（DK から HKDF で作った鍵で SQLCipher 方式に暗号化） |
+| 鍵の計算（DK の包み、HKDF、回復キーの生成・解析。純関数） | `packages/db/src/vault-crypto.ts`、`recovery-key.ts`（復元のコマンドが使うので db に置く。domain は `node:crypto` を使えない） |
+| DK の保持と DB の開き方（`setDataKey`・`clearDataKey`・`VaultLockedError`・`openAuth`・`openRegistry`・`openTenant`） | `packages/db/src/tenant-store.ts`。ドライバーは `packages/db/src/driver.ts`（`better-sqlite3-multiple-ciphers`） |
+| 認証の表のスキーマとマイグレーション | `packages/db/src/schema/auth.ts`、`packages/db/drizzle/auth/`、`drizzle.auth.config.ts`（registry の `schema/registry.ts`・`drizzle/registry/` とは別） |
+| server の解錠まわり | `apps/server/src/lib/`（`vault.ts`、`session-sweeper.ts`、`reauth.ts`、`startup.ts`）、`routes/auth.ts` |
+| 画面 | `apps/web/src/features/auth/`（`AuthGate.tsx`、`RegisterPasskey.tsx`、`SignIn.tsx`、`Recovery.tsx`、`RecoveryCodePanel.tsx`、`PasskeyList.tsx`、`webauthn-client.ts`）、`routes/settings/security.tsx` |
+| E2E | `apps/web/e2e/helpers/`（`virtual-authenticator.ts` は `hasPrf: true`、`auth.ts` の `enterVault`） |
+
+- **DK・DB の鍵・バックアップの鍵は、平文でディスク・ログ・環境変数・応答に出さない**（INV-51）。回復キーは作成・再発行の応答で 1 回だけ返す。DK は `setDataKey` で渡したバッファだけが持ち、`clearDataKey` が `fill(0)` する。
+- **施錠中は registry・事業体を開けない**（`VaultLockedError`）。帳簿の API は、セッションがなければ 401、セッションがあって施錠中なら 401 `LOCKED`。誤った鍵は `SQLITE_NOTADB` を例外として上げる。空の DB として扱わない。
+- **正しさの判定は包みが開けたこと（GCM の検証）だけ**。回復キーのハッシュを保存しない。包みの AAD は種類と資格情報 ID（INV-52）。設定済みなら recovery の包みは 1 行、passkey の包みはパスキーと 1 対 1（INV-53）。
+- **エラーコード**: 401 `LOCKED`、403 `REAUTH_REQUIRED`、400 `PRF_UNSUPPORTED`。パスキーの追加・削除、回復キーの再発行は、全権のセッションに加え、直近 5 分以内の再認証（`POST /api/auth/reauth/options`・`verify`）を要求する。最後の 1 本のパスキーは削除できない。
+- **セッションは `auth.sqlite`**。無操作 30 分で失効し、有効なセッションが 1 つもなくなると施錠する。**起動時・施錠時に `sessions` を全部消す**。サインアウトは全セッションを消して施錠する。**新しいセッションを入れてから期限切れを掃除する**（逆にすると解錠の直後に施錠される）。
+- **回復キーの試行はロックしない**。失敗ごとに 1 秒待たせる。
+- **初回の設定**は `key_wraps` に recovery の行がないときだけ。以前の registry・事業体は `data/discarded-<時刻>/` に移す（消さない）。
+- **バックアップの定期実行と定期仕訳の自動登録は、解錠中だけ**動く（`lib/startup.ts` を vault の状態に結びつける）。
+- **バックアップの鍵は `HKDF(DK, ヘッダーの salt, "trebuchet/backup/v1")`**。ヘッダーに取った時点の recovery の包みを入れる（INV-54）。中の SQLite の写しは平文で、外側の AES-GCM が守る。`pnpm restore` は回復キーを標準入力から読み、ヘッダーの包み → 今の `auth.sqlite` の包みの順に試す。復元した後の `auth.sqlite` は recovery の包みだけ。画面のファイルの検査は解錠中に DK で行う。
+- **テストは `useTempDataDir` が固定のテスト用 DK を `setDataKey` する**（cleanup で `clearDataKey`）。既存の db・server のテストは鍵を意識しない。server のテストのセッションは `auth.sqlite` に作る（`createTestSession`）。
+- **E2E の仮想の認証器は `hasPrf: true`**。パスキーを書き出して戻すと PRF を失うので使わない。テストの間は回復キーを引き継ぎ、`enterVault` で回復キーで解錠して新しいパスキーを登録してから始める。E2E は利用者の端末で実行する。
+- **`pnpm verify:freee --continue` は使えない**（実行ごとに乱数の DK で作るため。利用者の判断で使えないままにする）。
+- **registry のマイグレーションは 008 で作り直した**（認証の表を `auth.sqlite` に分けたため）。以前の `data/` の DB は読めない。
 
 ## データと一時ファイル
 

@@ -1,7 +1,7 @@
 /**
  * 認証なしで呼べる手続きの完全一致の名簿（data-model §3、INV-29）。11 組。
- * プレフィックスやワイルドカードにしない。前提（パスキー 0 件、ローカルの Host、一時セッション、
- * トークン）は server が検査する。
+ * プレフィックスやワイルドカードにしない。前提（未設定、ローカルの Host、一時セッションと解錠、
+ * トークン）は server が検査する。それ以外は全権のセッションと解錠が必要（008 の D5）。
  */
 export const PUBLIC_ROUTES: readonly (readonly [method: string, path: string])[] = [
   ["GET", "/api/health"],

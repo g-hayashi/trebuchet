@@ -1,5 +1,5 @@
 import { randomUUIDv7 } from "node:crypto";
-import { DrizzleAuthStore, hashToken, openRegistry } from "@trebuchet/db";
+import { clearDataKey, DrizzleAuthStore, hashToken, openAuth, openRegistry } from "@trebuchet/db";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -16,7 +16,7 @@ beforeEach(() => {
 });
 afterEach(() => tmp.cleanup());
 
-const store = () => new DrizzleAuthStore(openRegistry());
+const store = () => new DrizzleAuthStore(openAuth(), openRegistry);
 const REMOTE_HOST = "mac.tail1234.ts.net";
 const remoteOn = async () => ({ enabled: true, host: REMOTE_HOST });
 
@@ -231,7 +231,7 @@ describe("認証（FR-003・004、INV-28）", () => {
       headers: { Host: host, ...(cookie ? { Cookie: cookie } : {}) },
     });
   const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
-  const HOUR = 60 * 60 * 1000;
+  const MIN = 60 * 1000;
 
   it("cookie なしは 401 UNAUTHENTICATED", async () => {
     const res = await get();
@@ -253,14 +253,27 @@ describe("認証（FR-003・004、INV-28）", () => {
     expect((await get(s.cookie)).status).toBe(200);
   });
 
-  it("最後の操作から8時間を超えたセッションは 401", async () => {
-    const s = await createTestSession({ now: iso(8 * HOUR + 1000) });
+  it("最後の操作から 30 分を超えたセッションは 401（008 の D3）", async () => {
+    const s = await createTestSession({ now: iso(30 * MIN + 1000) });
     expect((await get(s.cookie)).status).toBe(401);
   });
 
-  it("7時間59分のセッションは通る", async () => {
-    const s = await createTestSession({ now: iso(8 * HOUR - 60 * 1000) });
+  it("29 分のセッションは通る", async () => {
+    const s = await createTestSession({ now: iso(29 * MIN) });
     expect((await get(s.cookie)).status).toBe(200);
+  });
+
+  it("有効なセッションでも施錠中は 401 LOCKED。セッションがなければ施錠中でも 401 UNAUTHENTICATED（008 の D5）", async () => {
+    const s = await createTestSession();
+    clearDataKey();
+    const locked = await get(s.cookie);
+    expect(locked.status).toBe(401);
+    expect((await errorOf(locked)).code).toBe("LOCKED");
+    const none = await get();
+    expect(none.status).toBe(401);
+    expect((await errorOf(none)).code).toBe("UNAUTHENTICATED");
+    const bad = await get(`${SESSION_COOKIE}=nonexistent`);
+    expect((await errorOf(bad)).code).toBe("UNAUTHENTICATED");
   });
 
   it("revoked_at つきのセッションは 401", async () => {
@@ -291,7 +304,7 @@ describe("認証（FR-003・004、INV-28）", () => {
 
   it("トークンが DB に平文で残っていない（ハッシュだけ）", async () => {
     const s = await createTestSession();
-    const rows = openRegistry().$client.prepare("SELECT * FROM sessions").all();
+    const rows = openAuth().$client.prepare("SELECT * FROM sessions").all();
     expect(JSON.stringify(rows)).not.toContain(s.token);
     expect(JSON.stringify(rows)).toContain(hashToken(s.token));
   });
@@ -313,10 +326,10 @@ describe("認証（FR-003・004、INV-28）", () => {
   });
 
   it("401 の要求では last_seen_at を更新しない（失効したセッション）", async () => {
-    const s = await createTestSession({ now: iso(9 * HOUR) });
+    const s = await createTestSession({ now: iso(31 * MIN) });
     expect((await get(s.cookie)).status).toBe(401);
     const row = await store().findSessionByTokenHash(hashToken(s.token));
-    expect(Date.parse(row?.lastSeenAt ?? "")).toBeLessThan(Date.now() - 8 * HOUR);
+    expect(Date.parse(row?.lastSeenAt ?? "")).toBeLessThan(Date.now() - 30 * MIN);
   });
 });
 
@@ -341,29 +354,43 @@ describe("公開の手続きの前提（FR-001・006、INV-29）", () => {
       headers: { Host: TEST_HOST, Origin: TEST_ORIGIN, ...headers },
     });
 
-  async function addPasskey() {
-    await store().addPasskey({
-      id: randomUUIDv7(),
-      publicKey: new Uint8Array([1, 2, 3]),
-      counter: 0,
-      rpId: "localhost",
-      transports: null,
-      name: "テスト",
-      createdAt: new Date().toISOString(),
-    });
+  /** 設定済みにする（パスキー 1 本と、その包み・recovery の包み。中身は形だけ） */
+  async function initialize() {
+    const wrap = {
+      salt: new Uint8Array(32),
+      iv: new Uint8Array(12),
+      tag: new Uint8Array(16),
+      wrapped: new Uint8Array(32),
+    };
+    await store().initializeVault(
+      {
+        id: randomUUIDv7(),
+        publicKey: new Uint8Array([1, 2, 3]),
+        counter: 0,
+        rpId: "localhost",
+        transports: null,
+        name: "テスト",
+        prfSalt: new Uint8Array(32),
+        createdAt: new Date().toISOString(),
+      },
+      wrap,
+      wrap,
+    );
   }
 
   it.each(["/api/auth/register/options", "/api/auth/register/verify"])(
-    "%s はパスキー0件・ローカルの Host で通る",
+    "%s は未設定・ローカルの Host で通る（施錠中でも）",
     async (path) => {
+      expect(passes(await post(publicApp(), path, {}))).toBe(true);
+      clearDataKey();
       expect(passes(await post(publicApp(), path, {}))).toBe(true);
     },
   );
 
   it.each(["/api/auth/register/options", "/api/auth/register/verify"])(
-    "%s はパスキー1件で 409 ALREADY_REGISTERED",
+    "%s は設定済み（recovery の包みがある）で 409 ALREADY_REGISTERED",
     async (path) => {
-      await addPasskey();
+      await initialize();
       const res = await post(publicApp(), path, {});
       expect(res.status).toBe(409);
       expect((await errorOf(res)).code).toBe("ALREADY_REGISTERED");
@@ -371,7 +398,7 @@ describe("公開の手続きの前提（FR-001・006、INV-29）", () => {
   );
 
   it.each(["/api/auth/register/options", "/api/auth/register/verify"])(
-    "%s はパスキー0件でも ts.net の Host なら 421",
+    "%s は未設定でも ts.net の Host なら 421",
     async (path) => {
       const a = publicApp({ getRemoteSettings: remoteOn });
       const res = await post(a, path, { Host: REMOTE_HOST, Origin: `https://${REMOTE_HOST}` });
@@ -396,6 +423,17 @@ describe("公開の手続きの前提（FR-001・006、INV-29）", () => {
       expect((await post(publicApp(), path, { Cookie: normal.cookie })).status).toBe(401);
       const recovery = await createTestSession({ kind: "recovery" });
       expect(passes(await post(publicApp(), path, { Cookie: recovery.cookie }))).toBe(true);
+    },
+  );
+
+  it.each(["/api/auth/recovery/register/options", "/api/auth/recovery/register/verify"])(
+    "%s は一時セッションでも施錠中なら 401 LOCKED",
+    async (path) => {
+      const recovery = await createTestSession({ kind: "recovery" });
+      clearDataKey();
+      const res = await post(publicApp(), path, { Cookie: recovery.cookie });
+      expect(res.status).toBe(401);
+      expect((await errorOf(res)).code).toBe("LOCKED");
     },
   );
 
@@ -425,15 +463,18 @@ describe("公開の手続きの前提（FR-001・006、INV-29）", () => {
     "/api/auth/recovery/verify",
     "/api/auth/pairing/register/options",
     "/api/auth/pairing/register/verify",
-  ])("%s は未サインインで通る", async (path) => {
+  ])("%s は未サインイン・施錠中で通る", async (path) => {
+    clearDataKey();
     expect(passes(await post(publicApp(), path, {}))).toBe(true);
   });
 
-  it("status・health は未サインインで通る", async () => {
+  it("status・health は未サインイン・施錠中で通る", async () => {
+    await initialize();
+    clearDataKey();
     const a = publicApp();
-    expect((await a.request("/api/auth/status", { headers: { Host: TEST_HOST } })).status).toBe(
-      200,
-    );
+    const status = await a.request("/api/auth/status", { headers: { Host: TEST_HOST } });
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({ registered: true, signedIn: false });
     expect((await a.request("/api/health", { headers: { Host: TEST_HOST } })).status).toBe(200);
   });
 });
@@ -452,7 +493,7 @@ describe("セッションの発行（lib/session.ts、R5）", () => {
     const row = await store().findSessionByTokenHash(hashToken(token));
     expect(row?.id).toBe(id);
     expect(row?.tokenHash).not.toBe(token);
-    const rows = openRegistry().$client.prepare("SELECT * FROM sessions").all();
+    const rows = openAuth().$client.prepare("SELECT * FROM sessions").all();
     expect(JSON.stringify(rows)).not.toContain(token);
   });
 
