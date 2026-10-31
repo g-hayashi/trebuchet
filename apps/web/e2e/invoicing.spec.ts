@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ensureSignedIn } from "./helpers/auth.ts";
+import { enterVault } from "./helpers/auth.ts";
 
 // 日付は実行日に左右されないよう、対象月・発行日・入金日をすべて明示する。
 // 開始年度 2026（1 月始まり）の期間に収まる値にする。事業体は新規で、消費税は免税（既定）
@@ -12,8 +12,8 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
   const saved = page.getByRole("status").filter({ hasText: "保存しました。" });
   let invoiceNo = "";
 
-  await test.step("登録またはサインインする", async () => {
-    await ensureSignedIn(page);
+  await test.step("設定または解錠する", async () => {
+    await enterVault(page);
   });
 
   await test.step("事業体を作成する（開始年度 2026）", async () => {

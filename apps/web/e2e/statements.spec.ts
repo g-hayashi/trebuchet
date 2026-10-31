@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { BANK_TWO_COLUMNS } from "../../../packages/domain/test/fixtures/statements/expected.ts";
-import { ensureSignedIn } from "./helpers/auth.ts";
+import { enterVault } from "./helpers/auth.ts";
 
 // 007 US1（と 006 US1・US2）: 銀行の CSV（CP932、前置きつき、出金・入金の 2 列）のファイルを選ぶ → 列の案を確かめる →
 // 取込の口座の名前を入れる → 確認 → 口座の対応 → 取り込む → 候補の承認 → 仕訳帳 → 仕訳の取消で未処理に戻る。
@@ -30,8 +30,8 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
       .filter({ has: page.getByRole("cell", { name: content, exact: true }) });
   let journalNo = "";
 
-  await test.step("登録またはサインインする", async () => {
-    await ensureSignedIn(page);
+  await test.step("設定または解錠する", async () => {
+    await enterVault(page);
   });
 
   await test.step("事業体を作成する（開始年度 2026）", async () => {

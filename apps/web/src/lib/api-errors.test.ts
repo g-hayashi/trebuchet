@@ -69,12 +69,17 @@ describe("describeError", () => {
   it("認証のエラーは日本語の文言にする", () => {
     const code = (c: ConstructorParameters<typeof ApiError>[1]) =>
       describeError(new ApiError(400, c, "x")).message;
-    expect(code("RECOVERY_INVALID")).toBe("回復コードが違います。");
+    expect(code("RECOVERY_INVALID")).toBe("回復キーが違います。");
     expect(code("LAST_PASSKEY")).toContain("最後のパスキー");
     expect(code("WEBAUTHN_FAILED")).toContain("パスキーの確認に失敗しました");
-    expect(code("ALREADY_REGISTERED")).toContain("すでにパスキーが登録されています");
+    expect(code("ALREADY_REGISTERED")).toContain("すでに設定されています");
     expect(code("HOST_NOT_ALLOWED")).toContain("localhost");
-    expect(code("UNAUTHENTICATED")).toContain("サインイン");
+    expect(code("UNAUTHENTICATED")).toContain("解錠");
+    expect(code("LOCKED")).toContain("施錠");
+    expect(code("REAUTH_REQUIRED")).toContain("もう一度");
+    const prf = code("PRF_UNSUPPORTED");
+    expect(prf).toContain("iCloud キーチェーン");
+    expect(prf).toContain("1Password");
   });
 
   it("明細の取込（006）: 貼り付け・口座の対応・プレビューの変更", () => {

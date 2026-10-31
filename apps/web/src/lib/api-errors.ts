@@ -125,7 +125,20 @@ export function describeError(error: unknown): ErrorDescription {
     case "ENTITY_KIND_UNSUPPORTED":
       return { message: "青色申告決算書は、個人の事業体でだけ作れます。", details: [] };
     case "UNAUTHENTICATED":
-      return { message: "サインインが必要です。", details: [] };
+      return { message: "解錠が必要です。パスキーか回復キーで解錠してください。", details: [] };
+    case "LOCKED":
+      return { message: "帳簿は施錠されています。解錠してください。", details: [] };
+    case "PRF_UNSUPPORTED":
+      return {
+        message:
+          "このパスキーは鍵の保護（PRF）に対応していません。iCloud キーチェーンや 1Password などの PRF に対応したパスキーを使ってください。",
+        details: [],
+      };
+    case "REAUTH_REQUIRED":
+      return {
+        message: "この操作の前に、パスキーでもう一度確認してください。",
+        details: [],
+      };
     case "CSRF_REJECTED":
       return {
         message: "要求の送信元を確認できませんでした。画面を開き直してください。",
@@ -139,7 +152,7 @@ export function describeError(error: unknown): ErrorDescription {
       };
     case "ALREADY_REGISTERED":
       return {
-        message: "すでにパスキーが登録されています。サインインしてください。",
+        message: "すでに設定されています。パスキーで解錠してください。",
         details: [],
       };
     case "WEBAUTHN_FAILED":
@@ -148,7 +161,7 @@ export function describeError(error: unknown): ErrorDescription {
         details: [],
       };
     case "RECOVERY_INVALID":
-      return { message: "回復コードが違います。", details: [] };
+      return { message: "回復キーが違います。", details: [] };
     case "LAST_PASSKEY":
       return {
         message:

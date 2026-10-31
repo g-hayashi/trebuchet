@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
-import { ensureSignedIn } from "./helpers/auth.ts";
+import { enterVault } from "./helpers/auth.ts";
 
 const fixtures = resolve(import.meta.dirname, "../../../packages/domain/test/fixtures/freee");
 const JOURNAL = resolve(fixtures, "journal-2025.csv");
@@ -9,8 +9,8 @@ const LEDGER = resolve(fixtures, "ledger-2025.csv");
 test("freee の仕訳帳の取込から、元帳による期首残高、照合まで", async ({ page }) => {
   const menu = page.getByRole("navigation", { name: "事業体のメニュー" });
 
-  await test.step("登録またはサインインする", async () => {
-    await ensureSignedIn(page);
+  await test.step("設定または解錠する", async () => {
+    await enterVault(page);
   });
 
   await test.step("事業体を作成する（開始年度 2025）", async () => {

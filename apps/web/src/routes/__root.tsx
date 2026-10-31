@@ -9,7 +9,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootLayout() {
-  // 画面は、サインインしているときだけ描画する（FR-001・003）。帳簿のデータを含まない静的ファイルは常に配信される
+  // 画面は、解錠しているときだけ描画する（FR-001・003）。帳簿のデータを含まない静的ファイルは常に配信される
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AuthGate>

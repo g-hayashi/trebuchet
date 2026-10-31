@@ -1,31 +1,23 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
-  acknowledgeRecoveryCode,
-  attachAuthenticator,
-  readAuthState,
-  registerFirstPasskey,
-  signInWithPasskey,
-  writeAuthState,
+  acknowledgeRecoveryKey,
+  enterVault,
+  lockVault,
+  ORIGIN_HEADERS,
+  readVaultState,
+  submitRecoveryKey,
+  unlockWithPasskey,
+  writeVaultState,
 } from "./helpers/auth.ts";
 
-const signInHeading = (page: Page) =>
-  page.getByRole("heading", { name: "サインイン", exact: true });
-
-async function signOut(page: Page) {
-  await page.goto("/settings/security");
-  await expect(page.getByRole("heading", { name: "セキュリティ" })).toBeVisible();
-  await page.getByRole("button", { name: "サインアウト" }).click();
-  await expect(signInHeading(page)).toBeVisible();
-}
-
-// E2E の実行は1つのデータ場所を共有し、他のファイルも同じ認証の状態を使う。
-// 初回の登録は、このファイルが最初に動いたときだけここで通る（順序に依存しない作り）。
-// 最後は、新しいパスキーと回復コードを状態に残すので、後のテストはそれでサインインできる
-test("パスキーの登録から、サインアウト・サインイン、回復コードでの再登録まで（FR-001〜008）", async ({
+// E2E の実行は1つのデータ場所を共有し、他のファイルも同じ帳簿を使う。
+// 初回の設定は、このファイルが最初に動いたときだけここで通る（順序に依存しない作り）。
+// 最後は、新しい回復キーを引き継ぎ（`e2e-vault-state.json`）、後のテストはそれで解錠して始める
+test("初回の設定から、施錠・パスキーでの解錠・回復キーでの解錠・古い回復キーの失効まで（008）", async ({
   page,
   request,
 }) => {
-  await test.step("サインインしていない要求は 401 で拒否され、公開の手続きだけが通る（FR-003）", async () => {
+  await test.step("解錠していない要求は 401 で拒否され、公開の手続きだけが通る", async () => {
     // request は cookie を持たない新しい文脈。画面と同じ入口（vite の proxy）を通す
     const health = await request.get("/api/health");
     expect(health.status()).toBe(200);
@@ -37,96 +29,90 @@ test("パスキーの登録から、サインアウト・サインイン、回�
     expect(await status.json()).toMatchObject({ signedIn: false, rpId: "localhost" });
   });
 
-  const authenticator = await attachAuthenticator(page);
-  const registered = (
-    (await (await page.request.get("/api/auth/status")).json()) as {
-      registered: boolean;
+  let authenticator: Awaited<ReturnType<typeof enterVault>>["authenticator"];
+  await test.step("初回ならパスキーを作って回復キーを保管する。設定済みなら引き継いだ回復キーで解錠する", async () => {
+    const entered = await enterVault(page);
+    authenticator = entered.authenticator;
+    if (!entered.setupNow) {
+      test.info().annotations.push({
+        type: "note",
+        description: "他のテストが先に設定したので、初回の設定の手順は確かめていない",
+      });
     }
-  ).registered;
-  let recoveryCode: string;
+    expect(await authenticator.credentialCount()).toBe(1);
+  });
 
-  await page.goto("/");
-  if (registered) {
-    test.info().annotations.push({
-      type: "note",
-      description: "他のテストが先に登録したので、初回の登録の手順は確かめていない",
-    });
-    const state = await readAuthState();
-    if (!state) throw new Error("登録済みなのに、保存したパスキーがない");
-    recoveryCode = state.recoveryCode;
-    await test.step("パスキーでサインインする", async () => {
-      await expect(signInHeading(page)).toBeVisible();
-      await signInWithPasskey(page, authenticator);
-    });
-  } else {
-    await test.step("最初のパスキーを登録し、回復コードを控えて続ける（FR-001・002）", async () => {
-      // 登録の画面（ここでは帳簿の画面に入れない）
-      await expect(page.getByRole("heading", { name: "パスキーの登録" })).toBeVisible();
-      await expect(page.getByRole("link", { name: "設定", exact: true })).toBeHidden();
-      recoveryCode = await registerFirstPasskey(page, authenticator);
-      await expect(page.getByRole("link", { name: "設定", exact: true })).toBeVisible();
-    });
-  }
-
-  await test.step("設定の画面にパスキーが1件以上並ぶ（FR-005）", async () => {
+  await test.step("設定の画面にパスキーが1件以上並ぶ", async () => {
     await page.goto("/settings/security");
-    const list = page.getByRole("table", { name: "パスキーの一覧" });
+    const list = page.getByRole("table", { name: "パスキーの一覧", exact: true });
     await expect(list.getByRole("cell", { name: "localhost", exact: true }).first()).toBeVisible();
   });
 
-  await test.step("サインアウトすると、サインインの画面に戻り、API は 401（FR-004）", async () => {
-    await signOut(page);
+  const entityName = `解錠の確認 ${Date.now()}`;
+  const entityNames = async () =>
+    (
+      (await (await page.request.get("/api/entities")).json()) as { entities: { name: string }[] }
+    ).entities.map((e) => e.name);
+
+  await test.step("帳簿を操作する（事業体を作る）", async () => {
+    const res = await page.request.post("/api/entities", {
+      headers: ORIGIN_HEADERS,
+      data: { name: entityName, kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 },
+    });
+    expect(res.status()).toBe(201);
+    expect(await entityNames()).toContain(entityName);
+  });
+
+  await test.step("施錠すると、解錠の画面に戻り、帳簿の API は 401", async () => {
+    await lockVault(page);
     expect((await page.request.get("/api/entities")).status()).toBe(401);
   });
 
-  await test.step("認証器のパスキーでサインインし直す（FR-003）", async () => {
-    await signInWithPasskey(page, authenticator);
-    expect((await page.request.get("/api/entities")).status()).toBe(200);
+  await test.step("パスキーで解錠すると、施錠の前の帳簿が読める", async () => {
+    await unlockWithPasskey(page);
+    expect(await entityNames()).toContain(entityName);
   });
 
-  await test.step("認証の記録に、サインインの出来事が残る（FR-008）", async () => {
-    await page.goto("/settings/security");
-    await expect(page.getByRole("heading", { name: "セキュリティ" })).toBeVisible();
-    await expect
-      .poll(async () => {
-        const res = await page.request.get("/api/auth/events");
-        const body = (await res.json()) as { events: { kind: string }[] };
-        return body.events.some((e) => e.kind === "sign_in");
-      })
-      .toBe(true);
-  });
+  const state = await readVaultState();
+  if (!state) throw new Error("引き継いだ回復キーがない");
+  const oldKey = state.recoveryKey;
+  let newKey = "";
 
-  let newCode = "";
-  await test.step("回復コードでサインインし、新しいパスキーを登録する（FR-006）", async () => {
-    await signOut(page);
-    await page.getByRole("button", { name: "回復コードを使う" }).click();
-    await page.getByLabel("回復コード", { exact: true }).fill(recoveryCode);
-    await page.getByRole("button", { name: "確認する" }).click();
-    await expect(page.getByText("回復コードを確認しました。")).toBeVisible();
-    // 一時セッションでは、帳簿の API はまだ使えない
+  await test.step("施錠し、回復キーで解錠する。新しいパスキーを登録するまで帳簿は読めない", async () => {
+    await lockVault(page);
+    await submitRecoveryKey(page, oldKey);
+    const register = page.getByRole("main").getByRole("button", {
+      name: "新しいパスキーを登録",
+      exact: true,
+    });
+    await expect(register).toBeVisible();
+    // 回復用の一時セッションでは、帳簿の API はまだ使えない
     expect((await page.request.get("/api/entities")).status()).toBe(401);
 
     // 既存のパスキーは登録の除外に入るので、パスキーを持たない別の認証器に取り替える
     await authenticator.replace();
-    await page.getByRole("button", { name: "新しいパスキーを登録" }).click();
-    newCode = await acknowledgeRecoveryCode(page);
-    expect(newCode).not.toBe(recoveryCode);
+    await register.click();
+    newKey = await acknowledgeRecoveryKey(page);
+    expect(newKey).not.toBe(oldKey);
+    // 後のテストが、新しい回復キーで始められるようにする
+    await writeVaultState({ recoveryKey: newKey });
     await expect(page.getByRole("link", { name: "設定", exact: true })).toBeVisible();
-    expect((await page.request.get("/api/entities")).status()).toBe(200);
-    // 後のテストが、新しいパスキーと新しい回復コードを使えるようにする
-    await writeAuthState({ credentials: await authenticator.credentials(), recoveryCode: newCode });
+    // 回復キーで開けても、データの鍵は同じ（施錠の前の帳簿が読める）
+    expect(await entityNames()).toContain(entityName);
   });
 
-  await test.step("古い回復コードは使えない（FR-006）", async () => {
-    await signOut(page);
-    await page.getByRole("button", { name: "回復コードを使う" }).click();
-    await page.getByLabel("回復コード", { exact: true }).fill(recoveryCode);
-    await page.getByRole("button", { name: "確認する" }).click();
-    await expect(page.getByRole("alert")).toContainText("回復コードが違います");
-    await page.getByRole("button", { name: "サインインに戻る" }).click();
+  await test.step("古い回復キーは使えない", async () => {
+    await lockVault(page);
+    await submitRecoveryKey(page, oldKey);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("回復キーが違います");
+    await page
+      .getByRole("main")
+      .getByRole("button", { name: "パスキーでの解錠に戻る", exact: true })
+      .click();
   });
 
-  await test.step("新しいパスキーでサインインできる", async () => {
-    await signInWithPasskey(page, authenticator);
+  await test.step("新しいパスキーで解錠できる", async () => {
+    await unlockWithPasskey(page);
+    expect(await entityNames()).toContain(entityName);
   });
 });
