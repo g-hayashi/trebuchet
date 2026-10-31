@@ -16,4 +16,4 @@
 - [X] T003 web と E2E: PRF の値の変換（`webauthnClient.ts` を写す）、初回の設定・解錠（パスキー・回復キー）・回復の後のパスキー登録の画面、401 `LOCKED` で解錠の画面に戻す、設定のセキュリティ（追加・削除・回復キーの再発行・施錠、再認証）。`mock-api.ts` の既定の応答。E2E の仮想の認証器に `hasPrf: true`、回復キーで引き継ぐ `enterVault`（D4・D6・D11）
 - [X] T004 バックアップと復元: 鍵を DK から（D9）、ヘッダーに recovery の包み、パスフレーズ・キーチェーンの経路と画面・API の削除（`SecretStore` は AI の API キーのために残す）、解錠中だけの定期実行、`pnpm restore` は回復キーで（ヘッダー → 今の `auth.sqlite` の順に試す）、画面の検査は DK で。テストの後に `.tmp/server-<id>/snap` が残る漏れを直す。INV-54 の性質テスト。`bench:backup` を合わせる（D9、INV-54）
 - [X] T005 文書: ADR 0011、ADR 0006・0007 の置き換えの記載、`specs/INVARIANTS.md` に INV-51〜54、AGENTS.md の 004 の節と 008 の節、`docs/requirements.md`、README（D10・D12）
-- [ ] T006 メイン: `pnpm typecheck`・`pnpm lint`・`pnpm test`・web の build。利用者の端末で `data/` を作り直し、E2E と手動の確認（設定 → 施錠 → パスキーで解錠 → 回復キーで解錠 → バックアップ → 復元）
+- [X] T006 メイン: `pnpm typecheck`・`pnpm lint`・`pnpm test`・web の build。利用者の端末で `data/` を作り直し、E2E と手動の確認（設定 → 施錠 → パスキーで解錠 → 回復キーで解錠 → バックアップ → 復元）
