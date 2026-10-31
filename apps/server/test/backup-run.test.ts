@@ -1,24 +1,56 @@
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
-import { backupFileName } from "@trebuchet/db";
-import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
+import {
+  backupFileName,
+  clearDataKey,
+  currentAppVersion,
+  decryptBackup,
+  decryptBackupWithRecoveryKey,
+  generateRecoveryKey,
+  unpackArchive,
+  wrapDataKey,
+} from "@trebuchet/db";
+import { TEST_DATA_KEY, type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type BackupEnv, configure, makeBackupEnv } from "./backup-helpers.ts";
 import { createTestEntity } from "./helpers.ts";
 
-// T012: バックアップの実行（スナップショット → 内容の SHA-256 → skip の判断 → 暗号化 → 書き込み → 世代の整理 → 記録）
+// バックアップの実行（スナップショット → 内容の SHA-256 → skip の判断 → 暗号化（DK から作った鍵） → 書き込み → 世代の整理 → 記録）
+
+/** VERIFY_FAILED の試験用: 立てている間は、暗号化したファイルの最後の 1 バイト（認証タグ）を壊す */
+const hooks = vi.hoisted(() => ({ corrupt: false }));
+vi.mock("@trebuchet/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@trebuchet/db")>();
+  return {
+    ...actual,
+    encryptBackup: (...args: Parameters<typeof actual.encryptBackup>) => {
+      const bytes = actual.encryptBackup(...args);
+      if (hooks.corrupt) bytes[bytes.length - 1] = (bytes[bytes.length - 1] ?? 0) ^ 1;
+      return bytes;
+    },
+  };
+});
 
 let tmp: TempDataDir;
 let env: BackupEnv;
 beforeEach(async () => {
+  hooks.corrupt = false;
   tmp = useTempDataDir("server");
   await createTestEntity("事業 A");
   env = makeBackupEnv(tmp);
   await configure(env);
 });
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
-  tmp.cleanup();
+  await env.finish();
 });
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -48,6 +80,42 @@ describe("成功", () => {
     expect(await env.backups().getLastRun()).toEqual(run);
     expect(await env.auth().getSetting("backup_force_write")).not.toBe("1");
     expect(env.snapshotLeftovers()).toEqual([]);
+  });
+
+  it("鍵は DK から作る。そのときの回復キー（ヘッダーの包み）でも DK でも開け、本体は事業 A を含む（INV-54）", async () => {
+    const run = await runOnce("manual");
+    const bytes = readFileSync(join(env.folder, run.fileName ?? ""));
+    const byRecovery = decryptBackupWithRecoveryKey(bytes, env.recovery.text, currentAppVersion());
+    expect(byRecovery.ok).toBe(true);
+    const byDk = decryptBackup(bytes, TEST_DATA_KEY, currentAppVersion());
+    expect(byDk.ok).toBe(true);
+    if (!byRecovery.ok || !byDk.ok) return;
+    expect(byRecovery.value.dk.equals(Buffer.from(TEST_DATA_KEY))).toBe(true);
+    const unpacked = unpackArchive(byDk.value.archive);
+    expect(unpacked.ok && unpacked.value.manifest.entities.map((e) => e.name)).toEqual(["事業 A"]);
+    // 誤った回復キーでは開かない
+    expect(
+      decryptBackupWithRecoveryKey(bytes, generateRecoveryKey().text, currentAppVersion()),
+    ).toEqual({ ok: false, error: "INVALID" });
+  });
+
+  it("回復キーの再発行の後の実行は新しい包みを入れ、古いファイルも古いキーのまま開ける", async () => {
+    const first = await runOnce("manual");
+    const next = generateRecoveryKey();
+    await env
+      .auth()
+      .replaceRecoveryWrap(
+        wrapDataKey(TEST_DATA_KEY, next.secret, "recovery", null),
+        env.clock.clock.now(),
+      );
+    const second = await runOnce("manual", DAY);
+    const bytes1 = readFileSync(join(env.folder, first.fileName ?? ""));
+    const bytes2 = readFileSync(join(env.folder, second.fileName ?? ""));
+    const version = currentAppVersion();
+    expect(decryptBackupWithRecoveryKey(bytes1, env.recovery.text, version).ok).toBe(true);
+    expect(decryptBackupWithRecoveryKey(bytes1, next.text, version).ok).toBe(false);
+    expect(decryptBackupWithRecoveryKey(bytes2, next.text, version).ok).toBe(true);
+    expect(decryptBackupWithRecoveryKey(bytes2, env.recovery.text, version).ok).toBe(false);
   });
 
   it("start は終わりを待たずに runId を返す。記録の id は runId と同じ", async () => {
@@ -103,7 +171,7 @@ describe("変更なし（skipped）", () => {
     expect(env.files()).toHaveLength(1);
   });
 
-  it("backup_force_write（パスフレーズの変更の後）が立っていれば自動も書き、成功で消える", async () => {
+  it("backup_force_write（置き場所の設定の直後）が立っていれば自動も書き、成功で消える", async () => {
     await runOnce("auto");
     await env.auth().setSetting("backup_force_write", "1", env.clock.clock.now());
     const forced = await runOnce("auto", DAY);
@@ -115,7 +183,7 @@ describe("変更なし（skipped）", () => {
 
   it("失敗した実行では backup_force_write を消さない", async () => {
     await env.auth().setSetting("backup_force_write", "1", env.clock.clock.now());
-    await env.secrets.delete("trebuchet-backup");
+    rmSync(env.folder, { recursive: true, force: true });
     const failed = await runOnce("manual");
     expect(failed.status).toBe("failed");
     expect(await env.auth().getSetting("backup_force_write")).toBe("1");
@@ -151,7 +219,7 @@ describe("失敗", () => {
     const newer = backupFileName(macId, new Date("2026-09-01T02:00:00Z"));
     writeFileSync(join(env.folder, older), "old");
     writeFileSync(join(env.folder, newer), "new");
-    env.crypto.state.breakAfter = env.crypto.state.calls + 1; // 暗号化の鍵は正しく、検証の復号だけ別の鍵
+    hooks.corrupt = true; // 書いたファイルの認証タグを壊す（読み戻しの復号が通らない）
     const run = await runOnce("manual");
     expect(run.status).toBe("failed");
     expect(run.errorCode).toBe("VERIFY_FAILED");
@@ -159,11 +227,12 @@ describe("失敗", () => {
     expect(env.snapshotLeftovers()).toEqual([]);
   });
 
-  it("パスフレーズがなければ PASSPHRASE_MISSING", async () => {
-    await env.secrets.delete("trebuchet-backup");
-    const run = await runOnce("auto");
-    expect(run.status).toBe("failed");
-    expect(run.errorCode).toBe("PASSPHRASE_MISSING");
+  it("施錠中（DK がない）なら始めず LOCKED を返す。記録も平文の写しも作らない", async () => {
+    clearDataKey();
+    const started = await env.runner.start("auto");
+    expect(started.ok).toBe(false);
+    if (!started.ok) expect(started.error.code).toBe("LOCKED");
+    expect(env.runner.isRunning()).toBe(false);
     expect(env.files()).toEqual([]);
     expect(env.snapshotLeftovers()).toEqual([]);
   });
@@ -171,7 +240,7 @@ describe("失敗", () => {
   it("スナップショットの作成が失敗しても failed で記録し、平文の写しを残さない", async () => {
     const empty = join(tmp.dir, "no-data");
     mkdirSync(empty);
-    const env2 = makeBackupEnv(tmp, { dataDirOverride: empty });
+    const env2 = makeBackupEnv(tmp, { dataDirOverride: empty, recovery: env.recovery });
     const started = await env2.runner.start("manual");
     if (!started.ok) throw new Error("start failed");
     const run = await started.value.done;
@@ -232,21 +301,51 @@ describe("同時実行と未設定", () => {
   });
 });
 
-describe("パスフレーズを残さない", () => {
-  it("backup_runs・app_settings・ファイル名・ログに出ない", async () => {
-    const secret = "unique-passphrase-d0f1c2b3-xyz";
-    await env.secrets.set("trebuchet-backup", secret);
+describe("片付けの後に作業場所を作り直さない（.tmp/server-<id>/snap の漏れ）", () => {
+  it("終わりを待たない実行があっても、finish（実行の終わりを待つ → 片付け）の後に何も残らない", async () => {
+    const started = await env.runner.start("manual"); // done を待たない
+    expect(started.ok).toBe(true);
+    expect(env.runner.isRunning()).toBe(true);
+    await env.finish();
+    expect(env.runner.isRunning()).toBe(false);
+    expect(existsSync(tmp.dir)).toBe(false);
+  });
+
+  it("idle は実行がなければすぐ解決し、実行中は終わりで解決する（失敗した実行でも）", async () => {
+    await env.runner.idle();
+    rmSync(env.folder, { recursive: true, force: true }); // FOLDER_NOT_FOUND で失敗する実行
+    await env.runner.start("manual");
+    await env.runner.idle();
+    expect(env.runner.isRunning()).toBe(false);
+    expect((await env.backups().getLastRun())?.status).toBe("failed");
+  });
+});
+
+describe("鍵を残さない（INV-51）", () => {
+  it("DK・回復キーが backup_runs・app_settings・ファイル名・ログ・置き場所のファイルに出ない", async () => {
     const logs = [vi.spyOn(console, "log"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")];
     await runOnce("manual");
-    env.clock.advance(1000);
-    await env.secrets.delete("trebuchet-backup");
+    rmSync(env.folder, { recursive: true, force: true });
     await runOnce("manual"); // 失敗の記録
+    mkdirSync(env.folder);
+    await runOnce("manual");
+    const needles = [
+      Buffer.from(TEST_DATA_KEY).toString("hex"),
+      Buffer.from(TEST_DATA_KEY).toString("base64"),
+      env.recovery.text,
+      env.recovery.text.replaceAll("-", ""),
+    ];
     const runs = JSON.stringify(await env.backups().listRuns(10));
-    expect(runs).not.toContain(secret);
-    expect(JSON.stringify(logs.map((l) => l.mock.calls))).not.toContain(secret);
-    for (const name of env.files()) {
-      expect(readFileSync(join(env.folder, name)).includes(Buffer.from(secret))).toBe(false);
+    const logged = JSON.stringify(logs.map((l) => l.mock.calls));
+    for (const needle of needles) {
+      expect(runs).not.toContain(needle);
+      expect(logged).not.toContain(needle);
     }
-    expect((await env.auth().getSetting("backup_folder")) ?? "").not.toContain(secret);
+    for (const name of env.files()) {
+      const bytes = readFileSync(join(env.folder, name));
+      expect(bytes.includes(Buffer.from(TEST_DATA_KEY))).toBe(false);
+      for (const needle of needles) expect(bytes.includes(Buffer.from(needle))).toBe(false);
+    }
+    expect((await env.auth().getSetting("backup_folder")) ?? "").not.toContain(needles[2] ?? "");
   });
 });

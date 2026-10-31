@@ -7,7 +7,7 @@ import {
   unwrapDataKey,
   type WrapKind,
   wrapDataKey,
-} from "../src/lib/vault-crypto.ts";
+} from "../src/vault-crypto.ts";
 
 // 008 の D1: DK の包み（AES-256-GCM、KEK = HKDF-SHA256(ikm, salt, "trebuchet/dk-wrap/v1")）。INV-52
 

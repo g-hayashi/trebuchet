@@ -1,29 +1,30 @@
+import { randomBytes } from "node:crypto";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AppVersion,
-  type BackupHeaderInput,
   currentAppVersion,
   type DbKeyScope,
   dataDir,
   encryptBackup,
+  generateRecoveryKey,
   openEncryptedSqlite,
   packArchive,
   type Snapshot,
+  wrapDataKey,
 } from "@trebuchet/db";
-import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
+import { TEST_DATA_KEY, type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import type { BackupInspection } from "@trebuchet/schema";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.ts";
-import { fastCrypto, PASSPHRASE } from "./backup-helpers.ts";
 import { createTestEntity, createTestSession, errorOf, TEST_HOST, TEST_ORIGIN } from "./helpers.ts";
 
-// T014: POST /backup/inspect（contracts/http-api.md「バックアップ」。R13、FR-024・027）
+// T014: POST /backup/inspect（contracts/http-api.md「バックアップ」。R13、FR-024・027）。
+// 008 の D9: 解錠中の DK で復号する（パスフレーズの入力はない）
 
 const ENTITY = "0192f3a0-0000-7000-8000-000000000001";
 const CREATED_AT = "2026-10-20T09:00:00.000Z";
 const MAC_ID = "9f3c2b1a-1111-4222-8333-444455556666";
-const crypto = fastCrypto().crypto;
 
 const snapshot: Snapshot = {
   files: [
@@ -45,20 +46,27 @@ const snapshot: Snapshot = {
   },
 };
 
-/** .tbk を作る（鍵導出は軽くしてある。ファイルは1回作って使い回す） */
-async function makeFile(version: AppVersion = currentAppVersion()): Promise<Buffer> {
-  const header: BackupHeaderInput = { appVersion: version, macId: MAC_ID, createdAt: CREATED_AT };
-  return encryptBackup(packArchive(snapshot), PASSPHRASE, header, crypto);
+/** .tbk を作る（DK で暗号化し、ヘッダーに recovery の包みを入れる。ファイルは1回作って使い回す） */
+function makeFile(version: AppVersion = currentAppVersion(), dk: Uint8Array = TEST_DATA_KEY) {
+  const key = generateRecoveryKey();
+  return encryptBackup(packArchive(snapshot), dk, {
+    appVersion: version,
+    macId: MAC_ID,
+    createdAt: CREATED_AT,
+    recoveryWrap: wrapDataKey(dk, key.secret, "recovery", null),
+  });
 }
 
 let good: Buffer;
 let newer: Buffer;
 let older: Buffer;
-beforeAll(async () => {
+let otherDk: Buffer;
+beforeAll(() => {
   const v = currentAppVersion();
-  good = await makeFile();
-  newer = await makeFile({ registry: v.registry + 1, tenant: v.tenant });
-  older = await makeFile({ registry: v.registry, tenant: Math.max(0, v.tenant - 1) });
+  good = makeFile();
+  newer = makeFile({ registry: v.registry + 1, tenant: v.tenant });
+  older = makeFile({ registry: v.registry, tenant: Math.max(0, v.tenant - 1) });
+  otherDk = makeFile(v, randomBytes(32));
 });
 
 let tmp: TempDataDir;
@@ -68,14 +76,13 @@ beforeEach(async () => {
   tmp = useTempDataDir("server");
   await createTestEntity("事業 A");
   cookie = (await createTestSession()).cookie;
-  app = createApp({ backup: { crypto } });
+  app = createApp();
 });
 afterEach(() => tmp.cleanup());
 
-const form = (file: Uint8Array | undefined, passphrase: string | null = PASSPHRASE) => {
+const form = (file: Uint8Array | undefined) => {
   const f = new FormData();
   if (file !== undefined) f.append("file", new File([new Uint8Array(file)], "x.tbk"));
-  if (passphrase !== null) f.append("passphrase", passphrase);
   return f;
 };
 
@@ -115,7 +122,7 @@ function dumpAll(): unknown {
 }
 
 describe("POST /api/backup/inspect", () => {
-  it("正しいパスフレーズで要約を返す", async () => {
+  it("解錠中の DK で復号して要約を返す（パスフレーズは要らない。古い passphrase の項目は無視する）", async () => {
     const res = await inspect(form(good));
     expect(res.status).toBe(200);
     const body = (await res.json()) as BackupInspection;
@@ -125,21 +132,24 @@ describe("POST /api/backup/inspect", () => {
       appVersion: currentAppVersion(),
       entities: snapshot.manifest.entities,
     });
+    const legacy = form(good);
+    legacy.append("passphrase", "legacy-passphrase-value");
+    expect((await inspect(legacy)).status).toBe(200);
   });
 
-  it("誤ったパスフレーズは 422 BACKUP_INVALID。応答にパスフレーズを含めない", async () => {
-    const wrong = "wrong horse battery staple";
-    const res = await inspect(form(good, wrong));
+  it("別の DK で取ったバックアップは 422 BACKUP_INVALID。応答に鍵を含めない", async () => {
+    const res = await inspect(form(otherDk));
     expect(res.status).toBe(422);
     const text = await res.text();
     expect(JSON.parse(text).error.code).toBe("BACKUP_INVALID");
-    expect(text).not.toContain(wrong);
+    expect(text).not.toContain(Buffer.from(TEST_DATA_KEY).toString("hex"));
+    expect(text).not.toContain(Buffer.from(TEST_DATA_KEY).toString("base64"));
   });
 
-  it("1バイト書き換え・切り詰め・ファイルでない中身は 422 BACKUP_INVALID（誤ったパスフレーズと同じ応答）", async () => {
+  it("1バイト書き換え・切り詰め・ファイルでない中身は 422 BACKUP_INVALID（別の DK と同じ応答）", async () => {
     const flipped = Buffer.from(good);
     flipped[flipped.length - 20] = (flipped[flipped.length - 20] ?? 0) ^ 0xff;
-    const wrong = await inspect(form(good, "wrong horse battery staple"));
+    const wrong = await inspect(form(otherDk));
     const wrongBody = await wrong.json();
     for (const bad of [flipped, good.subarray(0, good.length - 1), Buffer.from("not a backup")]) {
       const res = await inspect(form(bad));
@@ -156,23 +166,21 @@ describe("POST /api/backup/inspect", () => {
     }
   });
 
-  it("file がない・passphrase がない → 400 VALIDATION", async () => {
-    for (const body of [form(undefined), form(good, null)]) {
-      const res = await inspect(body);
-      expect(res.status).toBe(400);
-      expect((await errorOf(res)).code).toBe("VALIDATION");
-    }
+  it("file がない → 400 VALIDATION", async () => {
+    const res = await inspect(form(undefined));
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).code).toBe("VALIDATION");
   });
 
   it("上限を超えるファイルは 413 FILE_TOO_LARGE", async () => {
-    const small = createApp({ backup: { crypto, inspectMaxBytes: good.length - 1 } });
+    const small = createApp({ backup: { inspectMaxBytes: good.length - 1 } });
     const res = await inspect(form(good), small);
     expect(res.status).toBe(413);
     const error = await errorOf(res);
     expect(error.code).toBe("FILE_TOO_LARGE");
     expect(error.details).toEqual({ maxBytes: good.length - 1 });
     // ちょうどの大きさは通る
-    const exact = createApp({ backup: { crypto, inspectMaxBytes: good.length } });
+    const exact = createApp({ backup: { inspectMaxBytes: good.length } });
     expect((await inspect(form(good), exact)).status).toBe(200);
   });
 
@@ -180,7 +188,7 @@ describe("POST /api/backup/inspect", () => {
     const before = dumpAll();
     const filesBefore = readdirSync(dataDir(), { recursive: true }).sort();
     expect((await inspect(form(good))).status).toBe(200);
-    expect((await inspect(form(good, "wrong horse battery staple"))).status).toBe(422);
+    expect((await inspect(form(otherDk))).status).toBe(422);
     expect(dumpAll()).toEqual(before);
     expect(readdirSync(dataDir(), { recursive: true }).sort()).toEqual(filesBefore);
   });

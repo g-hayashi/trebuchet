@@ -65,9 +65,9 @@ export function removeStaleSnapshots(tmpRoot: string): number {
 const quote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
 
 /**
- * 暗号化した元を DK から作った鍵で開いて VACUUM INTO で写し（写しも同じ鍵で暗号化される）、
- * 写しの暗号を外す（`PRAGMA rekey=''`）。写しは今までどおり平文の SQLite で、.tbk の中で暗号化する
- * （バックアップの鍵を DK からにするのは 008 の D9・T004）
+ * 暗号化した元を今の DK から作った鍵で開いて VACUUM INTO で写し（写しも同じ鍵で暗号化される）、
+ * 写しの暗号を外す（`PRAGMA rekey=''`）。写しは平文の SQLite のまま .tbk の中に入れる（外側の AES-GCM が
+ * 守る。008 の D9。復元は展開した写しを、バックアップの DK から作った鍵で暗号化し直す）
  */
 function vacuumInto(source: string, dest: string, scope: DbKeyScope): void {
   const db = openEncryptedSqlite(source, scope, { fileMustExist: true });

@@ -15,9 +15,9 @@ beforeEach(() => {
   tmp = useTempDataDir("server");
   env = makeBackupEnv(tmp);
 });
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers();
-  tmp.cleanup();
+  await env.finish();
 });
 
 const deps = (
@@ -28,7 +28,6 @@ const deps = (
   runner: runner as BackupEnv["runner"],
   auth: env.auth,
   backups: env.backups,
-  secrets: env.secrets,
   clock: env.clock.clock,
   tmpRoot: env.tmpRoot,
   recurring: {

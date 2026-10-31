@@ -1,7 +1,8 @@
-import { hkdfSync } from "node:crypto";
+import { hkdfSync, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { WrappedKey } from "@trebuchet/domain";
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { Database, type DrizzleDb, drizzleOf } from "./driver.ts";
@@ -161,6 +162,51 @@ export function encryptSqliteFile(file: string, scope: DbKeyScope): void {
     } finally {
       key.fill(0);
     }
+  } finally {
+    client.close();
+  }
+}
+
+/**
+ * 別の DK を一時的に使って fn（同期）を実行し、終わったら元の状態（解錠中なら元の DK、施錠中なら施錠）に戻す。
+ * 復元が、バックアップの DK と今の帳簿の DK を使い分けるために使う。開いている registry・事業体の DB は
+ * 切り替えの前後で閉じる。DK の写しは終わりに 0 で埋める
+ */
+export function withDataKeyOverride<T>(dk: Uint8Array, fn: () => T): T {
+  const prior = dataKey === null ? null : Buffer.from(dataKey);
+  clearDataKey();
+  setDataKey(Buffer.from(dk));
+  try {
+    return fn();
+  } finally {
+    clearDataKey();
+    if (prior !== null) setDataKey(prior);
+  }
+}
+
+/**
+ * 認証の表だけの `auth.sqlite` を作る（暗号化しない）。recovery の包みの 1 行だけを入れ、パスキー・
+ * セッションは空（復元の後、次の起動で回復キーで解錠してパスキーを登録する。008 の D9）。
+ * 作った後は WAL を残さない 1 ファイルにする。ファイルが既にあれば例外
+ */
+export function createAuthFile(file: string, recoveryWrap: WrappedKey, now: string): void {
+  mkdirSync(dirname(file), { recursive: true });
+  const client = new Database(file);
+  try {
+    migrate(drizzleOf(client, authSchema), { migrationsFolder: MIGRATIONS.auth });
+    client
+      .prepare(
+        "INSERT INTO key_wraps (id, kind, credential_id, salt, iv, tag, wrapped, created_at) VALUES (?, 'recovery', NULL, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        randomUUID(),
+        Buffer.from(recoveryWrap.salt),
+        Buffer.from(recoveryWrap.iv),
+        Buffer.from(recoveryWrap.tag),
+        Buffer.from(recoveryWrap.wrapped),
+        now,
+      );
+    client.pragma("journal_mode = DELETE");
   } finally {
     client.close();
   }

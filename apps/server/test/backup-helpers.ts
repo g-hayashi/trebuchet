@@ -1,35 +1,19 @@
-import { createHash, randomUUIDv7 } from "node:crypto";
+import { randomUUIDv7 } from "node:crypto";
 import { mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
-  type CryptoOptions,
   DrizzleAuthStore,
   DrizzleBackupStore,
   dataDir,
+  generateRecoveryKey,
   openAuth,
   openRegistry,
+  wrapDataKey,
 } from "@trebuchet/db";
-import type { TempDataDir } from "@trebuchet/db/testing";
+import { TEST_DATA_KEY, type TempDataDir } from "@trebuchet/db/testing";
+import type { WrappedKey } from "@trebuchet/domain";
 import { type BackupRunner, createBackupRunner } from "../src/lib/backup-run.ts";
-import { BACKUP_PASSPHRASE_KEY, createMemorySecretStore } from "../src/lib/keychain.ts";
 import { makeClock } from "./helpers.ts";
-
-/** 鍵導出を軽くする（本物の Argon2id は 64 MiB × 3 回で遅い）。`breakAfter` 回目以降は別の鍵を返す */
-export function fastCrypto(state: { calls: number; breakAfter?: number } = { calls: 0 }): {
-  crypto: CryptoOptions;
-  state: { calls: number; breakAfter?: number };
-} {
-  return {
-    state,
-    crypto: {
-      deriveKey: async (passphrase, kdf) => {
-        state.calls += 1;
-        const tag = state.breakAfter !== undefined && state.calls > state.breakAfter ? "x" : "";
-        return createHash("sha256").update(tag).update(passphrase).update(kdf.salt).digest();
-      },
-    },
-  };
-}
 
 /** `makeClock`（helpers.ts）を、バックアップのテストが使う `{ clock, advance, set }` の形にしたもの */
 function mutableClock() {
@@ -38,53 +22,77 @@ function mutableClock() {
 }
 
 export const HOUR = 60 * 60 * 1000;
-export const PASSPHRASE = "correct horse battery staple";
 
 export type BackupEnv = {
   folder: string;
   tmpRoot: string;
   runner: BackupRunner;
-  secrets: ReturnType<typeof createMemorySecretStore>;
   clock: ReturnType<typeof mutableClock>;
   auth: () => DrizzleAuthStore;
   backups: () => DrizzleBackupStore;
-  crypto: ReturnType<typeof fastCrypto>;
+  /** 初回の設定で作った回復キー（本文）と recovery の包み（`auth.sqlite` に入れてある。DK はテスト用の固定の DK） */
+  recovery: { text: string; wrap: WrappedKey };
   files(): string[];
   snapshotLeftovers(): string[];
+  /**
+   * 片付け。実行中のバックアップが終わるのを待ってから、一時のデータ場所を消す。
+   * 終わりを待たない実行（`start` の戻りの `done` を見ないもの）が、片付けの後に作業場所
+   * （`<tmp.dir>/snap`）を作り直して `.tmp/` に残すのを防ぐ。afterEach で必ずこれを呼ぶ
+   */
+  finish(): Promise<void>;
 };
 
-/** useTempDataDir の後に呼ぶ。置き場所・平文の写しの作業場所は `.tmp/` の下 */
+/** 回復キーを作り、DK（テスト用の固定の DK）を包んだ recovery の包みを `auth.sqlite` に入れる */
+function seedRecoveryWrap(now: string): BackupEnv["recovery"] {
+  const key = generateRecoveryKey();
+  const wrap = wrapDataKey(TEST_DATA_KEY, key.secret, "recovery", null);
+  openAuth()
+    .$client.prepare(
+      "INSERT INTO key_wraps (id, kind, credential_id, salt, iv, tag, wrapped, created_at) VALUES (?, 'recovery', NULL, ?, ?, ?, ?, ?)",
+    )
+    .run(
+      randomUUIDv7(),
+      Buffer.from(wrap.salt),
+      Buffer.from(wrap.iv),
+      Buffer.from(wrap.tag),
+      Buffer.from(wrap.wrapped),
+      now,
+    );
+  return { text: key.text, wrap };
+}
+
+/** useTempDataDir の後に呼ぶ。置き場所・平文の写しの作業場所は `.tmp/` の下。recovery の包みも入れる */
 export function makeBackupEnv(
   tmp: TempDataDir,
-  opts: { configured?: boolean; passphrase?: string | null; dataDirOverride?: string } = {},
+  opts: {
+    dataDirOverride?: string;
+    /** 同じデータ場所に 2 つめの env を作るとき、先の env の recovery を渡す（包みを重ねて入れない） */
+    recovery?: BackupEnv["recovery"];
+  } = {},
 ): BackupEnv {
   const folder = join(tmp.dir, "dest");
   const tmpRoot = join(tmp.dir, "snap");
   mkdirSync(folder, { recursive: true });
   const clock = mutableClock();
-  const secrets = createMemorySecretStore();
-  const crypto = fastCrypto();
   const auth = () => new DrizzleAuthStore(openAuth(), openRegistry);
   const backups = () => new DrizzleBackupStore(openRegistry());
   const runner = createBackupRunner({
     auth,
     backups,
-    secrets,
     clock: clock.clock,
     ids: { next: () => randomUUIDv7() },
     dataDir: () => opts.dataDirOverride ?? dataDir(),
     tmpRoot,
-    crypto: crypto.crypto,
   });
-  const env: BackupEnv = {
+  const recovery = opts.recovery ?? seedRecoveryWrap(clock.clock.now());
+  return {
     folder,
     tmpRoot,
     runner,
-    secrets,
     clock,
     auth,
     backups,
-    crypto,
+    recovery,
     files: () => readdirSync(folder).sort(),
     snapshotLeftovers: () => {
       try {
@@ -93,16 +101,15 @@ export function makeBackupEnv(
         return [];
       }
     },
+    finish: async () => {
+      await runner.idle();
+      tmp.cleanup();
+    },
   };
-  if (opts.passphrase !== null) {
-    void secrets.set(BACKUP_PASSPHRASE_KEY, opts.passphrase ?? PASSPHRASE);
-  }
-  return env;
 }
 
 /** 置き場所を設定済みにする（app_settings） */
 export async function configure(env: BackupEnv): Promise<void> {
   const now = env.clock.clock.now();
   await env.auth().setSetting("backup_folder", env.folder, now);
-  await env.auth().setSetting("backup_passphrase_set", "1", now);
 }

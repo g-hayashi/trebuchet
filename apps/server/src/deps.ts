@@ -102,7 +102,6 @@ export const fmServer = createFmServer({
 export const backupRunner: BackupRunner = createBackupRunner({
   auth: authStore,
   backups: backupStore,
-  secrets: secretStore,
   clock,
   ids,
   dataDir,

@@ -5,7 +5,7 @@ import {
   generateRecoveryKey,
   parseRecoveryKey,
   RECOVERY_KEY_BYTES,
-} from "../src/lib/recovery-key.ts";
+} from "../src/recovery-key.ts";
 
 // 008 の D1: 回復キーは 160 ビットの乱数（Crockford base32、4 文字区切り）。ハッシュは保存しない
 

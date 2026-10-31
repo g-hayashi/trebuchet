@@ -6,15 +6,6 @@ import { Id } from "./primitives.ts";
 const Timestamp = z.string().min(1);
 const Count = z.number().int().nonnegative();
 
-/** パスフレーズ。12文字以上。改行（\n、\r）を含むものは拒否する（キーチェーンへの保存の入力が1行のため。R12） */
-/** server はスキーマの検証の前にこの長さを見て 422 `PASSPHRASE_TOO_SHORT` を返す */
-export const PASSPHRASE_MIN_LENGTH = 12;
-
-const Passphrase = z
-  .string()
-  .min(PASSPHRASE_MIN_LENGTH, "パスフレーズは12文字以上にしてください")
-  .regex(/^[^\r\n]*$/, "パスフレーズに改行は使えません");
-
 export const BackupTrigger = z.enum(["manual", "auto"]);
 export type BackupTrigger = z.infer<typeof BackupTrigger>;
 
@@ -35,7 +26,7 @@ export const BackupRun = z.object({
   finishedAt: Timestamp,
   trigger: BackupTrigger,
   status: BackupRunStatus,
-  /** `FOLDER_NOT_FOUND`・`WRITE_FAILED`・`VERIFY_FAILED`・`PASSPHRASE_MISSING` など */
+  /** `FOLDER_NOT_FOUND`・`WRITE_FAILED`・`VERIFY_FAILED`・`SNAPSHOT_FAILED`・`LOCKED` など */
   errorCode: z.string().nullable(),
   fileName: z.string().nullable(),
   sizeBytes: Count.nullable(),
@@ -47,7 +38,7 @@ export const BackupRun = z.object({
 });
 export type BackupRun = z.infer<typeof BackupRun>;
 
-export const BackupAlertReason = z.enum(["STALE", "LAST_RUN_FAILED", "PASSPHRASE_NEEDED"]);
+export const BackupAlertReason = z.enum(["STALE", "LAST_RUN_FAILED"]);
 export type BackupAlertReason = z.infer<typeof BackupAlertReason>;
 
 export const BackupStatus = z.object({
@@ -62,23 +53,14 @@ export const BackupStatus = z.object({
 });
 export type BackupStatus = z.infer<typeof BackupStatus>;
 
-/** 不一致（`PASSPHRASE_MISMATCH`）は server が検査する */
+/**
+ * 置き場所だけ。バックアップの鍵は DK から作る（パスフレーズ・同意は持たない。008 の D9）。
+ * 失った Mac の復元は、回復キーで行う
+ */
 export const BackupSettingsInput = z.object({
   folder: z.string().min(1, "置き場所を入力してください"),
-  passphrase: Passphrase,
-  passphraseConfirm: z.string(),
-  /** 「パスフレーズを失うと復元できない」ことへの同意 */
-  acknowledged: z.literal(true),
 });
 export type BackupSettingsInput = z.infer<typeof BackupSettingsInput>;
-
-export const BackupPassphraseInput = z.object({
-  /** キーチェーン（使えない環境ではメモリ）が空のときだけ省略できる */
-  current: z.string().optional(),
-  passphrase: Passphrase,
-  passphraseConfirm: z.string(),
-});
-export type BackupPassphraseInput = z.infer<typeof BackupPassphraseInput>;
 
 export const BackupInspection = z.object({
   createdAt: Timestamp,

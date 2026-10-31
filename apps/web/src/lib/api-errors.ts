@@ -114,7 +114,10 @@ export function describeError(error: unknown): ErrorDescription {
       return { message: `ファイルが大きすぎます（${limit} MB まで）。`, details: [] };
     }
     case "BACKUP_INVALID":
-      return { message: "パスフレーズが違うか、ファイルが壊れています。", details: [] };
+      return {
+        message: "このアプリのバックアップではないか、ファイルが壊れています。",
+        details: [],
+      };
     case "BACKUP_VERSION_MISMATCH":
       return {
         message: "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください。",
@@ -168,12 +171,6 @@ export function describeError(error: unknown): ErrorDescription {
           "この Mac（localhost）の最後のパスキーは削除できません。先に別のパスキーを追加してください。",
         details: [],
       };
-    case "PASSPHRASE_TOO_SHORT":
-      return { message: "パスフレーズは12文字以上にしてください。", details: [] };
-    case "PASSPHRASE_MISMATCH":
-      return { message: "パスフレーズと確認用の入力が一致しません。", details: [] };
-    case "PASSPHRASE_WRONG":
-      return { message: "今のパスフレーズが違います。", details: [] };
     case "BACKUP_FOLDER_NOT_FOUND":
       return {
         message:
@@ -182,7 +179,7 @@ export function describeError(error: unknown): ErrorDescription {
       };
     case "BACKUP_NOT_CONFIGURED":
       return {
-        message: "バックアップの置き場所とパスフレーズが未設定です。先に設定してください。",
+        message: "バックアップの置き場所が未設定です。先に設定してください。",
         details: [],
       };
     case "BACKUP_RUNNING":

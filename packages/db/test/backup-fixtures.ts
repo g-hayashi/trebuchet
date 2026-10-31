@@ -5,8 +5,17 @@ import { DrizzleClosingStore } from "../src/closing-repository.ts";
 import type { Database } from "../src/driver.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
+import { generateRecoveryKey } from "../src/recovery-key.ts";
 import { openAuth, openRegistry, openTenant } from "../src/tenant-store.ts";
 import { createTestEntity, NOW } from "../src/testing.ts";
+import { wrapDataKey } from "../src/vault-crypto.ts";
+
+/** 回復キー（本文）と、それで DK を包んだ recovery の包み。テストが DK ごとに作る */
+export function recoveryFixture(dk: Uint8Array) {
+  const key = generateRecoveryKey();
+  const wrap = wrapDataKey(dk, key.secret, "recovery", null);
+  return { text: key.text, wrap };
+}
 
 /** 合成の事業体 1 件の指定。seed と journals から仕訳を決定的に作る */
 export type EntitySpec = {

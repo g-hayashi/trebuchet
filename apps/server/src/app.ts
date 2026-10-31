@@ -1,4 +1,3 @@
-import type { CryptoOptions } from "@trebuchet/db";
 import type { AuthStore, BackupStore, Clock, SecretStore } from "@trebuchet/domain";
 import { Hono } from "hono";
 import {
@@ -92,15 +91,12 @@ export type AppOptions = {
   vault?: Vault;
   /** 回復キーの失敗ごとの遅延（008 の D5）。既定は 1 秒待つ。テストは待たない関数を渡す */
   recoveryDelay?: (ms: number) => Promise<void>;
-  /** バックアップの依存（既定は deps.ts の実物）。テストは偽の SecretStore・実行を渡す */
+  /** バックアップの依存（既定は deps.ts の実物）。テストは偽の実行を渡す */
   backup?: {
     runner?: BackupRunner;
-    secrets?: SecretStore;
     store?: () => BackupStore;
     /** 検査のファイルの上限（テストが小さくする） */
     inspectMaxBytes?: number;
-    /** テストが鍵導出を軽くするための差し替え */
-    crypto?: CryptoOptions;
   };
 };
 
@@ -142,13 +138,11 @@ export function createApp(options: AppOptions = {}) {
       backupRoutes({
         auth: store,
         backups: options.backup?.store ?? backupStore,
-        secrets: options.backup?.secrets ?? secretStore,
         runner: options.backup?.runner ?? backupRunner,
         clock,
         ...(options.backup?.inspectMaxBytes === undefined
           ? {}
           : { inspectMaxBytes: options.backup.inspectMaxBytes }),
-        ...(options.backup?.crypto === undefined ? {} : { crypto: options.backup.crypto }),
       }),
     )
     .route("/settings", aiSettingsRoutes({ clock, ai }))

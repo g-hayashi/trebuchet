@@ -8,12 +8,13 @@ import { decryptBackup, encryptBackup } from "../src/backup/crypto.ts";
 import { currentAppVersion, snapshotDataDir } from "../src/backup/snapshot.ts";
 import { Database } from "../src/driver.ts";
 import { openRegistry, openTenant } from "../src/tenant-store.ts";
-import { type TempDataDir, TMP_ROOT, useTempDataDir } from "../src/testing.ts";
+import { TEST_DATA_KEY, type TempDataDir, TMP_ROOT, useTempDataDir } from "../src/testing.ts";
 import {
   dumpSchema,
   dumpTables,
   EXCLUDED_REGISTRY_TABLES,
   entitySpecArb,
+  recoveryFixture,
   seedAuthRows,
   seedEntities,
 } from "./backup-fixtures.ts";
@@ -29,22 +30,22 @@ afterEach(() => {
   for (const d of cleanups.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-const PASS = "correct horse battery staple 日本語";
 const header = {
   appVersion: currentAppVersion(),
   macId: randomUUIDv7(),
   createdAt: "2026-10-31T09:00:00.000Z",
+  recoveryWrap: recoveryFixture(TEST_DATA_KEY).wrap,
 };
 
 /** 往復の結果を `.tmp/` の空の場所に展開して返す */
-async function roundtrip(dataDir: string = tmp.dir) {
+function roundtrip(dataDir: string = tmp.dir) {
   const snapDir = join(TMP_ROOT, `backup-snapshot-${randomUUIDv7()}`);
   const restoreDir = join(TMP_ROOT, `backup-restore-${randomUUIDv7()}`);
   cleanups.push(snapDir, restoreDir);
   const snap = snapshotDataDir(dataDir, snapDir);
   const archive = packArchive(snap);
-  const encrypted = await encryptBackup(archive, PASS, header);
-  const decrypted = await decryptBackup(encrypted, PASS, currentAppVersion());
+  const encrypted = encryptBackup(archive, TEST_DATA_KEY, header);
+  const decrypted = decryptBackup(encrypted, TEST_DATA_KEY, currentAppVersion());
   if (!decrypted.ok) throw new Error(`復号に失敗: ${decrypted.error}`);
   const unpacked = unpackArchive(decrypted.value.archive);
   if (!unpacked.ok) throw new Error("展開に失敗");

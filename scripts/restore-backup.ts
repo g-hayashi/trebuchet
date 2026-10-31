@@ -6,7 +6,10 @@
  *   pnpm restore -- --file <path/to/backup.tbk> [--data-dir <dir>] [--yes]
  *
  * - `--data-dir` の既定は TREBUCHET_DATA_DIR、なければリポジトリ直下の `data/`
- * - パスフレーズは端末から入力する（エコーなし）。引数・環境変数では受け取らない
+ * - 回復キー（初回の設定・再発行で表示した 4 文字区切りのキー）を標準入力から受け取る。端末ならエコーなしで入力し、
+ *   パイプでも 1 行目を読む（そのときは確認も標準入力を使えないので `--yes` が要る）。引数・環境変数では受け取らない（`ps` に出るため）。バックアップのヘッダーの包み →
+ *   今のデータ場所の `auth.sqlite` の recovery の包みの順に試す。復元した後の `auth.sqlite` は、DK を開けた
+ *   recovery の包みだけ（パスキーとセッションは空）。次の起動で回復キーで解錠し、パスキーを登録する
  * - server が 127.0.0.1:8787 で動いていれば中止する。先に停止すること
  * - 終了コード: 0 = 成功、1 = 検査の失敗、2 = 使い方の誤り、3 = server が動いている、4 = 取り消し
  *
@@ -16,12 +19,18 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { isServerRunning, runRestoreCli } from "./lib/restore-cli.ts";
 
-/** 端末から 1 行読む。入力は画面に出さない */
+/** 標準入力から 1 行読む。端末なら入力は画面に出さない。パイプなら 1 行目（空なら失敗） */
 function readHiddenLine(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const stdin = process.stdin;
     if (!stdin.isTTY) {
-      reject(new Error("not a terminal"));
+      const rl = createInterface({ input: stdin });
+      rl.once("line", (line) => {
+        rl.close();
+        if (line.trim() === "") reject(new Error("empty"));
+        else resolve(line);
+      });
+      rl.once("close", () => reject(new Error("no input")));
       return;
     }
     process.stderr.write(prompt);
@@ -68,7 +77,7 @@ const code = await runRestoreCli(process.argv.slice(2), {
   env: process.env,
   defaultDataDir: fileURLToPath(new URL("../data", import.meta.url)),
   tmpRoot: fileURLToPath(new URL("../.tmp/", import.meta.url)),
-  readPassphrase: () => readHiddenLine("バックアップのパスフレーズ: "),
+  readRecoveryKey: () => readHiddenLine("回復キー: "),
   confirm: askYesNo,
   isServerRunning: () => isServerRunning(),
   stdout: (line) => console.log(line),

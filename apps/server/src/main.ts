@@ -10,7 +10,6 @@ import {
   fmServer,
   ids,
   openRecurringUnitOfWork,
-  secretStore,
   vault,
 } from "./deps.ts";
 import { startBackgroundServices } from "./lib/startup.ts";
@@ -33,7 +32,6 @@ const background = startBackgroundServices({
   runner: backupRunner,
   auth: authStore,
   backups: backupStore,
-  secrets: secretStore,
   clock,
   tmpRoot: TMP_ROOT,
   recurring: { entities: entityIds, openUnitOfWork: openRecurringUnitOfWork, ids },

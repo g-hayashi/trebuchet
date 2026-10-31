@@ -15,9 +15,9 @@ beforeEach(async () => {
   await createTestEntity("事業 A");
   env = makeBackupEnv(tmp);
 });
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers();
-  tmp.cleanup();
+  await env.finish();
 });
 
 const scheduler = (runner: Pick<BackupRunner, "start"> = env.runner) =>
@@ -25,7 +25,6 @@ const scheduler = (runner: Pick<BackupRunner, "start"> = env.runner) =>
     runner,
     auth: env.auth,
     backups: env.backups,
-    secrets: env.secrets,
     clock: env.clock.clock,
     intervalMs: 1000,
   });
@@ -70,16 +69,6 @@ describe("判断（tick）", () => {
     const s = scheduler();
     await s.tick();
     expect(await count()).toBe(0);
-    s.stop();
-  });
-
-  it("パスフレーズが使えないときは実行しない（失敗の記録も作らない）", async () => {
-    await configure(env);
-    await env.secrets.delete("trebuchet-backup");
-    const s = scheduler();
-    await s.tick();
-    expect(await count()).toBe(0);
-    expect(env.files()).toEqual([]);
     s.stop();
   });
 

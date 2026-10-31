@@ -10,18 +10,31 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import type { Result } from "@trebuchet/domain";
+import type { Result, WrappedKey } from "@trebuchet/domain";
 import { Database } from "../driver.ts";
-import { type DbKeyScope, encryptSqliteFile, openEncryptedSqlite } from "../tenant-store.ts";
+import { parseRecoveryKey } from "../recovery-key.ts";
+import {
+  createAuthFile,
+  type DbKeyScope,
+  encryptSqliteFile,
+  openEncryptedSqlite,
+  withDataKeyOverride,
+} from "../tenant-store.ts";
+import { unwrapDataKey } from "../vault-crypto.ts";
 import { packArchive, sha256Hex, unpackArchive } from "./archive.ts";
-import { type BackupHeader, type CryptoOptions, decryptBackup, encryptBackup } from "./crypto.ts";
+import {
+  type BackupHeader,
+  decryptBackup,
+  decryptBackupWithRecoveryKey,
+  encryptBackup,
+} from "./crypto.ts";
 import { beforeRestoreFileName, compactStamp, writeBackupFile } from "./file.ts";
 import { createSnapshotDir, currentAppVersion, snapshotDataDir } from "./snapshot.ts";
 import type { ManifestEntity, UnpackedArchive } from "./types.ts";
 
 /**
- * 復元の失敗の種類（パスフレーズ・鍵・内容を含めない）。
- * - INVALID: パスフレーズが違う、ファイルが壊れている、読めない（区別しない）
+ * 復元の失敗の種類（回復キー・鍵・内容を含めない）。
+ * - INVALID: 回復キーが違う、ファイルが壊れている、読めない（区別しない）
  * - VERSION_MISMATCH: アプリの版が今と一致しない（新しくても古くても）
  * - CANCELLED: 確認で拒否された
  * - BEFORE_BACKUP_FAILED: 復元前のバックアップを書けなかった（何も変えていない）
@@ -72,7 +85,8 @@ export type RestoreIo = {
 export type RestoreOptions = {
   /** `.tbk` のパス */
   file: string;
-  passphrase: string;
+  /** 回復キー（表記ゆれは受ける）。ヘッダーの包み → 今のデータ場所の `auth.sqlite` の包みの順に試す */
+  recoveryKey: string;
   /** 置き換えるデータ場所 */
   dataDir: string;
   /** 復元前のバックアップの平文の写しを作る場所（`.tmp/`）。写しは finally で必ず消す */
@@ -80,7 +94,6 @@ export type RestoreOptions = {
   /** 要約を見せて続けてよいかを返す。false なら CANCELLED（何も作らない） */
   confirm: (summary: RestoreSummary) => boolean | Promise<boolean>;
   now?: () => Date;
-  crypto?: CryptoOptions;
   io?: RestoreIo;
 };
 
@@ -230,40 +243,138 @@ function pickStamp(dataDir: string, start: Date): Date {
   throw new Error("空いている名前がない");
 }
 
+/** データ場所の `auth.sqlite`（暗号化しない）の recovery の包み。ファイル・行がなければ undefined */
+function readCurrentRecoveryWrap(dataDir: string): WrappedKey | undefined {
+  const file = join(dataDir, "auth.sqlite");
+  if (!existsSync(file)) return undefined;
+  let db: Database.Database | undefined;
+  try {
+    db = new Database(file, { readonly: true, fileMustExist: true });
+    return db
+      .prepare("SELECT salt, iv, tag, wrapped FROM key_wraps WHERE kind = 'recovery'")
+      .get() as WrappedKey | undefined;
+  } catch {
+    return undefined;
+  } finally {
+    db?.close();
+  }
+}
+
+/** この DK でデータ場所の registry が開けるか（開けなければ SQLITE_NOTADB） */
+function opensRegistry(dataDir: string, dk: Uint8Array): boolean {
+  return withDataKeyOverride(dk, () => {
+    try {
+      openEncryptedSqlite(join(dataDir, "registry.sqlite"), "registry", {
+        readonly: true,
+        fileMustExist: true,
+      }).close();
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** 今のデータ場所の帳簿を読める DK と、その DK を開く recovery の包み（復元前のバックアップのヘッダー用） */
+type CurrentKey = { dk: Buffer; wrap: WrappedKey };
+
+/**
+ * 今の帳簿を開ける DK を探す。①今の `auth.sqlite` の recovery の包みを回復キーで開いた DK
+ * ②バックアップの DK（同じ DK の系列のとき）の順に、registry が開けた最初のもの。
+ * どれでも開けなければ null（別の系列の帳簿。読めないので、差・設定の引き継ぎ・復元前のバックアップはしない。
+ * 元のデータ場所は `.before-restore-<日時>` にそのまま残る）。registry がないとき（事業体の DB だけ）は
+ * 検査できないので②を返す
+ */
+function resolveCurrentKey(
+  dataDir: string,
+  secret: Buffer,
+  backupDk: Buffer,
+  openedWrap: WrappedKey,
+): CurrentKey | null {
+  const registryExists = existsSync(join(dataDir, "registry.sqlite"));
+  const currentWrap = readCurrentRecoveryWrap(dataDir);
+  if (currentWrap !== undefined) {
+    const dk = unwrapDataKey(currentWrap, secret, "recovery", null);
+    if (dk !== null) {
+      if (!registryExists || opensRegistry(dataDir, dk)) return { dk, wrap: currentWrap };
+      dk.fill(0);
+    }
+  }
+  if (!registryExists || opensRegistry(dataDir, backupDk)) {
+    return { dk: Buffer.from(backupDk), wrap: openedWrap };
+  }
+  return null;
+}
+
 /**
  * バックアップの復元（research R13。contracts/cli.md の手順 2〜6）。全部か無か。
- * 復号と検査 → 確認 → 今の帳簿のバックアップ → `<dataDir>.restore-<日時>/` に展開して integrity_check →
- * `app_settings` の引き継ぎ → 改名の入れ替え。失敗はどの経路でも展開先を消し、元の `dataDir` に触らない。
- * server が動いていないことは呼び出し側が確かめる。マイグレーションは当てない。
+ * 回復キーで DK を開いて復号と検査 → 確認 → 今の帳簿のバックアップ → `<dataDir>.restore-<日時>/` に展開して
+ * integrity_check → `app_settings` の引き継ぎ → バックアップの DK で暗号化 → `auth.sqlite`（recovery の包みだけ）を
+ * 作る → 改名の入れ替え。失敗はどの経路でも展開先を消し、元の `dataDir` に触らない。
+ * server が動いていないことは呼び出し側が確かめる。マイグレーションは当てない（008 の D9）。
  */
 export async function restoreBackup(
   options: RestoreOptions,
 ): Promise<Result<RestoreResult, RestoreErrorCode>> {
   const dataDir = resolve(options.dataDir);
-  const rename = options.io?.rename ?? renameSync;
-  const writeFile = options.io?.writeFile ?? writeFileSync;
   const appVersion = currentAppVersion();
 
-  // 2. 復号と検査（誤ったパスフレーズ・壊れたファイルは区別しない。版の不一致は何も作らず拒否）
+  // 2. 復号と検査（誤った回復キー・壊れたファイルは区別しない。版の不一致は何も作らず拒否）
   let bytes: Buffer;
   try {
     bytes = readFileSync(options.file);
   } catch {
     return fail("INVALID");
   }
-  const decrypted = await decryptBackup(bytes, options.passphrase, appVersion, options.crypto);
+  const currentWrap = readCurrentRecoveryWrap(dataDir);
+  const decrypted = decryptBackupWithRecoveryKey(
+    bytes,
+    options.recoveryKey,
+    appVersion,
+    currentWrap === undefined ? [] : [currentWrap],
+  );
   if (!decrypted.ok) return fail(decrypted.error);
-  const unpacked = unpackArchive(decrypted.value.archive);
+  const backupDk = decrypted.value.dk;
+  const secret = parseRecoveryKey(options.recoveryKey);
+  if (secret === null) {
+    backupDk.fill(0);
+    return fail("INVALID");
+  }
+  const hasLedger = hasExistingLedger(dataDir);
+  const current = hasLedger
+    ? resolveCurrentKey(dataDir, secret, backupDk, decrypted.value.recoveryWrap)
+    : null;
+  try {
+    return await applyRestore(options, dataDir, appVersion, decrypted.value, hasLedger, current);
+  } finally {
+    backupDk.fill(0);
+    secret.fill(0);
+    current?.dk.fill(0);
+  }
+}
+
+type Decrypted = { header: BackupHeader; archive: Buffer; dk: Buffer; recoveryWrap: WrappedKey };
+
+async function applyRestore(
+  options: RestoreOptions,
+  dataDir: string,
+  appVersion: ReturnType<typeof currentAppVersion>,
+  decrypted: Decrypted,
+  hasLedger: boolean,
+  current: CurrentKey | null,
+): Promise<Result<RestoreResult, RestoreErrorCode>> {
+  const rename = options.io?.rename ?? renameSync;
+  const writeFile = options.io?.writeFile ?? writeFileSync;
+  const unpacked = unpackArchive(decrypted.archive);
   if (!unpacked.ok) return fail("INVALID");
   const archive = unpacked.value;
-  const header = decrypted.value.header;
+  const header = decrypted.header;
 
   // 3. 要約と確認
-  const hasLedger = hasExistingLedger(dataDir);
   let differences: RestoreEntityDiff[] = [];
-  if (hasLedger) {
+  if (hasLedger && current !== null) {
     try {
-      differences = computeDifferences(dataDir, archive);
+      differences = withDataKeyOverride(current.dk, () => computeDifferences(dataDir, archive));
     } catch {
       differences = [];
     }
@@ -283,34 +394,35 @@ export async function restoreBackup(
   const restoreDir = `${dataDir}.restore-${stamp}`;
   const beforeDir = `${dataDir}.before-restore-${stamp}`;
 
-  // 4. 今の帳簿を同じパスフレーズ・同じ形式でバックアップ（db の関数だけ。backup_runs には記録しない）
+  // 4. 今の帳簿を同じ形式でバックアップ（db の関数だけ。backup_runs には記録しない）。今の帳簿を読める
+  // DK がないとき（別の系列の帳簿）は作らない。元のデータ場所は `.before-restore-<日時>` にそのまま残る
   let beforeRestoreBackup: string | null = null;
-  let settings: SettingRow[];
+  let settings: SettingRow[] = [];
   let aiSettings: AiSettingsRow | undefined;
-  if (hasLedger) {
+  if (hasLedger && current !== null) {
     try {
-      settings = readAppSettings(dataDir);
-      aiSettings = readAiSettings(dataDir);
+      const currentDk = current.dk;
+      const read = withDataKeyOverride(currentDk, () => ({
+        settings: readAppSettings(dataDir),
+        aiSettings: readAiSettings(dataDir),
+      }));
+      settings = read.settings;
+      aiSettings = read.aiSettings;
       const macId = settings.find((s) => s.key === "mac_id")?.value ?? randomUUID();
       const name = beforeRestoreFileName(at);
       const snapDir = createSnapshotDir(options.tmpRoot);
       try {
-        const snapshot = snapshotDataDir(dataDir, snapDir);
+        const snapshot = withDataKeyOverride(currentDk, () => snapshotDataDir(dataDir, snapDir));
         const plain = packArchive(snapshot);
         const sha = sha256Hex(plain);
-        const encrypted = await encryptBackup(
-          plain,
-          options.passphrase,
-          { appVersion, macId, createdAt: at.toISOString() },
-          options.crypto,
-        );
+        const encrypted = encryptBackup(plain, currentDk, {
+          appVersion,
+          macId,
+          createdAt: at.toISOString(),
+          recoveryWrap: current.wrap,
+        });
         await writeBackupFile(dirname(dataDir), name, encrypted, async (readBack) => {
-          const check = await decryptBackup(
-            readBack,
-            options.passphrase,
-            appVersion,
-            options.crypto,
-          );
+          const check = decryptBackup(readBack, currentDk, appVersion);
           return (
             check.ok &&
             unpackArchive(check.value.archive).ok &&
@@ -324,9 +436,6 @@ export async function restoreBackup(
     } catch {
       return fail("BEFORE_BACKUP_FAILED");
     }
-  } else {
-    settings = [];
-    aiSettings = undefined;
   }
 
   // 5〜6. 展開 → integrity_check → app_settings の引き継ぎ → 改名の入れ替え
@@ -370,15 +479,20 @@ export async function restoreBackup(
     } finally {
       registry.close();
     }
-    // 展開した平文のファイルを、今の DK から作った鍵で暗号化する（008 の D2。入れ替えの前に）
-    for (const file of archive.files) {
-      const path = file.path.toLowerCase();
-      const scope: DbKeyScope =
-        path === "registry.sqlite"
-          ? "registry"
-          : { tenant: path.slice("tenants/".length, -".sqlite".length) };
-      encryptSqliteFile(join(restoreDir, path), scope);
-    }
+    // 展開した平文のファイルを、バックアップの DK から作った鍵で暗号化する（008 の D2・D9。入れ替えの前に）
+    withDataKeyOverride(decrypted.dk, () => {
+      for (const file of archive.files) {
+        const path = file.path.toLowerCase();
+        const scope: DbKeyScope =
+          path === "registry.sqlite"
+            ? "registry"
+            : { tenant: path.slice("tenants/".length, -".sqlite".length) };
+        encryptSqliteFile(join(restoreDir, path), scope);
+      }
+    });
+    // auth.sqlite は recovery の包み（DK を開けたもの）だけで作り直す。パスキー・セッションは空。
+    // 次の起動で回復キーで解錠し、パスキーを登録する
+    createAuthFile(join(restoreDir, "auth.sqlite"), decrypted.recoveryWrap, at.toISOString());
 
     let removedEmpty = false;
     if (existsSync(dataDir)) {

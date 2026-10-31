@@ -8,15 +8,15 @@ import {
   isUnlocked,
   openAuth,
   openRegistry,
+  parseRecoveryKey,
   registryFile,
+  unwrapDataKey,
   withDataKey,
 } from "@trebuchet/db";
 import { TEST_DATA_KEY, type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.ts";
-import { parseRecoveryKey } from "../src/lib/recovery-key.ts";
 import { SESSION_COOKIE } from "../src/lib/session.ts";
-import { unwrapDataKey } from "../src/lib/vault-crypto.ts";
 import type { CredentialRef, WebAuthnVerifier } from "../src/lib/webauthn.ts";
 import { challengeOf } from "../src/lib/webauthn-response.ts";
 import { simpleWebAuthnVerifier } from "../src/lib/webauthn-simplewebauthn.ts";

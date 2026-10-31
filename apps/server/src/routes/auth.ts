@@ -1,6 +1,13 @@
 import { randomBytes } from "node:crypto";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/server";
 import {
+  DK_BYTES,
+  generateRecoveryKey,
+  parseRecoveryKey,
+  unwrapDataKey,
+  wrapDataKey,
+} from "@trebuchet/db";
+import {
   type AuthEventKind,
   type AuthStore,
   type Clock,
@@ -25,7 +32,6 @@ import { DomainException } from "../errors.ts";
 import type { ChallengeStore } from "../lib/challenges.ts";
 import { expectedOriginFor, isLocalHost, rpIdFor } from "../lib/origin.ts";
 import { ReauthTracker } from "../lib/reauth.ts";
-import { generateRecoveryKey, parseRecoveryKey } from "../lib/recovery-key.ts";
 import {
   clearSessionCookie,
   isSecureHost,
@@ -34,7 +40,6 @@ import {
 } from "../lib/session.ts";
 import { sweepSessions } from "../lib/session-sweeper.ts";
 import { setAsideDataFiles, type Vault } from "../lib/vault.ts";
-import { DK_BYTES, unwrapDataKey, wrapDataKey } from "../lib/vault-crypto.ts";
 import type { VerifiedRegistration, WebAuthnVerifier } from "../lib/webauthn.ts";
 import { challengeOf, readPrf, responseKind } from "../lib/webauthn-response.ts";
 import { findActiveSession } from "../middleware/auth.ts";
