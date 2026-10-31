@@ -38,7 +38,9 @@ async function setup(options: { fmAvailable?: boolean; hold?: Promise<void> } = 
   const accountId = await accountLookup(entityId);
   const session = await createTestSession({ now: NOW });
   const headers = { Host: TEST_HOST, Origin: TEST_ORIGIN, Cookie: session.cookie };
-  const plain = testClient(createApp(), undefined, undefined, { headers });
+  const plain = testClient(createApp({ clock: { now: () => NOW } }), undefined, undefined, {
+    headers,
+  });
   const supplies =
     (
       await (await plain.api.entities[":entityId"].accounts.$get({ param: { entityId } })).json()
