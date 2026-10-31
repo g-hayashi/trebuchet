@@ -15,7 +15,7 @@ CREATE TABLE `app_settings` (
 	`key` text PRIMARY KEY NOT NULL,
 	`value` text NOT NULL,
 	`updated_at` text NOT NULL,
-	CONSTRAINT "app_settings_key" CHECK("app_settings"."key" IN ('mac_id', 'remote_enabled', 'remote_host', 'backup_folder', 'backup_passphrase_set', 'backup_force_write', 'recovery_code_acknowledged'))
+	CONSTRAINT "app_settings_key" CHECK("app_settings"."key" IN ('mac_id', 'remote_enabled', 'remote_host', 'backup_folder', 'backup_force_write', 'recovery_code_acknowledged'))
 ) STRICT;
 --> statement-breakpoint
 CREATE TABLE `backup_runs` (

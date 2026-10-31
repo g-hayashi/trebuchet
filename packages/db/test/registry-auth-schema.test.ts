@@ -232,17 +232,17 @@ describe("auth.sqlite の CHECK・トリガー", () => {
 });
 
 describe("registry の CHECK・UNIQUE", () => {
-  it("app_settings.key は 7 種だけ", () => {
+  it("app_settings.key は 6 種だけ（backup_passphrase_set は 008 で廃止）", () => {
     for (const k of [
       "mac_id",
       "remote_enabled",
       "remote_host",
       "backup_folder",
-      "backup_passphrase_set",
       "backup_force_write",
       "recovery_code_acknowledged",
     ])
       insertSetting(k);
+    expect(() => insertSetting("backup_passphrase_set")).toThrow(/CHECK/);
     expect(() => insertSetting("other")).toThrow(/CHECK/);
   });
 

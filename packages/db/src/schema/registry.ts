@@ -27,7 +27,6 @@ export const appSettings = sqliteTable(
         "remote_enabled",
         "remote_host",
         "backup_folder",
-        "backup_passphrase_set",
         "backup_force_write",
         "recovery_code_acknowledged",
       ],
@@ -38,7 +37,7 @@ export const appSettings = sqliteTable(
   (t) => [
     check(
       "app_settings_key",
-      sql`${t.key} IN ('mac_id', 'remote_enabled', 'remote_host', 'backup_folder', 'backup_passphrase_set', 'backup_force_write', 'recovery_code_acknowledged')`,
+      sql`${t.key} IN ('mac_id', 'remote_enabled', 'remote_host', 'backup_folder', 'backup_force_write', 'recovery_code_acknowledged')`,
     ),
   ],
 );

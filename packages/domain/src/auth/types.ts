@@ -9,7 +9,6 @@ export type AppSettingKey =
   | "remote_enabled"
   | "remote_host"
   | "backup_folder"
-  | "backup_passphrase_set"
   | "backup_force_write"
   | "recovery_code_acknowledged";
 

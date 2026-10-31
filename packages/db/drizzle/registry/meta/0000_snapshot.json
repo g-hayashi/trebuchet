@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "21938d22-b1d8-448c-997f-3bc403481244",
+  "id": "f32d9c72-2527-4665-b8e8-829d092a4ed4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "ai_settings": {
@@ -107,7 +107,7 @@
       "checkConstraints": {
         "app_settings_key": {
           "name": "app_settings_key",
-          "value": "\"app_settings\".\"key\" IN ('mac_id', 'remote_enabled', 'remote_host', 'backup_folder', 'backup_passphrase_set', 'backup_force_write', 'recovery_code_acknowledged')"
+          "value": "\"app_settings\".\"key\" IN ('mac_id', 'remote_enabled', 'remote_host', 'backup_folder', 'backup_force_write', 'recovery_code_acknowledged')"
         }
       }
     },

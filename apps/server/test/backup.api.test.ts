@@ -166,7 +166,7 @@ describe("PUT /backup/settings", () => {
     );
     expect(res.status).toBe(200);
     await idle();
-    expect(await env.auth().getSetting("backup_passphrase_set")).toBeUndefined();
+    expect((await status()).folder).toBe(env.folder);
   });
 
   it("存在しないフォルダ・ファイル・相対パスは 422 BACKUP_FOLDER_NOT_FOUND。何も保存しない", async () => {

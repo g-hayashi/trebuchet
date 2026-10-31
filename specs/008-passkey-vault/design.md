@@ -16,7 +16,7 @@ invest-copilot の `specs/003-passkey-vault/design.md`（D1〜D8）を土台に�
   - 回復キー: ikm は回復キーの 160 ビットの乱数そのもの（Crockford base32、4 文字区切り）。Argon2 は使わない。
 - 包み: `AES-256-GCM(KEK, iv 12 バイト, DK)`。AAD は `kind` と `credential_id`（回復は `"recovery"`）。行の差し替えを検出する。
 - 正しさの判定は包みが開けたこと（GCM の検証）だけ。回復キーのハッシュは保存しない（`recovery_codes` の表と `hashToken` による回復コードの照合はやめる）。
-- 鍵の計算は純関数（`node:crypto` を使うので domain ではなく server の `lib/vault-crypto.ts`）。写す元: invest-copilot `src/lib/server/vaultCrypto.ts`・`recoveryKey.ts`。
+- 鍵の計算は純関数（`node:crypto` を使うので domain には置かない）。`packages/db/src/vault-crypto.ts`・`recovery-key.ts`（復元のコマンドが使うので server ではなく db に置いた）。写す元: invest-copilot `src/lib/server/vaultCrypto.ts`・`recoveryKey.ts`。
 
 ## D2 ファイルと表
 
@@ -37,20 +37,21 @@ invest-copilot の `specs/003-passkey-vault/design.md`（D1〜D8）を土台に�
 
 - vault: 解錠済みの DK か null（`lib/vault.ts`。写す元: invest-copilot `vault.ts`）。解錠 = `setDataKey`、施錠 = `clearDataKey`。
 - セッションは `auth.sqlite` の `sessions`（今のまま、トークンのハッシュだけ）。種類は `normal`（全権）と `recovery`（10 分、パスキーの登録だけ）。**起動時と施錠時に `sessions` を全部消す**（再起動で DK が消えるので、残ったセッションは使えない）。
-- 全権セッションは無操作 30 分で失効し、最後の全権セッションが消えたら施錠する。**新しいセッションを入れてから期限切れを掃除する**（逆にすると解錠の直後に施錠される。落とし穴 5）。
+- 全権セッションは無操作 30 分で失効し、有効なセッションが 1 つもなくなったら施錠する（回復のセッションの間も DK が要るので、回復のセッションも数える）。判定は `lib/session-sweeper.ts`（`sweepSessions`、1 分ごとの `startSessionSweeper`）。**新しいセッションを入れてから期限切れを掃除する**（逆にすると解錠の直後に施錠される。落とし穴 5）。
 - チャレンジ: 今の `lib/challenges.ts`（メモリー、5 分、1 回限り）。
 
 ## D4 流れ
 
-1. 初回の設定（`key_wraps` が空、かつ Host が許可の一覧にあるとき）: 登録の options（`residentKey: required`、`userVerification: required`、`extensions.prf.eval.first = prf_salt`）→ 検証。登録で PRF の出力が返らない認証器のため、続けて認証を 1 回行い出力を得る（`prf_required`）。`prf.enabled` が真でなければ 400 `PRF_UNSUPPORTED`（画面で iCloud キーチェーン・1Password などを案内）。DK と回復キーを作り、包みを 2 行作り、`data/` の registry と tenants を空から作る。回復キーは応答で 1 回だけ返す。全権セッションを発行する。
+1. 初回の設定（`key_wraps` が空、かつ Host が許可の一覧にあるとき）: 登録の options（`residentKey: required`、`userVerification: required`、`extensions.prf.eval.first = prf_salt`）→ 検証。登録で PRF の出力が返らない認証器のため、続けて認証を 1 回行い出力を得る（`prf_required`）。`prf.enabled` が真でなければ 400 `PRF_UNSUPPORTED`（画面で iCloud キーチェーン・1Password などを案内）。DK と回復キーを作り、包みを 2 行作り、`data/` の registry と tenants を空から作る（前の registry・tenants は消さず `data/discarded-<時刻>/` に移す）。回復キーは応答で 1 回だけ返す。全権セッションを発行する。
 2. サインイン: 認証の options（`extensions.prf.evalByCredential` に資格情報ごとの `prf_salt`）→ 署名を検証 → PRF の出力で包みを開く → 解錠 → 全権セッション。
 3. 回復: 回復キー → 包みが開けたら解錠し、recovery セッション（10 分）。できるのは新しいパスキーの登録だけ。登録に成功したら、新しい回復キーで recovery の包みを差し替え、新しいキーを 1 回だけ返し、全権セッションに上げる。
-4. パスキーの追加・削除、回復キーの再発行: 全権セッションに加え、直近 5 分以内のパスキーの再認証を要求する（`REAUTH_REQUIRED`）。最後の 1 本のパスキーは削除できない。パスキーを削除したら、その包みも同じトランザクションで消す。
-5. 施錠: サインアウトで全セッションを消して施錠する。
+4. パスキーの追加・削除、回復キーの再発行: 全権セッションに加え、直近 5 分以内のパスキーの再認証を要求する（403 `REAUTH_REQUIRED`。`POST /api/auth/reauth/options`・`verify`、`lib/reauth.ts`）。最後の 1 本のパスキーは削除できない。パスキーを削除したら、その包みも同じトランザクションで消す。
+5. 施錠: サインアウト（`POST /api/auth/sign-out`）で全セッションを消して施錠する。
 - PRF の値の変換: server は options の `eval.first`・`evalByCredential` を base64url で返す。画面は bytes に直して `startRegistration`・`startAuthentication` に渡し、`clientExtensionResults.prf.results.first` を base64url に戻して送る（落とし穴 1。写す元: invest-copilot `src/app/lib/webauthnClient.ts`）。PRF の出力は署名の対象外なので、正しさは包みが開けたかで判定する（落とし穴 3）。
 
 ## D5 保護の範囲
 
+- 回復キーの試行の失敗の待ちは 1 秒。本文のとおり全体のロックはしない。
 - 公開の手続きは `requiresAuth`（`packages/domain/src/auth/access.ts`）の完全一致の一覧だけ（INV-29 のまま。手続きの名前が変われば一覧と `auth-coverage.test.ts` を直す）。
 - それ以外の `/api/*` は全権セッションと解錠済みの vault を要求する。セッションがなければ今の 401、セッションがあって施錠中なら 401 `LOCKED`。Host → CSRF → 認証の順は変えない。
 - 回復キーの試行: 失敗ごとに 1 秒待たせる。全体のロックはしない（今のロックをやめる）。
@@ -67,6 +68,7 @@ invest-copilot の `specs/003-passkey-vault/design.md`（D1〜D8）を土台に�
 - `main.ts` は起動時に `auth.sqlite` だけを開き、`sessions` を消す。registry と tenants は開かない。
 - バックアップの定期実行（004 R10）、定期仕訳の自動登録（005 R18）は、解錠で始め、施錠で止める（`lib/startup.ts` を vault の状態に結びつける）。`.tmp/backup-snapshot-*/` の掃除は起動時のまま。
 - `fm serve` の扱いは変えない。
+- `pnpm verify:freee --continue` は使えない（実行ごとに乱数の DK で作るため。利用者の判断でそのままにする）。
 
 ## D8 使うもの
 
@@ -78,9 +80,9 @@ invest-copilot の `specs/003-passkey-vault/design.md`（D1〜D8）を土台に�
 
 - 暗号の鍵を、パスフレーズ + Argon2id から D1 のバックアップの鍵に替える。AES-256-GCM でヘッダー全体を AAD にするのは今のまま。
 - ヘッダーに、作成時の recovery の包み（`salt`、`iv`、`tag`、`wrapped`）を入れる。新しい Mac では回復キーだけで復元できる。
-- 本体の SQLite の写しは `VACUUM INTO` で作る（暗号化された DB の写しは同じ鍵で暗号化される）。`auth.sqlite` はバックアップに含めない（今の「認証の表を含めない」と同じ）。
+- 本体の SQLite の写しは `VACUUM INTO` で作る（暗号化された DB の写しは同じ鍵で暗号化されるので、写しの暗号を `PRAGMA rekey=''` で外す）。中の写しは平文の SQLite のままで、外側の AES-GCM が守る。`auth.sqlite` はバックアップに含めない（今の「認証の表を含めない」と同じ）。
 - 定期実行は解錠中だけ（D7）。キーチェーンのバックアップのパスフレーズ、パスフレーズの設定・変更の画面と API、「パスフレーズが使えない」の警告はなくす。`SecretStore`（キーチェーン）は外部の AI の API キー（006）のために残す。
-- 復元のコマンド（`pnpm restore`）は回復キーを標準入力から受け取る。ヘッダーの包みで DK を開き、開けなければ今のデータ場所の `auth.sqlite` の recovery の包みでも試す（DK は変わらないので、回復キーを再発行した後でも古いバックアップを戻せる）。復元した後は、`auth.sqlite` を recovery の包みだけにして作り直す（パスキーとセッションは空）。次の起動で回復キーで解錠し、パスキーを登録する。
+- 復元のコマンド（`pnpm restore`）は回復キーを標準入力から受け取る（端末ならエコーなし。パイプなら 1 行目で、そのときは `--yes` が要る。引数・環境変数では受け取らない）。ヘッダーの包みで DK を開き、開けなければ今のデータ場所の `auth.sqlite` の recovery の包みでも試す（DK は変わらないので、回復キーを再発行した後でも古いバックアップを戻せる）。復元した後は、`auth.sqlite` を recovery の包みだけにして作り直す（パスキーとセッションは空）。次の起動で回復キーで解錠し、パスキーを登録する。
 - 画面からのファイルの検査（004）は、解錠中に DK で行う（パスフレーズの入力はなくす）。
 - `server-<id>/snap` がテストの後に残る漏れを直す（バックアップのテストの片付けの順序。ランナーが片付けの後に `snap` を作っている）。
 
