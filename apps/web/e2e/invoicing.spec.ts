@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { enterVault } from "./helpers/auth.ts";
+import { openNav } from "./helpers/nav.ts";
 
 // 日付は実行日に左右されないよう、対象月・発行日・入金日をすべて明示する。
 // 開始年度 2026（1 月始まり）の期間に収まる値にする。事業体は新規で、消費税は免税（既定）
@@ -31,8 +32,7 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
   });
 
   await test.step("発行者を設定する", async () => {
-    await menu.getByRole("link", { name: "請求", exact: true }).click();
-    await page.getByRole("link", { name: "請求の設定" }).click();
+    await openNav(page, "請求", "請求の設定");
     await expect(page.getByRole("heading", { name: "請求の設定" })).toBeVisible();
 
     await page.getByLabel("氏名", { exact: true }).fill("山田 太郎");
@@ -45,7 +45,7 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
   });
 
   await test.step("取引先を追加し、請求の条件（時間単価型・翌月末払い）を設定する", async () => {
-    await menu.getByRole("link", { name: "取引先", exact: true }).click();
+    await openNav(page, "事業体の設定", "取引先");
     await page.getByLabel("名称", { exact: true }).fill("取引先A");
     await page.getByRole("button", { name: "追加する" }).click();
     await expect(page.getByRole("cell", { name: "取引先A", exact: true })).toBeVisible();
@@ -64,7 +64,7 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
   });
 
   await test.step("対象月の工数を入力する", async () => {
-    await menu.getByRole("link", { name: "請求", exact: true }).click();
+    await openNav(page, "請求", "請求書");
     await page.getByRole("link", { name: "工数の入力" }).click();
     await expect(page.getByRole("heading", { name: "工数の入力" })).toBeVisible();
 
@@ -141,7 +141,7 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
   });
 
   await test.step("一覧でも入金済みと残額 0 が見える", async () => {
-    await menu.getByRole("link", { name: "請求", exact: true }).click();
+    await openNav(page, "請求", "請求書");
     const list = page.getByRole("table", { name: "請求書の一覧" });
     const row = list.getByRole("row", { name: new RegExp(invoiceNo) });
     await expect(row).toContainText("入金済み");
