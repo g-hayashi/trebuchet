@@ -92,6 +92,47 @@ describe("GET /blue-return/:year（US1）", () => {
   });
 });
 
+describe("3 ページの減価償却の行（009 US1）", () => {
+  it("定額法の資産は償却率・本年中の償却期間・出所・方法を持つ。確定すると警告なしで一致する", async () => {
+    const created = await e["fixed-assets"].$post({
+      param: { entityId },
+      json: {
+        name: "機材A",
+        acquiredOn: "2026-07-10",
+        inServiceOn: "2026-07-10",
+        acquisitionCost: 500_000,
+        method: "straight_line",
+        usefulLifeYears: 4,
+        businessRatio: 10000,
+        assetAccountId: acc("工具器具備品"),
+      } as never,
+    });
+    expect(created.status).toBe(201);
+    const commit = await br().adjustments.$post({
+      param: param(),
+      json: {
+        kind: "depreciation",
+        sourceId: ((await created.json()) as { asset: { id: string } }).asset.id,
+        expected: { amount: 62_500 },
+      } as never,
+    });
+    expect(commit.status).toBe(201);
+    const res = await br().$get({ param: param() });
+    const parsed = BlueReturn.parse(((await res.json()) as { blueReturn: unknown }).blueReturn);
+    expect(parsed.page3.depreciation).toHaveLength(1);
+    expect(parsed.page3.depreciation[0]).toMatchObject({
+      source: "fixed_asset",
+      method: "straight_line",
+      ratePermille: 250,
+      months: 6,
+      disposedOn: null,
+      total: 62_500,
+      closingBookValue: 437_500,
+    });
+    expect(parsed.warnings.map((w) => w.code)).not.toContain("DEPRECIATION_MISMATCH");
+  });
+});
+
 describe("GET /blue-return/:year/csv（FR-003, R14）", () => {
   beforeEach(async () => {
     await simple("普通預金", "売上高", 500_000, "2026-03-31");

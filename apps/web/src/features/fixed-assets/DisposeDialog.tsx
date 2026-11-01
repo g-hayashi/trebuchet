@@ -30,18 +30,27 @@ export function DisposeDialog({
   const queryClient = useQueryClient();
   const [disposedOn, setDisposedOn] = useState("");
   const [reason, setReason] = useState("");
+  const [kind, setKind] = useState<"scrap" | "sale">("scrap");
   const [missing, setMissing] = useState<string>();
 
   const close = () => {
     setDisposedOn("");
     setReason("");
+    setKind("scrap");
     setMissing(undefined);
     dispose.reset();
     onClose();
   };
   const dispose = useMutation({
     mutationFn: (target: FixedAssetRow) =>
-      disposeFixedAsset(entityId, target.id, { disposedOn, reason }),
+      // 除却の種類は定額法の資産だけが持つ（少額の特例・一括償却は廃棄も売却も同じ扱い）
+      disposeFixedAsset(
+        entityId,
+        target.id,
+        target.method === "straight_line"
+          ? { disposedOn, reason, disposalKind: kind }
+          : { disposedOn, reason },
+      ),
     onSuccess: async () => {
       close();
       await Promise.all([
@@ -83,6 +92,38 @@ export function DisposeDialog({
               onChange={(e) => setDisposedOn(e.target.value)}
             />
           </div>
+          {asset?.method === "straight_line" && (
+            <fieldset className="grid gap-1">
+              <legend className="text-sm font-medium">除却の種類</legend>
+              <div className="flex gap-4 text-sm">
+                <label className="flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="dispose-kind"
+                    value="scrap"
+                    checked={kind === "scrap"}
+                    onChange={() => setKind("scrap")}
+                  />
+                  廃棄
+                </label>
+                <label className="flex items-center gap-1">
+                  <input
+                    type="radio"
+                    name="dispose-kind"
+                    value="sale"
+                    checked={kind === "sale"}
+                    onChange={() => setKind("sale")}
+                  />
+                  売却
+                </label>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {kind === "sale"
+                  ? "売却した月までの月割りの償却をしたうえで、残りの未償却残高を事業主貸へ振り替える案を作ります（除却損にはしません）。譲渡所得の計算はこのアプリの範囲外です。"
+                  : "除却した月までの月割りの償却をしたうえで、残りの未償却残高を固定資産除却損にする案を作ります。"}
+              </p>
+            </fieldset>
+          )}
           <div className="grid gap-1">
             <label htmlFor="dispose-reason" className="text-sm font-medium">
               理由

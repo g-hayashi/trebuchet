@@ -11,11 +11,15 @@ import { formatRatioAsPercent, parsePercentToRatio } from "@/features/blue-retur
 import { journalSearchQuery } from "@/features/journals/api";
 import { parseWholeYen } from "@/lib/format";
 import { type FixedAssetRow, fixedAssetKeys, postFixedAsset, putFixedAsset } from "./api";
+import { type AssetMethod, METHOD_OPTIONS } from "./methods";
 
 const COST_ERROR = "取得価額は1円以上の整数で入力してください";
 const RATIO_ERROR = "事業専用割合は 0〜100 の数値を小数第2位までで入力してください";
-const METHOD = "small_asset_28_2" as const;
+const LIFE_ERROR = "耐用年数は1以上の整数で入力してください";
+const PRIOR_ERROR = "前年までの償却累計額は0以上の整数で入力してください";
+const PRIOR_YEAR_ERROR = "累計が何年分までかを入力してください（4桁の年）";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const YEAR_PATTERN = /^\d{4}$/;
 
 type Values = {
   name: string;
@@ -23,6 +27,11 @@ type Values = {
   acquiredOn: string;
   cost: string;
   percent: string;
+  method: AssetMethod;
+  usefulLifeYears: string;
+  inServiceOn: string;
+  priorAccumulated: string;
+  priorThroughYear: string;
   assetAccountId: string;
   linkedJournalId: string;
   note: string;
@@ -35,6 +44,11 @@ const EMPTY: Values = {
   acquiredOn: "",
   cost: "",
   percent: "100",
+  method: "small_asset_28_2",
+  usefulLifeYears: "",
+  inServiceOn: "",
+  priorAccumulated: "",
+  priorThroughYear: "",
   assetAccountId: "",
   linkedJournalId: "",
   note: "",
@@ -47,11 +61,66 @@ const valuesOf = (asset: FixedAssetRow): Values => ({
   acquiredOn: asset.acquiredOn,
   cost: String(asset.acquisitionCost),
   percent: formatRatioAsPercent(asset.businessRatio),
+  method: asset.method,
+  usefulLifeYears: asset.usefulLifeYears === null ? "" : String(asset.usefulLifeYears),
+  inServiceOn: asset.inServiceOn ?? "",
+  priorAccumulated: asset.priorAccumulated > 0 ? String(asset.priorAccumulated) : "",
+  priorThroughYear: asset.priorThroughYear === null ? "" : String(asset.priorThroughYear),
   assetAccountId: asset.assetAccountId,
   linkedJournalId: asset.linkedJournalId ?? "",
   note: asset.note ?? "",
   reason: "",
 });
+
+/** 方法ごとの入力の検査と整形の結果。ok でなければ欄ごとのメッセージ */
+type MethodFields =
+  | {
+      ok: true;
+      usefulLifeYears: number | null;
+      inServiceOn: string | null;
+      priorAccumulated: number;
+      priorThroughYear: number | null;
+    }
+  | { ok: false; lifeError?: string; priorError?: string; priorYearError?: string };
+
+/** 少額の特例は耐用年数・供用日・累計を持たない。定額法は耐用年数が必須。一括償却は耐用年数を持たない */
+function methodFieldsOf(v: Values): MethodFields {
+  if (v.method === "small_asset_28_2") {
+    return {
+      ok: true,
+      usefulLifeYears: null,
+      inServiceOn: null,
+      priorAccumulated: 0,
+      priorThroughYear: null,
+    };
+  }
+  const life = v.method === "straight_line" ? parseWholeYen(v.usefulLifeYears, { min: 1 }) : null;
+  const prior =
+    v.priorAccumulated.trim() === "" ? 0 : parseWholeYen(v.priorAccumulated, { min: 0 });
+  const yearText = v.priorThroughYear.trim();
+  const year = yearText === "" ? null : YEAR_PATTERN.test(yearText) ? Number(yearText) : undefined;
+  const lifeError = v.method === "straight_line" && life === null ? LIFE_ERROR : undefined;
+  const priorError = prior === null ? PRIOR_ERROR : undefined;
+  const priorYearError =
+    year === undefined || (prior !== null && prior > 0 && year === null)
+      ? PRIOR_YEAR_ERROR
+      : undefined;
+  if (lifeError || priorError || priorYearError || prior === null || year === undefined) {
+    return {
+      ok: false,
+      ...(lifeError && { lifeError }),
+      ...(priorError && { priorError }),
+      ...(priorYearError && { priorYearError }),
+    };
+  }
+  return {
+    ok: true,
+    usefulLifeYears: life,
+    inServiceOn: v.inServiceOn === "" ? null : v.inServiceOn,
+    priorAccumulated: prior,
+    priorThroughYear: year,
+  };
+}
 
 /** 取得年月日の年の仕訳だけを、結びつける候補にする（年が決まるまでは読まない） */
 function JournalSelect({
@@ -113,8 +182,9 @@ function JournalSelect({
 }
 
 /**
- * 固定資産の登録・編集（FR-018〜020）。償却の方法は少額減価償却資産の特例（措置法28条の2）だけ、
- * 資産の勘定は資産の科目だけ。取得価額・割合の形を整えて送る（特例の基準額・年間の上限の判定は API が行う）
+ * 固定資産の登録・編集（FR-018〜020、009 US1）。償却の方法は少額の特例・定額法・一括償却で、
+ * 方法ごとに入力欄を変える（定額法は耐用年数が必須、一括償却は耐用年数なし、少額の特例は供用日・累計なし）。
+ * 資産の勘定は資産の科目だけ。入力の形を整えて送る（基準額・年間の上限・耐用年数の表・累計の上限の判定は API が行う）
  */
 export function FixedAssetForm({
   entityId,
@@ -137,6 +207,9 @@ export function FixedAssetForm({
   const [values, setValues] = useState<Values>(editing ? valuesOf(editing) : EMPTY);
   const [costError, setCostError] = useState<string>();
   const [ratioError, setRatioError] = useState<string>();
+  const [lifeError, setLifeError] = useState<string>();
+  const [priorError, setPriorError] = useState<string>();
+  const [priorYearError, setPriorYearError] = useState<string>();
   const set = (patch: Partial<Values>) => setValues((v) => ({ ...v, ...patch }));
 
   const assetAccounts = accounts.filter(
@@ -144,13 +217,25 @@ export function FixedAssetForm({
   );
 
   const save = useMutation({
-    mutationFn: ({ cost, ratio }: { cost: number; ratio: number }) => {
+    mutationFn: ({
+      cost,
+      ratio,
+      fields,
+    }: {
+      cost: number;
+      ratio: number;
+      fields: Extract<MethodFields, { ok: true }>;
+    }) => {
       const body = {
         name: values.name,
         quantity: values.quantity.trim() === "" ? null : values.quantity,
         acquiredOn: values.acquiredOn,
         acquisitionCost: cost,
-        method: METHOD,
+        method: values.method,
+        usefulLifeYears: fields.usefulLifeYears,
+        inServiceOn: fields.inServiceOn,
+        priorAccumulated: fields.priorAccumulated,
+        priorThroughYear: fields.priorThroughYear,
         businessRatio: ratio,
         assetAccountId: values.assetAccountId,
         linkedJournalId: values.linkedJournalId === "" ? null : values.linkedJournalId,
@@ -181,8 +266,12 @@ export function FixedAssetForm({
     const ratio = parsePercentToRatio(values.percent);
     setCostError(cost === null ? COST_ERROR : undefined);
     setRatioError(ratio === undefined ? RATIO_ERROR : undefined);
-    if (cost === null || ratio === undefined) return;
-    save.mutate({ cost, ratio });
+    const fields = methodFieldsOf(values);
+    setLifeError(fields.ok ? undefined : fields.lifeError);
+    setPriorError(fields.ok ? undefined : fields.priorError);
+    setPriorYearError(fields.ok ? undefined : fields.priorYearError);
+    if (cost === null || ratio === undefined || !fields.ok) return;
+    save.mutate({ cost, ratio, fields });
   };
 
   return (
@@ -190,7 +279,7 @@ export function FixedAssetForm({
       <CardHeader>
         <CardTitle>{editing ? `${editing.name}を編集` : "固定資産の登録"}</CardTitle>
         <CardDescription>
-          取得価額が基準額未満の資産を、取得した年に全額償却します（少額減価償却資産の特例）。登録しただけでは帳簿は変わりません。下の「決算整理の仕訳の案」で仕訳を登録します。
+          償却の方法を、少額減価償却資産の特例（取得した年に全額）、定額法（耐用年数ごとの償却率で月割り）、一括償却資産（3年均等）から選びます。登録しただけでは帳簿は変わりません。下の「決算整理の仕訳の案」で仕訳を登録します。
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -279,10 +368,86 @@ export function FixedAssetForm({
             <label htmlFor="asset-method" className="text-sm font-medium">
               償却の方法
             </label>
-            <NativeSelect id="asset-method" value={METHOD} onChange={() => {}}>
-              <option value={METHOD}>少額減価償却資産の特例（措置法28条の2）</option>
+            <NativeSelect
+              id="asset-method"
+              value={values.method}
+              onChange={(e) => set({ method: e.target.value as AssetMethod })}
+            >
+              {METHOD_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </NativeSelect>
           </div>
+          {values.method === "straight_line" && (
+            <div className="grid gap-1">
+              <label htmlFor="asset-useful-life" className="text-sm font-medium">
+                耐用年数
+              </label>
+              <Input
+                id="asset-useful-life"
+                inputMode="numeric"
+                autoComplete="off"
+                value={values.usefulLifeYears}
+                onChange={(e) => set({ usefulLifeYears: e.target.value })}
+                aria-invalid={lifeError ? true : undefined}
+                aria-describedby="asset-useful-life-error"
+              />
+              <FieldError id="asset-useful-life-error" message={lifeError} />
+            </div>
+          )}
+          {values.method !== "small_asset_28_2" && (
+            <>
+              <div className="grid gap-1">
+                <label htmlFor="asset-in-service-on" className="text-sm font-medium">
+                  事業の用に供した年月日
+                </label>
+                <Input
+                  id="asset-in-service-on"
+                  type="date"
+                  value={values.inServiceOn}
+                  onChange={(e) => set({ inServiceOn: e.target.value })}
+                />
+                <p className="text-sm text-muted-foreground">
+                  空欄のときは、取得年月日から償却を始めます。
+                </p>
+              </div>
+              <div className="grid gap-1">
+                <label htmlFor="asset-prior-accumulated" className="text-sm font-medium">
+                  前年までの償却累計額
+                </label>
+                <Input
+                  id="asset-prior-accumulated"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={values.priorAccumulated}
+                  onChange={(e) => set({ priorAccumulated: e.target.value })}
+                  aria-invalid={priorError ? true : undefined}
+                  aria-describedby="asset-prior-accumulated-error"
+                />
+                <FieldError id="asset-prior-accumulated-error" message={priorError} />
+              </div>
+              <div className="grid gap-1">
+                <label htmlFor="asset-prior-through-year" className="text-sm font-medium">
+                  累計の年分（何年分までか）
+                </label>
+                <Input
+                  id="asset-prior-through-year"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={values.priorThroughYear}
+                  onChange={(e) => set({ priorThroughYear: e.target.value })}
+                  aria-invalid={priorYearError ? true : undefined}
+                  aria-describedby="asset-prior-through-year-error"
+                />
+                <FieldError id="asset-prior-through-year-error" message={priorYearError} />
+                <p className="text-sm text-muted-foreground">
+                  この年分より後の年から、償却の仕訳の案を出します。前の年から使っている資産だけ入力します。
+                </p>
+              </div>
+            </>
+          )}
           <JournalSelect
             entityId={entityId}
             acquiredOn={values.acquiredOn}

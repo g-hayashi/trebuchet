@@ -16,7 +16,13 @@ import type { Account } from "@/features/accounts/api";
 import { formatYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
 import { type HomeUseAllocationRow, postAdjustment } from "./api";
-import { formatRatioAsPercent } from "./ratio";
+import { formatDepreciationRate, formatRatioAsPercent } from "./ratio";
+
+const DEPRECIATION_METHOD_LABELS = {
+  small_asset_28_2: "少額の特例",
+  straight_line: "定額法",
+  lump_sum: "一括償却",
+} as const;
 
 /** 画面が見た案の金額（借方の行の金額）。確定のとき API が帳簿から作り直した案と比べる */
 const debitTotal = (proposal: AdjustmentProposal) =>
@@ -107,20 +113,61 @@ export function AdjustmentPanel({
                   </dl>
                 )}
                 {"acquisitionCost" in b && (
-                  <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
-                    <div>
-                      <dt className="text-muted-foreground">取得価額</dt>
-                      <dd className="tabular-nums">{formatYen(b.acquisitionCost)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">事業専用割合</dt>
-                      <dd className="tabular-nums">{formatRatioAsPercent(b.businessRatio)}%</dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">必要経費算入額</dt>
-                      <dd className="tabular-nums">{formatYen(b.deductible)}</dd>
-                    </div>
-                  </dl>
+                  <>
+                    <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+                      <div>
+                        <dt className="text-muted-foreground">償却方法</dt>
+                        <dd>{DEPRECIATION_METHOD_LABELS[b.method]}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">取得価額</dt>
+                        <dd className="tabular-nums">{formatYen(b.acquisitionCost)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">事業専用割合</dt>
+                        <dd className="tabular-nums">{formatRatioAsPercent(b.businessRatio)}%</dd>
+                      </div>
+                      {b.months !== null && (
+                        <div>
+                          <dt className="text-muted-foreground">本年中の償却期間</dt>
+                          <dd className="tabular-nums">{b.months}/12</dd>
+                        </div>
+                      )}
+                      {b.ratePermille !== null && (
+                        <div>
+                          <dt className="text-muted-foreground">償却率</dt>
+                          <dd className="tabular-nums">{formatDepreciationRate(b.ratePermille)}</dd>
+                        </div>
+                      )}
+                      <div>
+                        <dt className="text-muted-foreground">必要経費算入額</dt>
+                        <dd className="tabular-nums">{formatYen(b.deductible)}</dd>
+                      </div>
+                      {b.disposalKind === "scrap" && (
+                        <>
+                          <div>
+                            <dt className="text-muted-foreground">除却損</dt>
+                            <dd className="tabular-nums">{formatYen(b.disposalAmount)}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-muted-foreground">除却損のうち必要経費算入額</dt>
+                            <dd className="tabular-nums">{formatYen(b.disposalDeductible)}</dd>
+                          </div>
+                        </>
+                      )}
+                      {b.disposalKind === "sale" && (
+                        <div>
+                          <dt className="text-muted-foreground">売却による事業主貸への振替</dt>
+                          <dd className="tabular-nums">{formatYen(b.disposalAmount)}</dd>
+                        </div>
+                      )}
+                    </dl>
+                    {b.disposalKind === "sale" && (
+                      <p className="text-sm text-muted-foreground">
+                        譲渡所得の計算はこのアプリの範囲外です。売却代金と譲渡所得は、別に計算して申告してください。
+                      </p>
+                    )}
+                  </>
                 )}
                 <div className="grid gap-1 text-sm">
                   <p>

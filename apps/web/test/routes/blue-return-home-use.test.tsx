@@ -435,7 +435,7 @@ describe("家事按分・地代家賃の内訳の画面（US2）", () => {
     const facts = within(card)
       .getAllByRole("definition")
       .map((d) => d.textContent);
-    expect(facts).toEqual(["200,000", "50%", "100,000"]);
+    expect(facts).toEqual(["少額の特例", "200,000", "50%", "100,000"]);
     expect(within(card).getByText("取得価額")).toBeInTheDocument();
     expect(within(card).getByText("必要経費算入額")).toBeInTheDocument();
     await user.click(within(card).getByRole("button", { name: "仕訳を登録" }));

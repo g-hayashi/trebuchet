@@ -21,8 +21,12 @@ import { formatRatioAsPercent } from "@/features/blue-return/ratio";
 import { fixedAssetsQuery } from "@/features/fixed-assets/api";
 import { DisposeDialog } from "@/features/fixed-assets/DisposeDialog";
 import { FixedAssetForm } from "@/features/fixed-assets/FixedAssetForm";
+import { depreciationErrorText, METHOD_SHORT_LABELS } from "@/features/fixed-assets/methods";
 import { thisYear } from "@/lib/dates";
 import { formatYen } from "@/lib/format";
+
+/** 除却の種類（定額法の資産だけが持つ）の表示。ないときは何も足さない */
+const DISPOSAL_KIND_SUFFIX: Record<string, string> = { scrap: "（廃棄）", sale: "（売却）" };
 
 /** 年分は暦年（個人）。不正な値は捨てて、今年にする */
 const Search = z.object({ year: z.number().int().min(1900).max(9999).optional().catch(undefined) });
@@ -94,6 +98,7 @@ function FixedAssetsPage() {
                   <TableHead>数量</TableHead>
                   <TableHead>取得年月日</TableHead>
                   <TableHead className="text-right">取得価額</TableHead>
+                  <TableHead>償却方法</TableHead>
                   <TableHead className="text-right">事業専用割合</TableHead>
                   <TableHead className="text-right">本年分の償却費</TableHead>
                   <TableHead className="text-right">必要経費算入額</TableHead>
@@ -111,6 +116,7 @@ function FixedAssetsPage() {
                     <TableCell className="text-right tabular-nums">
                       {formatYen(a.acquisitionCost)}
                     </TableCell>
+                    <TableCell>{METHOD_SHORT_LABELS[a.method]}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatRatioAsPercent(a.businessRatio)}%
                     </TableCell>
@@ -123,7 +129,16 @@ function FixedAssetsPage() {
                     <TableCell className="text-right tabular-nums">
                       {a.depreciation ? formatYen(a.depreciation.closingBookValue) : ""}
                     </TableCell>
-                    <TableCell>{a.disposedOn ? `除却 ${a.disposedOn}` : "使用中"}</TableCell>
+                    <TableCell>
+                      {a.disposedOn
+                        ? `除却 ${a.disposedOn}${DISPOSAL_KIND_SUFFIX[a.disposalKind ?? ""] ?? ""}`
+                        : "使用中"}
+                      {a.depreciationError && (
+                        <span className="block text-destructive">
+                          償却を計算できません（{depreciationErrorText(a.depreciationError.code)}）
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell className="flex gap-2">
                       <Button
                         variant="outline"

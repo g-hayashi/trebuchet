@@ -208,6 +208,161 @@ describe("POST /fixed-assets/:assetId/dispose", () => {
   });
 });
 
+const straightLine = (over: Record<string, unknown> = {}) => ({
+  name: "機材A",
+  acquiredOn: "2026-07-10",
+  inServiceOn: "2026-07-10",
+  acquisitionCost: 500_000,
+  method: "straight_line",
+  usefulLifeYears: 4,
+  businessRatio: 10000,
+  ...over,
+});
+
+describe("定額法（009 US1。FR-001〜002）", () => {
+  it("定額法を登録でき、?year= の depreciation に償却率・月数・償却費・未償却残高が出る", async () => {
+    const asset = await create(straightLine());
+    expect(asset).toMatchObject({
+      method: "straight_line",
+      usefulLifeYears: 4,
+      inServiceOn: "2026-07-10",
+      priorAccumulated: 0,
+      priorThroughYear: null,
+      disposalKind: null,
+    });
+    const res = await assets.$get({ param: { entityId }, query: { year: "2026" } });
+    const { assets: rows } = await okBody(res);
+    expect(rows[0]).toMatchObject({
+      id: asset.id,
+      depreciationError: null,
+      depreciation: {
+        method: "straight_line",
+        ratePermille: 250,
+        months: 6,
+        total: 62_500,
+        deductible: 62_500,
+        closingBookValue: 437_500,
+      },
+    });
+  });
+
+  it("前年までの累計と年を保存する", async () => {
+    const asset = await create(
+      straightLine({
+        acquiredOn: "2025-01-10",
+        inServiceOn: null,
+        priorAccumulated: 100_000,
+        priorThroughYear: 2025,
+      }),
+    );
+    expect(asset).toMatchObject({ priorAccumulated: 100_000, priorThroughYear: 2025 });
+  });
+
+  it("422: 耐用年数が率の表になければ USEFUL_LIFE_UNSUPPORTED（details.usefulLifeYears）", async () => {
+    const res = await post(straightLine({ usefulLifeYears: 1 }));
+    expect(res.status).toBe(422);
+    const error = await errorOf(res);
+    expect(error.code).toBe("USEFUL_LIFE_UNSUPPORTED");
+    expect(error.details).toMatchObject({ usefulLifeYears: 1 });
+  });
+
+  it("422: 累計が取得価額 - 1 を超えれば PRIOR_ACCUMULATED_INVALID", async () => {
+    const res = await post(
+      straightLine({ priorAccumulated: 500_000, priorThroughYear: 2025, acquiredOn: "2024-01-10" }),
+    );
+    expect(res.status).toBe(422);
+    expect((await errorOf(res)).code).toBe("PRIOR_ACCUMULATED_INVALID");
+  });
+
+  it("400: 累計が負なら VALIDATION、disposalKind の不明値も 400", async () => {
+    const neg = await post(straightLine({ priorAccumulated: -1 }));
+    expect(neg.status).toBe(400);
+    const asset = await create(straightLine());
+    const bad = await one().dispose.$post({
+      param: { entityId, assetId: asset.id },
+      json: { disposedOn: "2026-10-05", reason: "x", disposalKind: "gift" } as never,
+    });
+    expect(bad.status).toBe(400);
+  });
+});
+
+describe("除却の種類（009 FR-009）", () => {
+  const br = () => e["blue-return"][":year"];
+  const proposalFor = async (assetId: string) => {
+    const got = await br().adjustments.$get({ param: { entityId, year: "2026" } });
+    const { proposals } = await okBody(got);
+    return proposals.find((p) => p.sourceId === assetId);
+  };
+
+  it("dispose の disposalKind を保存し、省略は scrap。案の内訳に反映される", async () => {
+    const scrap = await create(straightLine({ name: "廃棄する機材" }));
+    const sale = await create(straightLine({ name: "売却する機材" }));
+    const r1 = await one().dispose.$post({
+      param: { entityId, assetId: scrap.id },
+      json: { disposedOn: "2026-10-05", reason: "廃棄" },
+    });
+    expect((await okBody(r1)).asset).toMatchObject({ disposalKind: "scrap" });
+    const r2 = await one().dispose.$post({
+      param: { entityId, assetId: sale.id },
+      json: { disposedOn: "2026-10-05", reason: "売却", disposalKind: "sale" },
+    });
+    expect((await okBody(r2)).asset).toMatchObject({ disposalKind: "sale" });
+    expect((await proposalFor(scrap.id))?.breakdown).toMatchObject({ disposalKind: "scrap" });
+    expect((await proposalFor(sale.id))?.breakdown).toMatchObject({ disposalKind: "sale" });
+  });
+});
+
+describe("償却の仕訳があるときの変更の制限（009/R12）", () => {
+  const br = () => e["blue-return"][":year"];
+
+  const registerDepreciation = async (assetId: string, amount: number) => {
+    const res = await br().adjustments.$post({
+      param: { entityId, year: "2026" },
+      json: { kind: "depreciation", sourceId: assetId, expected: { amount } } as never,
+    });
+    if (res.status !== 201) throw new Error(`commit failed: ${res.status}`);
+  };
+
+  it("409 DEPRECIATION_JOURNAL_EXISTS（details.years）: 計算に効く項目の PUT と dispose。名称だけの PUT は通る", async () => {
+    const asset = await create(straightLine());
+    await registerDepreciation(asset.id, 62_500);
+    const full = (over: Record<string, unknown>) =>
+      ({ ...asset, ...straightLine(), assetAccountId: asset.assetAccountId, ...over }) as never;
+
+    const put = await one().$put({
+      param: { entityId, assetId: asset.id },
+      json: full({ acquisitionCost: 600_000, reason: "訂正" }),
+    });
+    expect(put.status).toBe(409);
+    const putError = await errorOf(put);
+    expect(putError.code).toBe("DEPRECIATION_JOURNAL_EXISTS");
+    expect(putError.details).toMatchObject({ years: [2026] });
+
+    const dispose = await one().dispose.$post({
+      param: { entityId, assetId: asset.id },
+      json: { disposedOn: "2026-10-05", reason: "廃棄" },
+    });
+    expect(dispose.status).toBe(409);
+    expect((await errorOf(dispose)).code).toBe("DEPRECIATION_JOURNAL_EXISTS");
+
+    const rename = await one().$put({
+      param: { entityId, assetId: asset.id },
+      json: full({ name: "機材A（改）", reason: "名称の修正" }),
+    });
+    expect(rename.status).toBe(200);
+  });
+
+  it("少額の特例の資産にも効く", async () => {
+    const asset = await create();
+    await registerDepreciation(asset.id, 200_000);
+    const dispose = await one().dispose.$post({
+      param: { entityId, assetId: asset.id },
+      json: { disposedOn: "2026-12-01", reason: "廃棄" },
+    });
+    expect(dispose.status).toBe(409);
+  });
+});
+
 describe("減価償却の案（FR-021〜023）", () => {
   it("資産を登録すると案が出て、確定すると3ページと欄18 が一致して案が消える", async () => {
     const asset = await create();

@@ -18,6 +18,11 @@ export function parsePercentToRatio(raw: string): number | undefined {
   return ratio <= 10000 ? ratio : undefined;
 }
 
+/** 定額法の償却率（千分率の整数）を 0.250 の形の文字列にする（表示だけ。計算には使わない） */
+export function formatDepreciationRate(ratePermille: number): string {
+  return `${Math.floor(ratePermille / 1000)}.${String(ratePermille % 1000).padStart(3, "0")}`;
+}
+
 /** 万分率の整数を「%」の文字列にする（28.5、30 のように末尾の 0 は落とす） */
 export function formatRatioAsPercent(ratio: number): string {
   const whole = Math.floor(ratio / 100);
