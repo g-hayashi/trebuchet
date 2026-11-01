@@ -165,6 +165,7 @@ export function getBlueReturn(
       adjustmentRefs: deps.closing.listAdjustmentRefs(params.fiscalYear),
       rentDetails: deps.closing.listRentDetails(params.fiscalYear),
       fixedAssets: deps.closing.listFixedAssets(),
+      straightLineRates: deps.closing.listStraightLineRates(),
       opening: deps.reports.openingBalances(params.fiscalYear),
       priorPeriod: readPriorPeriod(deps, params.fiscalYear),
       closingNotes: deps.closing.listClosingNotes(params.fiscalYear),
@@ -465,11 +466,17 @@ export function listFixedAssets(
   const individual = requireIndividual(deps.masters);
   if (!individual.ok) return individual;
   const { fiscalYear } = params;
+  const depreciationParams = {
+    rates: deps.closing.listStraightLineRates(),
+    taxParameters: deps.closing.listTaxParameters(),
+  };
   return ok(
-    deps.closing.listFixedAssets().map((asset) => ({
-      ...asset,
-      depreciation: fiscalYear === undefined ? null : depreciate(asset, fiscalYear),
-    })),
+    deps.closing.listFixedAssets().map((asset) => {
+      // 計算できない資産（率がない）は null。depreciationError は T014 以後で足す
+      const result =
+        fiscalYear === undefined ? undefined : depreciate(asset, fiscalYear, depreciationParams);
+      return { ...asset, depreciation: result?.ok ? result.value : null };
+    }),
   );
 }
 
@@ -514,7 +521,11 @@ function saveFixedAssetIn(
       note: params.note ?? null,
     },
     all,
-    { accounts: deps.masters.listAccounts(), taxParameters: deps.closing.listTaxParameters() },
+    {
+      accounts: deps.masters.listAccounts(),
+      taxParameters: deps.closing.listTaxParameters(),
+      rates: deps.closing.listStraightLineRates(),
+    },
   );
   if (!validated.ok) return validated;
 

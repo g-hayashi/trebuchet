@@ -169,13 +169,20 @@ describe("listFixedAssets（FR-018、FR-023）", () => {
       {
         ...asset,
         depreciation: {
+          method: "small_asset_28_2",
           cost: 200_000,
           base: 200_000,
+          ratePermille: null,
+          months: null,
+          openingBookValue: 200_000,
           ordinary: 200_000,
           total: 200_000,
           businessRatio: 5000,
           deductible: 100_000,
           closingBookValue: 0,
+          disposalKind: null,
+          disposalAmount: 0,
+          disposalDeductible: 0,
         },
       },
     ]);
