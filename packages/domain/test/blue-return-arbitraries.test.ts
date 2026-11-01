@@ -1,14 +1,20 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { isValidDate } from "../src/dates.ts";
 import { type JournalContext, validateJournal } from "../src/journal.ts";
 import { buildBalanceSheet } from "../src/reports/balance-sheet.ts";
 import { buildProfitAndLoss } from "../src/reports/profit-and-loss.ts";
 import { TAX_RATES } from "../src/seed/tax-rates.ts";
+import type { FixedAsset } from "../src/types.ts";
 import {
   accountIdOf,
+  deferredAssetArb,
+  deferredDecisionsArb,
   homeUseArb,
   INDIVIDUAL_ACCOUNT_LIST,
   LEDGER_YEAR,
+  lumpSumAssetArb,
+  straightLineAssetArb,
   type YearLedger,
   yearLedgerArb,
 } from "./blue-return-arbitraries.ts";
@@ -154,5 +160,182 @@ describe("homeUseArb", () => {
     expect(samples.some((h) => h.businessRatio === 0)).toBe(true);
     expect(samples.some((h) => h.businessRatio === 10000)).toBe(true);
     expect(samples.some((h) => h.businessRatio > 0 && h.businessRatio < 10000)).toBe(true);
+  });
+});
+
+const isDate = (s: string) => isValidDate(s) && /^\d{4}-\d{2}-\d{2}$/.test(s);
+const yearOf = (date: string) => Number(date.slice(0, 4));
+const serviceDateOf = (a: FixedAsset) => a.inServiceOn ?? a.acquiredOn;
+const ASSET_ACCOUNT_IDS = new Set(
+  INDIVIDUAL_ACCOUNT_LIST.filter((a) => a.category === "asset").map((a) => a.id),
+);
+
+/** 009 data-model §1.3 の制約（定額法・一括償却に共通） */
+function expectCommonAssetConstraints(a: FixedAsset) {
+  expect(isDate(a.acquiredOn)).toBe(true);
+  expect(a.acquiredOn >= "2007-04-01").toBe(true);
+  if (a.inServiceOn !== null) {
+    expect(isDate(a.inServiceOn)).toBe(true);
+    expect(a.inServiceOn >= a.acquiredOn).toBe(true);
+  }
+  expect(Number.isSafeInteger(a.acquisitionCost)).toBe(true);
+  expect(a.acquisitionCost).toBeGreaterThan(0);
+  expect(a.businessRatio).toBeGreaterThanOrEqual(0);
+  expect(a.businessRatio).toBeLessThanOrEqual(10000);
+  expect(Number.isInteger(a.businessRatio)).toBe(true);
+  expect(ASSET_ACCOUNT_IDS.has(a.assetAccountId)).toBe(true);
+  expect(a.linkedJournalId).toBeNull();
+  // 累計と累計の年（prior_accumulated > 0 なら年は必須、供用の年以上）
+  expect(Number.isSafeInteger(a.priorAccumulated)).toBe(true);
+  expect(a.priorAccumulated).toBeGreaterThanOrEqual(0);
+  if (a.priorAccumulated > 0) {
+    expect(a.priorThroughYear).not.toBeNull();
+    expect(a.priorThroughYear ?? 0).toBeGreaterThanOrEqual(yearOf(serviceDateOf(a)));
+  } else {
+    expect(a.priorThroughYear).toBeNull();
+  }
+  // 除却の日と種類は同時に入る。除却の日は供用日以後（累計があれば累計の年の翌年以後）
+  expect(a.disposedOn === null).toBe(a.disposalKind === null);
+  if (a.disposedOn !== null) {
+    expect(isDate(a.disposedOn)).toBe(true);
+    expect(a.disposedOn >= serviceDateOf(a)).toBe(true);
+    if (a.priorThroughYear !== null) {
+      expect(yearOf(a.disposedOn)).toBeGreaterThan(a.priorThroughYear);
+    }
+    expect(["scrap", "sale"]).toContain(a.disposalKind);
+  }
+}
+
+describe("straightLineAssetArb（R17/T008）", () => {
+  it("data-model §1.3 の制約を満たす（取得日 2007-04-01 以後、耐用年数 2〜50、累計 ≤ 取得価額 − 1 など）", () => {
+    fc.assert(
+      fc.property(straightLineAssetArb, (a) => {
+        expect(a.method).toBe("straight_line");
+        expectCommonAssetConstraints(a);
+        expect(a.acquisitionCost).toBeLessThanOrEqual(1_000_000_000);
+        expect(Number.isInteger(a.usefulLifeYears)).toBe(true);
+        expect(a.usefulLifeYears ?? 0).toBeGreaterThanOrEqual(2);
+        expect(a.usefulLifeYears ?? 0).toBeLessThanOrEqual(50);
+        expect(a.priorAccumulated).toBeLessThanOrEqual(a.acquisitionCost - 1);
+      }),
+      { numRuns: 300 },
+    );
+  });
+
+  it("範囲の端と各分岐が出る（供用日あり・なし、累計あり・なし、廃棄・売却・除却なし、割合の両端）", () => {
+    const s = fc.sample(straightLineAssetArb, { numRuns: 600, seed: 11 });
+    expect(s.some((a) => a.inServiceOn === null)).toBe(true);
+    expect(s.some((a) => a.inServiceOn !== null && a.inServiceOn > a.acquiredOn)).toBe(true);
+    expect(s.some((a) => a.priorAccumulated > 0)).toBe(true);
+    expect(s.some((a) => a.priorAccumulated === 0)).toBe(true);
+    expect(s.some((a) => a.disposalKind === "scrap")).toBe(true);
+    expect(s.some((a) => a.disposalKind === "sale")).toBe(true);
+    expect(s.some((a) => a.disposedOn === null)).toBe(true);
+    expect(s.some((a) => a.businessRatio === 0)).toBe(true);
+    expect(s.some((a) => a.businessRatio === 10000)).toBe(true);
+    expect(s.some((a) => a.usefulLifeYears === 2)).toBe(true);
+    expect(s.some((a) => a.usefulLifeYears === 50)).toBe(true);
+    expect(s.some((a) => a.acquisitionCost < 10)).toBe(true);
+    expect(s.some((a) => a.acquisitionCost > 100_000_000)).toBe(true);
+    // 供用の年が取得の年と別になる（12 月に取得して翌年に供用）
+    expect(s.some((a) => yearOf(serviceDateOf(a)) > yearOf(a.acquiredOn))).toBe(true);
+  });
+});
+
+describe("lumpSumAssetArb（R17/T008）", () => {
+  it("取得価額 100,000〜199,999、耐用年数なし、累計 ≤ 取得価額など data-model §1.3 の制約を満たす", () => {
+    fc.assert(
+      fc.property(lumpSumAssetArb, (a) => {
+        expect(a.method).toBe("lump_sum");
+        expectCommonAssetConstraints(a);
+        expect(a.acquisitionCost).toBeGreaterThanOrEqual(100_000);
+        expect(a.acquisitionCost).toBeLessThanOrEqual(199_999);
+        expect(a.usefulLifeYears).toBeNull();
+        expect(a.priorAccumulated).toBeLessThanOrEqual(a.acquisitionCost);
+      }),
+      { numRuns: 300 },
+    );
+  });
+
+  it("範囲の端と各分岐が出る（累計 = 取得価額を含む）", () => {
+    const s = fc.sample(lumpSumAssetArb, { numRuns: 600, seed: 12 });
+    expect(s.some((a) => a.acquisitionCost === 100_000)).toBe(true);
+    expect(s.some((a) => a.acquisitionCost === 199_999)).toBe(true);
+    expect(s.some((a) => a.priorAccumulated > 0)).toBe(true);
+    expect(s.some((a) => a.priorAccumulated === 0)).toBe(true);
+    expect(s.some((a) => a.priorAccumulated > 0 && a.priorAccumulated === a.acquisitionCost)).toBe(
+      true,
+    );
+    expect(s.some((a) => a.disposedOn !== null)).toBe(true);
+    expect(s.some((a) => a.disposedOn === null)).toBe(true);
+    expect(s.some((a) => a.inServiceOn !== null)).toBe(true);
+  });
+});
+
+describe("deferredAssetArb・deferredDecisionsArb（R17/T008）", () => {
+  it("開業費は data-model §1.4 の制約を満たす（総額 > 0、累計 ≤ 総額、累計があれば年は開業の年以上、1080 開業費）", () => {
+    fc.assert(
+      fc.property(deferredAssetArb, (d) => {
+        expect(d.name.length).toBeGreaterThan(0);
+        expect(Number.isSafeInteger(d.totalAmount)).toBe(true);
+        expect(d.totalAmount).toBeGreaterThan(0);
+        expect(d.totalAmount).toBeLessThanOrEqual(1_000_000_000);
+        expect(isDate(d.openedOn)).toBe(true);
+        expect(d.priorAccumulated).toBeGreaterThanOrEqual(0);
+        expect(d.priorAccumulated).toBeLessThanOrEqual(d.totalAmount);
+        if (d.priorAccumulated > 0) {
+          expect(d.priorThroughYear).not.toBeNull();
+          expect(d.priorThroughYear ?? 0).toBeGreaterThanOrEqual(yearOf(d.openedOn));
+        } else {
+          expect(d.priorThroughYear).toBeNull();
+        }
+        expect(d.accountId).toBe(accountIdOf("1080"));
+        expect(ASSET_ACCOUNT_IDS.has(d.accountId)).toBe(true);
+      }),
+      { numRuns: 300 },
+    );
+    const s = fc.sample(deferredAssetArb, { numRuns: 400, seed: 13 });
+    expect(s.some((d) => d.priorAccumulated === 0)).toBe(true);
+    expect(s.some((d) => d.priorAccumulated > 0)).toBe(true);
+    expect(s.some((d) => d.priorAccumulated === d.totalAmount)).toBe(true);
+    expect(s.some((d) => d.note !== null)).toBe(true);
+  });
+
+  it("年度ごとの決定: 開業費の startYear 以後の年が昇順で重ならず、額は 0 以上で総額 − 累計以下の整数", () => {
+    fc.assert(
+      fc.property(
+        deferredAssetArb.chain((asset) =>
+          deferredDecisionsArb(asset).map((decisions) => ({ asset, decisions })),
+        ),
+        ({ asset, decisions }) => {
+          const startYear = (asset.priorThroughYear ?? yearOf(asset.openedOn) - 1) + 1;
+          const years = decisions.map((d) => d.fiscalYear);
+          expect(years).toEqual([...new Set(years)].sort((a, b) => a - b));
+          for (const d of decisions) {
+            expect(d.deferredAssetId).toBe(asset.id);
+            expect(d.fiscalYear).toBeGreaterThanOrEqual(startYear);
+            expect(Number.isSafeInteger(d.amount)).toBe(true);
+            expect(d.amount).toBeGreaterThanOrEqual(0);
+            expect(d.amount).toBeLessThanOrEqual(asset.totalAmount - asset.priorAccumulated);
+          }
+        },
+      ),
+      { numRuns: 300 },
+    );
+  });
+
+  it("決定の列は空・0 円・上限いっぱいの額を含み得る", () => {
+    const s = fc.sample(
+      deferredAssetArb.chain((asset) => deferredDecisionsArb(asset).map((d) => ({ asset, d }))),
+      { numRuns: 500, seed: 14 },
+    );
+    expect(s.some(({ d }) => d.length === 0)).toBe(true);
+    expect(s.some(({ d }) => d.some((x) => x.amount === 0))).toBe(true);
+    expect(s.some(({ d }) => d.length >= 3)).toBe(true);
+    expect(
+      s.some(({ asset, d }) =>
+        d.some((x) => x.amount === asset.totalAmount - asset.priorAccumulated && x.amount > 0),
+      ),
+    ).toBe(true);
   });
 });

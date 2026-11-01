@@ -22,10 +22,13 @@ import {
   blueDeductionAnswers,
   closingAuditLog,
   closingNotes,
+  deferredAmortizations,
+  deferredAssets,
   filedDocuments,
   fixedAssets,
   homeUseAllocations,
   rentDetails,
+  straightLineRates,
   taxParameters,
   taxReturnMemos,
 } from "./schema/tenant.ts";
@@ -112,17 +115,22 @@ export class DrizzleClosingStore implements ClosingStore {
       .from(adjustmentJournalRefs)
       .where(eq(adjustmentJournalRefs.fiscalYear, fiscalYear))
       .orderBy(insertionOrder)
-      .all()
-      .map((r) => ({ ...r, deferredAssetId: null }));
+      .all();
+  }
+
+  /** 出所ごとの参照（全年度）。登録の順 */
+  listAdjustmentRefsBySource(
+    source: { assetId: string } | { deferredAssetId: string },
+  ): AdjustmentRef[] {
+    const where =
+      "assetId" in source
+        ? eq(adjustmentJournalRefs.assetId, source.assetId)
+        : eq(adjustmentJournalRefs.deferredAssetId, source.deferredAssetId);
+    return this.db.select().from(adjustmentJournalRefs).where(where).orderBy(insertionOrder).all();
   }
 
   insertAdjustmentRef(ref: AdjustmentRef): void {
-    // deferredAssetId の列と kind = deferred_amortization は T005 で足す
-    const { deferredAssetId: _deferredAssetId, kind, ...rest } = ref;
-    this.db
-      .insert(adjustmentJournalRefs)
-      .values({ ...rest, kind: kind as "home_use" | "depreciation" })
-      .run();
+    this.db.insert(adjustmentJournalRefs).values(ref).run();
   }
 
   // ---- 控除の要件の回答 ----
@@ -220,32 +228,52 @@ export class DrizzleClosingStore implements ClosingStore {
     this.db.insert(closingAuditLog).values(entry).run();
   }
 
-  // ---- 009（表は T005、実装は T007。それまでは型を通すだけの仮実装） ----
+  // ---- 009: 定額法の償却率・開業費 ----
 
   listStraightLineRates(): StraightLineRate[] {
-    throw new Error("listStraightLineRates は T007 で実装する");
+    return this.db
+      .select()
+      .from(straightLineRates)
+      .orderBy(asc(straightLineRates.usefulLifeYears), asc(straightLineRates.effectiveFrom))
+      .all();
   }
 
   listDeferredAssets(): DeferredAsset[] {
-    throw new Error("listDeferredAssets は T007 で実装する");
+    return this.db
+      .select()
+      .from(deferredAssets)
+      .orderBy(asc(deferredAssets.openedOn), asc(deferredAssets.id))
+      .all();
   }
 
-  upsertDeferredAsset(_row: DeferredAsset): void {
-    throw new Error("upsertDeferredAsset は T007 で実装する");
+  upsertDeferredAsset(row: DeferredAsset): void {
+    const { id: _id, ...set } = row;
+    this.db
+      .insert(deferredAssets)
+      .values(row)
+      .onConflictDoUpdate({ target: deferredAssets.id, set })
+      .run();
   }
 
+  /** 全年度（開業費の期首の残高は前の年度の決定から求める） */
   listDeferredAmortizations(): DeferredAmortization[] {
-    throw new Error("listDeferredAmortizations は T007 で実装する");
+    return this.db
+      .select()
+      .from(deferredAmortizations)
+      .orderBy(asc(deferredAmortizations.deferredAssetId), asc(deferredAmortizations.fiscalYear))
+      .all();
   }
 
-  upsertDeferredAmortization(_row: DeferredAmortization): void {
-    throw new Error("upsertDeferredAmortization は T007 で実装する");
-  }
-
-  listAdjustmentRefsBySource(
-    _source: { assetId: string } | { deferredAssetId: string },
-  ): AdjustmentRef[] {
-    throw new Error("listAdjustmentRefsBySource は T007 で実装する");
+  upsertDeferredAmortization(row: DeferredAmortization): void {
+    const { deferredAssetId: _assetId, fiscalYear: _fiscalYear, ...set } = row;
+    this.db
+      .insert(deferredAmortizations)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [deferredAmortizations.deferredAssetId, deferredAmortizations.fiscalYear],
+        set,
+      })
+      .run();
   }
 }
 

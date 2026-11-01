@@ -1,8 +1,12 @@
 import fc from "fast-check";
+import { addDays, daysBetween } from "../src/dates.ts";
 import { INDIVIDUAL_ACCOUNTS } from "../src/seed/accounts.individual.ts";
 import type {
   Account,
+  DeferredAmortization,
+  DeferredAsset,
   FiscalPeriod,
+  FixedAsset,
   HomeUseAllocation,
   JournalDraft,
   LineDraft,
@@ -297,3 +301,224 @@ export const homeUseArb: fc.Arbitrary<HomeUseAllocation> = fc.record({
   createdAt: fc.constant("2026-01-10T00:00:00.000Z"),
   updatedAt: fc.constant("2026-01-10T00:00:00.000Z"),
 });
+
+// ---- 009: 定額法・一括償却資産・開業費（specs/009-depreciation-deferred、R15・R17/T008） ----
+
+/** 定額法の償却率の表が始まる日（取得日の下限。R2） */
+const ASSET_EPOCH = "2007-04-01";
+const ASSET_LAST_ACQUIRED = "2035-12-31";
+const ACQUIRED_DAYS = daysBetween(ASSET_EPOCH, ASSET_LAST_ACQUIRED);
+
+const yearOfDate = (date: string) => Number(date.slice(0, 4));
+
+const syntheticSeqId = (prefix: string, seq: number) =>
+  `${prefix}-0000-7000-8000-${seq.toString(16).padStart(12, "0")}`;
+
+const seqArb = fc.integer({ min: 1, max: 0xffff });
+
+/** 取得日・開業日（2007-04-01〜2035-12-31。両端と年末・年始を含む） */
+const acquiredOnArb: fc.Arbitrary<string> = fc.oneof(
+  {
+    weight: 1,
+    arbitrary: fc.constantFrom(ASSET_EPOCH, "2025-01-01", "2025-12-31", ASSET_LAST_ACQUIRED),
+  },
+  {
+    weight: 4,
+    arbitrary: fc.integer({ min: 0, max: ACQUIRED_DAYS }).map((n) => addDays(ASSET_EPOCH, n)),
+  },
+);
+
+/** 事業専用割合（万分率。0 と 10000 を含む） */
+const ratioArb: fc.Arbitrary<number> = fc.oneof(
+  { weight: 1, arbitrary: fc.constantFrom(0, 10000) },
+  { weight: 4, arbitrary: fc.integer({ min: 0, max: 10000 }) },
+);
+
+/** 1〜max の金額。上限そのものを多めに出す */
+const amountUpTo = (max: number): fc.Arbitrary<number> =>
+  fc.oneof(
+    { weight: 1, arbitrary: fc.constant(max) },
+    { weight: 4, arbitrary: fc.integer({ min: 1, max }) },
+  );
+
+const NOW_ISO = "2026-01-10T00:00:00.000Z";
+
+/**
+ * 定額法・一括償却資産の共通の生成（data-model §1.3 の制約を満たす）。
+ * - 供用日: なし、または取得日から 400 日以内（取得日以後。年をまたぐことがある）
+ * - 累計: なし、または 1〜`priorCap(取得価額)`。累計の年は供用の年から 8 年後まで
+ * - 除却: なし、または供用日（累計があれば累計の年の翌年 1 月 1 日）から 10 年以内。種類は廃棄・売却
+ *   （除却の日が台帳の計算の開始年度より前になる資産は作らない）
+ */
+function assetArb(spec: {
+  method: "straight_line" | "lump_sum";
+  cost: fc.Arbitrary<number>;
+  usefulLife: fc.Arbitrary<number | null>;
+  priorCap: (cost: number) => number;
+}): fc.Arbitrary<FixedAsset> {
+  return fc
+    .record({
+      seq: seqArb,
+      acquiredOn: acquiredOnArb,
+      acquisitionCost: spec.cost,
+      usefulLifeYears: spec.usefulLife,
+      serviceDelay: fc.option(fc.integer({ min: 0, max: 400 }), { nil: undefined }),
+      businessRatio: ratioArb,
+      assetAccountId: fc.constantFrom("1060", "1070").map(accountIdOf),
+      quantity: fc.option(fc.constantFrom("1", "2", "10"), { nil: null }),
+      note: fc.option(fc.constantFrom("備考", "リース満了後に購入"), { nil: null }),
+    })
+    .chain((base) => {
+      const inServiceOn =
+        base.serviceDelay === undefined ? null : addDays(base.acquiredOn, base.serviceDelay);
+      const serviceOn = inServiceOn ?? base.acquiredOn;
+      const cap = spec.priorCap(base.acquisitionCost);
+      const prior: fc.Arbitrary<{ amount: number; through: number } | null> =
+        cap >= 1
+          ? fc.option(
+              fc
+                .record({ amount: amountUpTo(cap), yearsAfter: fc.integer({ min: 0, max: 8 }) })
+                .map(({ amount, yearsAfter }) => ({
+                  amount,
+                  through: yearOfDate(serviceOn) + yearsAfter,
+                })),
+              { nil: null, freq: 2 },
+            )
+          : fc.constant(null);
+      return prior.chain((p) => {
+        const floor =
+          p === null || `${p.through + 1}-01-01` < serviceOn ? serviceOn : `${p.through + 1}-01-01`;
+        return fc
+          .option(
+            fc.record({
+              days: fc.integer({ min: 0, max: 3650 }),
+              kind: fc.constantFrom<"scrap" | "sale">("scrap", "sale"),
+            }),
+            { nil: null },
+          )
+          .map(
+            (disposal): FixedAsset => ({
+              id: syntheticSeqId("00000011", base.seq),
+              name: `資産${base.seq}`,
+              quantity: base.quantity,
+              acquiredOn: base.acquiredOn,
+              acquisitionCost: base.acquisitionCost,
+              method: spec.method,
+              usefulLifeYears: base.usefulLifeYears,
+              inServiceOn,
+              priorAccumulated: p?.amount ?? 0,
+              priorThroughYear: p?.through ?? null,
+              businessRatio: base.businessRatio,
+              assetAccountId: base.assetAccountId,
+              linkedJournalId: null,
+              note: base.note,
+              disposedOn: disposal === null ? null : addDays(floor, disposal.days),
+              disposalKind: disposal?.kind ?? null,
+              createdAt: NOW_ISO,
+              updatedAt: NOW_ISO,
+            }),
+          );
+      });
+    });
+}
+
+/**
+ * 定額法の資産。取得日 2007-04-01 以後、供用日 ≥ 取得日、取得価額 1〜10^9、耐用年数 2〜50、
+ * 割合 0〜10000、累計は取得価額 − 1 以下（取得価額 1 は累計なし）、除却の有無と種類
+ */
+export const straightLineAssetArb: fc.Arbitrary<FixedAsset> = assetArb({
+  method: "straight_line",
+  cost: fc.oneof(
+    { weight: 1, arbitrary: fc.constantFrom(1, 2, 3, 1_000_000_000) },
+    { weight: 2, arbitrary: fc.integer({ min: 1, max: 1_000_000 }) },
+    { weight: 2, arbitrary: fc.integer({ min: 1, max: 1_000_000_000 }) },
+  ),
+  usefulLife: fc.oneof(
+    { weight: 1, arbitrary: fc.constantFrom(2, 50) },
+    { weight: 4, arbitrary: fc.integer({ min: 2, max: 50 }) },
+  ),
+  priorCap: (cost) => cost - 1,
+});
+
+/** 一括償却資産。取得価額 100,000〜199,999、耐用年数なし、累計は取得価額以下 */
+export const lumpSumAssetArb: fc.Arbitrary<FixedAsset> = assetArb({
+  method: "lump_sum",
+  cost: fc.oneof(
+    { weight: 1, arbitrary: fc.constantFrom(100_000, 199_999) },
+    { weight: 4, arbitrary: fc.integer({ min: 100_000, max: 199_999 }) },
+  ),
+  usefulLife: fc.constant(null),
+  priorCap: (cost) => cost,
+});
+
+/**
+ * 開業費。総額 1〜10^9、開業日 2007-04-01〜2035-12-31、累計は 0〜総額（累計の年は開業の年から 8 年後まで）、
+ * 勘定は 1080 開業費
+ */
+export const deferredAssetArb: fc.Arbitrary<DeferredAsset> = fc
+  .record({
+    seq: seqArb,
+    totalAmount: fc.oneof(
+      { weight: 1, arbitrary: fc.constantFrom(1, 60, 300_000, 1_000_000_000) },
+      { weight: 4, arbitrary: fc.integer({ min: 1, max: 1_000_000_000 }) },
+    ),
+    openedOn: acquiredOnArb,
+    note: fc.option(fc.constantFrom("開業準備の費用", "開業前の広告費"), { nil: null }),
+  })
+  .chain((base) =>
+    fc
+      .option(
+        fc.record({
+          amount: amountUpTo(base.totalAmount),
+          yearsAfter: fc.integer({ min: 0, max: 8 }),
+        }),
+        { nil: null, freq: 2 },
+      )
+      .map(
+        (p): DeferredAsset => ({
+          id: syntheticSeqId("00000012", base.seq),
+          name: `開業費${base.seq}`,
+          totalAmount: base.totalAmount,
+          openedOn: base.openedOn,
+          priorAccumulated: p?.amount ?? 0,
+          priorThroughYear: p === null ? null : yearOfDate(base.openedOn) + p.yearsAfter,
+          accountId: accountIdOf("1080"),
+          note: base.note,
+          createdAt: NOW_ISO,
+          updatedAt: NOW_ISO,
+        }),
+      ),
+  );
+
+/**
+ * 開業費の年度ごとの決定の列。年度は `startYear`（累計の年の翌年、なければ開業の年）から昇順で、
+ * 決定のない年度（欠番）を含み得る（最大 8 年分、空もある）。額は 0〜（総額 − 累計）の整数で、
+ * その年度の上限（期首の未償却残高）を超え得る。上限の検査（`validateDeferredDecision`、INV-58）は
+ * 呼ぶ側のテストが行う
+ */
+export const deferredDecisionsArb = (
+  asset: DeferredAsset,
+): fc.Arbitrary<DeferredAmortization[]> => {
+  const startYear = (asset.priorThroughYear ?? yearOfDate(asset.openedOn) - 1) + 1;
+  const remaining = asset.totalAmount - asset.priorAccumulated;
+  const amountArb: fc.Arbitrary<number> = fc.oneof(
+    { weight: 1, arbitrary: fc.constant(0) },
+    { weight: 1, arbitrary: fc.constant(remaining) },
+    { weight: 3, arbitrary: fc.integer({ min: 0, max: remaining }) },
+  );
+  return fc.array(fc.option(amountArb, { nil: undefined }), { maxLength: 8 }).map((amounts) =>
+    amounts.flatMap((amount, i) =>
+      amount === undefined
+        ? []
+        : [
+            {
+              deferredAssetId: asset.id,
+              fiscalYear: startYear + i,
+              amount,
+              decidedAt: NOW_ISO,
+              updatedAt: NOW_ISO,
+            },
+          ],
+    ),
+  );
+};
