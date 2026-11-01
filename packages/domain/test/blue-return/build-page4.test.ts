@@ -4,6 +4,7 @@ import { buildBlueReturn } from "../../src/blue-return/build.ts";
 import { formForYear } from "../../src/blue-return/form.ts";
 import type { CarryForwardBalance } from "../../src/carry-forward.ts";
 import type { OpeningInput } from "../../src/reports/common.ts";
+import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type { Account, ClosingNote, PostedLine } from "../../src/types.ts";
 import { makeAccount, makeFiscalPeriod } from "../arbitraries.ts";
@@ -66,6 +67,7 @@ const build = (
     lines: over.lines ?? [],
     deductionAnswers: null,
     taxParameters: TAX_PARAMETERS,
+    straightLineRates: STRAIGHT_LINE_RATES,
     opening: over.opening ?? [],
     priorPeriod: over.priorPeriod ?? null,
     closingNotes: over.closingNotes ?? [],

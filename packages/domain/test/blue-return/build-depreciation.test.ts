@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type BuildBlueReturnInput, buildBlueReturn } from "../../src/blue-return/build.ts";
+import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type { FixedAsset, PostedLine } from "../../src/types.ts";
 import { makeFiscalPeriod } from "../arbitraries.ts";
@@ -65,6 +66,7 @@ const build = (over: Partial<BuildBlueReturnInput> = {}) =>
     lines: [],
     deductionAnswers: null,
     taxParameters: TAX_PARAMETERS,
+    straightLineRates: STRAIGHT_LINE_RATES,
     ...over,
   });
 
@@ -188,5 +190,151 @@ describe("buildBlueReturn の3ページ 減価償却費の計算（FR-023）", (
     });
     expect(asSupplies.page3.depreciation).toHaveLength(1);
     expect(mismatch(asSupplies)).toHaveLength(1);
+  });
+});
+
+describe("buildBlueReturn の定額法（009 FR-018〜020、R10・R11）", () => {
+  const straight = (over: Partial<FixedAsset> = {}) =>
+    asset({
+      method: "straight_line",
+      usefulLifeYears: 5,
+      acquiredOn: "2025-04-10",
+      acquisitionCost: 1_000_000,
+      note: null,
+      ...over,
+    });
+  const missing = (r: ReturnType<typeof build>) =>
+    r.warnings.filter((w) => w.code === "DEPRECIATION_PARAMETER_MISSING");
+  const registerMismatch = (r: ReturnType<typeof build>) =>
+    r.warnings.filter((w) => w.code === "ASSET_REGISTER_MISMATCH");
+
+  it("定額法の資産を、償却率・本年中の償却期間つきで 3 ページに載せ、欄18 と一致する", () => {
+    const r = build({
+      lines: entry(DEPRECIATION, EQUIPMENT, 150_000),
+      fixedAssets: [straight()],
+    });
+    // 耐用年数 5 年 = 償却率 200、4 月〜12 月の 9 か月: ⌈1,000,000 × 200 × 9 / 12,000⌉ = 150,000
+    expect(r.page3.depreciation).toEqual([
+      {
+        assetId: "asset-1",
+        name: "ノートパソコン",
+        quantity: "1台",
+        acquiredOn: "2025-04-10",
+        cost: 1_000_000,
+        source: "fixed_asset",
+        method: "straight_line",
+        usefulLifeYears: 5,
+        ratePermille: 200,
+        months: 9,
+        disposedOn: null,
+        base: 1_000_000,
+        ordinary: 150_000,
+        total: 150_000,
+        businessRatio: 10000,
+        deductible: 150_000,
+        closingBookValue: 850_000,
+        note: null,
+      },
+    ]);
+    expect(line(r, 18)).toBe(150_000);
+    expect(mismatch(r)).toEqual([]);
+    expect(missing(r)).toEqual([]);
+  });
+
+  it("除却の年度の資産も載せ（除却の日・月数）、少額の特例の行と取得日の順に並ぶ", () => {
+    const disposed = straight({
+      id: "gone",
+      acquiredOn: "2023-01-10",
+      acquisitionCost: 600_000,
+      usefulLifeYears: 3,
+      disposedOn: "2025-06-20",
+      disposalKind: "scrap",
+    });
+    const r = build({
+      lines: entry(DEPRECIATION, EQUIPMENT, 300_000),
+      fixedAssets: [asset({ id: "pc" }), disposed],
+    });
+    expect(r.page3.depreciation.map((d) => d.assetId)).toEqual(["gone", "pc"]);
+    // 2023・2024 年は 12 か月 ⌈600,000 × 334 × 12 / 12,000⌉ = 200,400 ずつ。2025 年は 1〜6 月の 6 か月
+    expect(r.page3.depreciation[0]).toMatchObject({
+      source: "fixed_asset",
+      method: "straight_line",
+      ratePermille: 334,
+      months: 6,
+      disposedOn: "2025-06-20",
+      ordinary: 100_200,
+    });
+  });
+
+  it("除却損（5300）は欄18 に含めない。任意欄に載り、欄32・33 は損益計算書と一致する", () => {
+    const r = build({
+      lines: [...entry("0000000a-0000-7000-8000-000000005300", EQUIPMENT, 50_000)],
+    });
+    expect(line(r, 18)).toBe(0);
+    expect(line(r, 32)).toBe(50_000);
+    expect(r.page1.lines.find((l) => l.label === "固定資産除却損")?.amount).toBe(50_000);
+    expect(mismatch(r)).toEqual([]);
+    expect(r.warnings.map((w) => w.code)).not.toContain("PL_MISMATCH");
+  });
+
+  it("償却率がなく計算できない資産は行に載せず、DEPRECIATION_PARAMETER_MISSING を資産ごとに 1 件出す", () => {
+    const r = build({
+      lines: entry(DEPRECIATION, EQUIPMENT, 50_000),
+      fixedAssets: [
+        straight({ id: "no-rate", usefulLifeYears: 99 }),
+        straight({ id: "ok", usefulLifeYears: 5 }),
+      ],
+    });
+    expect(r.page3.depreciation.map((d) => d.assetId)).toEqual(["ok"]);
+    const [w, ...rest] = missing(r);
+    expect(rest).toEqual([]);
+    expect(w?.details).toEqual({
+      source: "fixed_asset",
+      sourceId: "no-rate",
+      key: "STRAIGHT_LINE_RATE",
+      date: "2025-04-10",
+    });
+    expect(w?.message).toContain("ノートパソコン");
+  });
+
+  it("率の表が空なら、年度に関わる定額法の資産すべてで警告する。その年度に関わらない資産には出さない", () => {
+    const r = build({
+      straightLineRates: [],
+      fixedAssets: [
+        straight({ id: "a" }),
+        straight({ id: "future", acquiredOn: "2026-01-01" }),
+        straight({
+          id: "gone",
+          acquiredOn: "2023-01-10",
+          disposedOn: "2024-05-01",
+          disposalKind: "scrap",
+        }),
+        asset({ id: "small" }),
+      ],
+    });
+    expect(r.page3.depreciation.map((d) => d.assetId)).toEqual(["small"]);
+    expect(missing(r).map((w) => w.details?.sourceId)).toEqual(["a"]);
+  });
+
+  it("帳簿の期首と台帳の期首が違えば ASSET_REGISTER_MISMATCH（一致すれば出さない）", () => {
+    // 2024-07-10 取得: 2024 年は 6 か月 ⌈500,000 × 250 × 6 / 12,000⌉ = 62,500、2025 年の期首の未償却残高 437,500
+    const a = straight({
+      id: "old",
+      acquiredOn: "2024-07-10",
+      acquisitionCost: 500_000,
+      usefulLifeYears: 4,
+    });
+    const opening = (amount: number) => [
+      { accountId: EQUIPMENT, subAccountId: null, side: "debit" as const, amount },
+    ];
+    expect(registerMismatch(build({ fixedAssets: [a], opening: opening(437_500) }))).toEqual([]);
+    const [w, ...rest] = registerMismatch(build({ fixedAssets: [a], opening: opening(400_000) }));
+    expect(rest).toEqual([]);
+    expect(w?.details).toMatchObject({
+      accountId: EQUIPMENT,
+      bookOpening: 400_000,
+      registerOpening: 437_500,
+      difference: -37_500,
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type BuildBlueReturnInput, buildBlueReturn } from "../../src/blue-return/build.ts";
+import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type { AdjustmentRef, HomeUseAllocation, PostedLine, RentDetail } from "../../src/types.ts";
 import { makeFiscalPeriod } from "../arbitraries.ts";
@@ -76,6 +77,7 @@ const build = (over: Partial<BuildBlueReturnInput> = {}) =>
     lines: [],
     deductionAnswers: null,
     taxParameters: TAX_PARAMETERS,
+    straightLineRates: STRAIGHT_LINE_RATES,
     ...over,
   });
 

@@ -5,6 +5,7 @@ import { buildBlueReturn } from "../../src/blue-return/build.ts";
 import { blueReturnToCsv } from "../../src/blue-return/csv.ts";
 import { formForYear } from "../../src/blue-return/form.ts";
 import { parseCsv } from "../../src/import/csv.ts";
+import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type { DeductionAnswers } from "../../src/types.ts";
 import { yearLedgerArb } from "../blue-return-arbitraries.ts";
@@ -40,6 +41,7 @@ describe("blueReturnToCsv（R14）", () => {
         lines: [],
         deductionAnswers: answers,
         taxParameters: TAX_PARAMETERS,
+        straightLineRates: STRAIGHT_LINE_RATES,
       }),
       { blankUnused: false },
     );
@@ -59,6 +61,7 @@ describe("blueReturnToCsv（R14）", () => {
             lines: ledger.lines,
             deductionAnswers,
             taxParameters: TAX_PARAMETERS,
+            straightLineRates: STRAIGHT_LINE_RATES,
           });
           const rows = read(blueReturnToCsv(r, { blankUnused: false })).slice(1);
           const page1 = rows.filter((row) => row[0] === "1");
@@ -83,6 +86,7 @@ describe("blueReturnToCsv（R14）", () => {
       lines: ledger.lines,
       deductionAnswers: answers,
       taxParameters: TAX_PARAMETERS,
+      straightLineRates: STRAIGHT_LINE_RATES,
     });
     const shown = read(blueReturnToCsv(r, { blankUnused: false })).slice(1);
     const blank = read(blueReturnToCsv(r, { blankUnused: true })).slice(1);
@@ -109,6 +113,7 @@ describe("blueReturnToCsv（R14）", () => {
       lines: [],
       deductionAnswers: answers,
       taxParameters: TAX_PARAMETERS,
+      straightLineRates: STRAIGHT_LINE_RATES,
     });
     const r = {
       ...base,
@@ -134,6 +139,7 @@ describe("blueReturnToCsv（R14）", () => {
       lines: [],
       deductionAnswers: answers,
       taxParameters: TAX_PARAMETERS,
+      straightLineRates: STRAIGHT_LINE_RATES,
     });
     const r = {
       ...base,
@@ -154,6 +160,7 @@ function fullReturn(): BlueReturn {
     lines: [],
     deductionAnswers: answers,
     taxParameters: TAX_PARAMETERS,
+    straightLineRates: STRAIGHT_LINE_RATES,
   });
   return {
     ...base,
@@ -223,6 +230,26 @@ function fullReturn(): BlueReturn {
           deductible: 90000,
           closingBookValue: 0,
           note: "メモ",
+        },
+        {
+          assetId: "z",
+          name: "撮影機材",
+          quantity: null,
+          acquiredOn: "2025-04-10",
+          cost: 1000000,
+          source: "fixed_asset",
+          method: "straight_line",
+          usefulLifeYears: 5,
+          ratePermille: 200,
+          months: 9,
+          disposedOn: null,
+          base: 1000000,
+          ordinary: 150000,
+          total: 150000,
+          businessRatio: 10000,
+          deductible: 150000,
+          closingBookValue: 850000,
+          note: null,
         },
       ],
       specialCircumstances: '7月に事務所を移転した,\n"引越"あり',
@@ -317,10 +344,41 @@ describe("blueReturnToCsv の2〜4ページ（FR-003, US5 シナリオ5）", () 
     expect(rows).toContainEqual(["資産2", "デスク: 事業専用割合（%）", "100"]);
   });
 
-  it("3ページ: 特殊事情の行が金額でない唯一の行（本文は引用されて読み戻せる）", () => {
+  it("3ページ: 定額法の行に償却率（小数）と本年中の償却期間（n/12）を足し、少額の特例の行には足さない", () => {
+    const rows = pageRows(csv, 3);
+    expect(rows).toContainEqual(["資産3", "撮影機材: 償却率", "0.2"]);
+    expect(rows).toContainEqual(["資産3", "撮影機材: 本年中の償却期間", "9/12"]);
+    expect(rows).toContainEqual(["資産3", "撮影機材: 必要経費算入額", "150000"]);
+    expect(rows.filter((row) => row[1]?.includes("償却率"))).toHaveLength(1);
+    expect(rows.filter((row) => row[1]?.includes("償却期間"))).toHaveLength(1);
+  });
+
+  it("3ページ: 償却率は千分率を 3 桁の小数に直す（334 → 0.334）", () => {
+    const r = fullReturn();
+    const [first, ...others] = r.page3.depreciation;
+    if (first === undefined) throw new Error("fixture");
+    const rows = pageRows(
+      blueReturnToCsv(
+        {
+          ...r,
+          page3: {
+            ...r.page3,
+            depreciation: [{ ...first, ratePermille: 334, months: 12 }, ...others],
+          },
+        },
+        { blankUnused: false },
+      ),
+      3,
+    );
+    expect(rows).toContainEqual(["資産1", "ノートPC: 償却率", "0.334"]);
+    expect(rows).toContainEqual(["資産1", "ノートPC: 本年中の償却期間", "12/12"]);
+  });
+
+  it("3ページ: 金額でない行は、特殊事情と本年中の償却期間（n/12）だけ（本文は引用されて読み戻せる）", () => {
     const rows = read(csv).slice(1);
     const notNumeric = rows.filter((row) => !/^(-?\d+(\.\d+)?)?$/.test(row[3] ?? ""));
     expect(notNumeric).toEqual([
+      ["3", "資産3", "撮影機材: 本年中の償却期間", "9/12"],
       ["3", "特殊事情", "本年中における特殊事情", '7月に事務所を移転した,\n"引越"あり'],
     ]);
   });
@@ -365,6 +423,7 @@ describe("blueReturnToCsv の2〜4ページ（FR-003, US5 シナリオ5）", () 
           lines: ledger.lines,
           deductionAnswers: answers,
           taxParameters: TAX_PARAMETERS,
+          straightLineRates: STRAIGHT_LINE_RATES,
         });
         const out = blueReturnToCsv(r, { blankUnused: false });
         const p2 = pageRows(out, 2);

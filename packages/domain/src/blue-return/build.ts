@@ -15,12 +15,14 @@ import type {
   StraightLineRate,
   TaxParameter,
 } from "../types.ts";
+import { checkAssetRegister } from "./asset-register.ts";
 import { buildPage4, type PriorPeriod } from "./balance-sheet.ts";
 import { blueDeduction, blueDeductionCap } from "./deduction.ts";
 import { type DepreciationParams, depreciate, isDepreciationRow } from "./depreciation.ts";
 import { type BlueReturnForm, formForYear } from "./form.ts";
 import { proposeHomeUseAdjustment } from "./home-use.ts";
 import { salesWarnings, summarizeMonthlySales, summarizeSalesPartners } from "./sales.ts";
+import { assetStartYear } from "./straight-line.ts";
 
 /** 地代家賃の欄（様式の欄23）。内訳の必要経費算入額の合計と比べる */
 const RENT_LINE_NO = 23;
@@ -47,8 +49,8 @@ export type BuildBlueReturnInput = {
   adjustmentRefs?: readonly AdjustmentRef[];
   rentDetails?: readonly RentDetail[];
   fixedAssets?: readonly FixedAsset[];
-  /** 定額法の償却率の表（009）。なければ空（定額法の資産の行は載らない。T013 で必須にして警告を足す） */
-  straightLineRates?: readonly StraightLineRate[];
+  /** 定額法の償却率の表（009）。償却率がない定額法の資産は行に載せず、DEPRECIATION_PARAMETER_MISSING で警告する */
+  straightLineRates: readonly StraightLineRate[];
   /** 年度の期首残高（001）。なければ空 */
   opening?: readonly OpeningInput[];
   /** 前の年度（期首残高か仕訳があるときだけ）。なければ null で、繰越の検査をしない */
@@ -169,6 +171,37 @@ function depreciationRows(
         },
       ];
     });
+}
+
+/**
+ * 償却率・税制の値がなく計算できない資産の警告（009 FR-018、R13）。資産ごとに 1 件。
+ * 対象はその年度に関わる資産（取得が年度末日以前で、台帳の計算の開始年度以後、除却の年度以前）で、
+ * `depreciate` が `TAX_PARAMETER_MISSING` を返すもの。行には載せない（isDepreciationRow）
+ */
+function parameterMissingWarnings(
+  assets: readonly FixedAsset[],
+  fiscalYear: number,
+  params: DepreciationParams,
+): BlueReturnWarning[] {
+  const out: BlueReturnWarning[] = [];
+  for (const a of [...assets].sort(
+    (x, y) => x.acquiredOn.localeCompare(y.acquiredOn) || x.id.localeCompare(y.id),
+  )) {
+    if (a.method === "small_asset_28_2") continue;
+    if (a.acquiredOn > `${fiscalYear}-12-31`) continue;
+    if (fiscalYear < assetStartYear(a)) continue;
+    if (a.disposedOn !== null && fiscalYear > Number(a.disposedOn.slice(0, 4))) continue;
+    const d = depreciate(a, fiscalYear, params);
+    if (d.ok || d.error.code !== "TAX_PARAMETER_MISSING") continue;
+    const key = d.error.details?.key;
+    const date = d.error.details?.date;
+    out.push({
+      code: "DEPRECIATION_PARAMETER_MISSING",
+      message: `${a.name}の減価償却費を計算できません（${d.error.message}）`,
+      details: { source: "fixed_asset", sourceId: a.id, key, date },
+    });
+  }
+  return out;
 }
 
 /** 必要経費算入額の合計が欄18 と違うときの警告（FR-023）。資産がなくても欄18 が 0 でなければ警告する */
@@ -302,10 +335,12 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
       },
     });
   }
-  const depreciation = depreciationRows(input.fixedAssets ?? [], period.fiscalYear, {
-    rates: input.straightLineRates ?? [],
+  const fixedAssets = input.fixedAssets ?? [];
+  const depreciationParams: DepreciationParams = {
+    rates: input.straightLineRates,
     taxParameters: input.taxParameters,
-  });
+  };
+  const depreciation = depreciationRows(fixedAssets, period.fiscalYear, depreciationParams);
   const monthly = summarizeMonthlySales(input.lines, input.accounts, period);
   const partners = summarizeSalesPartners(
     input.lines,
@@ -318,6 +353,14 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
     ...homeUseWarnings(input, period),
     ...rentDetailsWarnings(rentDetails, amounts.get(RENT_LINE_NO) ?? 0),
     ...depreciationWarnings(depreciation, amounts.get(DEPRECIATION_LINE_NO) ?? 0),
+    ...parameterMissingWarnings(fixedAssets, period.fiscalYear, depreciationParams),
+    ...checkAssetRegister({
+      fiscalYear: period.fiscalYear,
+      accounts: input.accounts,
+      opening: input.opening ?? [],
+      fixedAssets,
+      params: depreciationParams,
+    }),
   );
   const { page4, warnings: page4Warnings } = buildPage4({
     form,
