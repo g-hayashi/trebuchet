@@ -12,11 +12,12 @@ import type {
   HomeUseAllocation,
   PostedLine,
   RentDetail,
+  StraightLineRate,
   TaxParameter,
 } from "../types.ts";
 import { buildPage4, type PriorPeriod } from "./balance-sheet.ts";
 import { blueDeduction, blueDeductionCap } from "./deduction.ts";
-import { depreciate, isDepreciationRow } from "./depreciation.ts";
+import { type DepreciationParams, depreciate, isDepreciationRow } from "./depreciation.ts";
 import { type BlueReturnForm, formForYear } from "./form.ts";
 import { proposeHomeUseAdjustment } from "./home-use.ts";
 import { salesWarnings, summarizeMonthlySales, summarizeSalesPartners } from "./sales.ts";
@@ -46,6 +47,8 @@ export type BuildBlueReturnInput = {
   adjustmentRefs?: readonly AdjustmentRef[];
   rentDetails?: readonly RentDetail[];
   fixedAssets?: readonly FixedAsset[];
+  /** 定額法の償却率の表（009）。なければ空（定額法の資産の行は載らない。T013 で必須にして警告を足す） */
+  straightLineRates?: readonly StraightLineRate[];
   /** 年度の期首残高（001）。なければ空 */
   opening?: readonly OpeningInput[];
   /** 前の年度（期首残高か仕訳があるときだけ）。なければ null で、繰越の検査をしない */
@@ -130,33 +133,41 @@ function rentDetailsWarnings(
 type DepreciationRow = BlueReturn["page3"]["depreciation"][number];
 
 /** 3ページの減価償却費の計算の行（取得日、ID の順）。載せる資産は isDepreciationRow */
-function depreciationRows(assets: readonly FixedAsset[], fiscalYear: number): DepreciationRow[] {
+function depreciationRows(
+  assets: readonly FixedAsset[],
+  fiscalYear: number,
+  params: DepreciationParams,
+): DepreciationRow[] {
   return assets
-    .filter((a) => isDepreciationRow(a, fiscalYear))
+    .filter((a) => isDepreciationRow(a, fiscalYear, params))
     .sort((a, b) => a.acquiredOn.localeCompare(b.acquiredOn) || a.id.localeCompare(b.id))
-    .map((a) => {
-      const d = depreciate(a, fiscalYear);
-      return {
-        assetId: a.id,
-        name: a.name,
-        quantity: a.quantity,
-        acquiredOn: a.acquiredOn,
-        cost: d.cost,
-        // 少額の特例の既定値。定額法・一括償却・開業費の行は T013・T019 で足す
-        source: "fixed_asset",
-        method: a.method,
-        usefulLifeYears: a.usefulLifeYears,
-        ratePermille: null,
-        months: null,
-        disposedOn: a.disposedOn,
-        base: d.base,
-        ordinary: d.ordinary,
-        total: d.total,
-        businessRatio: d.businessRatio,
-        deductible: d.deductible,
-        closingBookValue: d.closingBookValue,
-        note: a.note,
-      };
+    .flatMap((a): DepreciationRow[] => {
+      const r = depreciate(a, fiscalYear, params);
+      if (!r.ok) return [];
+      const d = r.value;
+      return [
+        {
+          assetId: a.id,
+          name: a.name,
+          quantity: a.quantity,
+          acquiredOn: a.acquiredOn,
+          cost: d.cost,
+          // 開業費の行は T019 で足す
+          source: "fixed_asset",
+          method: a.method,
+          usefulLifeYears: a.usefulLifeYears,
+          ratePermille: d.ratePermille,
+          months: d.months,
+          disposedOn: a.disposedOn,
+          base: d.base,
+          ordinary: d.ordinary,
+          total: d.total,
+          businessRatio: d.businessRatio,
+          deductible: d.deductible,
+          closingBookValue: d.closingBookValue,
+          note: a.note,
+        },
+      ];
     });
 }
 
@@ -291,7 +302,10 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
       },
     });
   }
-  const depreciation = depreciationRows(input.fixedAssets ?? [], period.fiscalYear);
+  const depreciation = depreciationRows(input.fixedAssets ?? [], period.fiscalYear, {
+    rates: input.straightLineRates ?? [],
+    taxParameters: input.taxParameters,
+  });
   const monthly = summarizeMonthlySales(input.lines, input.accounts, period);
   const partners = summarizeSalesPartners(
     input.lines,

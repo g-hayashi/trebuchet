@@ -8,6 +8,7 @@ import {
 } from "../../src/blue-return/depreciation.ts";
 import { resolveTaxParameter } from "../../src/blue-return/tax-parameters.ts";
 import { type JournalContext, validateJournal } from "../../src/journal.ts";
+import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type { FixedAsset } from "../../src/types.ts";
 import { makeFiscalPeriod } from "../arbitraries.ts";
@@ -15,7 +16,14 @@ import { accountIdOf, INDIVIDUAL_ACCOUNT_LIST } from "../blue-return-arbitraries
 
 const EQUIPMENT = accountIdOf("1060");
 const AT = "2026-01-10T00:00:00.000Z";
-const ctx = { accounts: INDIVIDUAL_ACCOUNT_LIST, taxParameters: TAX_PARAMETERS };
+const params = { rates: STRAIGHT_LINE_RATES, taxParameters: TAX_PARAMETERS };
+const ctx = { accounts: INDIVIDUAL_ACCOUNT_LIST, ...params };
+
+const depOf = (asset: FixedAsset, year: number) => {
+  const r = depreciate(asset, year, params);
+  if (!r.ok) throw new Error(JSON.stringify(r.error));
+  return r.value;
+};
 
 const pad = (n: number) => n.toString().padStart(2, "0");
 
@@ -104,7 +112,7 @@ describe("INV-21: 少額減価償却資産の特例の資産", () => {
           }
           const asset = toAsset(r.value, `a-${i}`);
           accepted.push(asset);
-          const dep = depreciate(asset, Number(year));
+          const dep = depOf(asset, Number(year));
           expect(dep.deductible).toBeGreaterThanOrEqual(0);
           expect(dep.deductible).toBeLessThanOrEqual(asset.acquisitionCost);
           expect(BigInt(dep.deductible)).toBe(
@@ -127,7 +135,7 @@ describe("INV-21: 少額減価償却資産の特例の資産", () => {
     fc.assert(
       fc.property(draftArb, fc.integer({ min: 2020, max: 2030 }), (d, year) => {
         const asset = toAsset(d, "a");
-        const dep = depreciate(asset, year);
+        const dep = depOf(asset, year);
         expect(dep.cost).toBe(asset.acquisitionCost);
         expect(dep.businessRatio).toBe(asset.businessRatio);
         if (String(year) !== d.acquiredOn.slice(0, 4)) {
@@ -161,7 +169,7 @@ describe("INV-23: 減価償却の仕訳の案", () => {
           expect(Number.isInteger(l.amount) && l.amount > 0).toBe(true);
           expect(l.taxCategory).toBe("OUT_OF_SCOPE");
         }
-        const { deductible } = depreciate(asset, year);
+        const { deductible } = depOf(asset, year);
         expect(proposal.breakdown).toEqual({
           method: "small_asset_28_2",
           acquisitionCost: d.acquisitionCost,
