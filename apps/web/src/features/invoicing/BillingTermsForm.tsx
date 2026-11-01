@@ -19,6 +19,8 @@ import {
 type Honorific = "様" | "御中" | "";
 
 type Values = {
+  priceMode: "inclusive" | "exclusive";
+  taxRate: string;
   billingType: "hourly" | "monthly";
   amount: string;
   dueMonthsAfter: string;
@@ -29,6 +31,15 @@ type Values = {
 };
 
 const valuesOf = (partner: Partner, terms: BillingTermsRow | null): Values => ({
+  priceMode: terms?.priceMode ?? "inclusive",
+  taxRate:
+    terms === null
+      ? "10"
+      : terms.taxRate === undefined
+        ? "default"
+        : terms.taxRate === null
+          ? "none"
+          : String(terms.taxRate),
   billingType: terms?.billingType ?? "hourly",
   amount: String((terms?.billingType === "monthly" ? terms.monthlyAmount : terms?.unitPrice) ?? ""),
   dueMonthsAfter: String(terms?.dueMonthsAfter ?? 1),
@@ -67,6 +78,10 @@ function toInput(
 
   const billingName = values.billingName.trim();
   const parsed = BillingTermsInput.safeParse({
+    priceMode: values.priceMode,
+    ...(values.taxRate === "default"
+      ? {}
+      : { taxRate: values.taxRate === "none" ? null : Number(values.taxRate) }),
     billingType: values.billingType,
     ...(values.billingType === "hourly" ? { unitPrice: amount } : { monthlyAmount: amount }),
     dueMonthsAfter: Number(values.dueMonthsAfter),
@@ -156,6 +171,35 @@ export function BillingTermsForm({
       className="grid gap-4 md:grid-cols-2"
       onSubmit={onSubmit}
     >
+      <div className="grid gap-2">
+        <Label htmlFor={`${id}-mode`}>金額の入力方法</Label>
+        <NativeSelect
+          id={`${id}-mode`}
+          value={values.priceMode}
+          onChange={(e) => set("priceMode")(e.target.value as Values["priceMode"])}
+        >
+          <option value="inclusive">税込入力（消費税を加算しない）</option>
+          <option value="exclusive">税抜入力（消費税を加算する）</option>
+        </NativeSelect>
+        <p className="text-sm text-muted-foreground">
+          {values.priceMode === "exclusive"
+            ? "単価・月額は税抜の金額を入力します。"
+            : "単価・月額は税込の金額を入力します。"}
+        </p>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor={`${id}-rate`}>請求税率</Label>
+        <NativeSelect
+          id={`${id}-rate`}
+          value={values.taxRate}
+          onChange={(e) => set("taxRate")(e.target.value)}
+        >
+          <option value="10">10%</option>
+          <option value="8">8%</option>
+          <option value="none">加算なし</option>
+          <option value="default">既定の税区分に従う</option>
+        </NativeSelect>
+      </div>
       <div className="grid gap-2">
         <Label htmlFor={`${id}-type`}>請求の型</Label>
         <NativeSelect

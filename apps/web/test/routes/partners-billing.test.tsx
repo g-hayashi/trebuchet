@@ -46,6 +46,23 @@ async function openBilling(user: ReturnType<typeof userEvent.setup>, name: strin
 }
 
 describe("取引先の請求の条件（US4。FR-001, FR-002）", () => {
+  it("入力方法と請求税率を保存し、既存条件の未指定税率を保つ", async () => {
+    const calls = setup([HOURLY], {
+      [`PUT ${BASE}/partners/p1/billing-terms`]: () => ok({ terms: HOURLY }),
+    });
+    const user = userEvent.setup();
+    const form = await openBilling(user, "株式会社A");
+    expect(within(form).getByLabelText("請求税率")).toHaveValue("default");
+    await user.selectOptions(within(form).getByLabelText("金額の入力方法"), "exclusive");
+    await user.selectOptions(within(form).getByLabelText("請求税率"), "10");
+    await user.click(within(form).getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "PUT")?.body).toMatchObject({
+        priceMode: "exclusive",
+        taxRate: 10,
+      }),
+    );
+  });
   it("一覧に請求の型と金額を出す。条件がなければ「未設定」", async () => {
     setup([HOURLY]);
     const table = await screen.findByRole("table");
@@ -63,6 +80,7 @@ describe("取引先の請求の条件（US4。FR-001, FR-002）", () => {
     const form = await openBilling(user, "株式会社A");
 
     expect(within(form).getByLabelText("請求の型")).toHaveValue("hourly");
+    expect(within(form).getByLabelText("請求税率")).toHaveValue("10");
     expect(within(form).getByLabelText("支払期限（月）")).toHaveValue("1");
     expect(within(form).getByLabelText("支払期限（日）")).toHaveValue("31");
     expect(within(form).queryByLabelText("月額（円）")).not.toBeInTheDocument();
@@ -74,6 +92,8 @@ describe("取引先の請求の条件（US4。FR-001, FR-002）", () => {
     await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
       billingType: "hourly",
+      priceMode: "inclusive",
+      taxRate: 10,
       unitPrice: 10_000,
       dueMonthsAfter: 1,
       dueDay: 31,
@@ -100,6 +120,8 @@ describe("取引先の請求の条件（US4。FR-001, FR-002）", () => {
     await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
       billingType: "monthly",
+      priceMode: "inclusive",
+      taxRate: 10,
       monthlyAmount: 300_000,
       dueMonthsAfter: 2,
       dueDay: 25,
@@ -190,6 +212,7 @@ describe("取引先の請求の条件（US4。FR-001, FR-002）", () => {
     await user.click(within(form).getByRole("button", { name: "保存" }));
     await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
     expect(calls.some((c) => c.method === "PATCH")).toBe(false);
+    expect(calls.find((c) => c.method === "PUT")?.body).not.toHaveProperty("taxRate");
   });
 
   it("サーバーの VALIDATION はフォームの近くに出す", async () => {

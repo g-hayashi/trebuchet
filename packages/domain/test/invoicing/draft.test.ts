@@ -78,6 +78,7 @@ describe("buildInvoiceDraft（免税の事業者）", () => {
         unitPrice: 10_000,
         amount: 1_205_000,
         taxCategory: "OUT_OF_SCOPE",
+        taxRate: null,
       },
     ]);
   });
@@ -85,7 +86,7 @@ describe("buildInvoiceDraft（免税の事業者）", () => {
   it("US1 Acceptance 2: 月額定額型は工数なしで月額の 1 行", () => {
     const draft = draftOf(build({ terms: monthly(), halfHours: null }));
     expect(draft.items).toEqual([
-      { name: "10月分 業務委託", amount: 300_000, taxCategory: "OUT_OF_SCOPE" },
+      { name: "10月分 業務委託", amount: 300_000, taxCategory: "OUT_OF_SCOPE", taxRate: null },
     ]);
     expect(draft.total).toBe(300_000);
   });
@@ -101,9 +102,9 @@ describe("buildInvoiceDraft（免税の事業者）", () => {
     expect(draft.total).toBe(5_000);
   });
 
-  it("免税の期間は、設定が別記でも税込のみ（R10）。税率なしなので別記の内訳は空", () => {
+  it("免税の期間も表示は設定どおり。税率なしなので別記の内訳は空", () => {
     const draft = draftOf(build({ settings: settings({ taxDisplay: "separate" }) }));
-    expect(draft.taxDisplay).toBe("inclusive_only");
+    expect(draft.taxDisplay).toBe("separate");
     expect(draft.taxBreakdown).toEqual([]);
   });
 
@@ -167,9 +168,9 @@ describe("buildInvoiceDraft（課税事業者）", () => {
     expect(build({ settings: null }).taxDisplay).toBe("inclusive_only");
   });
 
-  it("effectiveTaxDisplay: 計上日が免税・設定の空白なら税込のみ", () => {
+  it("effectiveTaxDisplay: 計上日の設定にかかわらず表示の設定を守る", () => {
     expect(effectiveTaxDisplay("separate", "2026-10-31", ctx.taxSettings)).toBe("separate");
-    expect(effectiveTaxDisplay("separate", "2024-12-31", ctx.taxSettings)).toBe("inclusive_only");
+    expect(effectiveTaxDisplay("separate", "2024-12-31", ctx.taxSettings)).toBe("separate");
   });
 });
 

@@ -791,6 +791,10 @@ export const partnerBillingTerms = sqliteTable(
       .primaryKey()
       .references(() => partners.id),
     billingType: text("billing_type", { enum: BILLING_TYPES }).notNull(),
+    priceMode: text("price_mode", { enum: ["inclusive", "exclusive"] })
+      .notNull()
+      .default("inclusive"),
+    taxRate: integer("tax_rate").default(-1),
     unitPrice: integer("unit_price"),
     monthlyAmount: integer("monthly_amount"),
     dueMonthsAfter: integer("due_months_after").notNull().default(1),
@@ -801,6 +805,11 @@ export const partnerBillingTerms = sqliteTable(
   },
   (t) => [
     check("partner_billing_terms_type", sql`${t.billingType} IN ('hourly', 'monthly')`),
+    check("partner_billing_terms_price_mode", sql`${t.priceMode} IN ('inclusive', 'exclusive')`),
+    check(
+      "partner_billing_terms_tax_rate",
+      sql`${t.taxRate} IS NULL OR ${t.taxRate} IN (-1, 8, 10)`,
+    ),
     check(
       "partner_billing_terms_amounts",
       sql`(${t.billingType} = 'hourly' AND ${t.unitPrice} IS NOT NULL AND ${t.unitPrice} > 0 AND ${t.monthlyAmount} IS NULL) OR (${t.billingType} = 'monthly' AND ${t.monthlyAmount} IS NOT NULL AND ${t.monthlyAmount} > 0 AND ${t.unitPrice} IS NULL)`,
@@ -844,6 +853,9 @@ export const invoices = sqliteTable(
     recipientName: text("recipient_name").notNull(),
     recipientHonorific: text("recipient_honorific", { enum: ["様", "御中"] }).notNull(),
     issuerJson: text("issuer_json").notNull(),
+    priceMode: text("price_mode", { enum: ["inclusive", "exclusive"] })
+      .notNull()
+      .default("inclusive"),
     taxDisplay: text("tax_display", { enum: ["separate", "inclusive_only"] }).notNull(),
     total: integer("total").notNull(),
     journalId: text("journal_id")
@@ -863,6 +875,7 @@ export const invoices = sqliteTable(
     check("invoices_recipient_name", sql`length(${t.recipientName}) > 0`),
     check("invoices_honorific", sql`${t.recipientHonorific} IN ('様', '御中')`),
     check("invoices_tax_display", sql`${t.taxDisplay} IN ('separate', 'inclusive_only')`),
+    check("invoices_price_mode", sql`${t.priceMode} IN ('inclusive', 'exclusive')`),
     check("invoices_total", sql`${t.total} > 0 AND ${t.total} < 1000000000000`),
     check("invoices_void", sql`(${t.voidedAt} IS NULL) = (${t.voidReason} IS NULL)`),
   ],

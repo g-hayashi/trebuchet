@@ -16,7 +16,7 @@ import {
 import { formatDateTime, formatYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
 import { postInvoiceVoid, postPaymentVoid } from "./api";
-import { quantityOf, recipientOf } from "./display";
+import { invoiceTaxSummary, quantityOf, recipientOf } from "./display";
 import { PaymentForm } from "./PaymentForm";
 import { INVOICE_STATUS_LABELS } from "./status";
 
@@ -37,6 +37,7 @@ export function InvoiceDetail({
   const [voiding, setVoiding] = useState(false);
   const [voidingPayment, setVoidingPayment] = useState<string | null>(null);
   const voided = invoice.status === "voided";
+  const summary = invoiceTaxSummary(invoice);
 
   const voidInvoice = useMutation({
     mutationFn: (reason: string) => postInvoiceVoid(entityId, invoice.id, reason),
@@ -101,8 +102,8 @@ export function InvoiceDetail({
               <TableRow>
                 <TableHead>品名</TableHead>
                 <TableHead className="text-right">数量</TableHead>
-                <TableHead className="text-right">単価</TableHead>
-                <TableHead className="text-right">金額</TableHead>
+                <TableHead className="text-right">{`単価（${summary.modeLabel}）`}</TableHead>
+                <TableHead className="text-right">{`金額（${summary.modeLabel}）`}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -122,11 +123,17 @@ export function InvoiceDetail({
           </Table>
 
           <div className="grid justify-items-end gap-1 tabular-nums">
+            {summary.exclusive && (
+              <>
+                <p>{`小計（税抜）${formatYen(summary.subtotal)} 円`}</p>
+                <p>{`${summary.taxLabel} ${formatYen(summary.tax)} 円`}</p>
+              </>
+            )}
             <p className="text-base font-semibold">{`合計 ${formatYen(invoice.total)} 円`}</p>
             {invoice.taxDisplay === "separate" &&
               invoice.taxBreakdown.map((b) => (
                 <p key={b.rate} className="text-sm text-muted-foreground">
-                  {`${b.rate}% 対象 税抜 ${formatYen(b.exclusive)} 円 ／ 消費税 ${formatYen(b.tax)} 円`}
+                  {`${b.rate}% 対象 税抜 ${formatYen(b.exclusive)} 円 ／ ${summary.taxLabel} ${formatYen(b.tax)} 円`}
                 </p>
               ))}
             <p className="text-sm">{`入金 ${formatYen(invoice.paid)} 円`}</p>

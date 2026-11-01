@@ -2,6 +2,8 @@ import {
   type BillingTerms,
   type BillingTermsInput,
   type BillingTermsView,
+  type InvoiceCalculationInput,
+  type InvoiceCalculationResponse,
   type InvoiceDetail,
   type InvoiceDraft,
   type InvoiceDraftRequest,
@@ -25,7 +27,7 @@ import {
 } from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
 import { isValidDate, monthEnd } from "../dates.ts";
-import { itemAmount } from "../invoicing/amounts.ts";
+import { calculateInvoiceAmounts, itemAmount } from "../invoicing/amounts.ts";
 import { buildInvoiceDetail, buildInvoiceSummary, toPaymentView } from "../invoicing/detail.ts";
 import { buildInvoiceDraft } from "../invoicing/draft.ts";
 import { dueDate } from "../invoicing/due-date.ts";
@@ -36,9 +38,10 @@ import {
 } from "../invoicing/journal-drafts.ts";
 import { formatInvoiceNo } from "../invoicing/number.ts";
 import { invoiceStatus } from "../invoicing/status.ts";
-import { defaultSalesTaxCategory, effectiveTaxDisplay, itemTaxRate } from "../invoicing/tax.ts";
+import { effectiveTaxDisplay, invoiceSalesTaxCategory, itemTaxRate } from "../invoicing/tax.ts";
 import { checkPeriod } from "../journal.ts";
 import type { Clock, IdGenerator, InvoicingStore, InvoicingUnitOfWork } from "../ports.ts";
+import { resolveTaxSetting } from "../tax-settings.ts";
 import {
   domainError,
   err,
@@ -64,6 +67,15 @@ export type InvoicingSettingsDeps = {
 
 /** 請求書のユースケース全般の依存（設定・工数・案・発行・取消・一覧） */
 export type InvoicingDeps = InvoicingSettingsDeps;
+
+/** 保存せずに請求額を計算する。計算後の合計も金額の上限を守る。 */
+export function previewInvoiceCalculation(
+  input: InvoiceCalculationInput,
+): Result<InvoiceCalculationResponse> {
+  const amounts = calculateInvoiceAmounts(input.items, input.priceMode);
+  if (amounts.total >= YEN_LIMIT) return validation("合計が大きすぎます", { field: "items" });
+  return ok(amounts);
+}
 
 export type InvoiceSettingsView = {
   settings: InvoiceSettings | null;
@@ -197,6 +209,8 @@ export function saveBillingTerms(
     const saved: BillingTerms = {
       partnerId,
       billingType: input.billingType,
+      priceMode: input.priceMode ?? "inclusive",
+      ...(input.taxRate === undefined ? {} : { taxRate: input.taxRate }),
       unitPrice: input.billingType === "hourly" ? (input.unitPrice ?? null) : null,
       monthlyAmount: input.billingType === "monthly" ? (input.monthlyAmount ?? null) : null,
       dueMonthsAfter: input.dueMonthsAfter,
@@ -483,7 +497,9 @@ export function issueInvoice(
       return validation(`明細は 1〜${MAX_INVOICE_ITEMS} 行にしてください`, { field: "items" });
     }
     const ctx = loadContext(masters);
-    const defaultCategory = defaultSalesTaxCategory(salesDate, ctx.taxSettings);
+    const taxSetting = resolveTaxSetting(salesDate, ctx.taxSettings);
+    const exempt = taxSetting === undefined || taxSetting.taxpayerStatus === "exempt";
+    const priceMode = input.priceMode ?? "inclusive";
     const records: Omit<InvoiceItemRecord, "id" | "invoiceId">[] = [];
     for (const [index, item] of input.items.entries()) {
       const field = `items.${index}`;
@@ -507,7 +523,24 @@ export function issueInvoice(
       ) {
         return validation("金額が数量 × 単価と一致しません", { field, index });
       }
-      const taxCategory = item.taxCategory ?? defaultCategory;
+      const taxCategory = exempt
+        ? "OUT_OF_SCOPE"
+        : (item.taxCategory ?? invoiceSalesTaxCategory(salesDate, ctx.taxSettings, item.taxRate));
+      const derivedRate = itemTaxRate(taxCategory, salesDate, ctx.taxSettings, ctx.taxRates);
+      if (
+        item.taxRate !== undefined &&
+        item.taxRate !== null &&
+        item.taxRate !== 8 &&
+        item.taxRate !== 10
+      ) {
+        return validation("請求の税率は 8%、10% または税率なしを指定してください", {
+          field,
+          index,
+        });
+      }
+      if (!exempt && item.taxRate !== undefined && item.taxRate !== derivedRate) {
+        return validation("請求の税率が計上日の税区分と一致しません", { field, index });
+      }
       records.push({
         lineNo: index + 1,
         name: item.name.trim(),
@@ -516,10 +549,10 @@ export function issueInvoice(
         unitPrice,
         amount: item.amount,
         taxCategory,
-        taxRate: itemTaxRate(taxCategory, salesDate, ctx.taxSettings, ctx.taxRates),
+        taxRate: item.taxRate === undefined ? derivedRate : item.taxRate,
       });
     }
-    const total = records.reduce((sum, r) => sum + r.amount, 0);
+    const { total } = calculateInvoiceAmounts(records, priceMode);
     if (total >= YEN_LIMIT) return validation("合計が大きすぎます", { field: "items" });
 
     const seq = settings.nextSeq;
@@ -533,7 +566,7 @@ export function issueInvoice(
     }
     const invoiceNo = formatInvoiceNo(issueDate, seq);
     const journalDraft = invoiceJournalDraft(
-      { invoiceNo, partnerId: partner.id, salesDate, items: records },
+      { invoiceNo, partnerId: partner.id, salesDate, items: records, priceMode },
       ctx.accounts,
     );
     if (!journalDraft.ok) return journalDraft;
@@ -567,8 +600,9 @@ export function issueInvoice(
         address: settings.address,
         contact: settings.contact,
         bankAccount: settings.bankAccount,
-        registrationNumber: settings.registrationNumber,
+        registrationNumber: exempt ? null : settings.registrationNumber,
       },
+      priceMode,
       taxDisplay: effectiveTaxDisplay(settings.taxDisplay, salesDate, ctx.taxSettings),
       total,
       journalId: journal.id,

@@ -49,7 +49,7 @@ describe("issueInvoice（成功）", () => {
       dueDate: "2026-11-30",
       recipientName: "A 社 経理部",
       recipientHonorific: "御中",
-      taxDisplay: "inclusive_only",
+      taxDisplay: "separate",
       total: 1_205_000,
       status: "unpaid",
       paid: 0,
@@ -149,11 +149,11 @@ describe("issueInvoice（成功）", () => {
     expect(journal.lines.find((l) => l.side === "debit")?.amount).toBe(177_000);
   });
 
-  it("設定が別記でも計上日が免税なら、写しは税込のみ（FR-013）", () => {
+  it("計上日が免税でも写しは表示の設定どおり", () => {
     const t = ready();
     t.setSettings({ nextSeq: 1, taxDisplay: "separate" });
     const r = issueInvoice(t.deps, t.input(), TODAY);
-    expect(r.ok && r.value.invoice.taxDisplay).toBe("inclusive_only");
+    expect(r.ok && r.value.invoice.taxDisplay).toBe("separate");
   });
 
   it("数量だけ・単価だけの明細は金額をそのまま使う", () => {

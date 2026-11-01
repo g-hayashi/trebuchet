@@ -10,6 +10,7 @@ import type {
   ErrorDetails,
   FiledDocumentKind,
   InvoiceIssuer,
+  InvoicePriceMode,
   InvoiceTaxDisplay,
   JournalSource,
   PaymentView,
@@ -700,6 +701,7 @@ export type InvoiceRecord = {
   recipientName: string;
   recipientHonorific: Honorific;
   issuer: InvoiceIssuer;
+  priceMode?: InvoicePriceMode | undefined;
   taxDisplay: InvoiceTaxDisplay;
   total: number;
   journalId: string;
@@ -721,7 +723,7 @@ export type InvoiceItemRecord = {
   unitPrice: number | null;
   amount: number;
   taxCategory: TaxCategoryCode;
-  /** 計上日の税率（%）。免税・課税でない区分は null */
+  /** 請求に使う税率（%）。免税の消費税相当額も含む。税率なしは null */
   taxRate: number | null;
 };
 
