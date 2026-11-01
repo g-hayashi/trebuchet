@@ -66,4 +66,14 @@
 | GET | `/entities/:id/blue-return/:year` | `page3.depreciation` の行に `source`、`ratePermille`、`months`、`disposedOn` を足し、`method` に `straight_line`・`lump_sum`・`deferred`。警告のコードに `ASSET_REGISTER_MISMATCH`、`DEPRECIATION_PARAMETER_MISSING`（data-model §2.1） |
 | GET | `/entities/:id/blue-return/:year/csv` | 3 ページの行に 償却率・本年中の償却期間 の値を足す（R11） |
 
+## 6. schema（Zod、`packages/schema/src/blue-return.ts`・`errors.ts`）の変更点
+
+- `DepreciationMethod`: `["small_asset_28_2", "straight_line", "lump_sum"]`
+- `FixedAssetInput`: `inServiceOn: DateString.nullish()`、`priorAccumulated: z.number().int().nonnegative().default(0)`、`priorThroughYear: z.number().int().min(1900).max(9999).nullish()`
+- `FixedAssetDisposeInput`: `disposalKind: z.enum(["scrap", "sale"]).default("scrap")`
+- 新規: `DeferredAssetInput`、`DeferredAssetUpdateInput`（`reason` つき）、`DeferredAmortizationInput`（`amount` は 0 以上の整数）、`DeferredAmortizationParam`（`FiscalYearParam.extend({ deferredAssetId: z.string() })`）
+- `AdjustmentKind` に `deferred_amortization`。`breakdown` の union は data-model §2.1（償却の形の拡張と開業費の形）
+- `DepreciationRow` に `source`・`ratePermille`・`months`・`disposedOn`、`DepreciationRowMethod`（3 方法 + `deferred`）
+- `BlueReturnWarningCode` に `ASSET_REGISTER_MISMATCH`・`DEPRECIATION_PARAMETER_MISSING`、`ErrorCode` に §1 の 6 コード。`apps/server/src/errors.ts` の `ERROR_STATUS`（`satisfies Record<ErrorCode, …>`）に §1 の HTTP の値を足す
+
 web は `features/fixed-assets/api.ts` と新しい `features/deferred-assets/api.ts`（または `fixed-assets/api.ts` に同居）に query key と呼び出しを置き、案の登録の後は `invalidateLedger(queryClient, entityId)`。`apps/web/test/mock-api.ts` に `/deferred-assets` の既定の応答を足す（AGENTS.md）。
