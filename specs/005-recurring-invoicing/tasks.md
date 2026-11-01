@@ -175,6 +175,13 @@ description: "Task list for 005-recurring-invoicing"
 2. US3（定期仕訳）は独立して足せる（P2）
 3. フェーズの区切りごとにコミットし（メッセージにタスク ID）、`/usage` を控える
 
+## 追加: 税抜入力と消費税相当額（2026-11-02）
+
+- [X] T028 schema/domain のテスト先行で税込・税抜入力、税率別の加算、免税の請求税率と帳簿税区分の分離、写しの固定を実装する。対象 `packages/schema/src/invoicing.ts`、`packages/domain/src/invoicing/`・`usecases/invoicing.ts` と対応テスト。参照 R27、data-model §4 INV-30・37・38。
+- [X] T029 db/server のテスト先行で請求条件・写しの計算方式の永続化、更新禁止、請求額計算 API を実装する。対象 `packages/db/src/schema/tenant.ts`・`invoicing-repository.ts`・`drizzle/tenant/`、`apps/server/src/routes/invoicing.ts` と対応テスト。参照 R27、contracts §3.8。
+- [ ] T030 web のテスト先行で条件・案の税込/税抜選択、請求税率、発行前の小計・加算額・合計、詳細と印刷の税抜表示と消費税相当額を実装する。対象 `apps/web/src/features/invoicing/` と `test/routes/`。参照 R27、contracts §3.8。
+- [ ] T031 （メイン）型・lint・全テスト・web build を確認し、変更をコミットする。ブラウザ/E2E はリポジトリの端末実行制約に従い、未検証なら引き継ぎに明記する。実データは使わない。
+
 ## Notes
 
 - 部下への渡し方: 関連するタスクのまとまり（同じユーザーストーリーのテストと実装、同じファイルを触るタスク）を1体に渡す。タスクの行と、参照する節（R・§・INV・H:§）だけを渡す

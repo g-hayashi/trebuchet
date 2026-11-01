@@ -1,7 +1,7 @@
 import type { InvoiceDetail, InvoiceSummary, PaymentView } from "@trebuchet/schema";
 import type { InvoiceItemRecord, InvoiceRecord, PaymentRecord } from "../types.ts";
+import { calculateInvoiceAmounts } from "./amounts.ts";
 import { invoiceStatus, isOverdue } from "./status.ts";
-import { taxBreakdownEntries } from "./tax.ts";
 
 /**
  * 一覧の 1 行（H:§3.5）。`today` を渡すと `overdue` を判定する（`isOverdue`）。省略すると偽
@@ -55,6 +55,7 @@ export function buildInvoiceDetail(
   return {
     ...buildInvoiceSummary(invoice, payments, today),
     salesDate: invoice.salesDate,
+    priceMode: invoice.priceMode ?? "inclusive",
     recipientHonorific: invoice.recipientHonorific,
     issuer: invoice.issuer,
     taxDisplay: invoice.taxDisplay,
@@ -68,7 +69,7 @@ export function buildInvoiceDetail(
       taxCategory: i.taxCategory,
       taxRate: i.taxRate,
     })),
-    taxBreakdown: taxBreakdownEntries(items),
+    taxBreakdown: calculateInvoiceAmounts(items, invoice.priceMode ?? "inclusive").taxBreakdown,
     journalId: invoice.journalId,
     voidJournalId: invoice.voidJournalId,
     voidedAt: invoice.voidedAt,

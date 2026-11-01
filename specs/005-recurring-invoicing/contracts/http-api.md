@@ -52,6 +52,12 @@
 - 発行・取消は1トランザクション（research R9）。発行の順序: 検査 → `createJournal`（`source = invoice`）→ 通し番号を進める → 請求書・明細 → 記録
 - 印刷用の画面（web の `/e/$entityId/invoices/$invoiceId/print`）は 3.6 だけを使う（research R2）
 
+### 3.8 税込/税抜入力の追加（R27）
+
+- 請求条件に `priceMode?: "inclusive" | "exclusive"`、`taxRate?: 10 | 8 | null` を追加する。案へ既定値を引き継ぐ。請求入力に `priceMode?`、各明細に `taxRate?` を追加し、案・詳細は方式と税率を返す。
+- `POST /invoices/calculate`: `{ priceMode, items: { amount, taxRate }[] }`（1〜5行）から、200 `{ subtotal, total, taxBreakdown }` を返す。`subtotal` は入力額の合計、`taxBreakdown` は税率ごとの `{ rate, inclusive, exclusive, tax }`。保存・採番・仕訳作成は行わない。認証・事業体の境界はほかの請求 API と同じ。
+- 発行は同じ domain の純関数で再計算し、画面の合計を信用しない。入力形式・金額の範囲外、課税時の税区分と請求税率の矛盾は既存と同じ 400 `VALIDATION`。税区分を省略し請求税率を明示した課税の明細は、対応する売上税区分を domain で導出する。計算方式・税率・発行者は写しに固定し、設定の変更で過去の請求書を変えない。
+
 ## 4. 入金の消し込み（US2）
 
 | § | メソッド | パス | 入力 | 出力 | 要件 |

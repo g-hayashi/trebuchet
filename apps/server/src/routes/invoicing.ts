@@ -8,6 +8,7 @@ import {
   issueInvoice,
   listBillingTerms,
   listInvoices,
+  previewInvoiceCalculation,
   recordPayment,
   saveBillingTerms,
   saveInvoiceSettings,
@@ -17,6 +18,7 @@ import {
 } from "@trebuchet/domain";
 import {
   BillingTermsInput,
+  InvoiceCalculationInput,
   InvoiceDraftRequest,
   InvoiceInput,
   InvoiceListQuery,
@@ -96,6 +98,10 @@ export function invoicingRoutes({ clock }: RouteOptions) {
       })
 
       // ---- 発行・詳細（US1。§3.4・§3.6） ----
+      .post("/invoices/calculate", validate("json", InvoiceCalculationInput), (c) => {
+        const result = previewInvoiceCalculation(c.req.valid("json"));
+        return respond(c, result, (amounts) => c.json(amounts, 200));
+      })
       .post("/invoices", validate("json", InvoiceInput), (c) => {
         const result = issueInvoice(deps(c.var.db), c.req.valid("json"), todayOf(clock));
         return respond(c, result, (issued) => c.json(issued, 201));

@@ -1,4 +1,8 @@
-import { itemAmountOfHalves } from "@trebuchet/schema";
+import {
+  type InvoicePriceMode,
+  itemAmountOfHalves,
+  type TaxBreakdownEntry,
+} from "@trebuchet/schema";
 import { computeInclusiveTax } from "../money.ts";
 
 /** 金額・工数の計算（005 R7）。すべて整数で行い、浮動小数で金額を計算しない */
@@ -29,6 +33,7 @@ export type TaxBreakdownRow = {
 /** 税率ごとの内訳（請求書の「別記」）。税率の高い順、税率なしは最後 */
 export function taxBreakdown(
   items: readonly { amount: number; taxRate: number | null }[],
+  priceMode: InvoicePriceMode = "inclusive",
 ): TaxBreakdownRow[] {
   const totals = new Map<number | null, number>();
   for (const item of items) {
@@ -41,8 +46,27 @@ export function taxBreakdown(
       if (b === null) return -1;
       return b - a;
     })
-    .map(([rate, inclusive]) => {
-      const tax = rate === null ? 0 : computeInclusiveTax(inclusive, rate);
+    .map(([rate, amount]) => {
+      const tax =
+        rate === null
+          ? 0
+          : priceMode === "exclusive"
+            ? Number((BigInt(amount) * BigInt(rate)) / 100n)
+            : computeInclusiveTax(amount, rate);
+      const inclusive = priceMode === "exclusive" ? amount + tax : amount;
       return { rate, inclusive, tax, exclusive: inclusive - tax };
     });
+}
+
+/** 入力方式に従い税率ごとに一度だけ端数を切り捨てる。税率なしの金額も合計に含める。 */
+export function calculateInvoiceAmounts(
+  items: readonly { amount: number; taxRate: number | null }[],
+  priceMode: InvoicePriceMode,
+): { subtotal: number; total: number; taxBreakdown: TaxBreakdownEntry[] } {
+  const rows = taxBreakdown(items, priceMode);
+  return {
+    subtotal: items.reduce((sum, item) => sum + item.amount, 0),
+    total: rows.reduce((sum, row) => sum + row.inclusive, 0),
+    taxBreakdown: rows.flatMap((row) => (row.rate === null ? [] : [{ ...row, rate: row.rate }])),
+  };
 }

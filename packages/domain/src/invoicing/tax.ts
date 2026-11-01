@@ -18,6 +18,17 @@ export function defaultSalesTaxCategory(
   return defaultTaxCategory(salesDate, "credit", { category: "revenue" }, taxSettings);
 }
 
+/** 請求税率を明示した案・入力の税区分。免税の売上は常に対象外にする。 */
+export function invoiceSalesTaxCategory(
+  salesDate: string,
+  taxSettings: readonly TaxSettingDraft[],
+  taxRate?: 8 | 10 | null | undefined,
+): TaxCategoryCode {
+  const defaultCategory = defaultSalesTaxCategory(salesDate, taxSettings);
+  if (defaultCategory === "OUT_OF_SCOPE" || taxRate === undefined) return defaultCategory;
+  return taxRate === 8 ? "SALES_8R" : taxRate === 10 ? "SALES_10" : "OUT_OF_SCOPE";
+}
+
 /**
  * 明細の税率（%）。免税の期間・課税でない区分は null。
  * 001 の `validateJournal` が貸方の行の `taxAmount` を求める条件と同じ
@@ -52,15 +63,12 @@ export function taxBreakdownEntries(
 }
 
 /**
- * 写しに残す消費税の表示。設定が「別記」でも、計上日が免税（または設定の空白）なら「税込のみ」にする
- * （免税事業者の請求書に消費税額を書かない。FR-013）
+ * 写しに残す消費税の表示。免税でも設定した消費税相当額の別記を許す。
  */
 export function effectiveTaxDisplay(
   configured: InvoiceTaxDisplay | undefined,
-  salesDate: string,
-  taxSettings: readonly TaxSettingDraft[],
+  _salesDate: string,
+  _taxSettings: readonly TaxSettingDraft[],
 ): InvoiceTaxDisplay {
-  const setting = resolveTaxSetting(salesDate, taxSettings);
-  if (setting === undefined || setting.taxpayerStatus === "exempt") return "inclusive_only";
   return configured ?? "inclusive_only";
 }

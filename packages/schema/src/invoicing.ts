@@ -33,6 +33,10 @@ export const MAX_INVOICE_ITEMS = 5;
 export const InvoiceTaxDisplay = z.enum(["separate", "inclusive_only"]);
 export type InvoiceTaxDisplay = z.infer<typeof InvoiceTaxDisplay>;
 
+export const InvoicePriceMode = z.enum(["inclusive", "exclusive"]);
+export type InvoicePriceMode = z.infer<typeof InvoicePriceMode>;
+const InvoiceTaxRate = z.union([z.literal(10), z.literal(8)]).nullable();
+
 /** 適格請求書発行事業者の登録番号（`T` ＋ 13 桁） */
 export const RegistrationNumber = z.string().regex(/^T\d{13}$/, "登録番号は T と 13 桁の数字です");
 
@@ -82,6 +86,8 @@ export type BillingType = z.infer<typeof BillingType>;
 
 const BillingTermsFields = z.object({
   billingType: BillingType,
+  priceMode: InvoicePriceMode.optional(),
+  taxRate: InvoiceTaxRate.optional(),
   unitPrice: Yen.optional(),
   monthlyAmount: Yen.optional(),
   dueMonthsAfter: z.number().int().min(0).max(12),
@@ -125,6 +131,8 @@ export type BillingTermsInput = z.infer<typeof BillingTermsInput>;
 export const BillingTerms = z.object({
   partnerId: Id,
   billingType: BillingType,
+  priceMode: InvoicePriceMode.optional(),
+  taxRate: InvoiceTaxRate.optional(),
   unitPrice: z.number().int().positive().nullable(),
   monthlyAmount: z.number().int().positive().nullable(),
   dueMonthsAfter: z.number().int().min(0).max(12),
@@ -190,6 +198,7 @@ const InvoiceItemFields = z.object({
   unitPrice: Yen.optional(),
   amount: Yen,
   taxCategory: TaxCategoryCode.optional(),
+  taxRate: InvoiceTaxRate.optional(),
 });
 
 /** 数量と単価があるとき、金額は `floor(数量 × 単価)` と一致する */
@@ -211,6 +220,7 @@ export type InvoiceItemInput = z.infer<typeof InvoiceItemInput>;
 /** POST /invoices。`issueDate` の既定は今日、`salesDate` は対象月の末日 */
 export const InvoiceInput = z.object({
   partnerId: Id,
+  priceMode: InvoicePriceMode.optional(),
   targetMonth: MonthString,
   issueDate: DateString.optional(),
   salesDate: DateString.optional(),
@@ -243,6 +253,22 @@ export const TaxBreakdownEntry = z.object({
 });
 export type TaxBreakdownEntry = z.infer<typeof TaxBreakdownEntry>;
 
+export const InvoiceCalculationInput = z.object({
+  priceMode: InvoicePriceMode,
+  items: z
+    .array(z.object({ amount: Yen, taxRate: InvoiceTaxRate }))
+    .min(1)
+    .max(MAX_INVOICE_ITEMS),
+});
+export type InvoiceCalculationInput = z.infer<typeof InvoiceCalculationInput>;
+
+export const InvoiceCalculationResponse = z.object({
+  subtotal: Yen,
+  total: Yen,
+  taxBreakdown: z.array(TaxBreakdownEntry),
+});
+export type InvoiceCalculationResponse = z.infer<typeof InvoiceCalculationResponse>;
+
 export const InvoiceDraftWarning = z.object({
   code: z.literal("INVOICE_DUPLICATE_MONTH"),
   message: z.string(),
@@ -252,6 +278,7 @@ export type InvoiceDraftWarning = z.infer<typeof InvoiceDraftWarning>;
 
 export const InvoiceDraft = z.object({
   partnerId: Id,
+  priceMode: InvoicePriceMode.optional(),
   targetMonth: MonthString,
   issueDate: DateString,
   salesDate: DateString,
@@ -349,6 +376,7 @@ export type PaymentView = z.infer<typeof PaymentView>;
 
 export const InvoiceDetail = InvoiceSummary.extend({
   salesDate: DateString,
+  priceMode: InvoicePriceMode.optional(),
   recipientHonorific: z.enum(["様", "御中"]),
   issuer: InvoiceIssuer,
   taxDisplay: InvoiceTaxDisplay,

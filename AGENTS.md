@@ -163,7 +163,7 @@ apps/server ──→ packages/schema
 - **請求書は発行時の写しを持つ**。写しの列と明細は DB のトリガーで更新を止め、取消で書けるのは取消の列だけ。物理削除しない。
 - **「今日」は `today: string`（`YYYY-MM-DD`）で domain に渡す**。server は `todayOf(clock)` で作る（005/R22）。ルートは `invoicingRoutes({ clock })`・`recurringRoutes({ clock })`（ほかのルートも同じ形）。server のテストは偽の時計を渡し、時刻を日付の境目から離す。
 - **仕訳の科目はコードで引く**（005/R10）。定数 `INVOICING_ACCOUNT_CODES`（`journal-drafts.ts`）が売掛金・売上高・支払手数料のコードを持つ。科目の選択の設定は増やさない。
-- **工数は半時間の整数**、明細の金額は `Math.floor(quantityHalves * unitPrice / 2)`。別記の税額は 001 の `computeInclusiveTax` を税率ごとに 1 回。
+- **工数は半時間の整数**、明細の金額は `Math.floor(quantityHalves * unitPrice / 2)`。請求の `priceMode` は税込/税抜入力を表し、内訳表示 `taxDisplay` と分ける。税込の内訳は `computeInclusiveTax`、税抜の加算は税率ごとの小計に対し一度だけ切り捨てる（005/R27）。免税でも消費税相当額を請求でき、帳簿は加算後の全額を対象外の売上とする。
 - 請求・入金の操作は `invoicing_audit_log`（追記のみ）に記録する。仕訳そのものの記録は 001 の `audit_log`。
 
 ## 明細の取込と AI 仕訳（006）

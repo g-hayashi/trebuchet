@@ -34,6 +34,16 @@ function toInvoiceRecord(row: typeof invoices.$inferSelect): InvoiceRecord {
   return { ...rest, issuer: JSON.parse(issuerJson) as InvoiceIssuer };
 }
 
+/** -1 は請求税率の自動導出、NULL は明示した税率なし。入力の省略と区別する。 */
+function toBillingTerms(row: typeof partnerBillingTerms.$inferSelect): BillingTerms {
+  const { taxRate, ...rest } = row;
+  if (taxRate === -1) return rest;
+  if (taxRate !== null && taxRate !== 8 && taxRate !== 10) {
+    throw new Error("保存した請求税率が不正です");
+  }
+  return { ...rest, taxRate };
+}
+
 /** `invoicing_audit_log` に1行を追記する。InvoicingStore と RecurringStore が共有する（R23） */
 export function appendInvoicingAuditRow(db: TenantConn, entry: InvoicingAuditEntry): void {
   db.insert(invoicingAuditLog).values(entry).run();
@@ -87,24 +97,29 @@ export class DrizzleInvoicingStore implements InvoicingStore {
       .select()
       .from(partnerBillingTerms)
       .orderBy(asc(partnerBillingTerms.partnerId))
-      .all();
+      .all()
+      .map(toBillingTerms);
   }
 
   getBillingTerms(partnerId: string): BillingTerms | null {
-    return (
-      this.db
-        .select()
-        .from(partnerBillingTerms)
-        .where(eq(partnerBillingTerms.partnerId, partnerId))
-        .get() ?? null
-    );
+    const row = this.db
+      .select()
+      .from(partnerBillingTerms)
+      .where(eq(partnerBillingTerms.partnerId, partnerId))
+      .get();
+    return row === undefined ? null : toBillingTerms(row);
   }
 
   upsertBillingTerms(row: BillingTerms): void {
-    const { partnerId: _partnerId, ...set } = row;
+    const values = {
+      ...row,
+      priceMode: row.priceMode ?? "inclusive",
+      taxRate: row.taxRate === undefined ? -1 : row.taxRate,
+    };
+    const { partnerId: _partnerId, ...set } = values;
     this.db
       .insert(partnerBillingTerms)
-      .values(row)
+      .values(values)
       .onConflictDoUpdate({ target: partnerBillingTerms.partnerId, set })
       .run();
   }

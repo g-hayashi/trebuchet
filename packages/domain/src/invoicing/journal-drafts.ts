@@ -1,4 +1,4 @@
-import type { TaxCategoryCode } from "@trebuchet/schema";
+import type { InvoicePriceMode, TaxCategoryCode } from "@trebuchet/schema";
 import {
   type Account,
   domainError,
@@ -9,6 +9,7 @@ import {
   ok,
   type Result,
 } from "../types.ts";
+import { calculateInvoiceAmounts } from "./amounts.ts";
 
 /**
  * 請求・入金の仕訳が使う科目のコード（005 R10）。科目の ID の設定は持たず、コードで引く。
@@ -113,7 +114,12 @@ export type InvoiceJournalSource = {
   partnerId: string;
   /** 売上の計上日 */
   salesDate: string;
-  items: readonly { amount: number; taxCategory: TaxCategoryCode }[];
+  priceMode?: InvoicePriceMode | undefined;
+  items: readonly {
+    amount: number;
+    taxCategory: TaxCategoryCode;
+    taxRate?: number | null | undefined;
+  }[];
 };
 
 /**
@@ -130,10 +136,31 @@ export function invoiceJournalDraft(
   if (!sales.ok) return sales;
 
   const byCategory = new Map<TaxCategoryCode, number>();
-  let total = 0;
+  const byRate = new Map<number | null, Map<TaxCategoryCode, number>>();
   for (const item of invoice.items) {
-    byCategory.set(item.taxCategory, (byCategory.get(item.taxCategory) ?? 0) + item.amount);
-    total += item.amount;
+    const rate = item.taxRate ?? null;
+    const categories = byRate.get(rate) ?? new Map<TaxCategoryCode, number>();
+    categories.set(item.taxCategory, (categories.get(item.taxCategory) ?? 0) + item.amount);
+    byRate.set(rate, categories);
+  }
+  let total = 0;
+  for (const [taxRate, categories] of byRate) {
+    const subtotal = [...categories.values()].reduce((sum, amount) => sum + amount, 0);
+    const inclusive = calculateInvoiceAmounts(
+      [{ amount: subtotal, taxRate }],
+      invoice.priceMode ?? "inclusive",
+    ).total;
+    const tax = inclusive - subtotal;
+    // 税率のまとまりで税込化してから税区分に配る。端数も含めて合計を保存する。
+    let cumulative = 0;
+    let allocated = 0;
+    for (const [taxCategory, amount] of categories) {
+      cumulative += amount;
+      const next = Number((BigInt(tax) * BigInt(cumulative)) / BigInt(subtotal));
+      byCategory.set(taxCategory, (byCategory.get(taxCategory) ?? 0) + amount + next - allocated);
+      allocated = next;
+    }
+    total += inclusive;
   }
   const lines: LineDraft[] = [
     { side: "debit", accountId: receivable.value, amount: total, partnerId: invoice.partnerId },

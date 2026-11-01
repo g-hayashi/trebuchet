@@ -8,14 +8,9 @@ import type {
 import { monthEnd } from "../dates.ts";
 import type { JournalContext } from "../journal.ts";
 import type { InvoiceRecord, Partner } from "../types.ts";
-import { itemAmount } from "./amounts.ts";
+import { calculateInvoiceAmounts, itemAmount } from "./amounts.ts";
 import { dueDate } from "./due-date.ts";
-import {
-  defaultSalesTaxCategory,
-  effectiveTaxDisplay,
-  itemTaxRate,
-  taxBreakdownEntries,
-} from "./tax.ts";
+import { invoiceSalesTaxCategory, effectiveTaxDisplay, itemTaxRate } from "./tax.ts";
 
 export type DraftOutcome =
   | { kind: "draft"; draft: InvoiceDraft }
@@ -45,7 +40,7 @@ export type BuildInvoiceDraftInput = {
 export function buildInvoiceDraft(input: BuildInvoiceDraftInput): DraftOutcome {
   const { terms, month, today, ctx } = input;
   const salesDate = monthEnd(month);
-  const taxCategory = defaultSalesTaxCategory(salesDate, ctx.taxSettings);
+  const taxCategory = invoiceSalesTaxCategory(salesDate, ctx.taxSettings, terms.taxRate);
   const name = `${Number(month.slice(5))}月分 ${terms.defaultItemName}`;
 
   let item: InvoiceItemInput;
@@ -65,7 +60,14 @@ export function buildInvoiceDraft(input: BuildInvoiceDraftInput): DraftOutcome {
     item = { name, amount: terms.monthlyAmount ?? 0, taxCategory };
   }
 
-  const taxRate = itemTaxRate(taxCategory, salesDate, ctx.taxSettings, ctx.taxRates);
+  const taxRate =
+    terms.taxRate === undefined
+      ? itemTaxRate(taxCategory, salesDate, ctx.taxSettings, ctx.taxRates)
+      : terms.taxRate;
+  // 過去の税率は既存の導出経路に任せる。新たに明示できる税率は 8/10/null。
+  if (taxRate === null || taxRate === 8 || taxRate === 10) item.taxRate = taxRate;
+  const priceMode = terms.priceMode ?? "inclusive";
+  const amounts = calculateInvoiceAmounts([{ amount: item.amount, taxRate }], priceMode);
   const warnings: InvoiceDraft["warnings"] =
     input.activeInvoices.length === 0
       ? []
@@ -83,14 +85,15 @@ export function buildInvoiceDraft(input: BuildInvoiceDraftInput): DraftOutcome {
     kind: "draft",
     draft: {
       partnerId: input.partner.id,
+      priceMode,
       targetMonth: month,
       issueDate: today,
       salesDate,
       dueDate: dueDate(month, terms.dueMonthsAfter, terms.dueDay),
       items: [item],
-      total: item.amount,
+      total: amounts.total,
       taxDisplay: effectiveTaxDisplay(input.settings?.taxDisplay, salesDate, ctx.taxSettings),
-      taxBreakdown: taxBreakdownEntries([{ amount: item.amount, taxRate }]),
+      taxBreakdown: amounts.taxBreakdown,
       warnings,
     },
   };
