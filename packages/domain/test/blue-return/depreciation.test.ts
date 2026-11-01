@@ -560,7 +560,7 @@ describe("isDepreciationRow（R11）", () => {
 
 describe("proposeDepreciationAdjustment（FR-021〜022、INV-23）", () => {
   const propose = (a: FixedAsset, year = 2025) =>
-    proposeDepreciationAdjustment(a, year, INDIVIDUAL_ACCOUNT_LIST);
+    proposeDepreciationAdjustment(a, year, INDIVIDUAL_ACCOUNT_LIST, params);
   const proposalOf = (a: FixedAsset, year = 2025) => {
     const r = propose(a, year);
     if (!r.ok) throw new Error(JSON.stringify(r.error));
@@ -618,7 +618,174 @@ describe("proposeDepreciationAdjustment（FR-021〜022、INV-23）", () => {
       asset({ businessRatio: 5000 }),
       2025,
       INDIVIDUAL_ACCOUNT_LIST.filter((a) => a.code !== "5180"),
+      params,
     );
     expect(!r.ok && r.error.code).toBe("ACCOUNT_NOT_FOUND");
+  });
+});
+
+describe("proposeDepreciationAdjustment: 定額法（FR-009、FR-016、R8、data-model §2.3、INV-57）", () => {
+  const LOSS = accountIdOf("5300");
+  const proposalOf = (a: FixedAsset, year: number) => {
+    const r = proposeDepreciationAdjustment(a, year, INDIVIDUAL_ACCOUNT_LIST, params);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    return r.value;
+  };
+  const triples = (a: FixedAsset, year: number) =>
+    proposalOf(a, year)?.journal.lines.map((l) => [l.side, l.accountId, l.amount]);
+  /** quickstart §2 の機材B（事業専用割合 60%） */
+  const machineB = (over: Partial<FixedAsset> = {}) =>
+    straight({ id: "asset-b", name: "機材B", businessRatio: 6000, ...over });
+
+  it("通年でない供用の年: 62,500 のうち 37,500 が算入額、家事分を 事業主貸 / 減価償却費（シナリオ1・2）", () => {
+    const p = proposalOf(machineB(), 2026);
+    expect(p).toMatchObject({ kind: "depreciation", sourceId: "asset-b" });
+    expect(p?.journal.date).toBe("2026-12-31");
+    expect(p?.journal.lines).toEqual([
+      { side: "debit", accountId: DEPRECIATION, amount: 62_500, taxCategory: "OUT_OF_SCOPE" },
+      { side: "credit", accountId: EQUIPMENT, amount: 62_500, taxCategory: "OUT_OF_SCOPE" },
+      { side: "debit", accountId: DRAWINGS, amount: 25_000, taxCategory: "OUT_OF_SCOPE" },
+      { side: "credit", accountId: DEPRECIATION, amount: 25_000, taxCategory: "OUT_OF_SCOPE" },
+    ]);
+    expect(p?.breakdown).toEqual({
+      method: "straight_line",
+      acquisitionCost: 500_000,
+      businessRatio: 6000,
+      depreciation: 62_500,
+      deductible: 37_500,
+      months: 6,
+      ratePermille: 250,
+      openingBookValue: 500_000,
+      closingBookValue: 437_500,
+      disposalKind: null,
+      disposalAmount: 0,
+      disposalDeductible: 0,
+    });
+    expect(p?.journal.memo).toContain("機材B");
+    expect(p?.journal.memo).toContain("定額法");
+    expect(p?.journal.memo).toContain("0.250");
+    expect(p?.journal.memo).toContain("6/12");
+    expect(p?.journal.memo).toContain("60%");
+  });
+
+  it("割合 100% の通年は「減価償却費 / 資産の勘定」だけ", () => {
+    expect(triples(straight(), 2027)).toEqual([
+      ["debit", DEPRECIATION, 125_000],
+      ["credit", EQUIPMENT, 125_000],
+    ]);
+  });
+
+  it("前年までの累計の資産は累計の年の翌年度から案を作る（シナリオ4）", () => {
+    const c = straight({
+      name: "機材C",
+      acquiredOn: "2024-01-15",
+      acquisitionCost: 300_000,
+      usefulLifeYears: 5,
+      priorAccumulated: 120_000,
+      priorThroughYear: 2025,
+    });
+    expect(proposalOf(c, 2025)).toBeNull();
+    expect(proposalOf(c, 2026)?.breakdown).toMatchObject({
+      depreciation: 60_000,
+      months: 12,
+      openingBookValue: 180_000,
+      closingBookValue: 120_000,
+    });
+  });
+
+  it("供用の前の年度、残高 1 円で償却の終わった年度は案を作らない（シナリオ3）", () => {
+    const a = straight({ acquiredOn: "2026-07-10", usefulLifeYears: 2 });
+    expect(proposalOf(a, 2025)).toBeNull();
+    // 0.500 × 6/12 = 125,000（2026）、250,000（2027）、残り 125,000 − 1（2028）、以後 0
+    expect(proposalOf(a, 2028)?.breakdown).toMatchObject({
+      depreciation: 124_999,
+      closingBookValue: 1,
+    });
+    expect(proposalOf(a, 2029)).toBeNull();
+  });
+
+  it("廃棄の年度: 償却 41,667 と除却損 458,333 の 1 つの仕訳（シナリオ6、quickstart §2 手順5）", () => {
+    const b = machineB({ disposedOn: "2026-10-05", disposalKind: "scrap" });
+    const p = proposalOf(b, 2026);
+    expect(p?.journal.date).toBe("2026-12-31");
+    expect(p?.journal.lines.map((l) => [l.side, l.accountId, l.amount])).toEqual([
+      ["debit", DEPRECIATION, 41_667],
+      ["credit", EQUIPMENT, 41_667],
+      ["debit", DRAWINGS, 16_667],
+      ["credit", DEPRECIATION, 16_667],
+      ["debit", LOSS, 458_333],
+      ["credit", EQUIPMENT, 458_333],
+      ["debit", DRAWINGS, 183_334],
+      ["credit", LOSS, 183_334],
+    ]);
+    for (const l of p?.journal.lines ?? []) expect(l.taxCategory).toBe("OUT_OF_SCOPE");
+    expect(p?.breakdown).toEqual({
+      method: "straight_line",
+      acquisitionCost: 500_000,
+      businessRatio: 6000,
+      depreciation: 41_667,
+      deductible: 25_000,
+      months: 4,
+      ratePermille: 250,
+      openingBookValue: 500_000,
+      closingBookValue: 0,
+      disposalKind: "scrap",
+      disposalAmount: 458_333,
+      disposalDeductible: 274_999,
+    });
+    expect(p?.journal.memo).toContain("4/12");
+    expect(p?.journal.memo).toContain("廃棄");
+    expect(proposalOf(b, 2027)).toBeNull();
+  });
+
+  it("売却の年度: 除却損の 2 行の代わりに 事業主貸 / 資産の勘定（全額。シナリオ7）", () => {
+    const b = machineB({ disposedOn: "2026-10-05", disposalKind: "sale" });
+    const p = proposalOf(b, 2026);
+    expect(p?.journal.lines.map((l) => [l.side, l.accountId, l.amount])).toEqual([
+      ["debit", DEPRECIATION, 41_667],
+      ["credit", EQUIPMENT, 41_667],
+      ["debit", DRAWINGS, 16_667],
+      ["credit", DEPRECIATION, 16_667],
+      ["debit", DRAWINGS, 458_333],
+      ["credit", EQUIPMENT, 458_333],
+    ]);
+    expect(p?.breakdown).toMatchObject({
+      depreciation: 41_667,
+      deductible: 25_000,
+      disposalKind: "sale",
+      disposalAmount: 458_333,
+      disposalDeductible: 0,
+      closingBookValue: 0,
+    });
+    expect(p?.journal.memo).toContain("売却");
+    expect(p?.journal.memo).toContain("譲渡所得");
+  });
+
+  it("廃棄の年度に除却損の科目（5300）がなければ ACCOUNT_NOT_FOUND（details.code）", () => {
+    const r = proposeDepreciationAdjustment(
+      machineB({ disposedOn: "2026-10-05", disposalKind: "scrap" }),
+      2026,
+      INDIVIDUAL_ACCOUNT_LIST.filter((a) => a.code !== "5300"),
+      params,
+    );
+    expect(!r.ok && r.error).toMatchObject({
+      code: "ACCOUNT_NOT_FOUND",
+      details: { code: "5300" },
+    });
+  });
+
+  it("除却損の科目を使わない案（除却しない年度、売却）は 5300 がなくても作れる", () => {
+    const accounts = INDIVIDUAL_ACCOUNT_LIST.filter((a) => a.code !== "5300");
+    const sale = machineB({ disposedOn: "2026-10-05", disposalKind: "sale" });
+    expect(proposeDepreciationAdjustment(machineB(), 2026, accounts, params).ok).toBe(true);
+    expect(proposeDepreciationAdjustment(sale, 2026, accounts, params).ok).toBe(true);
+  });
+
+  it("率がなく計算できなければ TAX_PARAMETER_MISSING", () => {
+    const r = proposeDepreciationAdjustment(machineB(), 2026, INDIVIDUAL_ACCOUNT_LIST, {
+      rates: [],
+      taxParameters: TAX_PARAMETERS,
+    });
+    expect(!r.ok && r.error.code).toBe("TAX_PARAMETER_MISSING");
   });
 });

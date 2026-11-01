@@ -621,7 +621,14 @@ function disposeFixedAssetIn(
 /** 案の作り直しに使う読み取り（トランザクションの中でも外でも同じ形） */
 type ProposalSources = {
   masters: Pick<MasterRepository, "listAccounts">;
-  closing: Pick<ClosingStore, "listHomeUseAllocations" | "listAdjustmentRefs" | "listFixedAssets">;
+  closing: Pick<
+    ClosingStore,
+    | "listHomeUseAllocations"
+    | "listAdjustmentRefs"
+    | "listFixedAssets"
+    | "listStraightLineRates"
+    | "listTaxParameters"
+  >;
   reports: Pick<ReportRepository, "linesInRange">;
 };
 
@@ -638,6 +645,7 @@ function assessDepreciation(
     asset,
     period.fiscalYear,
     src.masters.listAccounts(),
+    { rates: src.closing.listStraightLineRates(), taxParameters: src.closing.listTaxParameters() },
   );
   if (!proposed.ok) return proposed;
   if (proposed.value === null) {

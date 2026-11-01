@@ -402,79 +402,138 @@ export function isDepreciationRow(
   );
 }
 
+/** 固定資産除却損の科目コード（初期セットの 5300。009/R9）。定額法の廃棄の年度の案だけが使う */
+export const DISPOSAL_LOSS_ACCOUNT_CODE = "5300";
+
+const ACCOUNT_LABELS: Record<string, string> = {
+  [DEPRECIATION_ACCOUNT_CODE]: "減価償却費",
+  [DRAWINGS_ACCOUNT_CODE]: "事業主貸",
+  [DISPOSAL_LOSS_ACCOUNT_CODE]: "固定資産除却損",
+};
+
+function accountByCode(accounts: readonly Account[], code: string): Result<Account> {
+  const account = accounts.find((a) => a.code === code);
+  if (account === undefined) {
+    return err(
+      domainError(
+        "ACCOUNT_NOT_FOUND",
+        `${ACCOUNT_LABELS[code] ?? ""}の科目（${code}）がありません`,
+        {
+          code,
+        },
+      ),
+    );
+  }
+  return ok(account);
+}
+
+/** 千分率の償却率を 0.250 の形に（整数の演算だけ） */
+const formatRate = (permille: number) =>
+  `${Math.floor(permille / 1000)}.${String(permille % 1000).padStart(3, "0")}`;
+
+/** 案の摘要（009/R17 の T011: 方法・月数・率・除却の種類。売却は譲渡所得が範囲外である旨） */
+function depreciationMemo(asset: FixedAsset, d: Depreciation): string {
+  const percent = `事業専用割合 ${asset.businessRatio / 100}%`;
+  if (d.method === "small_asset_28_2") {
+    return `減価償却費の計上（${asset.name} 少額減価償却資産 ${percent}）`;
+  }
+  const detail = `${asset.name} 定額法 償却率 ${formatRate(d.ratePermille ?? 0)} 本年中の償却期間 ${d.months ?? 0}/12 ${percent}`;
+  switch (d.disposalKind) {
+    case "scrap":
+      return `減価償却費と固定資産除却損の計上（${detail} 廃棄による除却）`;
+    case "sale":
+      return `減価償却費の計上と売却した資産の振替（${detail} 売却による除却。譲渡所得はこのアプリの範囲外で、確定申告書で別に計算する）`;
+    case null:
+      return `減価償却費の計上（${detail}）`;
+  }
+}
+
 /**
- * 減価償却の仕訳の案（FR-021〜022、R7、INV-23）。「減価償却費 / 資産の勘定」（取得価額）と、
- * 家事分があれば「事業主貸 / 減価償却費」（取得価額 − 必要経費算入額）。日付は年度末日、
- * 行の税区分は対象外（内部の振替）。結びつけた仕訳（linkedJournalId）がある資産、取得した年以外、
- * 年度末日までに除却した資産は案なし（null）。登録済みの案を除くのは呼び出す側（出所の参照を読む）
+ * 減価償却の仕訳の案（FR-009、FR-016、003 の FR-021〜022、R7、R8、data-model §2.3、INV-23、INV-57）。
+ * 日付は年度末日、行の税区分は対象外（内部の振替）。金額は `depreciate` の値だけから作る。
+ *
+ * - 償却: 「減価償却費 / 資産の勘定」（償却費）と、家事分があれば「事業主貸 / 減価償却費」（償却費 − 算入額）
+ * - 定額法の廃棄の年度: 同じ案に「固定資産除却損 / 資産の勘定」（除却の年度の残高）と、家事分があれば
+ *   「事業主貸 / 固定資産除却損」（残高 − 除却損の事業分）
+ * - 定額法の売却の年度: 除却損の 2 行の代わりに「事業主貸 / 資産の勘定」（残高の全額。家事分に分けない）
+ *
+ * 案なし（null）: 結びつけた仕訳（linkedJournalId）がある資産。少額の特例は取得した年以外・年度末日までに
+ * 除却した資産。定額法は台帳の計算を始める年度より前と、償却費・除却の残高がともに 0 の年度（償却の終わった
+ * 資産、除却の翌年度以後）。一括償却は T017 で足す（今は null）。
+ * 科目がなければ ACCOUNT_NOT_FOUND（details.code。除却損の科目は廃棄の年度だけ要る）、
+ * 率・税制の値がなければ `depreciate` の TAX_PARAMETER_MISSING。
+ * 登録済みの案を除くのは呼び出す側（出所の参照を読む）
  */
 export function proposeDepreciationAdjustment(
   asset: FixedAsset,
   fiscalYear: number,
   accounts: readonly Account[],
+  params: DepreciationParams,
 ): Result<AdjustmentProposal | null> {
   if (asset.linkedJournalId !== null) return ok(null);
-  // 定額法・一括償却の案は T011・T017 で足す（今は少額の特例だけ）
-  if (asset.method !== "small_asset_28_2") return ok(null);
-  if (yearOf(asset.acquiredOn) !== String(fiscalYear) || !isSmallAssetRow(asset, fiscalYear)) {
-    return ok(null);
+  switch (asset.method) {
+    case "small_asset_28_2":
+      if (yearOf(asset.acquiredOn) !== String(fiscalYear) || !isSmallAssetRow(asset, fiscalYear)) {
+        return ok(null);
+      }
+      break;
+    case "straight_line":
+      if (fiscalYear < assetStartYear(asset)) return ok(null);
+      break;
+    case "lump_sum":
+      // 一括償却の案は T017 で足す
+      return ok(null);
   }
-  const expense = accounts.find((a) => a.code === DEPRECIATION_ACCOUNT_CODE);
-  if (expense === undefined) {
-    return err(
-      domainError("ACCOUNT_NOT_FOUND", "減価償却費の科目（5180）がありません", {
-        code: DEPRECIATION_ACCOUNT_CODE,
-      }),
-    );
-  }
-  const drawings = accounts.find((a) => a.code === DRAWINGS_ACCOUNT_CODE);
-  if (drawings === undefined) {
-    return err(
-      domainError("ACCOUNT_NOT_FOUND", "事業主貸の科目（3090）がありません", {
-        code: DRAWINGS_ACCOUNT_CODE,
-      }),
-    );
-  }
-  const { deductible } = smallAssetYear(asset, fiscalYear);
-  const home = asset.acquisitionCost - deductible;
+  const computed = depreciate(asset, fiscalYear, params);
+  if (!computed.ok) return computed;
+  const d = computed.value;
+  if (d.total === 0 && d.disposalAmount === 0) return ok(null);
+
+  const expense = accountByCode(accounts, DEPRECIATION_ACCOUNT_CODE);
+  if (!expense.ok) return expense;
+  const drawings = accountByCode(accounts, DRAWINGS_ACCOUNT_CODE);
+  if (!drawings.ok) return drawings;
+
   // 内部の振替で仕入ではない。課税期間でも既定（費用は仕入 10%）にしない
   const taxCategory = "OUT_OF_SCOPE" as const;
-  const line = (side: LineDraft["side"], accountId: string, amount: number): LineDraft => ({
-    side,
-    accountId,
-    amount,
-    taxCategory,
-  });
-  const lines: LineDraft[] = [
-    line("debit", expense.id, asset.acquisitionCost),
-    line("credit", asset.assetAccountId, asset.acquisitionCost),
-  ];
-  if (home > 0) {
-    lines.push(line("debit", drawings.id, home), line("credit", expense.id, home));
+  const lines: LineDraft[] = [];
+  const pair = (debitAccountId: string, creditAccountId: string, amount: number) => {
+    if (amount <= 0) return;
+    lines.push(
+      { side: "debit", accountId: debitAccountId, amount, taxCategory },
+      { side: "credit", accountId: creditAccountId, amount, taxCategory },
+    );
+  };
+  pair(expense.value.id, asset.assetAccountId, d.total);
+  pair(drawings.value.id, expense.value.id, d.total - d.deductible);
+  if (d.disposalAmount > 0) {
+    if (d.disposalKind === "sale") {
+      // 売却: 残高の全額を事業主貸へ（除却損にしない。譲渡所得は範囲外。R8）
+      pair(drawings.value.id, asset.assetAccountId, d.disposalAmount);
+    } else {
+      const loss = accountByCode(accounts, DISPOSAL_LOSS_ACCOUNT_CODE);
+      if (!loss.ok) return loss;
+      pair(loss.value.id, asset.assetAccountId, d.disposalAmount);
+      pair(drawings.value.id, loss.value.id, d.disposalAmount - d.disposalDeductible);
+    }
   }
-  const percent = `${asset.businessRatio / 100}%`;
   return ok({
     kind: "depreciation",
     sourceId: asset.id,
-    journal: {
-      date: `${fiscalYear}-12-31`,
-      memo: `減価償却費の計上（${asset.name} 少額減価償却資産 事業専用割合 ${percent}）`,
-      lines,
-    },
-    // 少額の特例は 009 の償却の形で埋める（月数・率・除却は持たない。T011 で方法ごとの値になる）
+    journal: { date: `${fiscalYear}-12-31`, memo: depreciationMemo(asset, d), lines },
     breakdown: {
-      method: "small_asset_28_2",
-      acquisitionCost: asset.acquisitionCost,
-      businessRatio: asset.businessRatio,
-      depreciation: asset.acquisitionCost,
-      deductible,
-      months: null,
-      ratePermille: null,
-      openingBookValue: asset.acquisitionCost,
-      closingBookValue: 0,
-      disposalKind: null,
-      disposalAmount: 0,
-      disposalDeductible: 0,
+      method: d.method,
+      acquisitionCost: d.cost,
+      businessRatio: d.businessRatio,
+      depreciation: d.total,
+      deductible: d.deductible,
+      months: d.months,
+      ratePermille: d.ratePermille,
+      openingBookValue: d.openingBookValue,
+      closingBookValue: d.closingBookValue,
+      disposalKind: d.disposalKind,
+      disposalAmount: d.disposalAmount,
+      disposalDeductible: d.disposalDeductible,
     },
   });
 }
