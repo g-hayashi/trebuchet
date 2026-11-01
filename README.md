@@ -1,5 +1,7 @@
 # trebuchet
 
+<img src="apps/web/public/app-icon.png" alt="硬貨と財布を載せた投石機を描いたTrebuchetのアプリアイコン" width="320" height="320" />
+
 個人事業主向けの複式簿記の会計アプリ。自分の Mac だけで動かす（ローカル専用）。1 人の個人事業主が使い、パスキー（Touch ID）でサインインする。
 
 ## 機能
