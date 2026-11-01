@@ -2,6 +2,7 @@ import type { TaxParameter } from "../types.ts";
 
 const NTA_2100 = "https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/2100.htm";
 const NTA_2072 = "https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/2072.htm";
+const NTA_SHITSUGI_OPENING_COST = "https://www.nta.go.jp/law/shitsugi/shotoku/04/08.htm";
 const MOF_FY2026 = "https://www.mof.go.jp/tax_policy/tax_reform/outline/fy2026/08taikou_03.htm";
 
 /**
@@ -53,5 +54,35 @@ export const TAX_PARAMETERS: readonly TaxParameter[] = [
     effectiveTo: null,
     value: 100_000,
     sourceUrl: NTA_2072,
+  },
+  // 009: 一括償却資産（取得日で解決する）と開業費（開業日で解決する）。研究 R13。
+  // 適用開始日は法令の施行日ではなく、009 が扱う期間（2007-04-01 以後の取得）の始め
+  {
+    key: "LUMP_SUM_COST_MIN",
+    effectiveFrom: "2007-04-01",
+    effectiveTo: null,
+    value: 100_000,
+    sourceUrl: NTA_2100,
+  },
+  {
+    key: "LUMP_SUM_COST_MAX",
+    effectiveFrom: "2007-04-01",
+    effectiveTo: null,
+    value: 200_000,
+    sourceUrl: NTA_2100,
+  },
+  {
+    key: "LUMP_SUM_YEARS",
+    effectiveFrom: "2007-04-01",
+    effectiveTo: null,
+    value: 3,
+    sourceUrl: NTA_2100,
+  },
+  {
+    key: "OPENING_COST_AMORTIZATION_MONTHS",
+    effectiveFrom: "2007-04-01",
+    effectiveTo: null,
+    value: 60,
+    sourceUrl: NTA_SHITSUGI_OPENING_COST,
   },
 ];

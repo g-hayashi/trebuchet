@@ -165,7 +165,12 @@ describe("DrizzleClosingStore（T008）", () => {
     store.upsertFixedAsset(later);
     store.upsertFixedAsset(first);
     expect(store.listFixedAssets()).toEqual([first, later]);
-    const disposed = { ...first, disposedOn: "2025-12-01", updatedAt: "y" };
+    const disposed = {
+      ...first,
+      disposedOn: "2025-12-01",
+      disposalKind: "scrap" as const,
+      updatedAt: "y",
+    };
     store.upsertFixedAsset(disposed);
     expect(store.listFixedAssets()).toEqual([disposed, later]);
   });

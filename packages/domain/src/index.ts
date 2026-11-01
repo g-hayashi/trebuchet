@@ -47,6 +47,7 @@ export * from "./reports/profit-and-loss.ts";
 export * from "./reports/trial-balance.ts";
 export * from "./reports/warnings.ts";
 export * from "./seed/accounts.individual.ts";
+export * from "./seed/depreciation-rates.ts";
 export * from "./seed/freee-aliases.ts";
 export * from "./seed/tax-categories.ts";
 export * from "./seed/tax-parameters.ts";

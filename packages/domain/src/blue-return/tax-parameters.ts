@@ -1,4 +1,22 @@
-import type { TaxParameter, TaxParameterKey } from "../types.ts";
+import type { StraightLineRate, TaxParameter, TaxParameterKey } from "../types.ts";
+
+/**
+ * 耐用年数と取得日から定額法の償却率の行を決める（009 R2）。
+ * `resolveTaxParameter` と同じ選び方（適用期間の中で effectiveFrom が最新の行）。外れたら undefined。
+ */
+export function resolveStraightLineRate(
+  usefulLifeYears: number,
+  acquiredOn: string,
+  rates: readonly StraightLineRate[],
+): StraightLineRate | undefined {
+  let latest: StraightLineRate | undefined;
+  for (const r of rates) {
+    if (r.usefulLifeYears !== usefulLifeYears || r.effectiveFrom > acquiredOn) continue;
+    if (r.effectiveTo !== null && acquiredOn > r.effectiveTo) continue;
+    if (latest === undefined || r.effectiveFrom > latest.effectiveFrom) latest = r;
+  }
+  return latest;
+}
 
 /**
  * キーと日付から税制の値の行を決める（Constitution VI、research R3）。

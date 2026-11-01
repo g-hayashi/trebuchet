@@ -583,7 +583,13 @@ function disposeFixedAssetIn(
     );
   }
   const now = deps.clock.now();
-  const saved: FixedAsset = { ...before, disposedOn: params.disposedOn, updatedAt: now };
+  // 除却の種類（廃棄・売却）の入力は T011〜T014 で足す。それまでは DB の CHECK（disposed_on ⇔ disposal_kind）のため廃棄
+  const saved: FixedAsset = {
+    ...before,
+    disposedOn: params.disposedOn,
+    disposalKind: "scrap",
+    updatedAt: now,
+  };
   deps.closing.upsertFixedAsset(saved);
   deps.closing.appendClosingAudit(
     auditEntry(deps, {

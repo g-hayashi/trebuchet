@@ -92,29 +92,11 @@ export class DrizzleClosingStore implements ClosingStore {
       .select()
       .from(fixedAssets)
       .orderBy(asc(fixedAssets.acquiredOn), asc(fixedAssets.id))
-      .all()
-      .map((r) => ({
-        ...r,
-        // 009 の列は T005 で足す。それまでは既定値（少額の特例の意味）
-        inServiceOn: null,
-        priorAccumulated: 0,
-        priorThroughYear: null,
-        disposalKind: null,
-      }));
+      .all();
   }
 
   upsertFixedAsset(row: FixedAsset): void {
-    // 009 の項目（inServiceOn など）と方法の拡張は T005 で列を足してから書く（T007）
-    const {
-      id: _id,
-      inServiceOn: _inServiceOn,
-      priorAccumulated: _priorAccumulated,
-      priorThroughYear: _priorThroughYear,
-      disposalKind: _disposalKind,
-      method,
-      ...rest
-    } = row;
-    const columns = { ...rest, method: method as "small_asset_28_2" };
+    const { id: _id, ...columns } = row;
     this.db
       .insert(fixedAssets)
       .values({ id: row.id, ...columns })

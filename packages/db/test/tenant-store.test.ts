@@ -34,6 +34,21 @@ describe("openTenant", () => {
     );
     // R2: 生成後の SQL に STRICT を付けている
     for (const t of tables) expect(t.sql).toMatch(/\)\s*STRICT$/);
+    // 009: 新しい 3 表と作り直した 4 表（research R14）も STRICT
+    for (const name of [
+      "straight_line_rates",
+      "deferred_assets",
+      "deferred_amortizations",
+      "fixed_assets",
+      "adjustment_journal_refs",
+      "tax_parameters",
+      "closing_audit_log",
+    ]) {
+      expect(
+        tables.map((t) => t.name),
+        name,
+      ).toContain(name);
+    }
     const rates = db.$client.prepare("SELECT COUNT(*) AS n FROM tax_rates").get() as { n: number };
     expect(rates.n).toBe(4);
   });
