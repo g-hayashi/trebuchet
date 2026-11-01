@@ -5,8 +5,7 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route as ImportsRoute } from "@/routes/e/$entityId/imports/index";
 import { Route as EntityHomeRoute } from "@/routes/e/$entityId/index";
@@ -67,21 +66,22 @@ function renderEntity(url: string) {
   return { router };
 }
 
-describe("事業体のメニューの「取込」（T017）", () => {
-  it("メニューに「取込」があり、押すと取込の画面に移動する", async () => {
-    const { router } = renderEntity("/e/e1");
+describe("事業体のメニューの「freee から移行」（T017）", () => {
+  it("「設定」の 2 段目に「freee から移行」があり、取込の画面でそれが強調される", async () => {
+    renderEntity("/e/e1/imports");
     const nav = await screen.findByRole("navigation", { name: "事業体のメニュー" });
-    const link = within(nav).getByRole("link", { name: "取込" });
-    expect(link).toHaveAttribute("href", "/e/e1/imports");
-
-    await userEvent.click(link);
-
-    await waitFor(() => expect(router.state.location.pathname).toBe("/e/e1/imports"));
     expect(await screen.findByRole("heading", { level: 1, name: "取込" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "新しい取込" })).toHaveAttribute(
       "href",
       "/e/e1/imports/new",
     );
-    expect(within(nav).getByRole("link", { name: "取込" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "事業体の設定" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    const sub = screen.getByRole("navigation", { name: "事業体のサブメニュー" });
+    const link = within(sub).getByRole("link", { name: "freee から移行" });
+    expect(link).toHaveAttribute("href", "/e/e1/imports");
+    expect(link).toHaveAttribute("aria-current", "page");
   });
 });

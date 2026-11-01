@@ -770,14 +770,16 @@ describe("除外・除外の取消・結びつきを外す（H:§4.6・§4.7・�
 });
 
 describe("メニュー", () => {
-  it("事業体のメニューの「明細」は明細の一覧へ進む", async () => {
+  it("事業体のメニューの「記帳」の 2 段目の「明細」は明細の一覧へ進む", async () => {
     mockApi({ "GET /api/entities": () => ok({ entities: [] }) });
     renderRoute(LayoutRoute, { path: "/e/$entityId", url: "/e/e1" });
     const nav = await screen.findByRole("navigation", { name: "事業体のメニュー" });
-    expect(within(nav).getByRole("link", { name: "明細" })).toHaveAttribute(
+    expect(within(nav).getByRole("link", { name: "記帳" })).toHaveAttribute(
       "href",
-      "/e/e1/statements",
+      "/e/e1/journals",
     );
+    // 2 段目は今いるグループの項目だけ。明細は記帳のグループの項目（entity-nav.test.tsx）
+    expect(within(nav).queryByRole("link", { name: "明細" })).toBeNull();
   });
 
   it("一覧から取込・しきい値の設定・推定のルールへ進める（どれも事業体の下）", async () => {
