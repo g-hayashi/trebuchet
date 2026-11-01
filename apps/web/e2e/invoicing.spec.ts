@@ -32,8 +32,7 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
   });
 
   await test.step("発行者を設定する", async () => {
-    await openNav(page, "請求", "請求書");
-    await page.getByRole("link", { name: "請求の設定" }).click();
+    await openNav(page, "請求", "請求の設定");
     await expect(page.getByRole("heading", { name: "請求の設定" })).toBeVisible();
 
     await page.getByLabel("氏名", { exact: true }).fill("山田 太郎");
