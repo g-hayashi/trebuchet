@@ -58,6 +58,9 @@ function parseMonth(month: string): { year: number; mon: number } {
 /** 日付（`YYYY-MM-DD`）の月（`YYYY-MM`） */
 export const monthOfDate = (date: string): string => date.slice(0, 7);
 
+/** 日付（`YYYY-MM-DD`）の年（暦年） */
+export const yearOfDate = (date: string): number => Number(date.slice(0, 4));
+
 const isLeapYear = (year: number) => (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 
 /** その月の日数（`month` は 1〜12） */

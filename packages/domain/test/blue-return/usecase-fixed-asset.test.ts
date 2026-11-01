@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import {
   commitAdjustment,
@@ -7,7 +8,9 @@ import {
   getBlueReturn,
   listFixedAssets,
   saveFixedAsset,
+  saveHomeUseAllocation,
 } from "../../src/usecases/blue-return.ts";
+import { correctJournal } from "../../src/usecases/correct-journal.ts";
 import { voidJournal } from "../../src/usecases/void-journal.ts";
 import { type FakeClosingUnitOfWork, fakeClosingUnitOfWork } from "../fakes.ts";
 import { setupLedger } from "../ledger-fixture.ts";
@@ -184,12 +187,13 @@ describe("listFixedAssets（FR-018、FR-023）", () => {
           disposalAmount: 0,
           disposalDeductible: 0,
         },
+        depreciationError: null,
       },
     ]);
     const other = unwrap(listFixedAssets(settingsDeps(), { fiscalYear: 2026 }));
     expect(other[0]?.depreciation).toMatchObject({ total: 0, deductible: 0 });
     const none = unwrap(listFixedAssets(settingsDeps(), {}));
-    expect(none).toEqual([{ ...asset, depreciation: null }]);
+    expect(none).toEqual([{ ...asset, depreciation: null, depreciationError: null }]);
   });
 
   it("法人の事業体は ENTITY_KIND_UNSUPPORTED", () => {
@@ -459,5 +463,260 @@ describe("減価償却の案の確定（FR-021〜023、R4・R7）", () => {
       }),
     ).toThrow("disk I/O error");
     expect(snapshot()).toEqual(before);
+  });
+});
+
+describe("定額法の年度ごとの案と変更の制限（009 T014、R12、FR-017・FR-021、INV-60）", () => {
+  beforeEach(() => {
+    uow.closing.straightLineRates = [...STRAIGHT_LINE_RATES];
+  });
+
+  /** 定額法 4 年（率 0.250）、2025-01-10 に取得・供用。各年 100,000 円 */
+  const straight = (over: Record<string, unknown> = {}) =>
+    unwrap(
+      save({
+        name: "サーバー",
+        method: "straight_line",
+        acquiredOn: "2025-01-10",
+        acquisitionCost: 400_000,
+        usefulLifeYears: 4,
+        ...over,
+      }),
+    );
+  const proposalsOf = (fiscalYear: number) =>
+    unwrap(getAdjustmentProposals(readDeps(), { fiscalYear }));
+  const commit = (fiscalYear: number, sourceId: string, amount: number) =>
+    commitAdjustment(commitDeps(), {
+      fiscalYear,
+      kind: "depreciation",
+      sourceId,
+      expected: { amount },
+    });
+  const debitOf = (p: { journal: { lines: { side: string; amount: number }[] } }) =>
+    p.journal.lines.filter((l) => l.side === "debit").reduce((s, l) => s + l.amount, 0);
+  /** その年度の資産の案を、案の金額のまま確定する */
+  const commitProposal = (fiscalYear: number, sourceId: string) => {
+    const p = proposalsOf(fiscalYear).find((x) => x.sourceId === sourceId);
+    if (p === undefined) throw new Error(`案がない: ${fiscalYear} ${sourceId}`);
+    return unwrap(commit(fiscalYear, sourceId, debitOf(p)));
+  };
+  const voidIt = (journal: { id: string; version: number }) =>
+    unwrap(voidJournal(fx.deps, journal.id, { reason: "やり直し", version: journal.version }));
+  const update = (asset: { id: string }, over: Record<string, unknown>) =>
+    saveFixedAsset(settingsDeps(), { ...input(over), id: asset.id });
+  const errorOf = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }) =>
+    r.ok ? null : (r.error as { code: string; details?: Record<string, unknown> });
+
+  it("取得の年度だけでなく、供用の年度以後の各年度に案を出し、登録済みは年度ごとに判定する", () => {
+    const asset = straight();
+    expect(proposalsOf(2025).map((p) => [p.sourceId, p.breakdown])).toEqual([
+      [asset.id, expect.objectContaining({ depreciation: 100_000, months: 12 })],
+    ]);
+    expect(proposalsOf(2026).map((p) => p.sourceId)).toEqual([asset.id]);
+
+    commitProposal(2025, asset.id);
+    expect(proposalsOf(2025)).toEqual([]);
+    expect(proposalsOf(2026).map((p) => p.sourceId)).toEqual([asset.id]);
+    const again = errorOf(commit(2025, asset.id, 100_000));
+    expect(again).toMatchObject({
+      code: "ADJUSTMENT_NOT_NEEDED",
+      details: { reason: "ALREADY_REGISTERED" },
+    });
+
+    const second = commitProposal(2026, asset.id);
+    expect(second.ref).toMatchObject({ assetId: asset.id, fiscalYear: 2026 });
+    expect(proposalsOf(2026)).toEqual([]);
+  });
+
+  it("登録した仕訳の日付を別の年度へ訂正しても、その年度の 2 回目の確定は ADJUSTMENT_NOT_NEEDED", () => {
+    const asset = straight();
+    const { journal } = commitProposal(2025, asset.id);
+    unwrap(
+      correctJournal(fx.deps, journal.id, {
+        date: "2026-01-15",
+        memo: "減価償却費",
+        lines: journal.lines.map((l) => ({
+          side: l.side,
+          accountId: l.accountId,
+          amount: l.amount,
+          taxCategory: l.taxCategory,
+        })),
+        reason: "日付の誤り",
+        version: journal.version,
+      }),
+    );
+    expect(errorOf(commit(2025, asset.id, 100_000))?.code).toBe("ADJUSTMENT_NOT_NEEDED");
+  });
+
+  it("締め済みの年度は償却の案を返さない（FR-021）。按分の案は今のまま返す", () => {
+    const asset = straight();
+    fx.create({
+      date: "2025-06-30",
+      memo: "家賃",
+      lines: [fx.line("debit", "地代家賃", 100_000), fx.line("credit", "現金", 100_000)],
+    });
+    unwrap(
+      saveHomeUseAllocation(settingsDeps(), {
+        fiscalYear: 2025,
+        accountId: fx.accountId("地代家賃"),
+        businessRatio: 3000,
+        basis: "床面積",
+      }),
+    );
+    expect(proposalsOf(2025).map((p) => p.kind)).toEqual(["home_use", "depreciation"]);
+    fx.closeYear(2025);
+    expect(proposalsOf(2025).map((p) => p.kind)).toEqual(["home_use"]);
+    expect(proposalsOf(2026).map((p) => p.sourceId)).toEqual([asset.id]);
+  });
+
+  it("償却率がない資産は案を出さず（警告に任せる）、ほかの資産の案は返す。確定は TAX_PARAMETER_MISSING", () => {
+    const asset = straight();
+    const small = unwrap(save());
+    uow.closing.straightLineRates = [];
+    expect(proposalsOf(2025).map((p) => p.sourceId)).toEqual([small.id]);
+    expect(errorOf(commit(2025, asset.id, 100_000))?.code).toBe("TAX_PARAMETER_MISSING");
+  });
+
+  it("listFixedAssets: 計算できない資産は depreciation が null で depreciationError を付ける", () => {
+    const asset = straight();
+    const ok = unwrap(listFixedAssets(settingsDeps(), { fiscalYear: 2025 }));
+    expect(ok[0]).toMatchObject({ depreciation: { total: 100_000 }, depreciationError: null });
+    uow.closing.straightLineRates = [];
+    expect(unwrap(listFixedAssets(settingsDeps(), { fiscalYear: 2025 }))).toEqual([
+      {
+        ...asset,
+        depreciation: null,
+        depreciationError: {
+          code: "TAX_PARAMETER_MISSING",
+          details: { key: "STRAIGHT_LINE_RATE", date: "2025-01-10", usefulLifeYears: 4 },
+        },
+      },
+    ]);
+    expect(unwrap(listFixedAssets(settingsDeps(), {}))).toEqual([
+      { ...asset, depreciation: null, depreciationError: null },
+    ]);
+  });
+
+  it("saveFixedAsset: 有効な償却の仕訳があれば計算に効く項目は 409（details.years）で何も書かない。名称・数量・備考は変えられる", () => {
+    const base = {
+      name: "サーバー",
+      method: "straight_line",
+      acquiredOn: "2025-01-10",
+      acquisitionCost: 400_000,
+      usefulLifeYears: 4,
+    };
+    const asset = straight();
+    commitProposal(2025, asset.id);
+    const second = commitProposal(2026, asset.id);
+    const changes: Record<string, unknown>[] = [
+      { acquiredOn: "2025-02-01" },
+      { inServiceOn: "2025-03-01" },
+      { acquisitionCost: 300_000 },
+      { usefulLifeYears: 5 },
+      { businessRatio: 5000 },
+      { acquiredOn: "2023-01-10", priorAccumulated: 100_000, priorThroughYear: 2024 },
+      { assetAccountId: fx.accountId("一括償却資産") },
+    ];
+    for (const change of changes) {
+      const before = snapshot();
+      const e = errorOf(update(asset, { ...base, ...change }));
+      expect(e, JSON.stringify(change)).toMatchObject({
+        code: "DEPRECIATION_JOURNAL_EXISTS",
+        details: { years: [2025, 2026] },
+      });
+      expect(snapshot()).toEqual(before);
+    }
+    expect(update(asset, { ...base, name: "NAS", quantity: "2", note: "棚" }).ok).toBe(true);
+
+    // 2026 年度の仕訳を取り消すと、残る 2025 年度だけを返す
+    voidIt(second.journal);
+    expect(errorOf(update(asset, { ...base, usefulLifeYears: 5 }))?.details).toMatchObject({
+      years: [2025],
+    });
+  });
+
+  it("saveFixedAsset: 少額の特例の資産にも効く。仕訳を取り消せば変えられる", () => {
+    const asset = unwrap(save());
+    const { journal } = commitProposal(2025, asset.id);
+    const changed = errorOf(update(asset, { acquisitionCost: 150_000 }));
+    expect(changed).toMatchObject({
+      code: "DEPRECIATION_JOURNAL_EXISTS",
+      details: { years: [2025] },
+    });
+    expect(errorOf(update(asset, { method: "straight_line", usefulLifeYears: 4 }))?.code).toBe(
+      "DEPRECIATION_JOURNAL_EXISTS",
+    );
+    voidIt(journal);
+    expect(update(asset, { acquisitionCost: 150_000 }).ok).toBe(true);
+  });
+
+  it("disposeFixedAsset: 種類（売却・廃棄、省略時は廃棄）を保存する。供用日より前の除却の日は VALIDATION", () => {
+    const sold = straight({ inServiceOn: "2025-04-01" });
+    const disposed = unwrap(
+      disposeFixedAsset(settingsDeps(), {
+        id: sold.id,
+        disposedOn: "2026-06-30",
+        disposalKind: "sale",
+        reason: "売却",
+      }),
+    );
+    expect(disposed).toMatchObject({ disposedOn: "2026-06-30", disposalKind: "sale" });
+    expect(proposalsOf(2026)[0]?.breakdown).toMatchObject({ disposalKind: "sale" });
+
+    const scrapped = straight({ name: "廃棄", inServiceOn: "2025-04-01" });
+    expect(
+      unwrap(
+        disposeFixedAsset(settingsDeps(), {
+          id: scrapped.id,
+          disposedOn: "2026-06-30",
+          reason: "廃棄",
+        }),
+      ).disposalKind,
+    ).toBe("scrap");
+
+    const before = snapshot();
+    const early = errorOf(
+      disposeFixedAsset(settingsDeps(), {
+        id: scrapped.id,
+        disposedOn: "2025-03-31",
+        reason: "廃棄",
+      }),
+    );
+    expect(early).toMatchObject({ code: "VALIDATION", details: { field: "disposedOn" } });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("disposeFixedAsset: 除却の年度以後（除却済みなら前の除却の年度以後）に有効な償却の仕訳があれば 409", () => {
+    const asset = straight();
+    commitProposal(2025, asset.id);
+    const dispose = (disposedOn: string) =>
+      disposeFixedAsset(settingsDeps(), { id: asset.id, disposedOn, reason: "廃棄" });
+    const before = snapshot();
+    expect(errorOf(dispose("2025-10-01"))).toMatchObject({
+      code: "DEPRECIATION_JOURNAL_EXISTS",
+      details: { years: [2025] },
+    });
+    expect(snapshot()).toEqual(before);
+
+    // 2025 年度は除却より前の年度なので除却できる。2026 年度の案は除却を含む
+    unwrap(dispose("2026-03-31"));
+    expect(proposalsOf(2026)[0]?.breakdown).toMatchObject({ months: 3, disposalKind: "scrap" });
+    commitProposal(2026, asset.id);
+    // 除却の日を後ろへ動かすと、登録済みの 2026 年度の除却の仕訳と食い違う
+    expect(errorOf(dispose("2027-01-31"))).toMatchObject({
+      code: "DEPRECIATION_JOURNAL_EXISTS",
+      details: { years: [2026] },
+    });
+  });
+
+  it("disposeFixedAsset: 少額の特例の資産にも効く", () => {
+    const asset = unwrap(save());
+    commitProposal(2025, asset.id);
+    const r = disposeFixedAsset(settingsDeps(), {
+      id: asset.id,
+      disposedOn: "2025-12-01",
+      reason: "廃棄",
+    });
+    expect(errorOf(r)?.code).toBe("DEPRECIATION_JOURNAL_EXISTS");
   });
 });

@@ -31,11 +31,13 @@ import {
   proposeHomeUseAdjustment,
   validateHomeUseAllocation,
 } from "../blue-return/home-use.ts";
+import { yearOfDate } from "../dates.ts";
 import type {
   Clock,
   ClosingStore,
   ClosingUnitOfWork,
   IdGenerator,
+  LedgerRepository,
   MasterRepository,
   ReportRepository,
 } from "../ports.ts";
@@ -46,6 +48,7 @@ import {
   type ClosingNote,
   type ClosingNoteKind,
   type DeductionAnswers,
+  type DomainError,
   type DomainWarning,
   domainError,
   err,
@@ -76,15 +79,22 @@ export type ClosingReadDeps = { masters: MasterRepository; closing: ClosingStore
  */
 export type ClosingSettingsDeps = { uow: ClosingUnitOfWork; ids: IdGenerator; clock: Clock };
 
-/** UnitOfWork の中で保存の本体に渡す依存（同じトランザクションのマスタと ClosingStore） */
-type ClosingTxDeps = ClosingReadDeps & { ids: IdGenerator; clock: Clock };
+/**
+ * UnitOfWork の中で保存の本体に渡す依存（同じトランザクションのマスタ・ClosingStore と、
+ * 償却の仕訳の状態を読む仕訳。009/R12）
+ */
+type ClosingTxDeps = ClosingReadDeps & {
+  ledger: Pick<LedgerRepository, "getJournal">;
+  ids: IdGenerator;
+  clock: Clock;
+};
 
 function inClosingTx<T>(
   deps: ClosingSettingsDeps,
   fn: (tx: ClosingTxDeps) => Result<T>,
 ): Result<T> {
-  return deps.uow.run(({ masters, closing }) =>
-    fn({ masters, closing, ids: deps.ids, clock: deps.clock }),
+  return deps.uow.run(({ ledger, masters, closing }) =>
+    fn({ ledger, masters, closing, ids: deps.ids, clock: deps.clock }),
   );
 }
 
@@ -452,8 +462,20 @@ function saveRentDetailsIn(
 
 // ---- 固定資産台帳（US3） ----
 
-/** 台帳の1行。fiscalYear を指定したときだけその年の償却の計算（なければ null） */
-export type FixedAssetWithDepreciation = FixedAsset & { depreciation: Depreciation | null };
+/** 償却を計算できない理由（率・税制の値がないなど。depreciate の失敗） */
+export type DepreciationError = {
+  code: DomainError["code"];
+  details: NonNullable<DomainError["details"]> | null;
+};
+
+/**
+ * 台帳の1行。fiscalYear を指定したときだけその年の償却の計算（なければ null）。
+ * 計算できなければ depreciation は null で depreciationError に理由（009 contract §3）
+ */
+export type FixedAssetWithDepreciation = FixedAsset & {
+  depreciation: Depreciation | null;
+  depreciationError: DepreciationError | null;
+};
 
 /**
  * 固定資産の台帳（GET /fixed-assets）。fiscalYear があれば各資産に depreciate の結果を付ける。
@@ -472,18 +494,67 @@ export function listFixedAssets(
   };
   return ok(
     deps.closing.listFixedAssets().map((asset) => {
-      // 計算できない資産（率がない）は null。depreciationError は T014 以後で足す
-      const result =
-        fiscalYear === undefined ? undefined : depreciate(asset, fiscalYear, depreciationParams);
-      return { ...asset, depreciation: result?.ok ? result.value : null };
+      if (fiscalYear === undefined) {
+        return { ...asset, depreciation: null, depreciationError: null };
+      }
+      const result = depreciate(asset, fiscalYear, depreciationParams);
+      return result.ok
+        ? { ...asset, depreciation: result.value, depreciationError: null }
+        : {
+            ...asset,
+            depreciation: null,
+            depreciationError: { code: result.error.code, details: result.error.details ?? null },
+          };
     }),
   );
 }
 
 /**
+ * 償却の計算に効く資産の項目（009/R12、spec Edge Cases）。有効な償却の仕訳があれば変えられない。
+ * 結びつけた仕訳（linkedJournalId）も含める: 償却の仕訳がある資産に既存の費用の仕訳を結びつけると、
+ * 同じ取得が二重に費用になるため
+ */
+const DEPRECIATION_INPUT_FIELDS = [
+  "acquiredOn",
+  "inServiceOn",
+  "acquisitionCost",
+  "method",
+  "usefulLifeYears",
+  "businessRatio",
+  "priorAccumulated",
+  "priorThroughYear",
+  "assetAccountId",
+  "linkedJournalId",
+] as const satisfies readonly (keyof FixedAsset)[];
+
+/**
+ * 資産に有効な（取り消されていない）償却の仕訳がある年度（昇順・重複なし）。参照は出所ごとの全年度、
+ * 仕訳の状態は同じトランザクションの仕訳から読む（009/R12）
+ */
+function activeDepreciationYears(deps: ClosingTxDeps, assetId: string): number[] {
+  const years = new Set<number>();
+  for (const ref of deps.closing.listAdjustmentRefsBySource({ assetId })) {
+    if (ref.kind !== "depreciation") continue;
+    if (deps.ledger.getJournal(ref.journalId)?.status === "active") years.add(ref.fiscalYear);
+  }
+  return [...years].sort((a, b) => a - b);
+}
+
+const depreciationJournalExists = (years: readonly number[]): Result<never> =>
+  err(
+    domainError(
+      "DEPRECIATION_JOURNAL_EXISTS",
+      `${years.join("・")}年度の減価償却の仕訳が登録されています。先にその仕訳を取り消してください`,
+      { years: [...years] },
+    ),
+  );
+
+/**
  * 固定資産を登録・更新する（FR-018〜020）。params.id があれば更新（作成日時と除却の日はそのまま。
  * 年間の上限の合計から自分自身を除く）、なければ作る。closing_audit_log に fixed_asset（create / update、
- * 理由、変更前・後）を残す。締め済みの年度の取得でも登録できる（仕訳の案の確定は commitAdjustment が拒否する）
+ * 理由、変更前・後）を残す。締め済みの年度の取得でも登録できる（仕訳の案の確定は commitAdjustment が拒否する）。
+ * 更新で償却の計算に効く項目が変わり、その資産に有効な償却の仕訳（どの年度でも。少額の特例を含む）が
+ * あれば 409 DEPRECIATION_JOURNAL_EXISTS（details.years。009/R12）。名称・数量・備考は変えられる
  */
 export function saveFixedAsset(
   deps: ClosingSettingsDeps,
@@ -528,6 +599,13 @@ function saveFixedAssetIn(
     },
   );
   if (!validated.ok) return validated;
+  if (
+    before !== undefined &&
+    DEPRECIATION_INPUT_FIELDS.some((field) => validated.value[field] !== before[field])
+  ) {
+    const years = activeDepreciationYears(deps, before.id);
+    if (years.length > 0) return depreciationJournalExists(years);
+  }
 
   const now = deps.clock.now();
   const { id: _draftId, ...fields } = validated.value;
@@ -554,20 +632,30 @@ function saveFixedAssetIn(
   return ok(saved);
 }
 
+export type DisposeFixedAssetParams = {
+  id: string;
+  disposedOn: string;
+  /** 廃棄・売却（省略時は廃棄。009/R8） */
+  disposalKind?: NonNullable<FixedAsset["disposalKind"]> | undefined;
+  reason: string;
+};
+
 /**
- * 固定資産を除却する（disposed_on を記録。物理削除はしない）。closing_audit_log に
- * fixed_asset（dispose、理由、変更前・後）を残す。資産がなければ、除却の日の形が違う・取得の日より前なら VALIDATION
+ * 固定資産を除却する（disposed_on と種類を記録。物理削除はしない）。closing_audit_log に
+ * fixed_asset（dispose、理由、変更前・後）を残す。資産がなければ、除却の日の形が違う・供用日
+ * （なければ取得日）より前なら VALIDATION。除却の年度以後（除却済みなら前の除却の年度とのうち早い方以後）に
+ * 有効な償却の仕訳があれば 409 DEPRECIATION_JOURNAL_EXISTS（009/R8・R12）
  */
 export function disposeFixedAsset(
   deps: ClosingSettingsDeps,
-  params: { id: string; disposedOn: string; reason: string },
+  params: DisposeFixedAssetParams,
 ): Result<FixedAsset> {
   return inClosingTx(deps, (tx) => disposeFixedAssetIn(tx, params));
 }
 
 function disposeFixedAssetIn(
   deps: ClosingTxDeps,
-  params: { id: string; disposedOn: string; reason: string },
+  params: DisposeFixedAssetParams,
 ): Result<FixedAsset> {
   const individual = requireIndividual(deps.masters);
   if (!individual.ok) return individual;
@@ -585,20 +673,29 @@ function disposeFixedAssetIn(
       }),
     );
   }
-  if (params.disposedOn < before.acquiredOn) {
+  const serviceOn = before.inServiceOn ?? before.acquiredOn;
+  if (params.disposedOn < serviceOn) {
     return err(
-      domainError("VALIDATION", "除却の日は取得年月日以後にしてください", {
+      domainError("VALIDATION", "除却の日は事業の用に供した日（取得年月日）以後にしてください", {
         field: "disposedOn",
         acquiredOn: before.acquiredOn,
+        inServiceOn: serviceOn,
       }),
     );
   }
+  // 除却済みの資産の除却の日・種類を変えると、前の除却の年度の仕訳（除却損・売却）とも食い違う
+  const fromYear = Math.min(
+    yearOfDate(params.disposedOn),
+    before.disposedOn === null ? Number.POSITIVE_INFINITY : yearOfDate(before.disposedOn),
+  );
+  const years = activeDepreciationYears(deps, before.id).filter((y) => y >= fromYear);
+  if (years.length > 0) return depreciationJournalExists(years);
+
   const now = deps.clock.now();
-  // 除却の種類（廃棄・売却）の入力は T011〜T014 で足す。それまでは DB の CHECK（disposed_on ⇔ disposal_kind）のため廃棄
   const saved: FixedAsset = {
     ...before,
     disposedOn: params.disposedOn,
-    disposalKind: "scrap",
+    disposalKind: params.disposalKind ?? "scrap",
     updatedAt: now,
   };
   deps.closing.upsertFixedAsset(saved);
@@ -625,22 +722,39 @@ type ProposalSources = {
     ClosingStore,
     | "listHomeUseAllocations"
     | "listAdjustmentRefs"
+    | "listAdjustmentRefsBySource"
     | "listFixedAssets"
     | "listStraightLineRates"
     | "listTaxParameters"
   >;
   reports: Pick<ReportRepository, "linesInRange">;
+  /**
+   * 仕訳が有効（取り消されていない）か。確定（commitAdjustment）はトランザクションの仕訳から読み、
+   * 一覧（getAdjustmentProposals）は年度の有効な行から読む（日付を年度の外へ訂正した仕訳は一覧では
+   * 未登録に見えるが、確定は登録済みとして拒否する。INV-60 を守るのは確定の側）
+   */
+  isActiveJournal: (journalId: string) => boolean;
 };
 
 /**
- * 減価償却の案。結びつけた仕訳のある資産・取得した年以外は proposeDepreciationAdjustment が null にする。
- * すでに有効な（取り消されていない）償却の仕訳が出所で登録されている資産も、案を作らない
+ * 減価償却の案（資産・年度ごと。009/R6・R12）。その資産・年度に有効な償却の仕訳が登録済みなら案を作らない
+ * （取り消した仕訳は未登録として案を戻す。INV-60）。結びつけた仕訳のある資産・その年度に償却のない資産は
+ * proposeDepreciationAdjustment が null にする。率・税制の値がなければ TAX_PARAMETER_MISSING
  */
 function assessDepreciation(
   src: ProposalSources,
   period: FiscalPeriod,
   asset: FixedAsset,
 ): Result<RebuiltProposal> {
+  const registered = src.closing
+    .listAdjustmentRefsBySource({ assetId: asset.id })
+    .some(
+      (r) =>
+        r.kind === "depreciation" &&
+        r.fiscalYear === period.fiscalYear &&
+        src.isActiveJournal(r.journalId),
+    );
+  if (registered) return ok({ proposal: null, reason: "ALREADY_REGISTERED" });
   const proposed = proposeDepreciationAdjustment(
     asset,
     period.fiscalYear,
@@ -654,26 +768,11 @@ function assessDepreciation(
       reason: asset.linkedJournalId === null ? "NOT_APPLICABLE" : "LINKED_JOURNAL",
     });
   }
-  const journals = new Set(
-    src.closing
-      .listAdjustmentRefs(period.fiscalYear)
-      .filter((r) => r.kind === "depreciation" && r.assetId === asset.id)
-      .map((r) => r.journalId),
-  );
-  const registered =
-    journals.size > 0 &&
-    src.reports
-      .linesInRange(period.startDate, period.endDate)
-      .some((l) => l.status === "active" && journals.has(l.journalId));
-  return ok(
-    registered
-      ? { proposal: null, reason: "ALREADY_REGISTERED" }
-      : { proposal: proposed.value, reason: null },
-  );
+  return ok({ proposal: proposed.value, reason: null });
 }
 
 function assessHomeUse(
-  src: ProposalSources,
+  src: Omit<ProposalSources, "isActiveJournal">,
   period: FiscalPeriod,
   allocation: HomeUseAllocation,
   allocations: readonly HomeUseAllocation[],
@@ -690,7 +789,10 @@ function assessHomeUse(
 
 /**
  * 決算整理の仕訳の案の一覧（差があるものだけ。FR-014・FR-016、FR-021）。按分の登録の順、
- * そのあとにこの年度に取得した資産の償却の案（台帳の順）
+ * そのあとにその年度に償却のある資産の償却の案（台帳の順。定額法は startYear 以後の各年度）。
+ * 締め済みの年度は償却の案を返さない（009 FR-021。按分の案は今のまま）。償却率・税制の値がない資産は
+ * 案を出さず、一覧は失敗させない（決算書の DEPRECIATION_PARAMETER_MISSING が知らせる。確定は
+ * TAX_PARAMETER_MISSING）
  */
 export function getAdjustmentProposals(
   deps: BlueReturnDeps,
@@ -705,9 +807,24 @@ export function getAdjustmentProposals(
     if (!assessed.ok) return assessed;
     if (assessed.value.proposal !== null) proposals.push(assessed.value.proposal);
   }
+  if (period.value.status === "closed") return ok(proposals);
+
+  const activeJournals = new Set(
+    deps.reports
+      .linesInRange(period.value.startDate, period.value.endDate)
+      .filter((l) => l.status === "active")
+      .map((l) => l.journalId),
+  );
+  const src: ProposalSources = {
+    ...deps,
+    isActiveJournal: (journalId) => activeJournals.has(journalId),
+  };
   for (const asset of deps.closing.listFixedAssets()) {
-    const assessed = assessDepreciation(deps, period.value, asset);
-    if (!assessed.ok) return assessed;
+    const assessed = assessDepreciation(src, period.value, asset);
+    if (!assessed.ok) {
+      if (assessed.error.code === "TAX_PARAMETER_MISSING") continue;
+      return assessed;
+    }
     if (assessed.value.proposal !== null) proposals.push(assessed.value.proposal);
   }
   return ok(proposals);
@@ -717,9 +834,9 @@ export function getAdjustmentProposals(
 type DepreciationNoProposalReason =
   /** 既存の仕訳を結びつけてある（FR-022） */
   | "LINKED_JOURNAL"
-  /** この年度に取得した資産でない、または年度末日までに除却した */
+  /** その年度に償却がない（供用の前、償却済み、除却の翌年度以後、少額の特例の取得の年度以外など） */
   | "NOT_APPLICABLE"
-  /** 償却の仕訳がすでに登録されている */
+  /** その資産・年度の償却の仕訳がすでに登録されている（INV-60） */
   | "ALREADY_REGISTERED";
 
 type RebuiltProposal = {
@@ -815,7 +932,13 @@ export function commitAdjustment(
     }
 
     const rebuilt = rebuildProposal(
-      { masters: tx.masters, closing: tx.closing, reports: deps.reports },
+      {
+        masters: tx.masters,
+        closing: tx.closing,
+        reports: deps.reports,
+        // 登録済みの判定は参照の仕訳そのものの状態（日付を年度の外へ訂正しても二重に登録しない。INV-60）
+        isActiveJournal: (journalId) => tx.ledger.getJournal(journalId)?.status === "active",
+      },
       period.value,
       params.kind,
       params.sourceId,

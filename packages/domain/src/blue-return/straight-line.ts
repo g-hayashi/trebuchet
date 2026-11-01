@@ -1,4 +1,4 @@
-import { monthIndex, monthOfDate } from "../dates.ts";
+import { monthIndex, monthOfDate, yearOfDate } from "../dates.ts";
 import type { FixedAsset } from "../types.ts";
 
 /** 定額法の 1 年度の計算（009 data-model §2.2。保存しない） */
@@ -17,8 +17,6 @@ export type StraightLineYear = {
 
 /** 率は千分率、年の月数は 12 で割る（÷ 12,000） */
 const RATE_DIVISOR = 12_000;
-
-const yearOfDate = (date: string): number => Number(date.slice(0, 4));
 
 /** 事業の用に供した日（なければ取得日） */
 const serviceDateOf = (asset: FixedAsset): string => asset.inServiceOn ?? asset.acquiredOn;
