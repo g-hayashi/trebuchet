@@ -4,10 +4,13 @@ import type {
   ClosingAuditEntry,
   ClosingNote,
   DeductionAnswers,
+  DeferredAmortization,
+  DeferredAsset,
   FiledDocument,
   FixedAsset,
   HomeUseAllocation,
   RentDetail,
+  StraightLineRate,
   TaxParameter,
   TaxReturnMemo,
 } from "../../src/types.ts";
@@ -17,9 +20,12 @@ import { fakeUnitOfWork } from "./unit-of-work.ts";
 
 type ClosingState = {
   taxParameters: TaxParameter[];
+  straightLineRates: StraightLineRate[];
   homeUseAllocations: HomeUseAllocation[];
   rentDetails: RentDetail[];
   fixedAssets: FixedAsset[];
+  deferredAssets: DeferredAsset[];
+  deferredAmortizations: DeferredAmortization[];
   adjustmentRefs: AdjustmentRef[];
   deductionAnswers: DeductionAnswers[];
   closingNotes: ClosingNote[];
@@ -30,9 +36,12 @@ type ClosingState = {
 
 const emptyClosingState = (): ClosingState => ({
   taxParameters: [],
+  straightLineRates: [],
   homeUseAllocations: [],
   rentDetails: [],
   fixedAssets: [],
+  deferredAssets: [],
+  deferredAmortizations: [],
   adjustmentRefs: [],
   deductionAnswers: [],
   closingNotes: [],
@@ -64,6 +73,10 @@ export class InMemoryClosingStore implements ClosingStore {
   /** テストが税制の値を差し込む */
   set taxParameters(rows: TaxParameter[]) {
     this.state.taxParameters = structuredClone(rows);
+  }
+  /** テストが定額法の償却率の表を差し込む */
+  set straightLineRates(rows: StraightLineRate[]) {
+    this.state.straightLineRates = structuredClone(rows);
   }
 
   listTaxParameters(): TaxParameter[] {
@@ -170,6 +183,56 @@ export class InMemoryClosingStore implements ClosingStore {
 
   appendClosingAudit(entry: ClosingAuditEntry): void {
     this.state.audits.push({ ...entry });
+  }
+
+  // ---- 009 ----
+
+  listStraightLineRates(): StraightLineRate[] {
+    return structuredClone(
+      [...this.state.straightLineRates].sort(
+        (a, b) =>
+          a.usefulLifeYears - b.usefulLifeYears || a.effectiveFrom.localeCompare(b.effectiveFrom),
+      ),
+    );
+  }
+
+  listDeferredAssets(): DeferredAsset[] {
+    return structuredClone(
+      [...this.state.deferredAssets].sort(
+        (a, b) => a.openedOn.localeCompare(b.openedOn) || a.id.localeCompare(b.id),
+      ),
+    );
+  }
+  upsertDeferredAsset(row: DeferredAsset): void {
+    this.state.deferredAssets = upsertById(this.state.deferredAssets, row);
+  }
+
+  listDeferredAmortizations(): DeferredAmortization[] {
+    return structuredClone(
+      [...this.state.deferredAmortizations].sort(
+        (a, b) => a.deferredAssetId.localeCompare(b.deferredAssetId) || a.fiscalYear - b.fiscalYear,
+      ),
+    );
+  }
+  upsertDeferredAmortization(row: DeferredAmortization): void {
+    this.state.deferredAmortizations = [
+      ...this.state.deferredAmortizations.filter(
+        (d) => !(d.deferredAssetId === row.deferredAssetId && d.fiscalYear === row.fiscalYear),
+      ),
+      { ...row },
+    ];
+  }
+
+  listAdjustmentRefsBySource(
+    source: { assetId: string } | { deferredAssetId: string },
+  ): AdjustmentRef[] {
+    return structuredClone(
+      this.state.adjustmentRefs.filter((r) =>
+        "assetId" in source
+          ? r.assetId === source.assetId
+          : r.deferredAssetId === source.deferredAssetId,
+      ),
+    );
   }
 }
 

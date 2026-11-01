@@ -39,6 +39,9 @@ const draftArb: fc.Arbitrary<FixedAssetDraft> = fc.record({
   acquisitionCost: costArb,
   method: fc.constant("small_asset_28_2" as const),
   usefulLifeYears: fc.constant(null),
+  inServiceOn: fc.constant(null),
+  priorAccumulated: fc.constant(0),
+  priorThroughYear: fc.constant(null),
   businessRatio: ratioArb,
   assetAccountId: fc.constant(EQUIPMENT),
   linkedJournalId: fc.constant(null),
@@ -49,6 +52,7 @@ const toAsset = (d: FixedAssetDraft, id: string): FixedAsset => ({
   ...d,
   id,
   disposedOn: null,
+  disposalKind: null,
   createdAt: AT,
   updatedAt: AT,
 });
@@ -159,9 +163,18 @@ describe("INV-23: 減価償却の仕訳の案", () => {
         }
         const { deductible } = depreciate(asset, year);
         expect(proposal.breakdown).toEqual({
+          method: "small_asset_28_2",
           acquisitionCost: d.acquisitionCost,
           businessRatio: d.businessRatio,
+          depreciation: d.acquisitionCost,
           deductible,
+          months: null,
+          ratePermille: null,
+          openingBookValue: d.acquisitionCost,
+          closingBookValue: 0,
+          disposalKind: null,
+          disposalAmount: 0,
+          disposalDeductible: 0,
         });
         expect(side("debit")).toBe(d.acquisitionCost + (d.acquisitionCost - deductible));
         expect(validateJournal(journal, journalCtx(year)).ok).toBe(true);

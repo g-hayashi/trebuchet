@@ -73,7 +73,20 @@ const PROPOSAL: AdjustmentProposal = {
       { side: "credit", accountId: "a-dep", amount: 100_000, taxCategory: "OUT_OF_SCOPE" },
     ],
   },
-  breakdown: { acquisitionCost: 200_000, businessRatio: 5000, deductible: 100_000 },
+  breakdown: {
+    method: "small_asset_28_2" as const,
+    acquisitionCost: 200_000,
+    businessRatio: 5000,
+    depreciation: 200_000,
+    deductible: 100_000,
+    months: null,
+    ratePermille: null,
+    openingBookValue: 200_000,
+    closingBookValue: 0,
+    disposalKind: null,
+    disposalAmount: 0,
+    disposalDeductible: 0,
+  },
 };
 
 const journal = (id: string, journalNo: number, date: string, memo: string | null) => ({

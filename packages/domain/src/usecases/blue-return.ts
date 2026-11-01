@@ -505,6 +505,9 @@ function saveFixedAssetIn(
       acquisitionCost: params.acquisitionCost,
       method: params.method,
       usefulLifeYears: params.usefulLifeYears ?? null,
+      inServiceOn: params.inServiceOn ?? null,
+      priorAccumulated: params.priorAccumulated,
+      priorThroughYear: params.priorThroughYear ?? null,
       businessRatio: params.businessRatio,
       assetAccountId: params.assetAccountId,
       linkedJournalId: params.linkedJournalId ?? null,
@@ -521,6 +524,7 @@ function saveFixedAssetIn(
     ...fields,
     id: before?.id ?? deps.ids.next(),
     disposedOn: before?.disposedOn ?? null,
+    disposalKind: before?.disposalKind ?? null,
     createdAt: before?.createdAt ?? now,
     updatedAt: now,
   };
@@ -730,6 +734,9 @@ function rebuildProposal(
       }
       return assessDepreciation(src, period, asset);
     }
+    case "deferred_amortization":
+      // 開業費の案は T020 で作る
+      return err(domainError("VALIDATION", "開業費の案はまだ作れません", { field: "kind", kind }));
   }
 }
 
@@ -820,6 +827,7 @@ export function commitAdjustment(
       kind: params.kind,
       allocationId: params.kind === "home_use" ? params.sourceId : null,
       assetId: params.kind === "depreciation" ? params.sourceId : null,
+      deferredAssetId: params.kind === "deferred_amortization" ? params.sourceId : null,
       fiscalYear: params.fiscalYear,
     };
     tx.closing.insertAdjustmentRef(ref);

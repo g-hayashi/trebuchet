@@ -339,7 +339,12 @@ export type TaxParameterKey =
   | "SMALL_ASSET_ANNUAL_LIMIT"
   | "BLUE_DEDUCTION_MAX"
   | "BLUE_DEDUCTION_STANDARD"
-  | "BLUE_DEDUCTION_BASIC";
+  | "BLUE_DEDUCTION_BASIC"
+  // 009: 一括償却資産と開業費（data-model §1.2）
+  | "LUMP_SUM_COST_MIN"
+  | "LUMP_SUM_COST_MAX"
+  | "LUMP_SUM_YEARS"
+  | "OPENING_COST_AMORTIZATION_MONTHS";
 
 /** 税制の値（R3、§1.1）。effectiveTo が null なら期限なし */
 export type TaxParameter = {
@@ -383,21 +388,76 @@ export type FixedAsset = {
   acquisitionCost: number;
   method: DepreciationMethod;
   usefulLifeYears: number | null;
+  /** 事業の用に供した日（009）。null なら取得日 */
+  inServiceOn: string | null;
+  /** 前年までの償却累計額（009） */
+  priorAccumulated: number;
+  /** 累計が何年分までか（009）。`priorAccumulated > 0` なら非 null */
+  priorThroughYear: number | null;
   businessRatio: number;
   assetAccountId: string;
   linkedJournalId: string | null;
   note: string | null;
   disposedOn: string | null;
+  /** 除却の種類（009）。`disposedOn` が null ⇔ null */
+  disposalKind: "scrap" | "sale" | null;
   createdAt: string;
   updatedAt: string;
 };
 
-/** 決算整理の仕訳の出所（§1.5）。kind = home_use なら allocationId、depreciation なら assetId が入る */
+/** 定額法の償却率の表の 1 行（009 data-model §1.1。千分率） */
+export type StraightLineRate = {
+  usefulLifeYears: number;
+  ratePermille: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  sourceUrl: string;
+};
+
+/** 繰延資産（開業費）（009 data-model §1.4） */
+export type DeferredAsset = {
+  id: string;
+  name: string;
+  totalAmount: number;
+  openedOn: string;
+  priorAccumulated: number;
+  priorThroughYear: number | null;
+  accountId: string;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** 開業費の年度ごとの償却額の決定（009 data-model §1.5） */
+export type DeferredAmortization = {
+  deferredAssetId: string;
+  fiscalYear: number;
+  amount: number;
+  decidedAt: string;
+  updatedAt: string;
+};
+
+/** 年度の開業費の償却の見え方（導出。009 data-model §2.1）。openingBalance は決定の上限 */
+export type DeferredAmortizationView = {
+  fiscalYear: number;
+  openingBalance: number;
+  /** 目安 */
+  target: number;
+  decision: DeferredAmortization | null;
+  registered: boolean;
+  closingBalance: number;
+};
+
+/**
+ * 決算整理の仕訳の出所（§1.5）。kind = home_use なら allocationId、depreciation なら assetId、
+ * deferred_amortization なら deferredAssetId が入る
+ */
 export type AdjustmentRef = {
   journalId: string;
   kind: AdjustmentKind;
   allocationId: string | null;
   assetId: string | null;
+  deferredAssetId: string | null;
   fiscalYear: number;
 };
 

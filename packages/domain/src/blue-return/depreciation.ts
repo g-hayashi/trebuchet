@@ -21,7 +21,10 @@ const RATIO_DENOMINATOR = 10000;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** 資産の登録の入力。id は更新のときだけ（編集中の資産を年間の上限の合計から除くのに使う） */
-export type FixedAssetDraft = Omit<FixedAsset, "id" | "createdAt" | "updatedAt" | "disposedOn"> & {
+export type FixedAssetDraft = Omit<
+  FixedAsset,
+  "id" | "createdAt" | "updatedAt" | "disposedOn" | "disposalKind"
+> & {
   id?: string;
 };
 
@@ -253,10 +256,20 @@ export function proposeDepreciationAdjustment(
       memo: `減価償却費の計上（${asset.name} 少額減価償却資産 事業専用割合 ${percent}）`,
       lines,
     },
+    // 少額の特例は 009 の償却の形で埋める（月数・率・除却は持たない。T011 で方法ごとの値になる）
     breakdown: {
+      method: "small_asset_28_2",
       acquisitionCost: asset.acquisitionCost,
       businessRatio: asset.businessRatio,
+      depreciation: asset.acquisitionCost,
       deductible,
+      months: null,
+      ratePermille: null,
+      openingBookValue: asset.acquisitionCost,
+      closingBookValue: 0,
+      disposalKind: null,
+      disposalAmount: 0,
+      disposalDeductible: 0,
     },
   });
 }

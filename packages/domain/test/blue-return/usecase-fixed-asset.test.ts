@@ -43,6 +43,7 @@ const input = (over: Record<string, unknown> = {}) => ({
   acquiredOn: "2025-06-15",
   acquisitionCost: 200_000,
   method: "small_asset_28_2" as const,
+  priorAccumulated: 0,
   businessRatio: 10000,
   assetAccountId: fx.accountId("工具器具備品"),
   ...over,
@@ -123,7 +124,7 @@ describe("saveFixedAsset（FR-018〜020）", () => {
     expect(code({ assetAccountId: fx.accountId("減価償却費") })).toBe("ASSET_ACCOUNT_INVALID");
     expect(code({ acquisitionCost: 300_000 })).toBe("SMALL_ASSET_OVER_THRESHOLD");
     expect(code({ acquiredOn: "2029-04-01" })).toBe("SMALL_ASSET_NOT_APPLICABLE");
-    expect(code({ method: "straight_line" })).toBe("DEPRECIATION_METHOD_UNSUPPORTED");
+    expect(code({ method: "declining_balance" })).toBe("DEPRECIATION_METHOD_UNSUPPORTED");
     expect(snapshot()).toEqual(before);
     for (let i = 0; i < 10; i++) {
       expect(code({ acquisitionCost: 299_000, name: `備品${i}` })).toBe("ok");
@@ -283,6 +284,7 @@ describe("減価償却の案の確定（FR-021〜023、R4・R7）", () => {
       kind: "depreciation",
       allocationId: null,
       assetId: asset.id,
+      deferredAssetId: null,
       fiscalYear: 2025,
     });
     expect(uow.closing.listAdjustmentRefs(2025)).toEqual([committed.ref]);

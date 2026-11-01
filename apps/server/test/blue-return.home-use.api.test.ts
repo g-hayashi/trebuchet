@@ -229,6 +229,7 @@ describe("GET / POST /blue-return/:year/adjustments（FR-014〜016）", () => {
       kind: "home_use",
       allocationId,
       assetId: null,
+      deferredAssetId: null,
       fiscalYear: 2026,
     });
 

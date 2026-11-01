@@ -315,6 +315,7 @@ function registerClosing(context: ImportContext, input: ClosingInput, year: numb
         acquiredOn: asset.acquiredOn,
         acquisitionCost: asset.cost,
         method: "small_asset_28_2",
+        priorAccumulated: 0,
         businessRatio: asset.ratio,
         assetAccountId: assetAccount.id,
         linkedJournalId,

@@ -409,7 +409,20 @@ describe("家事按分・地代家賃の内訳の画面（US2）", () => {
           { side: "credit", accountId: "a-bank", amount: 100_000, taxCategory: "OUT_OF_SCOPE" },
         ],
       },
-      breakdown: { acquisitionCost: 200_000, businessRatio: 5000, deductible: 100_000 },
+      breakdown: {
+        method: "small_asset_28_2" as const,
+        acquisitionCost: 200_000,
+        businessRatio: 5000,
+        depreciation: 200_000,
+        deductible: 100_000,
+        months: null,
+        ratePermille: null,
+        openingBookValue: 200_000,
+        closingBookValue: 0,
+        disposalKind: null,
+        disposalAmount: 0,
+        disposalDeductible: 0,
+      },
     };
     const { calls } = mockScreen({
       proposals: [depreciationProposal],

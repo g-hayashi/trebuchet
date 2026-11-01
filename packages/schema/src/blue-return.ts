@@ -64,10 +64,15 @@ export type RentDetailInput = z.infer<typeof RentDetailInput>;
 export const RentDetailsPut = z.object({ rows: z.array(RentDetailInput).max(100) });
 export type RentDetailsPut = z.infer<typeof RentDetailsPut>;
 
-export const DepreciationMethod = z.enum(["small_asset_28_2"]);
+/** 償却の方法（009）。少額の特例・定額法・一括償却資産 */
+export const DepreciationMethod = z.enum(["small_asset_28_2", "straight_line", "lump_sum"]);
 export type DepreciationMethod = z.infer<typeof DepreciationMethod>;
 
-/** 固定資産の登録（POST /fixed-assets）。方法は少額の特例だけ（R7） */
+/** 3 ページの行の方法。3 つの方法に開業費の任意償却（`deferred`）を足す */
+export const DepreciationRowMethod = z.enum([...DepreciationMethod.options, "deferred"]);
+export type DepreciationRowMethod = z.infer<typeof DepreciationRowMethod>;
+
+/** 固定資産の登録（POST /fixed-assets）。方法の組み合わせの検査は domain（009 contracts/http-api §2） */
 export const FixedAssetInput = z.object({
   name: NonEmpty,
   quantity: z.string().max(100).nullish(),
@@ -75,6 +80,12 @@ export const FixedAssetInput = z.object({
   acquisitionCost: z.number().int().positive(),
   method: DepreciationMethod,
   usefulLifeYears: z.number().int().positive().nullish(),
+  /** 事業の用に供した日。null・省略なら取得日 */
+  inServiceOn: DateString.nullish(),
+  /** 前年までの償却累計額 */
+  priorAccumulated: z.number().int().nonnegative().default(0),
+  /** 累計が何年分までか */
+  priorThroughYear: FiscalYear.nullish(),
   businessRatio: Ratio,
   assetAccountId: Id,
   linkedJournalId: Id.nullish(),
@@ -92,8 +103,35 @@ export type FixedAssetUpdateInput = z.infer<typeof FixedAssetUpdateInput>;
 export const FixedAssetDisposeInput = z.object({
   disposedOn: DateString,
   reason: z.string().max(1000),
+  /** 廃棄（除却損）か売却（事業主貸へ振替。譲渡所得は範囲外）。省略は廃棄 */
+  disposalKind: z.enum(["scrap", "sale"]).default("scrap"),
 });
 export type FixedAssetDisposeInput = z.infer<typeof FixedAssetDisposeInput>;
+
+/** 繰延資産（開業費）の登録（POST /deferred-assets）。勘定の区分などの検査は domain */
+export const DeferredAssetInput = z.object({
+  name: NonEmpty,
+  totalAmount: z.number().int().positive(),
+  openedOn: DateString,
+  priorAccumulated: z.number().int().nonnegative().default(0),
+  priorThroughYear: FiscalYear.nullish(),
+  accountId: Id,
+  note: z.string().max(1000).nullish(),
+});
+export type DeferredAssetInput = z.infer<typeof DeferredAssetInput>;
+
+/** 開業費の更新（PUT /deferred-assets/:deferredAssetId）。登録の入力に変更の理由を足す */
+export const DeferredAssetUpdateInput = DeferredAssetInput.extend({
+  reason: z.string().max(1000).nullish(),
+});
+export type DeferredAssetUpdateInput = z.infer<typeof DeferredAssetUpdateInput>;
+
+/** 開業費の年度ごとの償却額の決定（PUT /deferred-assets/:deferredAssetId/amortizations/:year） */
+export const DeferredAmortizationInput = z.object({ amount: NonNegativeYen });
+export type DeferredAmortizationInput = z.infer<typeof DeferredAmortizationInput>;
+
+/** `/deferred-assets/:deferredAssetId/amortizations/:year` のパス（ID の形は検査しない） */
+export const DeferredAmortizationParam = FiscalYearParam.extend({ deferredAssetId: z.string() });
 
 /** 固定資産の一覧のクエリ（GET /fixed-assets）。year を付けると各資産にその年の償却の計算を付ける */
 export const FixedAssetsQuery = z.object({
@@ -174,7 +212,7 @@ export type FiledDocumentInput = z.infer<typeof FiledDocumentInput>;
 
 // ---- 出力 ----
 
-/** data-model §2 の14種 */
+/** 003 data-model §2 の14種と 009 の 2 種（`ASSET_REGISTER_MISMATCH`・`DEPRECIATION_PARAMETER_MISSING`） */
 export const BlueReturnWarningCode = z.enum([
   "OPTIONAL_LINES_OVERFLOW",
   "PL_MISMATCH",
@@ -190,6 +228,8 @@ export const BlueReturnWarningCode = z.enum([
   "NEGATIVE_BALANCE",
   "DEDUCTION_ANSWERS_MISSING",
   "PRIOR_PERIOD_OPEN",
+  "ASSET_REGISTER_MISMATCH",
+  "DEPRECIATION_PARAMETER_MISSING",
 ]);
 export type BlueReturnWarningCode = z.infer<typeof BlueReturnWarningCode>;
 
@@ -200,7 +240,7 @@ export const BlueReturnWarning = z.object({
 });
 export type BlueReturnWarning = z.infer<typeof BlueReturnWarning>;
 
-export const AdjustmentKind = z.enum(["home_use", "depreciation"]);
+export const AdjustmentKind = z.enum(["home_use", "depreciation", "deferred_amortization"]);
 export type AdjustmentKind = z.infer<typeof AdjustmentKind>;
 
 const HomeUseBreakdown = z.object({
@@ -210,19 +250,38 @@ const HomeUseBreakdown = z.object({
   home: NonNegativeYen,
 });
 
+/** 償却の内訳（009 data-model §2.1。少額の特例も同じ形で埋める） */
 const DepreciationBreakdown = z.object({
+  method: DepreciationMethod,
   acquisitionCost: z.number().int().positive(),
   businessRatio: Ratio,
+  depreciation: NonNegativeYen,
   deductible: NonNegativeYen,
+  months: z.number().int().min(1).max(12).nullable(),
+  ratePermille: z.number().int().positive().nullable(),
+  openingBookValue: NonNegativeYen,
+  closingBookValue: NonNegativeYen,
+  disposalKind: z.enum(["scrap", "sale"]).nullable(),
+  disposalAmount: NonNegativeYen,
+  disposalDeductible: NonNegativeYen,
+});
+
+/** 開業費の償却の内訳（009 data-model §2.1） */
+const DeferredBreakdown = z.object({
+  totalAmount: z.number().int().positive(),
+  openingBalance: NonNegativeYen,
+  amount: NonNegativeYen,
+  target: NonNegativeYen,
+  closingBalance: NonNegativeYen,
 });
 
 /** 決算整理の仕訳の案。journal は年度末日付で、登録するときは 001 の仕訳の入力と同じ */
 export const AdjustmentProposal = z.object({
   kind: AdjustmentKind,
-  /** 按分の登録 ID または資産 ID */
+  /** 按分の登録 ID、資産 ID、または開業費の ID */
   sourceId: Id,
   journal: JournalInput,
-  breakdown: z.union([HomeUseBreakdown, DepreciationBreakdown]),
+  breakdown: z.union([HomeUseBreakdown, DepreciationBreakdown, DeferredBreakdown]),
 });
 export type AdjustmentProposal = z.infer<typeof AdjustmentProposal>;
 
@@ -279,8 +338,16 @@ const DepreciationRow = z.object({
   quantity: z.string().nullable(),
   acquiredOn: DateString,
   cost: z.number().int().positive(),
-  method: DepreciationMethod,
+  /** 資産か開業費か。`assetId` はそれぞれの ID */
+  source: z.enum(["fixed_asset", "deferred_asset"]),
+  method: DepreciationRowMethod,
   usefulLifeYears: z.number().int().positive().nullable(),
+  /** 償却率（千分率）。定額法だけ */
+  ratePermille: z.number().int().positive().nullable(),
+  /** 本年中の償却期間（月数）。定額法だけ */
+  months: z.number().int().min(1).max(12).nullable(),
+  /** 除却の日（年度末日までに除却したとき） */
+  disposedOn: DateString.nullable(),
   base: Amount,
   ordinary: Amount,
   total: Amount,

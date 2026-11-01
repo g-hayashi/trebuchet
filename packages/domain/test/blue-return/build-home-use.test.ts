@@ -54,6 +54,7 @@ const homeUseRef = (journalId: string): AdjustmentRef => ({
   kind: "home_use",
   allocationId: "alloc-rent",
   assetId: null,
+  deferredAssetId: null,
   fiscalYear: 2025,
 });
 

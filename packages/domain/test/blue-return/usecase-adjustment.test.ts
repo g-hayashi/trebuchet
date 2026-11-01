@@ -251,6 +251,7 @@ describe("getAdjustmentProposals・commitAdjustment（FR-014〜016、R4）", () 
       kind: "home_use",
       allocationId: allocation.id,
       assetId: null,
+      deferredAssetId: null,
       fiscalYear: 2025,
     });
     expect(uow.closing.listAdjustmentRefs(2025)).toEqual([committed.ref]);

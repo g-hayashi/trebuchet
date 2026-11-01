@@ -142,8 +142,13 @@ function depreciationRows(assets: readonly FixedAsset[], fiscalYear: number): De
         quantity: a.quantity,
         acquiredOn: a.acquiredOn,
         cost: d.cost,
+        // 少額の特例の既定値。定額法・一括償却・開業費の行は T013・T019 で足す
+        source: "fixed_asset",
         method: a.method,
         usefulLifeYears: a.usefulLifeYears,
+        ratePermille: null,
+        months: null,
+        disposedOn: a.disposedOn,
         base: d.base,
         ordinary: d.ordinary,
         total: d.total,

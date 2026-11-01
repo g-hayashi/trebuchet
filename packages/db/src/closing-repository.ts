@@ -5,10 +5,13 @@ import type {
   ClosingStore,
   ClosingUnitOfWork,
   DeductionAnswers,
+  DeferredAmortization,
+  DeferredAsset,
   FiledDocument,
   FixedAsset,
   HomeUseAllocation,
   RentDetail,
+  StraightLineRate,
   TaxParameter,
   TaxReturnMemo,
 } from "@trebuchet/domain";
@@ -89,15 +92,33 @@ export class DrizzleClosingStore implements ClosingStore {
       .select()
       .from(fixedAssets)
       .orderBy(asc(fixedAssets.acquiredOn), asc(fixedAssets.id))
-      .all();
+      .all()
+      .map((r) => ({
+        ...r,
+        // 009 の列は T005 で足す。それまでは既定値（少額の特例の意味）
+        inServiceOn: null,
+        priorAccumulated: 0,
+        priorThroughYear: null,
+        disposalKind: null,
+      }));
   }
 
   upsertFixedAsset(row: FixedAsset): void {
-    const { id: _id, ...set } = row;
+    // 009 の項目（inServiceOn など）と方法の拡張は T005 で列を足してから書く（T007）
+    const {
+      id: _id,
+      inServiceOn: _inServiceOn,
+      priorAccumulated: _priorAccumulated,
+      priorThroughYear: _priorThroughYear,
+      disposalKind: _disposalKind,
+      method,
+      ...rest
+    } = row;
+    const columns = { ...rest, method: method as "small_asset_28_2" };
     this.db
       .insert(fixedAssets)
-      .values(row)
-      .onConflictDoUpdate({ target: fixedAssets.id, set })
+      .values({ id: row.id, ...columns })
+      .onConflictDoUpdate({ target: fixedAssets.id, set: columns })
       .run();
   }
 
@@ -109,11 +130,17 @@ export class DrizzleClosingStore implements ClosingStore {
       .from(adjustmentJournalRefs)
       .where(eq(adjustmentJournalRefs.fiscalYear, fiscalYear))
       .orderBy(insertionOrder)
-      .all();
+      .all()
+      .map((r) => ({ ...r, deferredAssetId: null }));
   }
 
   insertAdjustmentRef(ref: AdjustmentRef): void {
-    this.db.insert(adjustmentJournalRefs).values(ref).run();
+    // deferredAssetId の列と kind = deferred_amortization は T005 で足す
+    const { deferredAssetId: _deferredAssetId, kind, ...rest } = ref;
+    this.db
+      .insert(adjustmentJournalRefs)
+      .values({ ...rest, kind: kind as "home_use" | "depreciation" })
+      .run();
   }
 
   // ---- 控除の要件の回答 ----
@@ -209,6 +236,34 @@ export class DrizzleClosingStore implements ClosingStore {
 
   appendClosingAudit(entry: ClosingAuditEntry): void {
     this.db.insert(closingAuditLog).values(entry).run();
+  }
+
+  // ---- 009（表は T005、実装は T007。それまでは型を通すだけの仮実装） ----
+
+  listStraightLineRates(): StraightLineRate[] {
+    throw new Error("listStraightLineRates は T007 で実装する");
+  }
+
+  listDeferredAssets(): DeferredAsset[] {
+    throw new Error("listDeferredAssets は T007 で実装する");
+  }
+
+  upsertDeferredAsset(_row: DeferredAsset): void {
+    throw new Error("upsertDeferredAsset は T007 で実装する");
+  }
+
+  listDeferredAmortizations(): DeferredAmortization[] {
+    throw new Error("listDeferredAmortizations は T007 で実装する");
+  }
+
+  upsertDeferredAmortization(_row: DeferredAmortization): void {
+    throw new Error("upsertDeferredAmortization は T007 で実装する");
+  }
+
+  listAdjustmentRefsBySource(
+    _source: { assetId: string } | { deferredAssetId: string },
+  ): AdjustmentRef[] {
+    throw new Error("listAdjustmentRefsBySource は T007 で実装する");
   }
 }
 

@@ -31,6 +31,7 @@ const asset = () => ({
   acquiredOn: "2025-06-15",
   acquisitionCost: 200_000,
   method: "small_asset_28_2" as const,
+  priorAccumulated: 0,
   businessRatio: 10000,
   assetAccountId: fx.accountId("工具器具備品"),
 });

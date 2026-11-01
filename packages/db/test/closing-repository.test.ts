@@ -66,11 +66,15 @@ const assetOf = (overrides: Partial<FixedAsset> = {}): FixedAsset => ({
   acquisitionCost: 200_000,
   method: "small_asset_28_2",
   usefulLifeYears: null,
+  inServiceOn: null,
+  priorAccumulated: 0,
+  priorThroughYear: null,
   businessRatio: 10000,
   assetAccountId: accountId("工具器具備品"),
   linkedJournalId: null,
   note: null,
   disposedOn: null,
+  disposalKind: null,
   createdAt: NOW,
   updatedAt: NOW,
   ...overrides,
@@ -175,6 +179,7 @@ describe("DrizzleClosingStore（T008）", () => {
       kind: "home_use",
       allocationId: allocation.id,
       assetId: null,
+      deferredAssetId: null,
       fiscalYear: 2025,
     };
     store.insertAdjustmentRef(ref);
@@ -299,6 +304,7 @@ describe("createClosingUnitOfWork（T008、research R4）", () => {
         kind: "home_use",
         allocationId: allocation.id,
         assetId: null,
+        deferredAssetId: null,
         fiscalYear: 2025,
       });
       expect(m.listAccounts().length).toBeGreaterThan(0);
@@ -321,6 +327,7 @@ describe("createClosingUnitOfWork（T008、research R4）", () => {
           kind: "home_use",
           allocationId: allocation.id,
           assetId: null,
+          deferredAssetId: null,
           fiscalYear: 2025,
         });
         closing.appendClosingAudit({

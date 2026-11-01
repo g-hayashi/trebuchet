@@ -22,11 +22,15 @@ const asset = (over: Partial<FixedAsset> = {}): FixedAsset => ({
   acquisitionCost: 200_000,
   method: "small_asset_28_2",
   usefulLifeYears: null,
+  inServiceOn: null,
+  priorAccumulated: 0,
+  priorThroughYear: null,
   businessRatio: 10000,
   assetAccountId: EQUIPMENT,
   linkedJournalId: null,
   note: null,
   disposedOn: null,
+  disposalKind: null,
   createdAt: AT,
   updatedAt: AT,
   ...over,
@@ -39,6 +43,9 @@ const draft = (over: Partial<FixedAssetDraft> = {}): FixedAssetDraft => ({
   acquisitionCost: 200_000,
   method: "small_asset_28_2",
   usefulLifeYears: null,
+  inServiceOn: null,
+  priorAccumulated: 0,
+  priorThroughYear: null,
   businessRatio: 10000,
   assetAccountId: EQUIPMENT,
   linkedJournalId: null,
@@ -74,7 +81,7 @@ describe("validateFixedAsset（FR-018〜020、R7）", () => {
   });
 
   it("少額の特例以外の方法は DEPRECIATION_METHOD_UNSUPPORTED（シナリオ6）", () => {
-    const bad = { ...draft(), method: "straight_line" } as unknown as FixedAssetDraft;
+    const bad = { ...draft(), method: "declining_balance" } as unknown as FixedAssetDraft;
     expect(errorOf(validate(bad)).code).toBe("DEPRECIATION_METHOD_UNSUPPORTED");
   });
 

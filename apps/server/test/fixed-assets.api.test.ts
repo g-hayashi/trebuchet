@@ -82,8 +82,8 @@ describe("POST /fixed-assets（FR-018〜020）", () => {
     expect((await errorOf(res)).code).toBe("SMALL_ASSET_NOT_APPLICABLE");
   });
 
-  it("償却の方法が特例以外なら 400 VALIDATION（形の検査）。DEPRECIATION_METHOD_UNSUPPORTED は domain の防御で、HTTP からは届かない", async () => {
-    const res = await post({ method: "straight_line" });
+  it("償却の方法が 3 つ以外なら 400 VALIDATION（形の検査）。DEPRECIATION_METHOD_UNSUPPORTED は domain の防御で、HTTP からは届かない", async () => {
+    const res = await post({ method: "declining_balance" });
     expect(res.status).toBe(400);
     expect((await errorOf(res)).code).toBe("VALIDATION");
   });

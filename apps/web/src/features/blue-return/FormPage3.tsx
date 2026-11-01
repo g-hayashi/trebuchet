@@ -20,9 +20,12 @@ import "./print.css";
 
 type Page3 = BlueReturn["page3"];
 
-/** 償却の方法の表示名（方法は少額の特例だけ。R7） */
+/** 償却の方法の表示名 */
 const METHOD_LABELS: Record<Page3["depreciation"][number]["method"], string> = {
   small_asset_28_2: "少額減価償却資産の特例（措置法28条の2）",
+  straight_line: "定額法",
+  lump_sum: "一括償却",
+  deferred: "任意償却",
 };
 
 /**
