@@ -25,6 +25,20 @@ afterEach(() => {
 });
 
 describe("請求書の詳細（US1。FR-010〜014）", () => {
+  it("税抜入力は内訳非表示でも小計と消費税相当額を表示する", async () => {
+    setup({
+      ...DETAIL,
+      priceMode: "exclusive",
+      taxDisplay: "inclusive_only",
+      issuer: { ...DETAIL.issuer, registrationNumber: null },
+      total: 445500,
+      taxBreakdown: [{ rate: 10, exclusive: 405000, tax: 40500, inclusive: 445500 }],
+    });
+    await screen.findByRole("heading", { name: "請求書 2026-0001" });
+    expect(screen.getByRole("columnheader", { name: "単価（税抜）" })).toBeInTheDocument();
+    expect(screen.getByText("小計（税抜）405,000 円")).toBeInTheDocument();
+    expect(screen.getByText("消費税相当額 40,500 円")).toBeInTheDocument();
+  });
   it("番号・宛名・日付・明細・合計・状態・残額を出し、売上の仕訳と印刷にリンクする", async () => {
     setup();
 

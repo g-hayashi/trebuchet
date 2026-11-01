@@ -10,7 +10,7 @@ import type { JournalContext } from "../journal.ts";
 import type { InvoiceRecord, Partner } from "../types.ts";
 import { calculateInvoiceAmounts, itemAmount } from "./amounts.ts";
 import { dueDate } from "./due-date.ts";
-import { invoiceSalesTaxCategory, effectiveTaxDisplay, itemTaxRate } from "./tax.ts";
+import { effectiveTaxDisplay, invoiceSalesTaxCategory, itemTaxRate } from "./tax.ts";
 
 export type DraftOutcome =
   | { kind: "draft"; draft: InvoiceDraft }

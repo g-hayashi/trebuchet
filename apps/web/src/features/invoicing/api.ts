@@ -1,5 +1,10 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { BillingTermsView, InvoiceDetail, InvoiceListStatus } from "@trebuchet/schema";
+import type {
+  BillingTermsView,
+  InvoiceCalculationInput,
+  InvoiceDetail,
+  InvoiceListStatus,
+} from "@trebuchet/schema";
 import { api, unwrap } from "@/lib/api";
 
 // 請求の設定・取引先の請求の条件の API（005 contracts/http-api.md §2）
@@ -113,6 +118,14 @@ export const postInvoiceDrafts = async (entityId: string, month: string) =>
 
 export type InvoiceDraftResult = Awaited<ReturnType<typeof postInvoiceDrafts>>;
 export type InvoiceDraftView = InvoiceDraftResult["drafts"][number];
+
+export const invoiceCalculationQuery = (entityId: string, input: InvoiceCalculationInput) =>
+  queryOptions({
+    queryKey: ["entities", entityId, "invoices", "calculation", input] as const,
+    queryFn: async () =>
+      unwrap(await entityApi.invoices.calculate.$post({ param: { entityId }, json: input })),
+    retry: false,
+  });
 
 /** 発行（§3.4）。201 `{ invoice, journal }` */
 export const postInvoice = async (

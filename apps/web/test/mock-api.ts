@@ -74,6 +74,14 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 工数・請求書の一覧（US1）。仕訳の詳細は出所を読む（`:id` は 1 つのパスの区切り）
   "GET /work-hours": () => ok({ entries: [] }),
   "GET /invoices": () => ok({ invoices: [], outstandingByPartner: [] }),
+  "POST /invoices/calculate": ({ body }) => {
+    const input = body as {
+      priceMode: string;
+      items: { amount: number; taxRate: number | null }[];
+    };
+    const subtotal = input.items.reduce((sum, item) => sum + item.amount, 0);
+    return ok({ subtotal, total: subtotal, taxBreakdown: [] });
+  },
   "GET /journals/:id/origin": () => ok({ origin: null }),
   // 請求書の詳細の消し込みの入力（US2）が入金先の科目・補助科目を読む
   "GET /accounts": () => ok({ accounts: [] }),

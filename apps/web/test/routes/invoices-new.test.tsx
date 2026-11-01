@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@/routes/e/$entityId/invoices/new";
@@ -26,6 +26,7 @@ const hourlyDraft = (over: Record<string, unknown> = {}) => ({
       unitPrice: 10_000,
       amount: 405_000,
       taxCategory: "SALES_10",
+      taxRate: 10,
     },
   ],
   total: 405_000,
@@ -41,7 +42,7 @@ const monthlyDraft = {
   issueDate: "2026-11-05",
   salesDate: "2026-10-31",
   dueDate: "2026-11-30",
-  items: [{ name: "保守費", amount: 100_000, taxCategory: "SALES_10" }],
+  items: [{ name: "保守費", amount: 100_000, taxCategory: "SALES_10", taxRate: 10 }],
   total: 100_000,
   taxDisplay: "inclusive_only",
   taxBreakdown: [],
@@ -65,7 +66,7 @@ const INVOICE = {
 
 function setup(
   drafts: unknown[],
-  extra: Record<string, () => ApiReply> = {},
+  extra: Parameters<typeof mockApi>[0] = {},
   skipped: { partnerId: string; reason: string }[] = [],
 ) {
   const calls = mockApi({
@@ -92,6 +93,172 @@ afterEach(() => {
 });
 
 describe("請求書の案と発行（US1。FR-006〜016）", () => {
+  it("免税の案を税抜10%に変えるとAPIの合計198000を確認して発行する", async () => {
+    const calls = setup(
+      [
+        hourlyDraft({
+          items: [
+            {
+              name: "開発",
+              quantity: 30,
+              unit: "時間",
+              unitPrice: 6000,
+              amount: 180000,
+              taxCategory: "OUT_OF_SCOPE",
+              taxRate: null,
+            },
+          ],
+        }),
+      ],
+      {
+        [`POST ${BASE}/invoices/calculate`]: ({ body }) =>
+          ok(
+            (body as { priceMode: string }).priceMode === "exclusive"
+              ? {
+                  subtotal: 180000,
+                  total: 198000,
+                  taxBreakdown: [{ rate: 10, exclusive: 180000, tax: 18000, inclusive: 198000 }],
+                }
+              : { subtotal: 180000, total: 180000, taxBreakdown: [] },
+          ),
+        [`POST ${BASE}/invoices`]: () => ok({ invoice: INVOICE, journal: { id: "j1" } }, 201),
+      },
+    );
+    const u = user();
+    await makeDrafts(u);
+    const region = await screen.findByRole("region", { name: "請求書の案（株式会社A）" });
+    expect(await within(region).findByText("合計 180,000 円")).toBeInTheDocument();
+    await u.selectOptions(within(region).getByLabelText("金額の入力方法"), "exclusive");
+    expect(within(region).getByLabelText("請求税率 1")).toHaveValue("10");
+    expect(await within(region).findByText("合計 198,000 円")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(region).getByRole("button", { name: "発行する" })).toBeEnabled(),
+    );
+    await u.click(within(region).getByRole("button", { name: "発行する" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.path === `${BASE}/invoices`)?.body).toMatchObject({
+        priceMode: "exclusive",
+        items: [{ unitPrice: 6000, quantity: 30, amount: 180000, taxRate: 10 }],
+      }),
+    );
+    const body = calls.find((c) => c.path === `${BASE}/invoices`)?.body as { items: object[] };
+    expect(body.items[0]).not.toHaveProperty("taxCategory");
+  });
+
+  it("計算エラーでは発行できない", async () => {
+    setup([hourlyDraft()], {
+      [`POST ${BASE}/invoices/calculate`]: () => apiError(400, "VALIDATION", "計算できません"),
+    });
+    await makeDrafts(user());
+    const region = await screen.findByRole("region", { name: "請求書の案（株式会社A）" });
+    expect(await within(region).findByRole("alert")).toHaveTextContent("計算できません");
+    expect(within(region).getByRole("button", { name: "発行する" })).toBeDisabled();
+  });
+  it("利用者が加算なしを明示した行は税抜への切替でも維持する", async () => {
+    const calls = setup([monthlyDraft]);
+    const u = user();
+    await makeDrafts(u);
+    const region = await screen.findByRole("region", { name: "請求書の案（B 商事）" });
+    await u.selectOptions(within(region).getByLabelText("請求税率 1"), "none");
+    await u.selectOptions(within(region).getByLabelText("金額の入力方法"), "exclusive");
+    expect(within(region).getByLabelText("請求税率 1")).toHaveValue("none");
+    await waitFor(() =>
+      expect(calls.findLast((c) => c.path === `${BASE}/invoices/calculate`)?.body).toEqual({
+        priceMode: "exclusive",
+        items: [{ amount: 100000, taxRate: null }],
+      }),
+    );
+  });
+
+  it("計算待ちは発行できず、遅い旧応答が新しい入力の合計を上書きしない", async () => {
+    let resolveOld: (reply: ApiReply) => void = () => {};
+    const oldResponse = new Promise<ApiReply>((resolve) => {
+      resolveOld = resolve;
+    });
+    const calls = setup([monthlyDraft], {
+      [`POST ${BASE}/invoices/calculate`]: ({ body }) => {
+        const input = body as { priceMode: string; items: { amount: number; taxRate: number }[] };
+        if (input.priceMode === "exclusive" && input.items[0]?.taxRate === 10) return oldResponse;
+        return ok({
+          subtotal: 100000,
+          total: input.priceMode === "exclusive" ? 108000 : 100000,
+          taxBreakdown: [],
+        });
+      },
+    });
+    const u = user();
+    await makeDrafts(u);
+    const region = await screen.findByRole("region", { name: "請求書の案（B 商事）" });
+    expect(await within(region).findByText("合計 100,000 円")).toBeInTheDocument();
+    await u.selectOptions(within(region).getByLabelText("金額の入力方法"), "exclusive");
+    expect(within(region).getByRole("button", { name: "発行する" })).toBeDisabled();
+    await waitFor(() =>
+      expect(calls.filter((c) => c.path === `${BASE}/invoices/calculate`)).toHaveLength(2),
+    );
+    await u.selectOptions(within(region).getByLabelText("請求税率 1"), "8");
+    expect(await within(region).findByText("合計 108,000 円")).toBeInTheDocument();
+    await act(async () => {
+      resolveOld(ok({ subtotal: 100000, total: 110000, taxBreakdown: [] }));
+      await oldResponse;
+    });
+    expect(within(region).getByText("合計 108,000 円")).toBeInTheDocument();
+    expect(within(region).queryByText("合計 110,000 円")).not.toBeInTheDocument();
+  });
+
+  it("発行処理中は明細とモードを変更できず、不正入力では発行できない", async () => {
+    let finish: (reply: ApiReply) => void = () => {};
+    const pending = new Promise<ApiReply>((resolve) => {
+      finish = resolve;
+    });
+    const calls = setup([monthlyDraft], { [`POST ${BASE}/invoices`]: () => pending });
+    const u = user();
+    await makeDrafts(u);
+    const region = await screen.findByRole("region", { name: "請求書の案（B 商事）" });
+    const amount = within(region).getByLabelText("金額 1");
+    await u.clear(amount);
+    await u.type(amount, "1.5");
+    expect(within(region).getByRole("button", { name: "発行する" })).toBeDisabled();
+    await u.clear(amount);
+    await u.type(amount, "100000");
+    await waitFor(() =>
+      expect(within(region).getByRole("button", { name: "発行する" })).toBeEnabled(),
+    );
+    await u.click(within(region).getByRole("button", { name: "発行する" }));
+    expect(amount).toBeDisabled();
+    expect(within(region).getByLabelText("金額の入力方法")).toBeDisabled();
+    expect(within(region).getByLabelText("請求税率 1")).toBeDisabled();
+    expect(calls.filter((c) => c.path === `${BASE}/invoices`)).toHaveLength(1);
+    await act(async () => {
+      finish(ok({ invoice: INVOICE, journal: { id: "j1" } }, 201));
+      await pending;
+    });
+  });
+  it("発行が無効な入力では送信前に行と修正方法を示す", async () => {
+    const calls = setup([hourlyDraft()]);
+    const u = user();
+    await makeDrafts(u);
+    const region = await screen.findByRole("region", { name: "請求書の案（株式会社A）" });
+    const quantity = within(region).getByLabelText("数量 1");
+    await u.clear(quantity);
+    await u.type(quantity, "1.25");
+    expect(
+      within(region).getByText("1 行目の数量は 0.5 単位の正の数で入力してください"),
+    ).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "発行する" })).toBeDisabled();
+    await u.clear(quantity);
+    await u.type(quantity, "1");
+    const price = within(region).getByLabelText("単価 1");
+    await u.clear(price);
+    await u.type(price, "1000000000000");
+    expect(
+      within(region).getByText("1 行目の単価は 1 円以上、1 兆円未満の整数で入力してください"),
+    ).toBeInTheDocument();
+    await u.clear(price);
+    await u.type(price, "10000");
+    await u.click(within(region).getByRole("button", { name: "明細を追加" }));
+    expect(within(region).getByText("2 行目の品名を入力してください")).toBeInTheDocument();
+    expect(calls.some((c) => c.path === `${BASE}/invoices`)).toBe(false);
+  });
   it("対象月の案を作り、取引先ごとに明細・合計・日付を出す", async () => {
     const calls = setup([hourlyDraft(), monthlyDraft]);
     const u = user();
@@ -105,7 +272,7 @@ describe("請求書の案と発行（US1。FR-006〜016）", () => {
     expect(within(a).getByLabelText("数量 1")).toHaveValue(40.5);
     expect(within(a).getByLabelText("単価 1")).toHaveValue(10_000);
     expect(within(a).getByLabelText("金額 1")).toHaveValue("405,000");
-    expect(within(a).getByText("合計 405,000 円")).toBeInTheDocument();
+    expect(await within(a).findByText("合計 405,000 円")).toBeInTheDocument();
     expect(within(a).getByLabelText("発行日")).toHaveValue("2026-11-05");
     expect(within(a).getByLabelText("売上の計上日")).toHaveValue("2026-10-31");
     expect(within(a).getByText(/支払期限 2026-11-30/)).toBeInTheDocument();
@@ -134,7 +301,7 @@ describe("請求書の案と発行（US1。FR-006〜016）", () => {
     await u.type(within(a).getByLabelText("単価 1"), "3333");
     // floor(40.5 * 3333) = 134986
     expect(within(a).getByLabelText("金額 1")).toHaveValue("134,986");
-    expect(within(a).getByText("合計 134,986 円")).toBeInTheDocument();
+    expect(await within(a).findByText("合計 134,986 円")).toBeInTheDocument();
   });
 
   it("明細は最大 5 行まで足せ、行を消せる。月額の行は金額を直接入力する", async () => {
@@ -151,11 +318,14 @@ describe("請求書の案と発行（US1。FR-006〜016）", () => {
 
     await u.type(within(b).getByLabelText("品名 2"), "出張費");
     await u.type(within(b).getByLabelText("金額 2"), "2500");
-    expect(within(b).getByText("合計 102,500 円")).toBeInTheDocument();
+    // 未入力の明細が残る間は合計を確定表示しない。
+    for (let n = 5; n >= 3; n -= 1)
+      await u.click(within(b).getByRole("button", { name: `明細 ${n} を削除` }));
+    expect(await within(b).findByText("合計 102,500 円")).toBeInTheDocument();
 
     await u.click(within(b).getByRole("button", { name: "明細 2 を削除" }));
     expect(within(b).queryByLabelText("品名 5")).not.toBeInTheDocument();
-    expect(within(b).getByText("合計 100,000 円")).toBeInTheDocument();
+    expect(await within(b).findByText("合計 100,000 円")).toBeInTheDocument();
   });
 
   it("発行すると POST /invoices に、発行日・売上の計上日（既定値）と明細を載せる", async () => {
@@ -174,6 +344,7 @@ describe("請求書の案と発行（US1。FR-006〜016）", () => {
       expect.stringContaining("/e/e1/invoices/inv1"),
     );
     expect(calls.find((c) => c.method === "POST" && c.path === `${BASE}/invoices`)?.body).toEqual({
+      priceMode: "inclusive",
       partnerId: "p1",
       targetMonth: "2026-10",
       issueDate: "2026-11-05",
@@ -186,6 +357,7 @@ describe("請求書の案と発行（US1。FR-006〜016）", () => {
           unitPrice: 10_000,
           amount: 405_000,
           taxCategory: "SALES_10",
+          taxRate: 10,
         },
       ],
     });
@@ -208,11 +380,12 @@ describe("請求書の案と発行（US1。FR-006〜016）", () => {
 
     await waitFor(() => expect(within(b).getByRole("status")).toBeInTheDocument());
     expect(calls.find((c) => c.method === "POST" && c.path === `${BASE}/invoices`)?.body).toEqual({
+      priceMode: "inclusive",
       partnerId: "p2",
       targetMonth: "2026-10",
       issueDate: "2026-11-10",
       salesDate: "2026-11-01",
-      items: [{ name: "保守費", amount: 100_000, taxCategory: "SALES_10" }],
+      items: [{ name: "保守費", amount: 100_000, taxCategory: "SALES_10", taxRate: 10 }],
     });
   });
 
