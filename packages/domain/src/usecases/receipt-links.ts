@@ -8,6 +8,7 @@ import {
   rankJournalCandidates,
 } from "../receipts/candidates.ts";
 import { RECEIPT_REASON_AUTO_VOIDED } from "../receipts/history.ts";
+import { candidatesOf, compareReadingWithJournal } from "../receipts/reading.ts";
 import {
   domainError,
   err,
@@ -21,7 +22,12 @@ import {
 } from "../types.ts";
 import { createJournal } from "./create-journal.ts";
 import { checkReason } from "./journal-edit.ts";
-import { type ReceiptDeps, receiptDetailOf, receiptSummaryOf } from "./receipts.ts";
+import {
+  type ReceiptDeps,
+  receiptDetailOf,
+  receiptSummaryOf,
+  writeReadingComparison,
+} from "./receipts.ts";
 
 // 証憑と仕訳の結びつき（010 US3。contracts/domain-module.md §3、research R5・R6、FR-010〜013、INV-64）。
 // 結びつきは仕訳（`journal_id`）単位。仕訳を訂正しても同じ `journal_id` のまま、取消しても残る（状態を導く）。
@@ -194,12 +200,18 @@ export function unlinkReceipt(
   });
 }
 
-export type CreateJournalFromReceiptInput = { journal: JournalDraft };
+export type CreateJournalFromReceiptInput = {
+  journal: JournalDraft;
+  /** 証憑の読み取りの記録（`receipt_readings`）の ID。あれば科目・税区分の比べを書く（R14） */
+  readingId?: string | undefined;
+};
 
 /**
  * 証憑から仕訳を登録して結びつける（FR-010）。1 つの `uow.run` の中で、006 の `approveCandidate` と同じく
  * `tx` の帳簿で 001 の `createJournal` を呼び、同じ `tx` で `linkInTx`（`replace` なし）を呼ぶ。
- * 有効な仕訳に結びついていれば、仕訳を作る前に `RECEIPT_ALREADY_LINKED`。どこで失敗しても全部巻き戻る
+ * 有効な仕訳に結びついていれば、仕訳を作る前に `RECEIPT_ALREADY_LINKED`。どこで失敗しても全部巻き戻る。
+ * `readingId` があれば、その証憑の読み取りの `account_match`・`tax_match` に、登録した仕訳との比べを
+ * まだ書いていない列だけ書く（値の保存の比べとは別の列。L2）。その証憑の読み取りでなければ `VALIDATION`
  */
 export function createJournalFromReceipt(
   deps: ReceiptDeps,
@@ -211,6 +223,13 @@ export function createJournalFromReceipt(
     if (!loaded.ok) return loaded;
     const current = tx.receipts.getActiveLink(receiptId);
     if (current !== undefined && !isVoidedLink(tx, current)) return err(alreadyLinked(current));
+    const reading =
+      input.readingId === undefined
+        ? undefined
+        : tx.receipts.listReadings(receiptId).find((r) => r.id === input.readingId);
+    if (input.readingId !== undefined && reading === undefined) {
+      return validation("読み取りの記録が見つかりません", { field: "readingId" });
+    }
 
     const posted = createJournal(
       { ledger: tx.ledger, masters: tx.masters, ids: deps.ids, clock: deps.clock },
@@ -220,6 +239,16 @@ export function createJournalFromReceipt(
     const journal = posted.value.journal;
     const linked = linkInTx(tx, deps, receiptId, { journalId: journal.id });
     if (!linked.ok) return linked;
+    if (reading !== undefined) {
+      const codes = new Map(tx.masters.listAccounts().map((a) => [a.id, a.code]));
+      const comparison = compareReadingWithJournal(candidatesOf(reading), {
+        lines: journal.lines.map((l) => ({
+          accountCode: codes.get(l.accountId) ?? "",
+          taxCategory: l.taxCategory,
+        })),
+      });
+      writeReadingComparison(tx, reading, comparison, deps.clock.now());
+    }
     return ok({ journal, receipt: receiptDetailOf(tx, deps, linked.value) });
   });
 }

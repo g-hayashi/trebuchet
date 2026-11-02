@@ -26,6 +26,7 @@ import {
 } from "../ports.ts";
 import { detectReceiptFormat } from "../receipts/format.ts";
 import { linkStateOf, needsReason, receiptValuesOf } from "../receipts/history.ts";
+import { candidatesOf, compareReadingWithSaved } from "../receipts/reading.ts";
 import { normalizeReceiptText } from "../receipts/search.ts";
 import { receiptWarnings } from "../receipts/warnings.ts";
 import { TAX_PARAMETERS } from "../seed/tax-parameters.ts";
@@ -34,6 +35,7 @@ import {
   err,
   type JournalRef,
   ok,
+  type ReadingOutcome,
   type ReceiptFileRow,
   type ReceiptLinkRow,
   type ReceiptReadingRow,
@@ -378,6 +380,37 @@ function writeReceipt(tx: ReadTx, before: ReceiptRow, after: ReceiptRow): Result
 }
 
 /**
+ * 読み取りの記録に、比べの結果（null を除く）のうち**まだ書いていない列**だけを書く（列ごとに 1 回だけ。
+ * R14・L2）。書くものがなければ何も呼ばない。`uow.run` の中で呼ぶ
+ */
+export function writeReadingComparison(
+  tx: ReadTx,
+  reading: ReceiptReadingRow,
+  comparison: Partial<Record<keyof ReadingOutcome, boolean | null>>,
+  now: string,
+): void {
+  const outcome: Partial<ReadingOutcome> = {};
+  for (const key of Object.keys(comparison) as (keyof ReadingOutcome)[]) {
+    const value = comparison[key];
+    if (value !== null && value !== undefined && reading[key] === null) outcome[key] = value;
+  }
+  if (Object.keys(outcome).length > 0) tx.receipts.setReadingOutcome(reading.id, outcome, now);
+}
+
+/**
+ * 値の保存の後、今の版の最新の `succeeded` の読み取りに、保存した値との比べ（日付・金額・取引先）を書く
+ * （R14）。保存していない（null の）項目は比べず、後から保存したときに書く
+ */
+function compareLatestReading(tx: ReadTx, saved: ReceiptRow, now: string): void {
+  const latest = tx.receipts
+    .listReadings(saved.id)
+    .filter((r) => r.status === "succeeded" && r.fileSha256 === saved.currentSha256)
+    .at(-1);
+  if (latest === undefined) return;
+  writeReadingComparison(tx, latest, compareReadingWithSaved(candidatesOf(latest), saved), now);
+}
+
+/**
  * 証憑の値を更新する（FR-005・018。contracts/domain-module.md §3、D1）。
  * 未入力（NULL）の取引年月日・金額・取引先を埋める・メモを変えるだけなら理由は要らない。
  * 入力済みの値（区分を含む）の変更（訂正。`needsReason` が真）は理由が要る（001 の `checkReason`）。
@@ -458,6 +491,7 @@ export function updateReceipt(
         at: now,
       }),
     );
+    compareLatestReading(tx, after, now);
     return ok(buildDetail(tx, deps, after));
   });
 }
@@ -645,7 +679,7 @@ export function getReceiptHistory(
 // ---- ファイルの取り出し ----
 
 /** db の `ReceiptFileUnreadableError`（欠け・改ざん・誤った鍵・ハッシュの不一致）。domain は名前で見分ける */
-const isUnreadable = (e: unknown): boolean =>
+export const isUnreadable = (e: unknown): boolean =>
   e instanceof Error && e.name === "ReceiptFileUnreadableError";
 
 /**
