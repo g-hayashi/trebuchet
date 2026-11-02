@@ -38,7 +38,7 @@
 |---|---|---|
 | I. 帳簿の正確性 | ✅ | 証憑から仕訳を作るときは 001 の `createJournal`（`validateJournal`）を同じ UnitOfWork で通す（R5）。結びつきの操作は仕訳を変えない（INV-64）。金額は整数。帳票は仕訳から導出したまま（証憑は集計に入らない） |
 | II. 監査可能性（電子帳簿保存法） | ✅ | 証憑の値・版・削除・結びつき・読み取りは追記のみの `receipt_audit_log` に残し、物理削除をトリガーで止める（R7、INV-63）。取引年月日・金額・取引先で範囲・組み合わせの検索（R4、INV-65）。ファイルは内容の SHA-256 で識別し、仕訳との結びつきを持つ（R5・R8）。7 年以上: 期限で消す機能がなく、バックアップに含める（R11）。一次資料の確認で、スキャナ保存はタイムスタンプなしでは紙の代わりにならないと分かった（R1）。紙の原本を残す運用と電子取引の規程・システム概要書（R18）で、法令の要件と矛盾しない形にする（D1・D2） |
-| III. ローカルファーストとプライバシー | ⚠️ → ✅ | 外部の AI に画像を送るのは「必要最小限」の原則の**利用者が決めた例外**（spec、2026-11-02）。例外は 1 つのポート（`ReceiptReader`）と 1 つの関数（`buildReceiptReadingRequest`）に閉じ込め、2 つの設定が真のときだけ呼び、Exif の位置情報を除き、取引先の一覧・仕訳・口座・メモ・ファイル名を送らない（R12・R13、INV-66）。画像のマスクはできないことを設定の画面で示す（FR-015）。Complexity Tracking に記録する。バックアップの置き場所（同期フォルダ）には平文のハッシュの名前を出さない（R11） |
+| III. ローカルファーストとプライバシー | ⚠️ → ✅ | 外部の AI に画像を送るのは「必要最小限」の原則の**利用者が決めた例外**（spec、2026-11-02）。例外は 1 つのポート（`ReceiptReader`）と 1 つの関数（`buildReceiptReadingRequest`）に閉じ込め、2 つの設定が真のときだけ呼び、Exif の位置情報を除き、取引先の一覧・仕訳・口座・メモ・ファイル名を送らない（R12・R13、INV-66）。画像のマスクはできないことを設定の画面で示す（FR-015）。Complexity Tracking に記録する。**例外は憲法の本文にも明記する**（C1。利用者が外部への画像の送信を明示的に選んだ、2026-11-02）: tasks T039 で、Constitution III に「証憑の画像の読み取りを、利用者が別に有効にしたときだけ許す」例外を 1 文足す PATCH の改定（Sync Impact Report つき）と、AGENTS.md の 006 の規則（INV-45）に 010 の例外を一言足す。ADR 0014（T038）にも判断を書く。バックアップの置き場所（同期フォルダ）には平文のハッシュの名前を出さない（R11） |
 | IV. AIは提案、確定は人 | ✅ | 候補は Zod（`AiReceiptReading`）で項目ごとに検証し、確信度を含め、入力欄の初期値にとどめる（R14、INV-67）。プロバイダは `ReceiptReader` のインターフェースで抽象化する（外部だけ。端末内の `fm` は spec の範囲外）。評価データ（合成の 20 枚、`pnpm eval:receipts`）で精度を比べてから指示文などを変える（R17） |
 | V. テストファースト | ✅ | tasks でテストを先に置く。INV-61〜68 は fast-check の性質テストか統合テスト（data-model §4 の「検証」）。フィクスチャは合成の画像（R17）。実データはフィクスチャにしない |
 | VI. 税制ルールはデータ | ✅ | 入力期間（2 か月・7 営業日）と画素数の目安（2,338・1,654）を、適用開始日・出典つきで `tax_parameters` に持つ（R2・R3・R20）。seed とマイグレーションの両方に書き、db のテストで一致を確かめる |
@@ -99,7 +99,7 @@ packages/
 ├── schema/src/
 │   ├── receipts.ts                    # 新規: data-model §2.1 の型、RECEIPT_MAX_BYTES、ReceiptQuery（contracts/http-api.md §7）
 │   ├── ai.ts                          # AiReceiptReading、AiSettings(Input).receiptImagesEnabled（R14・R15）
-│   ├── errors.ts                      # 8 コード（contracts §1）
+│   ├── errors.ts                      # 9 コード（contracts §1。RECEIPT_READ_UNSUPPORTED を含む）
 │   └── index.ts                       # 再エクスポート
 ├── domain/
 │   ├── src/
@@ -146,7 +146,8 @@ apps/
 │   ├── routes/journals.ts             # 一覧の receiptCount、詳細の receipts（R6）
 │   ├── routes/ai-settings.ts          # receiptImagesEnabled の検査（R15）
 │   ├── errors.ts                      # ERROR_STATUS
-│   ├── app.ts                         # ルートの登録、createApp の差し替え口（imageTool）
+│   ├── app.ts                         # ルートの登録、createApp の差し替え口（receipts: { imageTool, reader, files }）
+│   ├── deps.ts                        # receiptDeps（statementDeps と同形。dateOf は Asia/Tokyo 固定）
 │   └── lib/
 │       ├── image-tool.ts              # 新規: sips の ReceiptImageTool（R12）
 │       ├── ai-client.ts               # createReceiptReader、ChatRequest の content の部品（R13）
@@ -177,16 +178,17 @@ docs/
 
 ## Phase の進め方（tasks への入力）
 
-1. **Setup**: Q1〜Q5 の答えは記録済み（2026-11-02、Q1 = (A)）。R12 のゲート（利用者の Mac で `sips`・`qlmanage` の HEIC・PDF・向き）。004 の US4（T016b・T001(b)・T022）の状態を確かめ、US2 の実機の確認をその後に置く。合成のフィクスチャ（R17）を作る
+1. **Setup**: Q1〜Q5 の答えは記録済み（2026-11-02、Q1 = (A)）。R12 のゲート（**T040**。利用者の Mac で `sips`・`qlmanage` の HEIC・PDF・向き。T001 の直後に行い、`image-tool.ts` の T013 はその結果に従う。O1）。004 の US4（T016b・T001(b)・T022）の状態を確かめ、US2 の実機の確認をその後に置く。合成のフィクスチャ（R17）を作る
 2. **Foundational**: schema（`receipts.ts`、`ai.ts`、`errors.ts`。エラーコードは `grep -rn` で全プロジェクトのテストを直す）、`types.ts`・`ports.ts`・`dates.ts`、seed の 4 行、マイグレーション `0014`・`0015`（`) STRICT;`、作り直し、トリガー）と registry `0002`、`ReceiptStore` の実装と `FakeReceiptStore`、`receipt-files.ts`（INV-61）、`ReceiptFileStore` の偽物、arbitraries。履歴の表とトリガーはここで作る（US1 の追加から履歴を残す）
 3. **US1**（形式・警告・検索の純関数 → `addReceipt`・`listReceipts`・`getReceipt`・`readReceiptFile` → ルート（multipart、経路、ファイルの応答、`image-tool.ts` の `probe`・`toDisplay`）→ 一覧・詳細・追加の画面）→ **US2**（経路の表示、撮影の画面、事業体の一覧の入口、送信の失敗の表示）→ **US3**（結びつき・候補・証憑からの仕訳の登録・仕訳の一覧と詳細の合成）→ **US5**（訂正・差し替え・削除・履歴の画面、規程とシステム概要書）→ **US4**（設定、`stripJpegMetadata`・`buildReceiptReadingRequest`・`parseReceiptReading`、`createReceiptReader`、`readReceipt`、候補の表示、`eval:receipts`）
 4. **バックアップと復元**（FR-021）: `backup/receipts.ts`、`backup-run.ts` の順序、`restore.ts`・`restore-cli.ts` の証憑、INV-68。US1 の後ならいつでもよい
 5. 各ユーザーストーリーで「性質／例のテスト → ドメイン → リポジトリ → API → 画面」の順。テストと実装の対を 1 体の部下に渡す。**整合性の難所**（implementer-hard の候補）: INV-62（追加の全部か無か・重複）、INV-63（履歴の完全性）、INV-68（バックアップ → 復元）、R8 の暗号化の形式
-6. **Polish**: `bench:reports` に証憑 5,000 件（SC-002）、ADR 0014、AGENTS.md に「証憑（010）」の節（場所の表、暗号化と名前、INV-45 の例外の経路、`sips` の作業ファイル、バックアップの写し、`eval:receipts` の規則、税制の値の 4 つの key）、`docs/requirements.md` の FR-08・NFR-04・NFR-09 の状態、`specs/INVARIANTS.md`（済み）、quickstart §2 の手動確認、§3 の実環境の確認（利用者）、最終の全体検証
+6. **Polish**: `bench:reports` に証憑 5,000 件（SC-002）、ADR 0014（INV-45 の例外の判断を含む）、憲法 III の例外の 1 文と AGENTS.md の 006 の規則への一言（C1）、AGENTS.md に「証憑（010）」の節（場所の表、暗号化と名前、INV-45 の例外の経路、`sips` の作業ファイル、バックアップの写し、`eval:receipts` の規則、税制の値の 4 つの key）、`docs/requirements.md` の FR-08・NFR-04・NFR-09 の状態、`specs/INVARIANTS.md`（済み）、quickstart §2 の手動確認、§3 の実環境の確認（利用者）、最終の全体検証
 
 ## Complexity Tracking
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
 | III「外部の AI に送る情報は必要最小限、マスクする」の例外（画像はマスクできない） | 利用者の判断（spec、2026-11-02）。証憑の読み取りは画像そのものが入力 | 端末内の AI（`fm`）は spec の範囲外。手入力だけ → 利用者が読み取りを求めた。例外は 2 つの設定・1 つのポート・送る中身の性質テスト（INV-66）で閉じ込め、位置情報は除く |
+| 006 の推定の順序（ルール → 端末内の `fm` → 外部）を使わず、証憑の読み取りは外部の AI だけ（ルール・`fm` は範囲外。C2） | 利用者の判断（spec FR-014、2026-11-02）。画像の読み取りは文字の推定と入力の形が違い、006 のルール（取引先の文字列）も `fm`（文字だけ）も画像を扱えない | 006 の順序に載せる → ルールと `fm` は画像を読めず、`SuggestionProvider` に画像の口が要って INV-45 の経路と混ざる。端末内の画像モデル → spec の範囲外（後の機能） |
 | 証憑のファイルを `.tbk` の外に別置きで写す（バックアップの形が 2 つになる） | 証憑の合計が 10〜20 GB になり、`.tbk` はメモリー上で組む全量の形式（R11） | `.tbk` に入れる → 世代ごとに全量、メモリーに乗らない。ストリームの形式への作り直しは 004・008 の復元・検査の全部に波及する |

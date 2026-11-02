@@ -16,7 +16,7 @@
 | `received_at` | text | NOT NULL。アプリが最初のファイルを受け取った日時（受領日時、FR-002）。変えない |
 | `channel` | text | `local` / `remote`（CHECK。R10。要求の Host で決める） |
 | `category` | text | `paper_scan` / `electronic`（CHECK。FR-005） |
-| `current_sha256` | text | NOT NULL、FK `receipt_files(sha256)`。今の版（R7） |
+| `current_sha256` | text | NOT NULL、FK `receipt_files(sha256)`（`DEFERRABLE INITIALLY DEFERRED`。下の「循環した外部キー」）。今の版（R7） |
 | `transaction_date` | text | NULL 可。`YYYY-MM-DD` |
 | `amount` | integer | NULL 可。`amount > 0 AND amount < 1000000000000`（CHECK） |
 | `partner_name` | text | NULL 可。1〜100 文字（CHECK `length(trim(partner_name)) > 0`） |
@@ -30,13 +30,14 @@
 - 索引: `receipts_search_date`（`deleted_at`, `transaction_date`）、`receipts_amount`（`amount`）、`receipts_received`（`received_at`, `id`。一覧の並びとカーソル）
 - DELETE はトリガーで禁止。`received_at`・`channel`・`id` の UPDATE もトリガーで禁止。`deleted_at` は NULL から値へ 1 回だけ（削除の取り消しはない）
 - 変更はすべて `receipt_audit_log`（§1.5）
+- **循環した外部キー**（I1）: `receipts.current_sha256` → `receipt_files(sha256)` と `receipt_files.receipt_id` → `receipts(id)` は互いを指す。どちらを先に入れても外部キーが違反になるので、**両方の外部キーを `DEFERRABLE INITIALLY DEFERRED`** にし、コミットの時点で検査する（追加は `receipts` → `receipt_files` の順、差し替えは `receipt_files` → `receipts` の更新の順で、どちらも同じトランザクションの中）。drizzle-kit の生成は `DEFERRABLE` を出力しないので、`0014_receipts.sql` の生成後に `STRICT` と同じく手で書き足す（§5）。`PRAGMA defer_foreign_keys` は使わない（接続ごとの設定で、リポジトリの呼び出しに依存する）
 
 ### 1.2 `receipt_files`（証憑のファイルの版。FR-002・003・018。R7・R8）
 
 | 列 | 型 | 制約 |
 |---|---|---|
 | `sha256` | text | PK（事業体の中で一意＝重複の判定、FR-004）。CHECK 64 文字の 16 進 |
-| `receipt_id` | text | NOT NULL、FK `receipts` |
+| `receipt_id` | text | NOT NULL、FK `receipts`（`DEFERRABLE INITIALLY DEFERRED`。§1.1 の循環） |
 | `file_version` | integer | NOT NULL、≥ 1。UNIQUE（`receipt_id`, `file_version`） |
 | `media_type` | text | `image/jpeg` / `image/png` / `image/heic` / `application/pdf`（CHECK。中身で判定、R10） |
 | `size_bytes` | integer | `> 0 AND <= 20971520`（CHECK） |
@@ -74,15 +75,15 @@
 | `read_at` | text | NOT NULL |
 | `model` | text | NOT NULL（設定のモデル名） |
 | `status` | text | `succeeded` / `invalid` / `failed` / `timeout`（CHECK） |
-| `error_code` | text | NULL 可（`status <> 'succeeded'` のとき。例 `RECEIPT_READ_UNSUPPORTED`、`AI_HTTP_ERROR`） |
+| `error_code` | text | NULL 可（`status <> 'succeeded'` のとき）。文字列の定数 `RECEIPT_READING_ERROR`（domain の `receipts/reading.ts`。`AI_TIMEOUT`・`AI_HTTP_ERROR`・`AI_INVALID_OUTPUT`・`RECEIPT_READ_UNSUPPORTED`・`RECEIPT_CONVERSION_FAILED`）。失敗からの写像は research R13 |
 | `cand_date` / `cand_amount` / `cand_partner` / `cand_account_code` / `cand_tax_category` | text / integer / text / text / text | NULL 可（候補なし）。`status <> 'succeeded'` なら全部 NULL（CHECK） |
 | `confidence` | integer | NULL 可。0〜100 |
 | `compared_at` | text | NULL 可（値の比べ、R14） |
 | `date_match` / `amount_match` / `partner_match` | integer | NULL 可。0 / 1 |
 | `account_match` / `tax_match` | integer | NULL 可。0 / 1（証憑から仕訳を登録したとき） |
 
-- DELETE は禁止。UPDATE は `compared_at`・`*_match` を NULL から値へ 1 回だけ（トリガー）
-- 画像・応答の本文の列は持たない
+- DELETE は禁止。UPDATE は**列ごとに** NULL から値へ 1 回だけ（トリガー。`compared_at`・`date_match`・`amount_match`・`partner_match`・`account_match`・`tax_match` のそれぞれ。値の保存の比べと仕訳の登録の比べは別の機会なので、片方が書いても残りの列は後から書ける。L2）。ほかの列の UPDATE は禁止
+- 画像・応答の本文の列は持たない（AI の応答の `reason` も保存しない。R14）
 
 ### 1.5 `receipt_audit_log`（証憑の履歴。追記のみ。FR-013・018。R7）
 
@@ -138,8 +139,8 @@
 
 ### 2.1 型（schema、`packages/schema/src/receipts.ts`）
 
-- `ReceiptCategory` = `"paper_scan" | "electronic"`、`ReceiptChannel` = `"local" | "remote"`、`ReceiptMediaType`（§1.2 の 4 つ）
-- `RECEIPT_MAX_BYTES = 20 * 1024 * 1024`
+- `ReceiptCategory` = `"paper_scan" | "electronic"`（表示名は `paper_scan` →「紙を撮影（原本は保存）」、`electronic` →「電子取引」。web の `features/receipts/labels.ts` に 1 か所。識別子は変えない。E1）、`ReceiptChannel` = `"local" | "remote"`、`ReceiptMediaType`（§1.2 の 4 つ）
+- `RECEIPT_MAX_BYTES = 20 * 1024 * 1024`、`RECEIPT_MAX_PIXELS = 100_000_000`（1 億画素。`ReceiptImageTool.probe` が `width × height` で判定し、超えれば 422 `VALIDATION` の `details.maxPixels`。R10・R12）
 - `ReceiptCreateOptions`（multipart の `options`）: `{ category, transactionDate?: DateString | null, amount?: Amount | null, partnerName?: string | null, memo?: string | null }`
 - `ReceiptUpdateInput`: `{ category?, transactionDate?: DateString | null, amount?: Amount | null, partnerName?: string | null, memo?: string | null, reason?: string, version: number }`（未指定の項目は変えない。null で空にする＝訂正なので理由が要る）
 - `ReceiptReplaceOptions`（multipart の `options`）: `{ reason: string, version: number }`
@@ -151,17 +152,18 @@
 - `ReceiptWarningCode` = `"FIELDS_MISSING" | "INPUT_PERIOD_EXCEEDED" | "RESOLUTION_BELOW_GUIDE" | "NOT_FULL_COLOR" | "JOURNAL_VOIDED"`。`ReceiptWarning` = `{ code, details? }`（`INPUT_PERIOD_EXCEEDED` は `{ deadline }`、`RESOLUTION_BELOW_GUIDE` は `{ width, height, minLong, minShort }`）
 - `ReceiptSummary`（一覧・仕訳の詳細）: `{ id, receivedAt, channel, category, transactionDate, amount, partnerName, mediaType, deleted: boolean, linkState, journal: JournalRef | null, warnings: ReceiptWarning[] }`
 - `ReceiptDetail`: `ReceiptSummary` ＋ `{ memo, version, currentFile: ReceiptFileView, files: ReceiptFileView[], readings: ReceiptReadingView[], deletedAt, deletedReason }`。`ReceiptFileView` = `{ sha256, fileVersion, mediaType, sizeBytes, originalName, width, height, fullColor, addedAt, channel }`
-- `ReceiptReadingView`: `{ id, readAt, model, status, errorCode, candidates: { transactionDate, amount, partnerName, accountCode, taxCategory } (各 null 可), confidence }`
+- `ReceiptReadingView`: `{ id, readAt, model, status, errorCode, candidates: { transactionDate, amount, partnerName, accountCode, taxCategory } (各 null 可), confidence, reason: string | null }`。`reason` は `POST …/readings` の応答だけが持つ（AI の候補の説明。保存しないので、詳細の `readings` では null）
 - `ReceiptHistoryEntry`: `{ occurredAt, targetType, action, reason, before, after }`
 - 001 の `GET /journals` の `journals[]`（`JournalOutput`）の各項目に `receiptCount: number`、`GET /journals/:journalId` の応答（006 が `statements` を足した形）に `receipts: ReceiptSummary[]` を足す（ルートで合成、R6。`JournalOutput` の Zod は変えず、応答の型だけを広げる）
-- `AiReceiptReading`（`ai.ts`、R14）、`AiSettingsInput`・`AiSettings` に `receiptImagesEnabled: boolean`
+- パスのパラメーター: `ReceiptParam = { receiptId }`、`ReceiptFileParam = { receiptId, sha256 }`（事業体の `:entityId` は `tenant` ミドルウェアが処理する。ルートは `/entities/:entityId` の下、`apps/server/src/app.ts` の `tenantRoutes`）
+- `AiReceiptReading`（`ai.ts`、R14。`{ transactionDate, amount, partnerName, accountCode, taxCategory, confidence, reason（200 字まで） }`）、`AiSettingsInput`・`AiSettings` に `receiptImagesEnabled: boolean`（**必須**。L2）
 
 ### 2.2 導出の規則
 
 - **結びつきの状態**（保存しない）: 有効な結びつきがない → `none`。あって仕訳が `active` → `linked`。あって仕訳が `voided` → `journal_voided`
 - **警告**（`receiptWarnings(receipt, file, link, params)`、純関数。削除済みは警告を出さない）:
   - `FIELDS_MISSING`: 取引年月日・金額・取引先のどれかが NULL（FR-005「未入力」）
-  - `INPUT_PERIOD_EXCEEDED`: `category = paper_scan`、取引年月日あり、`dateOf(received_at) > deadline`。`deadline = addBusinessDays(addDays(addMonthsToDate(transaction_date, M), -1), N)`（M・N は §1.6 を取引年月日で解決。解決できなければ出さない）。`dateOf` は日本時間の日付（`todayOf` と同じ）。営業日は土日を除く
+  - `INPUT_PERIOD_EXCEEDED`: `category = paper_scan`、取引年月日あり、`dateOf(received_at) > deadline`。`deadline = addBusinessDays(addDays(addMonthsToDate(transaction_date, M), -1), N)`（M・N は §1.6 を取引年月日で解決。解決できなければ出さない）。`dateOf(received_at)` は **`Asia/Tokyo` に固定**した日付（`ReceiptDeps.dateOf`。server が `todayOf` と同じ変換で作って渡す。domain は `Date`・`Intl` を使わない）。比べるのは受領日時で、取引年月日を後から入れた日ではない。営業日は土日を除く
   - `RESOLUTION_BELOW_GUIDE`: `category = paper_scan`、今の版が画像で `width`・`height` あり、`max(w,h) < minLong` または `min(w,h) < minShort`（§1.6 を取引年月日〔なければ受領日〕で解決）
   - `NOT_FULL_COLOR`: `category = paper_scan`、今の版の `full_color = 0`
   - `JOURNAL_VOIDED`: 結びつきの状態が `journal_voided`
@@ -226,7 +228,7 @@
 
 ## 5. マイグレーション
 
-- tenant `0014_receipts.sql`: `pnpm --filter @trebuchet/db exec drizzle-kit generate --name receipts --config drizzle.tenant.config.ts`。新しい 5 表の `);` を `) STRICT;` に置き換える。`tax_parameters` の CHECK の変更は表の作り直しになる（009 の `0011` と同じ手順で、既存の行を写す）
+- tenant `0014_receipts.sql`: `pnpm --filter @trebuchet/db exec drizzle-kit generate --name receipts --config drizzle.tenant.config.ts`。新しい 5 表の `);` を `) STRICT;` に置き換え、**循環した 2 つの外部キー（§1.1）の `REFERENCES` に `DEFERRABLE INITIALLY DEFERRED` を手で書き足す**（`receipts.current_sha256`、`receipt_files.receipt_id`。再生成のたびに同じ書き足しが要る）。`tax_parameters` の CHECK の変更は表の作り直しになる（009 の `0011` と同じ手順で、既存の行を写す）
 - tenant `0015_receipts_integrity.sql`（`--custom --name receipts_integrity`）: §1 のトリガー（DELETE の禁止、不変の列、1 回だけの UPDATE）、`tax_parameters` の 4 行の `INSERT`、作り直した `tax_parameters` のトリガーがあれば作り直す
 - registry `0002_ai_receipt_images.sql`（`drizzle.registry.config.ts` で生成）: `ai_settings` に列を足す（ADD COLUMN。CHECK を含めて生成されないときは表を作り直す）
-- `packages/db/test/tenant-store.test.ts` が STRICT を、`closing-repository.test.ts` の `listTaxParameters` が seed との一致（4 行を含む）を確かめる
+- `packages/db/test/tenant-store.test.ts` が STRICT を、`closing-repository.test.ts` の `listTaxParameters` が seed との一致（4 行を含む）を確かめる。`receipt-schema.test.ts` が循環の外部キー（`foreign_keys=ON` で、同じトランザクションの中ならどちらの順でも入り、コミットの時点で相手がなければ失敗する）と、`tax_parameters` の作り直しで既存の行が残ること（009 の `migration-depreciation.test.ts` と同じ形）を確かめる

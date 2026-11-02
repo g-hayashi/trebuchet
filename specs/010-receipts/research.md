@@ -35,7 +35,8 @@
 - **Decision**: 区分が `paper_scan` の証憑だけ、**業務処理サイクル方式の最長**で期限を求め、受領日時（アプリが受け取った日時）が期限を過ぎていれば警告 `INPUT_PERIOD_EXCEEDED` を出す（保存は拒まない、FR-022）
   - 起算日 = 取引年月日（紙の領収書・レシートは受け取った日 ≈ 取引の日。受領日を別に入れる欄は作らない）
   - 期限 = `addBusinessDays(addDays(addMonthsToDate(取引年月日, M), -1), N)`。M = `RECEIPT_INPUT_CYCLE_MONTHS`（2）、N = `RECEIPT_INPUT_GRACE_BUSINESS_DAYS`（7）。問23 の例（4/21 受領 → 2 か月は 6/20 まで）に合わせ、M か月後の前日を周期の末日とし、そこから N 営業日。`addMonthsToDate`（日付に月を足し、日は月末に丸める）と `addBusinessDays` は `packages/domain/src/dates.ts` に足す（今の `addMonths` は `YYYY-MM` 用）。営業日は土日を除く（祝日は除かない＝期限が早めに出る。「おおむね」の範囲として保守的）
-  - 判定: 受領日時の日付（`Clock` の日本時間の日付。`todayOf` と同じ方法）> 期限 なら警告。取引年月日が未入力なら判定しない
+  - 判定: 受領日時の日付 > 期限 なら警告。取引年月日が未入力なら判定しない。**比べるのは受領日時（アプリへの保存の日時）で、取引年月日を後から入れた日ではない**（A1）
+  - **タイムゾーンは `Asia/Tokyo` に固定**する。受領日時（UTC の ISO 8601）から日付を取る `dateOf(iso): string` は domain に直接書かず（`Date`・`Intl` を使わない）、`ReceiptDeps.dateOf` として server が作って渡す（`todayOf(clock)` と同じ `Asia/Tokyo` の変換。contracts/domain-module.md §3）。純関数 `receiptWarnings` は日付に直した `receivedDate` を受け取る（D: §2）。日付の境目（UTC 15:00）を挟むテストを T012・T016 に置く
   - 差し替え（R7）の後も、最初の受領日時で判定する（問30 の再読み取りの扱いは、タイムスタンプを使わないこの機能では判定に入れない）
 - **値の置き場所**: M・N は Constitution VI に従い `tax_parameters` に適用期間・出典つきで持つ（R20 の 4 つの key）。`effective_from` は 2024-01-01（令和5年度改正後の要件の適用。スキャナ問66）、出典はスキャナ一問一答の URL
 - **Rationale**: 業務処理サイクル方式は規程が要るが、事務処理規程（R19）に周期を書けば使える。早期入力方式（7 営業日）だと、外出先で撮って後から Mac で入力する使い方の大半が警告になる。祝日の表を持たないのは YAGNI（警告だけで、保存は拒まない）
@@ -125,10 +126,10 @@
 - **Decision**:
   - 受け口は 007 の `apps/server/src/lib/upload.ts`（`uploadLimitFor(1, RECEIPT_MAX_BYTES)`、`readUpload(c, RECEIPT_MAX_BYTES)`、`readJsonField(c, "options", ReceiptCreateOptions)`）。上限 `RECEIPT_MAX_BYTES` = 20 MB（`packages/schema/src/receipts.ts`。web も同じ値で事前に止める）。超えれば 413 `FILE_TOO_LARGE`
   - **形式は中身で判定**（`detectReceiptFormat`、domain の純関数）: JPEG `FF D8 FF`、PNG `89 50 4E 47 0D 0A 1A 0A`、PDF 先頭 1,024 バイト以内の `%PDF-`、HEIC ISOBMFF の `ftyp`（offset 4）で major brand が `heic`・`heix`・`heim`・`heis`・`hevc`・`hevx`、または `mif1`・`msf1` で compatible brands に前の 6 つのどれか。それ以外は 422 `RECEIPT_FORMAT_UNSUPPORTED`（拡張子・`Content-Type` は見ない）
-  - 画素数・色は形式の判定の後に `ReceiptImageTool.probe`（R12）で調べる（非同期。ここまでは何も書かない）
+  - 画素数・色は形式の判定の後に `ReceiptImageTool.probe`（R12）で調べる（非同期。ここまでは何も書かない）。**画素数の上限 `RECEIPT_MAX_PIXELS`（1 億画素、`probe` が `width × height` で判定）を超える画像は 422 `VALIDATION`（`details.maxPixels`）で拒む**: 20 MB 以下でも高圧縮の画像は展開で数 GB のメモリーを使い、`sips` が止まる・server が重くなる（画像の展開爆弾）。iPhone の最高の撮影（約 4,800 万画素）や A4 を 600dpi で読んだ画像（約 3,500 万画素）は通る。`probe` が寸法を返せないときは拒まない（PDF など）。判定は PNG・JPEG・HEIC の先頭のヘッダーを `sips -g` が読むだけで展開しない
   - **同期の区間で全部か無か**: `digest → 既存の判定 → ファイルの書き込み（なければ）→ ReceiptUnitOfWork の run（行と履歴）→ 失敗ならこの呼び出しが作ったファイルだけを消す` を `await` を挟まずに行う（Node の 1 本のスレッドで、同じ内容の同時の追加が交わらない）。DB の UNIQUE（`receipt_files.sha256`）に当たれば重複として扱う
   - **重複**（FR-004）: 事業体の `receipt_files` に同じ SHA-256 があれば（削除済み・差し替え前の版を含む）、作らずに 409 `RECEIPT_DUPLICATE`（`details.receiptId`、`deleted`）。画面は既存の証憑を開く
-  - 経路（FR-002）は要求の Host で決める: ローカルの Host（`isLocalHost`）なら `local`（画面の表示は「Mac」）、ts.net なら `remote`（「スマホ・リモート」）。端末の自己申告は使わない
+  - 経路（FR-002）は要求の Host で決める: `isLocalHost(requestHost(c.req))`（`apps/server/src/lib/origin.ts`。`requestHost` は `Host` ヘッダーをそのまま返す。004 の T001(b)）が真なら `local`（画面の表示は「Mac」）、それ以外（ts.net）は `remote`（「スマホ・リモート」）。端末の自己申告は使わない
 - **Rationale**: FR-001・004・007、Edge Cases（拡張子と中身の違い、2 回送る、途中で切れる）。multipart のファイル全体がメモリーに乗るのは 20 MB までなので許容（007 も同じ読み方）
 - **Alternatives**: ファイルを先に一時の名前で置き、DB の後で改名 → 失敗の後始末が 2 か所になる。孤立したファイルの定期の掃除 → 同期の区間で作ったものだけ消せば、異常終了の残りは無害（同じ内容が来れば使い回す）なので作らない
 
@@ -153,12 +154,12 @@
 ## R12. 画像の変換（HEIC の表示、AI に送る JPEG、PDF）
 
 - **Decision**: 新しい npm の依存を足さず、**macOS の `sips` を server から `node:child_process` の `execFile` で呼ぶ**。domain にポート `ReceiptImageTool`（contracts/domain-module.md §4）を置き、server の `apps/server/src/lib/image-tool.ts` が実装する。テストは偽の変換器（決まったバイト列・画素数を返す）を使い、`sips` を呼ばない
-  - `probe(bytes, format)`: `sips -g pixelWidth -g pixelHeight -g space -g bitsPerSample`。PDF は調べない（undefined）
+  - `probe(bytes, format)`: `sips -g pixelWidth -g pixelHeight -g space -g bitsPerSample`。PDF は調べない（undefined）。`width × height` が `RECEIPT_MAX_PIXELS`（1 億画素。R10）を超えれば `Result` の失敗（422 `VALIDATION`）にして、変換・保存に進ませない（S1。`sips` が展開で重くなるのを防ぐ）
   - `toDisplay(bytes, format)`: HEIC だけ `sips -s format jpeg` で JPEG にする（Chrome は HEIC を表示できない。Safari は表示できるが同じ経路にそろえる）。JPEG・PNG・PDF は原本をそのまま返す（PDF はブラウザの表示に任せる）。原本は変えない
   - `toAiJpeg(bytes, format, maxPx)`: `sips -s format jpeg -s formatOptions 80 -Z <maxPx>`（長辺 `RECEIPT_AI_MAX_PX` = 2,048）。PDF は 1 ページ目を描く（`sips -s format png` の後に縮小。描けないとき・文字が読めないときは `qlmanage -t -s 2048` を試す。どちらもだめなら PDF の読み取りは `RECEIPT_READ_UNSUPPORTED` で手入力）
   - AI に送る前に domain の `stripJpegMetadata`（純関数）で APP1（Exif・XMP）・APP13（IPTC）・COM を除く（位置情報を送らない。Constitution III）。**向き（Exif の Orientation）だけを残す最小の APP1 を作り直す**（向きが失われると画像が横倒しになる）
   - `sips` の作業ファイルは `.tmp/receipt-convert-<乱数>/`（R9）。子プロセスの環境の `TMPDIR` も `.tmp/` にする。時間切れ 20 秒。`sips` がない・失敗したら `RECEIPT_CONVERSION_FAILED`（表示）または読み取りの失敗（AI）
-- **ゲート**（tasks の Setup。利用者の Mac で行う。サンドボックスでは `sips` が一時ファイルを書けず確かめられなかった）: 合成の HEIC（iPhone の撮影）・PDF（1 ページの電子の領収書）で、①HEIC → JPEG の表示 ②PDF の 1 ページ目が 2,048 px で文字が読める ③iPhone の縦の撮影の向きが AI 用の JPEG で正しい、を確かめて research に追記する。②が `sips` でも `qlmanage` でもだめなら、PDF の読み取りを範囲外にする（利用者の判断。依存の候補 `pdfjs-dist` は承認が要る）
+- **ゲート**（tasks の **T040**。Phase 1 の直後、`image-tool.ts` の T013 より前に行い、T013 はその結果に従う。O1。利用者の Mac で行う。サンドボックスでは `sips` が一時ファイルを書けず確かめられなかった）: 合成の HEIC（iPhone の撮影）・PDF（1 ページの電子の領収書）で、①HEIC → JPEG の表示 ②PDF の 1 ページ目が 2,048 px で文字が読める ③iPhone の縦の撮影の向きが AI 用の JPEG で正しい、を確かめて research に追記する。②が `sips` でも `qlmanage` でもだめなら、PDF の読み取りを範囲外にする（利用者の判断。依存の候補 `pdfjs-dist` は承認が要る）
 - **Rationale**: Constitution VII（標準機能で代替できれば依存を足さない）。対象は macOS だけ（Technical Constraints）。iPhone の Safari はカメラの撮影・写真の選択を `accept="image/*"` で JPEG に変えて送ることが多く、HEIC は Mac のファイルの追加で来ることが多い
 - **Alternatives**（依存を足すなら利用者の承認が要る）: `sharp`（libvips のネイティブ、HEIC は別の libheif が要る）、`heic-convert`/`libheif-js`（WASM、遅い）、`pdfjs-dist`（PDF の描画に canvas が要る）。どれも `sips` で足りる間は足さない
 
@@ -171,6 +172,8 @@
   - **送るもの**（`buildReceiptReadingRequest`、純関数、INV-66）: ①固定の指示文（`receipts/reading-prompt.ts` の定数）②有効な科目のコードと名前の一覧（006 の推定と同じ選び方）③税区分のコードの一覧 ④画像 1 枚（R12 の JPEG、メタデータを除いたもの）。**取引先の一覧、ほかの仕訳、口座、メモ、元のファイル名、証憑に入力済みの値は送らない**（FR-015）
   - **要求の形**: `messages: [{ role: "system", content: 指示文 }, { role: "user", content: [{ type: "text", text: 選択肢 }, { type: "image_url", image_url: { url: "data:image/jpeg;base64,…", detail: "high" } }] }]`、`response_format` は `json_schema`（strict、各項目は null を許す）。`chatCompletion` の `ChatRequest.messages[].content` を「文字列 | 部品の配列」に広げる（006・007 の呼び出しは文字列のまま）
   - **時間切れ** `RECEIPT_READ_TIMEOUT_MS` = 90 秒（画像は文字より遅い。外部の 60 秒より長く）
+  - **失敗の記録の写像**（X1）: `receipt_readings.error_code` は ErrorCode ではなく文字列の定数（`packages/domain/src/receipts/reading.ts` の `RECEIPT_READING_ERROR`: `AI_TIMEOUT`・`AI_HTTP_ERROR`・`AI_INVALID_OUTPUT`・`RECEIPT_READ_UNSUPPORTED`・`RECEIPT_CONVERSION_FAILED`）。`readReceipt` ②の失敗を ③ で次のように記録して `ok(reading)` を返す: `toAiJpeg` が `RECEIPT_READ_UNSUPPORTED`（PDF を描けない）→ `failed`・`RECEIPT_READ_UNSUPPORTED`／`toAiJpeg` のその他の失敗 → `failed`・`RECEIPT_CONVERSION_FAILED`／`stripJpegMetadata` の失敗 → `failed`・`RECEIPT_CONVERSION_FAILED`／`reader.read` の失敗で `details.timeout`（`COLUMN_TIMEOUT_DETAIL` と同じ印）→ `timeout`・`AI_TIMEOUT`／その他の `reader.read` の失敗（`chatCompletion` は通信の失敗と HTTP のエラーを見分けない）→ `failed`・`AI_HTTP_ERROR`／`parseReceiptReading` が `invalid` → `invalid`・`AI_INVALID_OUTPUT`。`AI_UNREACHABLE` は作らない。`RECEIPT_READ_UNSUPPORTED` は `toAiJpeg` の失敗の ErrorCode でもあるので 9 つ目のコードとして足す（H: §1）
+  - **憲法と AGENTS.md の改定**（C1。利用者が外部への画像の送信を明示的に選んだ、2026-11-02）: 例外が仕様・plan だけにあって、憲法の「外部の AI に送る情報は必要最小限、マスクする」と AGENTS.md の 006 の「AI へ送る情報は `buildAiPayload` を通したものだけ（INV-45）」と食い違わないよう、tasks T039 で ①`.specify/memory/constitution.md` の III に「証憑の画像の読み取りは、利用者が別に有効にしたときだけ、この原則の例外として許す」を 1 文足す（PATCH の改定。Sync Impact Report に変更・理由・影響を書く）②AGENTS.md の 006 の該当の規則に「010 の証憑の画像は例外。専用の `ReceiptReader` を通す」を一言足す。ADR 0014（T038）にも例外の判断を書く
   - **3 段**（006/R8 と同じ）: ①`ReceiptUnitOfWork` で証憑・科目・税区分を読む ②UnitOfWork の外で復号・変換・AI の呼び出し ③読み取りの記録と履歴を書く。AI の呼び出しをトランザクションの中に入れない
   - 読み取りは利用者の操作（`POST /receipts/:id/readings`）。「追加時に自動で読む」は web が追加の直後にこの API を呼ぶだけ（設定が有効なとき）。追加の応答（SC-001）を待たせない
 - **Rationale**: spec FR-014〜017、Constitution III・IV。例外を 1 つのポートと 1 つの関数に閉じ込め、テスト（INV-66）で送る中身の形を固定する
@@ -179,11 +182,11 @@
 ## R14. AI の出力の検証と、読み取りの記録
 
 - **Decision**:
-  - Zod `AiReceiptReading`（`packages/schema/src/ai.ts` に足す）: `{ transactionDate: DateString | null, amount: 整数 0 < x < 1e12 | null, partnerName: string(1..100) | null, accountCode: string | null, taxCategory: TaxCategoryCode | null, confidence: 0..100 の整数 }`
+  - Zod `AiReceiptReading`（`packages/schema/src/ai.ts` に足す）: `{ transactionDate: DateString | null, amount: 整数 0 < x < 1e12 | null, partnerName: string(1..100) | null, accountCode: string | null, taxCategory: TaxCategoryCode | null, confidence: 0..100 の整数, reason: string（200 字まで） }`。`reason` は 006 の `AiSuggestion.reason` と同じく、候補の根拠の短い説明（画面に AI の候補の説明として出す。記録には保存しない）。200 字を超えれば `reason` だけ「候補なし」（空）にし、ほかの項目は残す
   - domain の `parseReceiptReading(raw, context)`: JSON として読めなければ全項目「候補なし」。読めれば**項目ごとに** `safeParse` し、合わない項目だけ「候補なし」（FR-016、US4 シナリオ2）。科目は事業体の有効な科目のコードにあるものだけ、税区分は一覧にあるものだけ。日付は実在の日付（`DateString` の検査）
   - 候補は応答として返し、**証憑の値は変えない**（INV-67。保存は利用者の `PATCH` だけ）
   - 記録（`receipt_readings`、data-model §1.4）: 読み取った日時、ファイルの版（sha256）、モデル名、状態（`succeeded` / `invalid` / `failed` / `timeout`）、失敗のコード、候補の値（項目ごと、なければ NULL）。**画像と応答の本文は保存しない**（FR-017）
-  - 精度の記録: 読み取りの後に利用者が値を保存したとき（`PATCH`）、その版の最新の `succeeded` の読み取りで比べていないものに、`date_match`・`amount_match`・`partner_match`（`normalizeReceiptText` で比べる）を 1 回だけ書く。証憑から仕訳を登録したとき（`readingId` を渡す）、`account_match`・`tax_match`（仕訳のどれかの行の科目コード・税区分が候補と同じ）を書く。書けるのは NULL から値への 1 回だけ（トリガー）
+  - 精度の記録: 読み取りの後に利用者が値を保存したとき（`PATCH`）、その版の最新の `succeeded` の読み取りで比べていないものに、`date_match`・`amount_match`・`partner_match`（`normalizeReceiptText` で比べる）を 1 回だけ書く。証憑から仕訳を登録したとき（`readingId` を渡す）、`account_match`・`tax_match`（仕訳のどれかの行の科目コード・税区分が候補と同じ）を書く。**書けるのは列ごとに NULL から値への 1 回だけ**（トリガー。L2）: 値の保存（`date_match`・`amount_match`・`partner_match`）と仕訳の登録（`account_match`・`tax_match`）は別の機会なので、後から書く列を先の書き込みが塞がない。`compared_at` は最初の比べで 1 回だけ書き、後の比べでは動かさない
   - 監査（`receipt_audit_log`）には `read` の操作として日時・モデル名・状態だけを書く（US4 シナリオ5）
 - **Rationale**: Constitution IV（Zod で検証、確信度を含める）。006 の `parseSuggestion` は全体を 1 つで判定するが、証憑は項目ごとに部分的に使える
 - **Alternatives**: 応答の本文を保存して後で比べる → FR-017 に反する
@@ -191,6 +194,7 @@
 ## R15. 設定「証憑の画像を外部の AI に送る」
 
 - **Decision**: registry の `ai_settings` に列 `receipt_images_enabled`（0/1、既定 0）を足す（registry のマイグレーション `0002`）。`AiSettingsInput`・`AiSettings`（schema）に `receiptImagesEnabled` を足す。外部の AI が無効なら真にできない（422 `AI_NOT_CONFIGURED`、`apps/server/src/routes/ai-settings.ts` の既存の検査に足す）。画面（`apps/web/src/routes/settings/ai.tsx`）は有効にする前に「画像はマスクできず、そのまま外部の AI に送られる（006 の送る情報の原則の例外）」を示し、確認を求める（FR-015）
+  - `AiSettingsInput`・`AiSettings` の `receiptImagesEnabled` は**必須**（省略を許さない。`localEnabled`・`externalEnabled` と同じ `z.boolean()`。L2）。web は今の値を読み、画面で変えたものを全項目つきで送る
   - `ai_settings` はバックアップに含めない（`EXCLUDED_REGISTRY_TABLES`）。**復元は `ai_settings` を列名を並べて引き継いでいる**（`restore.ts` の `readAiSettings` と `INSERT`）ので、新しい列も足す
 - **Rationale**: 外部の AI の設定（URL・キー）と同じ端末の設定で、同じ画面で見られる。spec「外部の AI の設定が有効で、さらに…別に有効」
 - **Alternatives**: 事業体ごとの設定（tenant の表）→ 外部の AI の接続先が端末の設定なので、片方だけ事業体ごとにすると分かりにくい（利用者の判断 Q3）。`app_settings` の key → 外部の AI の設定と別の場所になる
