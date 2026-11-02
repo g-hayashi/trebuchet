@@ -49,6 +49,28 @@ export function tenantFile(entityId: string): string {
   return join(dataDir(), "tenants", `${entityId.toLowerCase()}.sqlite`);
 }
 
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+
+export class InvalidReceiptHashError extends Error {
+  constructor() {
+    super("invalid receipt file name (expected 64 lowercase hex characters)");
+    this.name = "InvalidReceiptHashError";
+  }
+}
+
+/** 証憑のファイルの置き場所 `<データ場所>/receipts/<entityId 小文字>/`（`tenants/` の下に置かない。010/R9） */
+export function receiptsDir(entityId: string): string {
+  if (!isValidEntityId(entityId)) throw new InvalidEntityIdError(entityId);
+  return join(dataDir(), "receipts", entityId.toLowerCase());
+}
+
+/** 証憑のファイルのパス `<receiptsDir>/<sha256>.trc`。entityId と sha256 の形を検査する（パストラバーサル防止） */
+export function receiptFile(entityId: string, sha256: string): string {
+  const dir = receiptsDir(entityId);
+  if (!SHA256_PATTERN.test(sha256)) throw new InvalidReceiptHashError();
+  return join(dir, `${sha256}.trc`);
+}
+
 export function registryFile(): string {
   return join(dataDir(), "registry.sqlite");
 }
