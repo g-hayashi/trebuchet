@@ -10,11 +10,16 @@ import { taxCategoriesQuery, taxSettingsQuery } from "@/features/entities/api";
 import { journalQuery, postJournal } from "@/features/journals/api";
 import { JournalForm } from "@/features/journals/JournalForm";
 import { partnersQuery, tagsQuery } from "@/features/masters/api";
+import { postReceiptJournal, receiptQuery } from "@/features/receipts/api";
+import { journalSourceOf } from "@/features/receipts/journal-source";
 import { today } from "@/lib/dates";
 import { invalidateLedger } from "@/lib/queries";
 
-/** correctsJournalId を付けて開くと、その仕訳の訂正仕訳を起票する（FR-019a） */
-const NewJournalSearch = z.object({ correctsJournalId: Id.optional() });
+/**
+ * correctsJournalId を付けて開くと、その仕訳の訂正仕訳を起票する（FR-019a）。
+ * receiptId を付けて開くと、その証憑の値を初期値にして仕訳を作り、証憑に結びつける（010 FR-010）
+ */
+const NewJournalSearch = z.object({ correctsJournalId: Id.optional(), receiptId: Id.optional() });
 
 export const Route = createFileRoute("/e/$entityId/journals/new")({
   validateSearch: NewJournalSearch,
@@ -23,10 +28,14 @@ export const Route = createFileRoute("/e/$entityId/journals/new")({
 
 function NewJournalPage() {
   const { entityId } = Route.useParams();
-  const { correctsJournalId } = Route.useSearch();
+  const { correctsJournalId, receiptId } = Route.useSearch();
   const corrects = useQuery({
     ...journalQuery(entityId, correctsJournalId ?? ""),
     enabled: correctsJournalId !== undefined,
+  });
+  const receipt = useQuery({
+    ...receiptQuery(entityId, receiptId ?? ""),
+    enabled: receiptId !== undefined,
   });
   const queryClient = useQueryClient();
   const accounts = useQuery(accountsQuery(entityId));
@@ -49,7 +58,18 @@ function NewJournalPage() {
       await invalidateLedger(queryClient, entityId);
     },
   });
+  // 証憑から作る（1 つのトランザクションで仕訳の登録と結びつけ）。登録したあとは入力を閉じて二重に登録しない
+  const saveFromReceipt = useMutation({
+    mutationFn: (json: JournalInput) =>
+      postReceiptJournal(entityId, receiptId ?? "", { journal: json }),
+    onSuccess: () => invalidateLedger(queryClient, entityId),
+  });
   const saved = save.isSuccess ? save.data : undefined;
+  const savedFromReceipt = saveFromReceipt.isSuccess ? saveFromReceipt.data : undefined;
+  const receiptSource =
+    receipt.data && partners.data
+      ? journalSourceOf(receipt.data, partners.data, defaultDate)
+      : undefined;
 
   return (
     <main className="grid gap-6">
@@ -66,6 +86,20 @@ function NewJournalPage() {
         </Link>
       </div>
       <div role="status" aria-label="登録の結果">
+        {savedFromReceipt && (
+          <div className="rounded-md border px-3 py-2 text-sm">
+            <p className="font-medium">
+              仕訳 No.{savedFromReceipt.journal.journalNo} を登録し、証憑に結びつけました。
+            </p>
+            <Link
+              to="/e/$entityId/receipts/$receiptId"
+              params={{ entityId, receiptId: savedFromReceipt.receipt.id }}
+              className="text-primary underline underline-offset-4"
+            >
+              証憑に戻る
+            </Link>
+          </div>
+        )}
         {saved && (
           <div
             className={
@@ -110,15 +144,22 @@ function NewJournalPage() {
           )}
         </CardHeader>
         <CardContent>
-          <ApiErrorMessage error={loadError ?? corrects.error} />
+          <ApiErrorMessage error={loadError ?? corrects.error ?? receipt.error} />
           {queries.some((q) => q.isPending) && !loadError && (
             <p className="text-sm text-muted-foreground">読み込み中…</p>
+          )}
+          {receiptId !== undefined && receipt.data?.deleted && (
+            <p role="note" className="text-sm">
+              この証憑は削除済みのため、仕訳を作れません。
+            </p>
           )}
           {accounts.data &&
             partners.data &&
             tags.data &&
             taxSettings.data &&
-            taxCategories.data && (
+            taxCategories.data &&
+            !savedFromReceipt &&
+            (receiptId === undefined ? (
               <JournalForm
                 key={formKey}
                 entityId={entityId}
@@ -131,7 +172,22 @@ function NewJournalPage() {
                 correctsJournalId={correctsJournalId}
                 onSubmit={(input) => save.mutateAsync(input)}
               />
-            )}
+            ) : (
+              receiptSource &&
+              !receipt.data?.deleted && (
+                <JournalForm
+                  entityId={entityId}
+                  accounts={accounts.data}
+                  partners={partners.data}
+                  tags={tags.data}
+                  taxSettings={taxSettings.data}
+                  taxCategories={taxCategories.data}
+                  defaultDate={receiptSource.date}
+                  journal={receiptSource}
+                  onSubmit={(input) => saveFromReceipt.mutateAsync(input)}
+                />
+              )
+            ))}
         </CardContent>
       </Card>
     </main>

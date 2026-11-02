@@ -14,6 +14,7 @@ import {
   warningText,
 } from "@/features/receipts/labels";
 import { ReceiptFieldsForm } from "@/features/receipts/ReceiptFieldsForm";
+import { ReceiptLinkSection } from "@/features/receipts/ReceiptLinkSection";
 import { ReceiptViewer } from "@/features/receipts/ReceiptViewer";
 import { formatDateTime } from "@/lib/format";
 
@@ -79,6 +80,7 @@ function ReceiptBody({ entityId, receipt }: { entityId: string; receipt: Receipt
               )}
             </CardContent>
           </Card>
+          <ReceiptLinkSection entityId={entityId} receipt={receipt} />
           <ReceiptInfo entityId={entityId} receipt={receipt} />
         </div>
       </div>

@@ -2,7 +2,10 @@ import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import type {
   ReceiptCreateOptions,
   ReceiptDetail,
+  ReceiptJournalInput,
+  ReceiptLinkInput,
   ReceiptQuery,
+  ReceiptUnlinkInput,
   ReceiptUpdateInput,
 } from "@trebuchet/schema";
 import { uploadForm } from "@/features/imports/upload";
@@ -18,6 +21,8 @@ export const receiptKeys = {
     ["entities", entityId, "receipts", "search", search] as const,
   detail: (entityId: string, receiptId: string) =>
     ["entities", entityId, "receipts", "detail", receiptId] as const,
+  candidates: (entityId: string, receiptId: string) =>
+    ["entities", entityId, "receipts", "candidates", receiptId] as const,
 };
 
 /** 証憑の検索条件（ページの指定を除く） */
@@ -80,6 +85,54 @@ export const postReceipt = async (
     file,
     options: JSON.stringify(options),
   });
+
+/** 結びつける仕訳の候補（取引年月日の前後。H: §3、R6） */
+export const journalCandidatesQuery = (entityId: string, receiptId: string) =>
+  queryOptions({
+    queryKey: receiptKeys.candidates(entityId, receiptId),
+    queryFn: async () =>
+      (
+        await unwrap(
+          await receiptApi[":receiptId"]["journal-candidates"].$get({
+            param: { entityId, receiptId },
+          }),
+        )
+      ).candidates,
+  });
+
+/**
+ * 仕訳に結びつける。付け替え（`replace`）の理由は、server が 422 `REASON_REQUIRED` を返したら
+ * 求めて、`reason` つきで送り直す（要否は web で判断しない）
+ */
+export const postReceiptLink = async (
+  entityId: string,
+  receiptId: string,
+  json: ReceiptLinkInput,
+): Promise<ReceiptDetail> =>
+  (
+    await unwrap(
+      await receiptApi[":receiptId"].link.$post({ param: { entityId, receiptId }, json }),
+    )
+  ).receipt;
+
+/** 結びつきを理由つきで解除する（行は消えない） */
+export const postReceiptUnlink = async (
+  entityId: string,
+  receiptId: string,
+  json: ReceiptUnlinkInput,
+): Promise<ReceiptDetail> =>
+  (
+    await unwrap(
+      await receiptApi[":receiptId"].unlink.$post({ param: { entityId, receiptId }, json }),
+    )
+  ).receipt;
+
+/** 証憑から仕訳を登録して結びつける（1 つのトランザクション。H: §3） */
+export const postReceiptJournal = async (
+  entityId: string,
+  receiptId: string,
+  json: ReceiptJournalInput,
+) => unwrap(await receiptApi[":receiptId"].journal.$post({ param: { entityId, receiptId }, json }));
 
 /** 値の更新（未入力を埋める・メモ。入力済みの値の訂正は理由が要る） */
 export const patchReceipt = async (

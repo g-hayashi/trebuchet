@@ -127,6 +127,9 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 証憑（010 US1）。一覧は空。詳細は電子取引の 1 件で、PATCH は送られた値を当てて version を進める
   "GET /receipts": () => ok({ receipts: [], nextCursor: null }),
   "GET /receipts/:receiptId": () => ok({ receipt: receiptDetail() }),
+  // 仕訳に結びつける候補（010 US3）。候補なし。仕訳の一覧・詳細の既定の応答は各テストが持つので、
+  // 証憑の項目（一覧の `receiptCount`、詳細の `receipts`）は画面が省略を 0・空として扱う
+  "GET /receipts/:receiptId/journal-candidates": () => ok({ candidates: [] }),
   "PATCH /receipts/:receiptId": ({ body }) => {
     const { version, ...values } = body as { version: number } & Record<string, unknown>;
     return ok({ receipt: { ...receiptDetail(), ...values, version: version + 1 } });
