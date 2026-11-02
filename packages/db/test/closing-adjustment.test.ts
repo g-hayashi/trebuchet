@@ -2,8 +2,10 @@ import { randomUUIDv7 } from "node:crypto";
 import {
   commitAdjustment,
   createJournal,
+  decideDeferredAmortization,
   disposeFixedAsset,
   getAdjustmentProposals,
+  saveDeferredAsset,
   saveFixedAsset,
   saveHomeUseAllocation,
   voidJournal,
@@ -222,5 +224,79 @@ describe("減価償却の案の確定と変更の制限（009 T014、実 DB、IN
       disposedOn: "2026-03-31",
       disposalKind: "sale",
     });
+  });
+});
+
+describe("開業費の償却の案の確定（009 T020、実 DB、INV-59・60）", () => {
+  /** 開業費 600,000 円（2025-04-10 開業）の 2025 年度の償却を 90,000 円と決める */
+  function decideDeferred() {
+    const saved = saveDeferredAsset(
+      { uow, ids, clock },
+      {
+        name: "開業準備費",
+        totalAmount: 600_000,
+        openedOn: "2025-04-10",
+        priorAccumulated: 0,
+        accountId: accountId("開業費"),
+      },
+    );
+    if (!saved.ok) throw new Error(JSON.stringify(saved.error));
+    const decided = decideDeferredAmortization(
+      { uow, ids, clock },
+      { deferredAssetId: saved.value.id, fiscalYear: 2025, amount: 90_000 },
+    );
+    if (!decided.ok) throw new Error(JSON.stringify(decided.error));
+    return saved.value;
+  }
+  const commitDeferred = (deferredAssetId: string) =>
+    commitAdjustment(
+      { uow, reports: ledger, ids, clock },
+      {
+        fiscalYear: 2025,
+        kind: "deferred_amortization",
+        sourceId: deferredAssetId,
+        expected: { amount: 90_000 },
+      },
+    );
+
+  it("参照の登録が DB で失敗すると、仕訳・行・監査ログ・出所も残らない（全部か無か）。失敗の後は同じ案を確定できる", () => {
+    const asset = decideDeferred();
+    db.$client.exec(
+      "CREATE TEMP TRIGGER fail_ref BEFORE INSERT ON adjustment_journal_refs BEGIN SELECT RAISE(ABORT, 'ref insert failed'); END",
+    );
+    const before = counts();
+    expect(() => commitDeferred(asset.id)).toThrow("ref insert failed");
+    expect(counts()).toEqual(before);
+    expect(closing.listAdjustmentRefsBySource({ deferredAssetId: asset.id })).toEqual([]);
+    db.$client.exec("DROP TRIGGER fail_ref");
+
+    const committed = commitDeferred(asset.id);
+    if (!committed.ok) throw new Error(JSON.stringify(committed.error));
+    expect(counts()).toMatchObject({ journals: before.journals + 1, refs: 1 });
+    expect(closing.listAdjustmentRefsBySource({ deferredAssetId: asset.id })).toMatchObject([
+      { kind: "deferred_amortization", fiscalYear: 2025, journalId: committed.value.journal.id },
+    ]);
+  });
+
+  it("金額が変わっていれば ADJUSTMENT_CHANGED、確定済みなら ADJUSTMENT_NOT_NEEDED で、何も書かない", () => {
+    const asset = decideDeferred();
+    const before = counts();
+    const changed = commitAdjustment(
+      { uow, reports: ledger, ids, clock },
+      {
+        fiscalYear: 2025,
+        kind: "deferred_amortization",
+        sourceId: asset.id,
+        expected: { amount: 80_000 },
+      },
+    );
+    expect(!changed.ok && changed.error.code).toBe("ADJUSTMENT_CHANGED");
+    expect(counts()).toEqual(before);
+
+    expect(commitDeferred(asset.id).ok).toBe(true);
+    const after = counts();
+    const again = commitDeferred(asset.id);
+    expect(!again.ok && again.error.code).toBe("ADJUSTMENT_NOT_NEEDED");
+    expect(counts()).toEqual(after);
   });
 });
