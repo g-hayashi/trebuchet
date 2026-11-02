@@ -17,8 +17,10 @@ import { ReceiptDeleteSection } from "@/features/receipts/ReceiptDeleteSection";
 import { ReceiptFieldsForm } from "@/features/receipts/ReceiptFieldsForm";
 import { ReceiptHistory } from "@/features/receipts/ReceiptHistory";
 import { ReceiptLinkSection } from "@/features/receipts/ReceiptLinkSection";
+import { ReceiptReadingNote } from "@/features/receipts/ReceiptReadingNote";
 import { ReceiptReplaceSection } from "@/features/receipts/ReceiptReplaceSection";
 import { ReceiptViewer } from "@/features/receipts/ReceiptViewer";
+import { useReceiptReading } from "@/features/receipts/reading";
 import { formatDateTime } from "@/lib/format";
 
 export const Route = createFileRoute("/e/$entityId/receipts/$receiptId")({
@@ -46,6 +48,7 @@ function ReceiptDetailPage() {
 }
 
 function ReceiptBody({ entityId, receipt }: { entityId: string; receipt: ReceiptDetail }) {
+  const { usable } = useReceiptReading(receipt);
   return (
     <>
       {receipt.deleted && (
@@ -79,10 +82,11 @@ function ReceiptBody({ entityId, receipt }: { entityId: string; receipt: Receipt
               {receipt.deleted ? (
                 <ValueSummary receipt={receipt} />
               ) : (
-                <ReceiptFieldsForm entityId={entityId} receipt={receipt} />
+                <ReceiptFieldsForm entityId={entityId} receipt={receipt} reading={usable} />
               )}
             </CardContent>
           </Card>
+          <ReceiptReadingNote entityId={entityId} receipt={receipt} />
           <ReceiptLinkSection entityId={entityId} receipt={receipt} />
           {!receipt.deleted && <ReceiptReplaceSection entityId={entityId} receipt={receipt} />}
           <ReceiptInfo entityId={entityId} receipt={receipt} />

@@ -7,6 +7,7 @@ import type {
   ReceiptJournalInput,
   ReceiptLinkInput,
   ReceiptQuery,
+  ReceiptReadingView,
   ReceiptReplaceOptions,
   ReceiptUnlinkInput,
   ReceiptUpdateInput,
@@ -174,6 +175,17 @@ export const receiptHistoryQuery = (entityId: string, receiptId: string) =>
         )
       ).history,
   });
+
+/**
+ * 外部の AI で今の版を読み取る（H: §5）。時間切れ・エラー・形の不一致も 201 で、`status` と `errorCode` が返る。
+ * 候補は入力欄の初期値にだけ使う（証憑の値は変わらない）。`reason` は応答にだけ入る
+ */
+export const postReceiptReading = async (
+  entityId: string,
+  receiptId: string,
+): Promise<ReceiptReadingView> =>
+  (await unwrap(await receiptApi[":receiptId"].readings.$post({ param: { entityId, receiptId } })))
+    .reading;
 
 /** 値の更新（未入力を埋める・メモ。入力済みの値の訂正は理由が要る） */
 export const patchReceipt = async (

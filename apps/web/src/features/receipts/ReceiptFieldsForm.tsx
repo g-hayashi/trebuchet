@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { ReceiptDetail, ReceiptUpdateInput } from "@trebuchet/schema";
-import { type FormEvent, useId, useState } from "react";
+import type { ReceiptDetail, ReceiptReadingView, ReceiptUpdateInput } from "@trebuchet/schema";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { ReasonDialog } from "@/components/reason-dialog";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
@@ -29,13 +29,43 @@ const valuesOf = (r: ReceiptDetail): Values => ({
 export function ReceiptFieldsForm({
   entityId,
   receipt,
+  reading,
 }: {
   entityId: string;
   receipt: ReceiptDetail;
+  /** 入力欄の初期値にする AI の候補（成功した読み取り。010 US4）。入力済みの欄は上書きしない */
+  reading?: ReceiptReadingView | undefined;
 }) {
   const id = useId();
   const queryClient = useQueryClient();
   const [values, setValues] = useState<Values>(() => valuesOf(receipt));
+  // AI の候補を入れた欄（未保存）。直す・保存すると外れる
+  const [suggested, setSuggested] = useState<ReadonlySet<keyof Values>>(new Set());
+  const appliedReading = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (reading === undefined || appliedReading.current === reading.id) return;
+    appliedReading.current = reading.id;
+    const c = reading.candidates;
+    const candidates: Partial<Values> = {};
+    if (c.transactionDate !== null) candidates.transactionDate = c.transactionDate;
+    if (c.amount !== null) candidates.amount = formatYen(c.amount);
+    if (c.partnerName !== null) candidates.partnerName = c.partnerName;
+    setValues((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(candidates) as (keyof Values)[]) {
+        if (prev[key] === "") next[key] = candidates[key] ?? "";
+      }
+      return next;
+    });
+    setSuggested(
+      new Set(
+        (Object.keys(candidates) as (keyof Values)[]).filter(
+          (key) => valuesOf(receipt)[key] === "",
+        ),
+      ),
+    );
+  }, [reading, receipt]);
   const [amountError, setAmountError] = useState<string | undefined>();
   const [message, setMessage] = useState<"saved" | "unchanged" | undefined>();
   // 理由を求められた入力（server が REASON_REQUIRED を返したとき）
@@ -46,6 +76,7 @@ export function ReceiptFieldsForm({
     onSuccess: async (updated) => {
       queryClient.setQueryData(receiptKeys.detail(entityId, receipt.id), updated);
       setValues(valuesOf(updated));
+      setSuggested(new Set());
       setMessage("saved");
       // 一覧・検索の結果にも反映する
       await queryClient.invalidateQueries({ queryKey: receiptKeys.all(entityId) });
@@ -61,8 +92,18 @@ export function ReceiptFieldsForm({
 
   const set = (key: keyof Values) => (value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
+    setSuggested((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
     setMessage(undefined);
   };
+
+  /** AI の候補を入れた欄の印（未保存。保存するまで証憑の値ではない） */
+  const suggestion = (key: keyof Values) =>
+    suggested.has(key) && <p className="text-xs text-muted-foreground">AI の候補（未保存）</p>;
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -115,6 +156,7 @@ export function ReceiptFieldsForm({
               value={values.transactionDate}
               onChange={(e) => set("transactionDate")(e.target.value)}
             />
+            {suggestion("transactionDate")}
           </div>
           <div className="grid content-start gap-1">
             <Label htmlFor={`${id}-amount`}>金額</Label>
@@ -132,6 +174,7 @@ export function ReceiptFieldsForm({
               }}
             />
             <FieldError id={`${id}-amount-error`} message={amountError} />
+            {suggestion("amount")}
           </div>
           <div className="grid content-start gap-1">
             <Label htmlFor={`${id}-partner`}>取引先</Label>
@@ -142,6 +185,7 @@ export function ReceiptFieldsForm({
               value={values.partnerName}
               onChange={(e) => set("partnerName")(e.target.value)}
             />
+            {suggestion("partnerName")}
           </div>
           <div className="grid content-start gap-1">
             <Label htmlFor={`${id}-memo`}>メモ</Label>

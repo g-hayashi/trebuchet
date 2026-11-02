@@ -1,6 +1,6 @@
 import type { ErrorCode } from "@trebuchet/schema";
 import { vi } from "vitest";
-import { receiptDetail } from "./receipts-fixtures";
+import { receiptDetail, receiptReading } from "./receipts-fixtures";
 
 /** query はクエリ文字列（キーと値）。body は JSON のボディ、form は multipart/form-data のボディ */
 export type ApiCall = {
@@ -144,6 +144,8 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
         },
       ],
     }),
+  // 外部の AI の読み取り（010 US4）。設定が無効なら画面は呼ばない。呼ばれたら候補なしの成功を返す
+  "POST /receipts/:receiptId/readings": () => ok({ reading: receiptReading() }, 201),
   "PATCH /receipts/:receiptId": ({ body }) => {
     const { version, ...values } = body as { version: number } & Record<string, unknown>;
     return ok({ receipt: { ...receiptDetail(), ...values, version: version + 1 } });

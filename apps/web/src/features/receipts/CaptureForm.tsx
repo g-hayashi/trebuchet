@@ -17,6 +17,7 @@ import { describeError } from "@/lib/api-errors";
 import { parseWholeYen } from "@/lib/format";
 import { postReceipt, receiptKeys } from "./api";
 import { CategoryFieldset, duplicateOf, SavedNotice } from "./ReceiptFormParts";
+import { useAutoReceiptReading } from "./reading";
 
 const MAX_MB = RECEIPT_MAX_BYTES / (1024 * 1024);
 
@@ -73,11 +74,15 @@ export function CaptureForm({ entityId }: { entityId: string }) {
   const [saved, setSaved] = useState<ReceiptDetail | undefined>();
   const [pickerKey, setPickerKey] = useState(0);
 
+  const autoRead = useAutoReceiptReading(entityId);
+
   const mutation = useMutation({
     mutationFn: (input: { file: File; options: ReceiptCreateOptions }) =>
       postReceipt(entityId, input.file, input.options),
     onSuccess: async ({ receipt }) => {
       setSaved(receipt);
+      // 設定が有効なら、保存の直後に AI で読み取る（保存の表示は待たない）
+      autoRead(receipt.id);
       setFile(undefined);
       setPickerKey((k) => k + 1);
       setTransactionDate("");

@@ -11,7 +11,8 @@ import { journalQuery, postJournal } from "@/features/journals/api";
 import { JournalForm } from "@/features/journals/JournalForm";
 import { partnersQuery, tagsQuery } from "@/features/masters/api";
 import { postReceiptJournal, receiptQuery } from "@/features/receipts/api";
-import { journalSourceOf } from "@/features/receipts/journal-source";
+import { journalSourceOf, suggestionOf } from "@/features/receipts/journal-source";
+import { useReceiptReading } from "@/features/receipts/reading";
 import { today } from "@/lib/dates";
 import { invalidateLedger } from "@/lib/queries";
 
@@ -59,16 +60,27 @@ function NewJournalPage() {
     },
   });
   // 証憑から作る（1 つのトランザクションで仕訳の登録と結びつけ）。登録したあとは入力を閉じて二重に登録しない
+  // AI の候補（科目・税区分）は初期値にだけ使う。使ったときは readingId を付けて、保存した仕訳との
+  // 一致を記録する（010 US4）。設定を読み終える前にフォームを開かない（初期値が後から変わらないように）
+  const { ready: readingReady, usable: reading } = useReceiptReading(receipt.data);
+  const suggestion =
+    accounts.data && taxCategories.data
+      ? suggestionOf(reading, accounts.data, taxCategories.data)
+      : undefined;
+  const readingId = reading?.status === "succeeded" ? reading.id : undefined;
   const saveFromReceipt = useMutation({
     mutationFn: (json: JournalInput) =>
-      postReceiptJournal(entityId, receiptId ?? "", { journal: json }),
+      postReceiptJournal(entityId, receiptId ?? "", {
+        journal: json,
+        ...(readingId !== undefined && { readingId }),
+      }),
     onSuccess: () => invalidateLedger(queryClient, entityId),
   });
   const saved = save.isSuccess ? save.data : undefined;
   const savedFromReceipt = saveFromReceipt.isSuccess ? saveFromReceipt.data : undefined;
   const receiptSource =
-    receipt.data && partners.data
-      ? journalSourceOf(receipt.data, partners.data, defaultDate)
+    receipt.data && partners.data && readingReady
+      ? journalSourceOf(receipt.data, partners.data, defaultDate, suggestion)
       : undefined;
 
   return (
@@ -151,6 +163,18 @@ function NewJournalPage() {
           {receiptId !== undefined && receipt.data?.deleted && (
             <p role="note" className="text-sm">
               この証憑は削除済みのため、仕訳を作れません。
+            </p>
+          )}
+          {suggestion !== undefined && reading !== undefined && !savedFromReceipt && (
+            <p
+              role="note"
+              aria-label="AI の候補"
+              className="mb-3 rounded-md border px-3 py-2 text-sm"
+            >
+              AI の候補: 科目 {suggestion.account.name}
+              {suggestion.taxCategory !== null && `、税区分 ${suggestion.taxCategory.name}`}
+              。確かめてから登録してください。
+              {reading.reason !== null && reading.reason !== "" && ` 説明: ${reading.reason}`}
             </p>
           )}
           {accounts.data &&

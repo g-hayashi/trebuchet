@@ -1,4 +1,4 @@
-import type { ReceiptDetail, ReceiptSummary } from "@trebuchet/schema";
+import type { ReceiptDetail, ReceiptReadingView, ReceiptSummary } from "@trebuchet/schema";
 
 // 010 証憑の画面のテストが共有する応答の例（合成の値）
 
@@ -43,5 +43,24 @@ export const receiptDetail = (over: Partial<ReceiptDetail> = {}): ReceiptDetail 
   readings: [],
   deletedAt: null,
   deletedReason: null,
+  ...over,
+});
+
+/** 外部の AI の読み取りの記録（010 US4）。既定は成功で、候補はすべて「なし」。`readAt` は現在のファイルの追加より後 */
+export const receiptReading = (over: Partial<ReceiptReadingView> = {}): ReceiptReadingView => ({
+  id: "00000000-0000-4000-8000-0000000000b1",
+  readAt: "2026-10-20T09:05:00.000Z",
+  model: "model-a",
+  status: "succeeded",
+  errorCode: null,
+  candidates: {
+    transactionDate: null,
+    amount: null,
+    partnerName: null,
+    accountCode: null,
+    taxCategory: null,
+  },
+  confidence: 80,
+  reason: null,
   ...over,
 });

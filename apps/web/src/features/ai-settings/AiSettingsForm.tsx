@@ -3,6 +3,14 @@ import { type AiSettings, type AiSettingsInput, isAllowedAiBaseUrl } from "@treb
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +27,11 @@ function Fields({ settings }: { settings: AiSettings }) {
   const [url, setUrl] = useState(settings.externalBaseUrl ?? "");
   const [model, setModel] = useState(settings.externalModel ?? "");
   const [apiKey, setApiKey] = useState("");
+  // 証憑の画像を外部の AI に送る（010 R15）。有効にする前に確認を求める
+  const [receiptImages, setReceiptImages] = useState(
+    settings.externalEnabled && settings.receiptImagesEnabled,
+  );
+  const [confirmingImages, setConfirmingImages] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [notice, setNotice] = useState("");
 
@@ -37,8 +50,8 @@ function Fields({ settings }: { settings: AiSettings }) {
     const input: AiSettingsInput = {
       localEnabled,
       externalEnabled,
-      // 証憑の画像の送信（010 R15）の画面は T034 以降。今の値を保ち、外部を無効にするなら false にする
-      receiptImagesEnabled: externalEnabled && settings.receiptImagesEnabled,
+      // 必須の項目。外部の AI を無効にするときは、画像の送信も false にする（server も同じに扱う）
+      receiptImagesEnabled: externalEnabled && receiptImages,
       ...(url.trim() === "" ? {} : { externalBaseUrl: url.trim() }),
       ...(model.trim() === "" ? {} : { externalModel: model.trim() }),
       ...(key === undefined ? {} : { apiKey: key }),
@@ -114,9 +127,34 @@ function Fields({ settings }: { settings: AiSettings }) {
               id={`${id}-external`}
               type="checkbox"
               checked={externalEnabled}
-              onChange={(e) => setExternalEnabled(e.target.checked)}
+              onChange={(e) => {
+                setExternalEnabled(e.target.checked);
+                // 外部を無効にしたら画像の送信も外す（戻したときに確認なしで有効に戻らない）
+                if (!e.target.checked) setReceiptImages(false);
+              }}
             />
             <Label htmlFor={`${id}-external`}>外部の AI を使う</Label>
+          </div>
+          <div className="grid gap-1">
+            <div className="flex items-center gap-2">
+              <input
+                id={`${id}-receipt-images`}
+                type="checkbox"
+                checked={externalEnabled && receiptImages}
+                disabled={!externalEnabled}
+                aria-describedby={`${id}-receipt-images-hint`}
+                onChange={(e) => {
+                  // 有効にする前に確認する。無効にするときは確認しない
+                  if (e.target.checked) setConfirmingImages(true);
+                  else setReceiptImages(false);
+                }}
+              />
+              <Label htmlFor={`${id}-receipt-images`}>証憑の画像を外部の AI に送る</Label>
+            </div>
+            <p id={`${id}-receipt-images-hint`} className="text-xs text-muted-foreground">
+              証憑の画面で「AI で読み取る」を使えるようにします。画像はマスクできず、そのまま外部の
+              AI に送られます。外部の AI を使うときだけ選べます。
+            </p>
           </div>
           <div className="grid gap-1">
             <Label htmlFor={`${id}-url`}>接続先の URL</Label>
@@ -187,6 +225,36 @@ function Fields({ settings }: { settings: AiSettings }) {
         {notice && <SaveNotice message={notice} />}
       </div>
       <ApiErrorMessage error={save.error} />
+      <Dialog
+        open={confirmingImages}
+        onOpenChange={(next) => {
+          if (!next) setConfirmingImages(false);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>証憑の画像を外部の AI に送る</DialogTitle>
+            <DialogDescription>
+              証憑の画像はマスクできず、そのまま外部の AI に送られます（006
+              の送る情報の原則の例外です）。送るのは、読み取りを操作した証憑の画像（メタデータを除いたもの）と、科目・税区分の選択肢だけで、取引先の一覧・ほかの仕訳・口座の名前は送りません。保存するまで帳簿は変わりません。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmingImages(false)}>
+              やめる
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setReceiptImages(true);
+                setConfirmingImages(false);
+              }}
+            >
+              理解して有効にする
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }
