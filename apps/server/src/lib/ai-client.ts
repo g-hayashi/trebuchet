@@ -124,7 +124,8 @@ export async function chatCompletion(
     };
     try {
       const response = await options.fetch(
-        `${endpoint.baseUrl.replace(/\/+$/, "")}/v1/chat/completions`,
+        // 末尾の /v1 は付けても付けなくてもよい（画面の例は /v1 つき。fm serve は /v1 なし）
+        `${endpoint.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/v1/chat/completions`,
         {
           method: "POST",
           headers,

@@ -93,6 +93,20 @@ const provider = (
     endpoint: async () => endpoint ?? undefined,
   });
 
+describe("chatCompletion: 接続先の URL", () => {
+  it.each(["https://api.example.com/openai/v1", "https://api.example.com/openai/v1/"])(
+    "末尾が /v1 の URL（%s）には /v1 を重ねない",
+    async (baseUrl) => {
+      const { fn, calls } = fakeFetch(completion(SUGGESTION_TEXT));
+      await provider(fn, { baseUrl, model: "model-a", apiKey: "sk-secret-123" }).suggest(
+        PAYLOAD,
+        CONTEXT,
+      );
+      expect(calls[0]?.url).toBe("https://api.example.com/openai/v1/chat/completions");
+    },
+  );
+});
+
 describe("createOpenAiProvider: 要求", () => {
   it("POST {baseUrl}/v1/chat/completions に、model・system と user のメッセージ・response_format を送る。API キーは Authorization だけ", async () => {
     const { fn, calls } = fakeFetch(completion(SUGGESTION_TEXT));
