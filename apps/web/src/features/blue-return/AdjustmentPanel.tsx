@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Account } from "@/features/accounts/api";
+import { deferredAssetKeys } from "@/features/deferred-assets/api";
 import { formatYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
 import { type HomeUseAllocationRow, postAdjustment } from "./api";
@@ -39,6 +40,7 @@ export function AdjustmentPanel({
   accounts,
   allocations = [],
   assets = [],
+  deferredAssets = [],
 }: {
   entityId: string;
   year: string;
@@ -48,6 +50,8 @@ export function AdjustmentPanel({
   allocations?: readonly HomeUseAllocationRow[];
   /** 減価償却の案の見出しに使う資産の名前（省略可） */
   assets?: readonly { id: string; name: string }[];
+  /** 開業費の案の見出しに使う開業費の名前（省略可） */
+  deferredAssets?: readonly { id: string; name: string }[];
 }) {
   const queryClient = useQueryClient();
   const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? "";
@@ -59,8 +63,13 @@ export function AdjustmentPanel({
         sourceId: proposal.sourceId,
         expected: { amount: debitTotal(proposal) },
       }),
-    // 失敗（案の金額が変わった）でも、決算書と案を読み直して新しい案を見せる
-    onSettled: () => invalidateLedger(queryClient, entityId),
+    // 失敗（案の金額が変わった）でも、決算書と案を読み直して新しい案を見せる。
+    // 開業費の案は、開業費の「登録済み」の状態も変わる
+    onSettled: () =>
+      Promise.all([
+        invalidateLedger(queryClient, entityId),
+        queryClient.invalidateQueries({ queryKey: deferredAssetKeys.all(entityId) }),
+      ]),
   });
 
   return (
@@ -68,7 +77,7 @@ export function AdjustmentPanel({
       <CardHeader>
         <CardTitle>決算整理の仕訳の案</CardTitle>
         <CardDescription>
-          按分の登録と帳簿から求めた、家事分を事業主貸へ振り替える仕訳の案と、固定資産台帳から求めた減価償却費の仕訳の案です。「仕訳を登録」で帳簿に登録されます（日付は年度末日）。
+          按分の登録と帳簿から求めた、家事分を事業主貸へ振り替える仕訳の案と、固定資産台帳から求めた減価償却費の仕訳の案と、決めた償却額による開業費の仕訳の案です。「仕訳を登録」で帳簿に登録されます（日付は年度末日）。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
@@ -81,9 +90,11 @@ export function AdjustmentPanel({
             const label =
               p.kind === "depreciation"
                 ? (assets.find((a) => a.id === p.sourceId)?.name ?? "固定資産")
-                : allocation
-                  ? nameOf(allocation.accountId)
-                  : "按分";
+                : p.kind === "deferred_amortization"
+                  ? (deferredAssets.find((d) => d.id === p.sourceId)?.name ?? "開業費")
+                  : allocation
+                    ? nameOf(allocation.accountId)
+                    : "按分";
             const b = p.breakdown;
             return (
               <fieldset
@@ -109,6 +120,30 @@ export function AdjustmentPanel({
                     <div>
                       <dt className="text-muted-foreground">家事分</dt>
                       <dd className="tabular-nums">{formatYen(b.home)}</dd>
+                    </div>
+                  </dl>
+                )}
+                {"totalAmount" in b && (
+                  <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-5">
+                    <div>
+                      <dt className="text-muted-foreground">総額</dt>
+                      <dd className="tabular-nums">{formatYen(b.totalAmount)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">期首の未償却残高</dt>
+                      <dd className="tabular-nums">{formatYen(b.openingBalance)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">償却額</dt>
+                      <dd className="tabular-nums">{formatYen(b.amount)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">目安</dt>
+                      <dd className="tabular-nums">{formatYen(b.target)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">期末の未償却残高</dt>
+                      <dd className="tabular-nums">{formatYen(b.closingBalance)}</dd>
                     </div>
                   </dl>
                 )}

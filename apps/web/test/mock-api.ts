@@ -89,6 +89,8 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 定期仕訳（US3）。事業体の画面の上部の知らせが status を読む（`/recurring-journals/:id` より具体的なので先に当たる）
   "GET /recurring-journals": () => ok({ recurring: [] }),
   "GET /recurring-journals/status": () => ok({ unacknowledged: [], blocked: [] }),
+  // 固定資産台帳の画面（009 US3）が開業費の一覧を読む。開業費はまだない
+  "GET /deferred-assets": () => ok({ deferredAssets: [] }),
   // 明細の取込（006 US1）。取込元の口座と取込の履歴は空
   "GET /statement-accounts": () => ok({ accounts: [] }),
   "GET /statements/imports": () => ok({ batches: [] }),
