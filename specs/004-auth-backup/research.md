@@ -27,6 +27,7 @@
 - **Rationale**: リモートの origin を1つ（8787）にまとめ、Host と Origin の検査を server だけで行える。vite の dev サーバーを外に見せない
 - **ゲート（Setup）**: `tailscale serve` の転送で server に届く `Host` と `X-Forwarded-Host` を、利用者の Mac で確かめる（公式に記載がない）。結果で R6 の名前の取り方を決める
 - **ゲートの結果（2026-10-20）**: 未確認（利用者の Mac に Tailscale が未導入）。US4（T016〜T018）の着手の前に確かめる
+- **ゲートの結果（2026-11-02、T001(b)）**: `tailscale serve --bg --https=443 http://127.0.0.1:8787` の転送で、server に届く `Host` は `<名前>.ts.net`（ブラウザで開いた名前のまま）で、`X-Forwarded-Host` も同じ値、`X-Forwarded-Proto` は `https`。ほかに `Tailscale-User-Login` などの tailnet の利用者のヘッダーが付く（使わない）。→ R6 の名前の取り方は **`Host` のまま**（`requestHost` は変えない。`X-Forwarded-Host` は読まない: 127.0.0.1 に直接つなぐ相手が偽れるため）
 - 出典: https://tailscale.com/kb/1312/serve （tailnet の中だけ。Funnel は使わない）、https://hono.dev/docs/getting-started/nodejs
 - **008 以降の変更（2026-11-02、US4 の再開）**: 静的配信は `apps/server/src/static.ts` を `/api` の外に足し、静的にも Host の検査を掛ける（認証は不要）。`/api` 以外の未知のパスは `index.html`、`/api/...` の未知は 404 JSON。`pnpm start` は web をビルドして server を起動し、待ち受けは `127.0.0.1:8787` のまま。cookie の `Secure` は `lib/session.ts` で実装済み。Host の取り方（`Host` か `X-Forwarded-Host` か）は T001(b) の結果をここに追記し、それに従って `requestHost`（`lib/origin.ts`）を直す
 
