@@ -106,6 +106,40 @@ describe("describeError", () => {
     );
   });
 
+  it("証憑（010）: 形式・重複・削除済み・結びつき・ファイルの読み出し", () => {
+    expect(describeError(new ApiError(422, "RECEIPT_FORMAT_UNSUPPORTED", "x")).message).toContain(
+      "JPEG・PNG・HEIC・PDF",
+    );
+    const dup = describeError(
+      new ApiError(409, "RECEIPT_DUPLICATE", "x", { receiptId: "r1", deleted: true }),
+    );
+    expect(dup.message).toContain("同じファイルがすでにあります");
+    expect(dup.details).toEqual(["削除済みの証憑です"]);
+    expect(
+      describeError(
+        new ApiError(409, "RECEIPT_DUPLICATE", "x", { receiptId: "r1", deleted: false }),
+      ).details,
+    ).toEqual([]);
+    expect(describeError(new ApiError(409, "RECEIPT_DELETED", "x")).message).toContain(
+      "削除済みの証憑",
+    );
+    expect(describeError(new ApiError(409, "RECEIPT_LINKED", "x")).message).toContain(
+      "先に仕訳との結びつきを解除",
+    );
+    expect(describeError(new ApiError(409, "RECEIPT_ALREADY_LINKED", "x")).message).toContain(
+      "すでに別の仕訳に結びついています",
+    );
+    expect(describeError(new ApiError(404, "RECEIPT_NOT_FOUND", "x")).message).toContain(
+      "証憑が見つかりません",
+    );
+    expect(describeError(new ApiError(500, "RECEIPT_FILE_UNREADABLE", "x")).message).toContain(
+      "ファイルを読み出せません",
+    );
+    expect(describeError(new ApiError(500, "RECEIPT_CONVERSION_FAILED", "x")).message).toContain(
+      "表示用の画像に変換できません",
+    );
+  });
+
   it("その他のコードはサーバーのメッセージをそのまま", () => {
     const e = new ApiError(404, "ACCOUNT_NOT_FOUND", "勘定科目が見つかりません");
     expect(describeError(e)).toEqual({ message: "勘定科目が見つかりません", details: [] });

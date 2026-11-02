@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TaxCategoryCode } from "./primitives.ts";
+import { DateString, TaxCategoryCode, Yen } from "./primitives.ts";
 import { StatementAmountSign, StatementColumnRole } from "./statements.ts";
 
 // 006-mfme-ai-journal（research R10・R12、contracts/http-api.md §7）
@@ -25,6 +25,23 @@ export const AiColumnSuggestion = z.object({
   confidence: z.number().int().min(0).max(100),
 });
 export type AiColumnSuggestion = z.infer<typeof AiColumnSuggestion>;
+
+/**
+ * 外部の AI による証憑の読み取りの出力（010/R14）。項目ごとに null（候補なし）を許す。
+ * ドメインの `parseReceiptReading` が、項目ごとに `AiReceiptReading.shape.<項目>` で検証し、
+ * 合わない項目だけ「候補なし」にする。科目・税区分は一覧にあるものだけを採る。
+ * `reason` は候補の根拠の短い説明（画面にだけ出す。保存しない）で、200 字まで
+ */
+export const AiReceiptReading = z.object({
+  transactionDate: DateString.nullable(),
+  amount: Yen.nullable(),
+  partnerName: z.string().min(1).max(100).nullable(),
+  accountCode: z.string().min(1).nullable(),
+  taxCategory: TaxCategoryCode.nullable(),
+  confidence: z.number().int().min(0).max(100),
+  reason: z.string().max(200),
+});
+export type AiReceiptReading = z.infer<typeof AiReceiptReading>;
 
 /** 外部の接続先の URL は `https://` か localhost（127.0.0.1・[::1]）の `http://` だけ */
 export function isAllowedAiBaseUrl(value: string): boolean {

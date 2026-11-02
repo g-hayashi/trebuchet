@@ -259,6 +259,42 @@ export function describeError(error: unknown): ErrorDescription {
         message: "取込元が見つかりません。削除された可能性があります。一覧を読み直してください。",
         details: [],
       };
+    case "RECEIPT_NOT_FOUND":
+      return { message: "証憑が見つかりません。一覧を読み直してください。", details: [] };
+    case "RECEIPT_FORMAT_UNSUPPORTED":
+      return {
+        message: "このファイルは扱えません。JPEG・PNG・HEIC・PDF のファイルを選んでください。",
+        details: [],
+      };
+    case "RECEIPT_DUPLICATE":
+      return {
+        message: "同じファイルがすでにあります。",
+        details: error.details?.deleted === true ? ["削除済みの証憑です"] : [],
+      };
+    case "RECEIPT_DELETED":
+      return { message: "削除済みの証憑は変更できません。", details: [] };
+    case "RECEIPT_LINKED":
+      return {
+        message:
+          "仕訳に結びついている証憑は削除できません。先に仕訳との結びつきを解除してください。",
+        details: [],
+      };
+    case "RECEIPT_ALREADY_LINKED":
+      return {
+        message:
+          "この証憑はすでに別の仕訳に結びついています。付け替えるときは理由を添えてください。",
+        details: [],
+      };
+    case "RECEIPT_FILE_UNREADABLE":
+      return {
+        message: "証憑のファイルを読み出せません。バックアップから復元できるか確認してください。",
+        details: [],
+      };
+    case "RECEIPT_CONVERSION_FAILED":
+      return {
+        message: "表示用の画像に変換できません。元のファイルを取り出して確認してください。",
+        details: [],
+      };
     case "INTERNAL":
       return {
         message: "サーバーでエラーが発生しました。時間をおいて再度お試しください。",

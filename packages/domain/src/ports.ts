@@ -2,6 +2,8 @@ import type {
   BillingTerms,
   InvoiceSettings,
   JournalOrigin,
+  ReceiptMediaType,
+  ReceiptQuery,
   Recurring,
   RemoteSettings,
   StatementAccount,
@@ -63,6 +65,13 @@ import type {
   Partner,
   PaymentRecord,
   PostedLine,
+  ReadingOutcome,
+  ReceiptAuditEntry,
+  ReceiptFileRow,
+  ReceiptLinkRow,
+  ReceiptReadingRow,
+  ReceiptRow,
+  ReceiptSearchRow,
   RecurringRunRecord,
   RentDetail,
   Result,
@@ -484,6 +493,98 @@ export interface ColumnSuggestionProvider {
   /** 使える（端末内が有効で、接続先・モデルがそろっている）か */
   available(): Promise<boolean>;
   suggestColumns(prompt: ColumnPrompt): Promise<Result<unknown>>;
+}
+
+// ---- 証憑（010-receipts。contracts/domain-module.md §4） ----
+
+/**
+ * 証憑の表（`packages/db` の `receipt-repository.ts` が実装。UnitOfWork の `run` の中で使う）。
+ * メソッドはすべて同期。操作の記録は `receipt_audit_log`（`appendAudit`）
+ */
+export interface ReceiptStore {
+  insertReceipt(row: ReceiptRow): void;
+  /** `expectedVersion` と今の版が違えば `RepositoryConflictError`。成功すれば版は `row.version` */
+  updateReceipt(row: ReceiptRow, expectedVersion: number): void;
+  getReceipt(id: string): ReceiptRow | undefined;
+  insertFile(row: ReceiptFileRow): void;
+  /** 版の昇順 */
+  listFiles(receiptId: string): ReceiptFileRow[];
+  /** 重複の判定（削除済み・差し替え前の版を含む） */
+  findFileBySha(sha256: string): ReceiptFileRow | undefined;
+  /** `received_at DESC, id DESC`。結びつきと仕訳の状態を含む。`limit` 件まで */
+  search(query: ReceiptQuery): { rows: ReceiptSearchRow[]; nextCursor: string | null };
+  getActiveLink(receiptId: string): ReceiptLinkRow | undefined;
+  insertLink(row: ReceiptLinkRow): void;
+  /** 有効な結びつきを閉じる（`unlinked_at`・`unlink_reason`）。ない・閉じ済みなら例外 */
+  closeLink(id: string, at: string, reason: string): void;
+  listActiveLinksByJournal(journalId: string): ReceiptLinkRow[];
+  countActiveLinksByJournal(journalIds: readonly string[]): Map<string, number>;
+  insertReading(row: ReceiptReadingRow): void;
+  /** 読み取った順 */
+  listReadings(receiptId: string): ReceiptReadingRow[];
+  /** 渡した比べのうち、列が NULL のものだけに書く（列ごとに 1 回だけ。`comparedAt` は最初の 1 回だけ） */
+  setReadingOutcome(id: string, outcome: Partial<ReadingOutcome>, at: string): void;
+  appendAudit(entry: ReceiptAuditEntry): void;
+  /** 古い順 */
+  listAudit(receiptId: string): ReceiptAuditEntry[];
+}
+
+/** 証憑の追加・差し替え・結びつきなどで、仕訳・マスタ・証憑の記録を 1 つのトランザクションで扱う（INV-62・64） */
+export type ReceiptUnitOfWork = TenantUnitOfWork<{ receipts: ReceiptStore }>;
+
+/**
+ * 暗号化した証憑のファイル（`packages/db` の `receipt-files.ts` が実装。事業体ごとに作る。
+ * 施錠中は `VaultLockedError`）。メソッドはすべて同期
+ */
+export interface ReceiptFileStore {
+  /** 平文の SHA-256（小文字の 16 進） */
+  digest(bytes: Uint8Array): string;
+  has(sha256: string): boolean;
+  /** `TRC1` で暗号化して `.partial` に書き、改名する。同じ名前があれば何もしない */
+  put(sha256: string, bytes: Uint8Array): void;
+  /** 復号と SHA-256 の検証。失敗は `ReceiptFileUnreadableError`（db が定義する） */
+  read(sha256: string): Uint8Array;
+  /** 追加の失敗の後始末だけに使う */
+  discard(sha256: string): void;
+}
+
+/** 画像の寸法と色（`ReceiptImageTool.probe`） */
+export type ReceiptProbe = { width: number; height: number; fullColor: boolean | null };
+
+/** 画像の変換（server の `image-tool.ts` が `sips` で実装。テストは偽物。R12） */
+export interface ReceiptImageTool {
+  /** 調べられない（PDF など）は `ok(undefined)`。`width × height` が `RECEIPT_MAX_PIXELS` を超えれば `err(VALIDATION, details.maxPixels)` */
+  probe(bytes: Uint8Array, mediaType: ReceiptMediaType): Promise<Result<ReceiptProbe | undefined>>;
+  /** 表示用（HEIC → JPEG など） */
+  toDisplay(
+    bytes: Uint8Array,
+    mediaType: ReceiptMediaType,
+  ): Promise<Result<{ bytes: Uint8Array; mediaType: string }>>;
+  /** AI に送る JPEG（長辺 `maxPx`。PDF は 1 ページ目。描けなければ `RECEIPT_READ_UNSUPPORTED`） */
+  toAiJpeg(
+    bytes: Uint8Array,
+    mediaType: ReceiptMediaType,
+    maxPx: number,
+  ): Promise<Result<Uint8Array>>;
+}
+
+/**
+ * 外部の AI に送る証憑の読み取りの要求（`buildReceiptReadingRequest` の出力。INV-66）。
+ * 固定の指示文、科目・税区分の一覧、画像 1 枚、出力の形（`response_format` の `json_schema`）だけを持つ
+ */
+export type ReceiptReadingRequest = {
+  system: string;
+  choices: string;
+  image: { mediaType: "image/jpeg"; bytes: Uint8Array };
+  schema: object;
+};
+
+/** 外部の AI による証憑の読み取り（server の `ai-client.ts` の `createReceiptReader`。外部の endpoint だけを持つ） */
+export interface ReceiptReader {
+  /** 記録するモデル名。設定がなければ undefined */
+  model(): Promise<string | undefined>;
+  /** 応答の `message.content` をそのまま返す。時間切れは `details.timeout` つきの失敗 */
+  read(request: ReceiptReadingRequest): Promise<Result<unknown>>;
 }
 
 /** 事業体の一覧（data/registry.sqlite） */

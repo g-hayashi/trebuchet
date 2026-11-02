@@ -91,6 +91,36 @@ export function addMonths(month: string, months: number): string {
 }
 
 /**
+ * 日付（`YYYY-MM-DD`）の `months` か月後（負なら前）の日付。その月に同じ日がなければ月末に丸める
+ * （1/31 + 1 か月 = 2/28 か 2/29）。不正な日付は RangeError（010/R2。`addMonths` は `YYYY-MM` 用）
+ */
+export function addMonthsToDate(date: string, months: number): string {
+  const m = DATE_RE.exec(date);
+  if (m === null) throw new RangeError(`不正な日付: ${date}`);
+  return dateInMonth(addMonths(`${m[1]}-${m[2]}`, months), Number(m[3]));
+}
+
+const isWeekend = (ms: number): boolean => {
+  const dow = new Date(ms).getUTCDay();
+  return dow === 0 || dow === 6;
+};
+
+/**
+ * 土日を除く営業日を `days` 日分進めた（負なら戻した）日付。祝日は除かない（010/R2）。
+ * 0 は日付のまま。土日から数えるときは、次（前）の平日が 1 営業日目
+ */
+export function addBusinessDays(date: string, days: number): string {
+  let ms = toUtcMs(date);
+  if (Number.isNaN(ms)) throw new RangeError(`不正な日付: ${date}`);
+  const step = days < 0 ? -DAY_MS : DAY_MS;
+  for (let left = Math.abs(days); left > 0; ) {
+    ms += step;
+    if (!isWeekend(ms)) left--;
+  }
+  return fromUtcMs(ms);
+}
+
+/**
  * 月（`YYYY-MM`）の `day` 日を `YYYY-MM-DD` で返す。その月の末日を超えるときは末日にする
  * （`day` は 1〜28 または 31 = 末日）
  */

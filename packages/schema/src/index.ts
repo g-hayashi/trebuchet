@@ -9,6 +9,7 @@ export * from "./invoicing.ts";
 export * from "./journals.ts";
 export * from "./masters.ts";
 export * from "./primitives.ts";
+export * from "./receipts.ts";
 export * from "./recurring.ts";
 export * from "./reports.ts";
 export * from "./statements.ts";
