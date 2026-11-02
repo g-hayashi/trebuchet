@@ -508,7 +508,9 @@ export type ClosingAuditTargetType =
   | "fixed_asset"
   | "blue_deduction_answer"
   | "closing_note"
-  | "account_report_line";
+  | "account_report_line"
+  | "deferred_asset"
+  | "deferred_amortization";
 
 export type ClosingAuditAction = "create" | "update" | "dispose" | "delete";
 

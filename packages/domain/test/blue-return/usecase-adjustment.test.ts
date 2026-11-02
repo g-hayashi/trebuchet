@@ -10,6 +10,10 @@ import {
   saveHomeUseAllocation,
   saveRentDetails,
 } from "../../src/usecases/blue-return.ts";
+import {
+  decideDeferredAmortization,
+  saveDeferredAsset,
+} from "../../src/usecases/deferred-assets.ts";
 import { voidJournal } from "../../src/usecases/void-journal.ts";
 import { type FakeClosingUnitOfWork, fakeClosingUnitOfWork } from "../fakes.ts";
 import { setupLedger } from "../ledger-fixture.ts";
@@ -450,5 +454,126 @@ describe("getAdjustmentProposals・commitAdjustment（FR-014〜016、R4）", () 
       expected: { amount: 840_000 },
     });
     expect(!r.ok && r.error.code).toBe("VALIDATION");
+  });
+});
+
+describe("開業費の償却の案と確定（009 R5・R7・R12、INV-23・60）", () => {
+  const deferredInput = () => ({
+    name: "開業準備費",
+    totalAmount: 600_000,
+    openedOn: "2025-04-10",
+    priorAccumulated: 0,
+    accountId: fx.accountId("開業費"),
+  });
+  const saveDeferred = () => unwrap(saveDeferredAsset(settingsDeps(), deferredInput()));
+  const decideAmount = (deferredAssetId: string, fiscalYear: number, amount: number) =>
+    unwrap(decideDeferredAmortization(settingsDeps(), { deferredAssetId, fiscalYear, amount }));
+  const commitDeferred = (sourceId: string, amount: number, fiscalYear = 2025) =>
+    commitAdjustment(commitDeps(), {
+      fiscalYear,
+      kind: "deferred_amortization",
+      sourceId,
+      expected: { amount },
+    });
+
+  it("決定した正の額の案を、按分・資産の案のあとに足す。決定がない・0 円は出さない", () => {
+    payRent(1_200_000);
+    saveRent();
+    const asset = saveDeferred();
+    expect(proposals().map((p) => p.kind)).toEqual(["home_use"]);
+    decideAmount(asset.id, 2025, 0);
+    expect(proposals().map((p) => p.kind)).toEqual(["home_use"]);
+    decideAmount(asset.id, 2025, 90_000);
+    const list = proposals();
+    expect(list.map((p) => p.kind)).toEqual(["home_use", "deferred_amortization"]);
+    expect(list[1]).toMatchObject({
+      sourceId: asset.id,
+      journal: {
+        date: "2025-12-31",
+        lines: [
+          { side: "debit", accountId: fx.accountId("減価償却費"), amount: 90_000 },
+          { side: "credit", accountId: fx.accountId("開業費"), amount: 90_000 },
+        ],
+      },
+      breakdown: { totalAmount: 600_000, openingBalance: 600_000, amount: 90_000 },
+    });
+  });
+
+  it("確定すると仕訳と出所の参照（deferredAssetId、年度）を 1 つのトランザクションで登録する", () => {
+    const asset = saveDeferred();
+    decideAmount(asset.id, 2025, 90_000);
+    const r = unwrap(commitDeferred(asset.id, 90_000));
+    expect(r.ref).toMatchObject({
+      journalId: r.journal.id,
+      kind: "deferred_amortization",
+      allocationId: null,
+      assetId: null,
+      deferredAssetId: asset.id,
+      fiscalYear: 2025,
+    });
+    expect(uow.closing.listAdjustmentRefsBySource({ deferredAssetId: asset.id })).toEqual([r.ref]);
+    expect(proposals()).toEqual([]);
+  });
+
+  it("登録済みの 2 回目は ADJUSTMENT_NOT_NEEDED（ALREADY_REGISTERED）で何も書かない。取り消すと案が戻る", () => {
+    const asset = saveDeferred();
+    decideAmount(asset.id, 2025, 90_000);
+    const { journal } = unwrap(commitDeferred(asset.id, 90_000));
+    const before = snapshot();
+    const again = commitDeferred(asset.id, 90_000);
+    expect(!again.ok && again.error.code).toBe("ADJUSTMENT_NOT_NEEDED");
+    expect(!again.ok && again.error.details?.reason).toBe("ALREADY_REGISTERED");
+    expect(snapshot()).toEqual(before);
+    unwrap(voidJournal(fx.deps, journal.id, { reason: "やり直し", version: journal.version }));
+    expect(proposals().map((p) => p.kind)).toEqual(["deferred_amortization"]);
+    expect(commitDeferred(asset.id, 90_000).ok).toBe(true);
+  });
+
+  it("決定がない・0 円の確定は ADJUSTMENT_NOT_NEEDED、金額が違えば ADJUSTMENT_CHANGED（details.proposal）", () => {
+    const asset = saveDeferred();
+    const none = commitDeferred(asset.id, 1);
+    expect(!none.ok && none.error.code).toBe("ADJUSTMENT_NOT_NEEDED");
+    decideAmount(asset.id, 2025, 0);
+    const zero = commitDeferred(asset.id, 1);
+    expect(!zero.ok && zero.error.code).toBe("ADJUSTMENT_NOT_NEEDED");
+    decideAmount(asset.id, 2025, 90_000);
+    const before = snapshot();
+    const changed = commitDeferred(asset.id, 80_000);
+    expect(!changed.ok && changed.error.code).toBe("ADJUSTMENT_CHANGED");
+    expect(!changed.ok && changed.error.details).toMatchObject({
+      expected: 80_000,
+      actual: 90_000,
+      proposal: { kind: "deferred_amortization" },
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("締め済みの年度は案を返さず、確定は PERIOD_CLOSED", () => {
+    const asset = saveDeferred();
+    decideAmount(asset.id, 2025, 90_000);
+    fx.closeYear(2025);
+    expect(proposals()).toEqual([]);
+    const r = commitDeferred(asset.id, 90_000);
+    expect(!r.ok && r.error.code).toBe("PERIOD_CLOSED");
+  });
+
+  it("開業費が見つからなければ VALIDATION。決定のない年度に案はない", () => {
+    const missing = commitDeferred("missing", 1);
+    expect(!missing.ok && missing.error.code).toBe("VALIDATION");
+    const asset = saveDeferred();
+    decideAmount(asset.id, 2025, 90_000);
+    expect(proposals(2026).map((p) => p.kind)).toEqual([]);
+  });
+
+  it("参照の登録に失敗すると仕訳も残らない（全部か無か）", () => {
+    const asset = saveDeferred();
+    decideAmount(asset.id, 2025, 90_000);
+    const before = snapshot();
+    vi.spyOn(uow.closing, "insertAdjustmentRef").mockImplementation(() => {
+      throw new Error("boom");
+    });
+    expect(() => commitDeferred(asset.id, 90_000)).toThrow("boom");
+    vi.restoreAllMocks();
+    expect(snapshot()).toEqual(before);
   });
 });

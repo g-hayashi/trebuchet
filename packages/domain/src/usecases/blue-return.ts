@@ -20,6 +20,11 @@ import {
   type DeductionRequirementAnswers,
 } from "../blue-return/deduction.ts";
 import {
+  type AdjustmentRefStatus,
+  deferredAmortizationYear,
+  proposeDeferredAmortization,
+} from "../blue-return/deferred-asset.ts";
+import {
   type Depreciation,
   depreciate,
   proposeDepreciationAdjustment,
@@ -48,6 +53,7 @@ import {
   type ClosingNote,
   type ClosingNoteKind,
   type DeductionAnswers,
+  type DeferredAsset,
   type DomainError,
   type DomainWarning,
   domainError,
@@ -83,13 +89,13 @@ export type ClosingSettingsDeps = { uow: ClosingUnitOfWork; ids: IdGenerator; cl
  * UnitOfWork の中で保存の本体に渡す依存（同じトランザクションのマスタ・ClosingStore と、
  * 償却の仕訳の状態を読む仕訳。009/R12）
  */
-type ClosingTxDeps = ClosingReadDeps & {
+export type ClosingTxDeps = ClosingReadDeps & {
   ledger: Pick<LedgerRepository, "getJournal">;
   ids: IdGenerator;
   clock: Clock;
 };
 
-function inClosingTx<T>(
+export function inClosingTx<T>(
   deps: ClosingSettingsDeps,
   fn: (tx: ClosingTxDeps) => Result<T>,
 ): Result<T> {
@@ -105,7 +111,7 @@ export type DeductionAnswersView = {
 };
 
 /** 個人の事業体でなければ ENTITY_KIND_UNSUPPORTED（事業体がなければ ENTITY_NOT_FOUND） */
-function requireIndividual(masters: Pick<MasterRepository, "getProfile">): Result<null> {
+export function requireIndividual(masters: Pick<MasterRepository, "getProfile">): Result<null> {
   const profile = masters.getProfile();
   if (profile === undefined) {
     return err(domainError("ENTITY_NOT_FOUND", "事業体が見つかりません"));
@@ -124,11 +130,50 @@ function requireIndividual(masters: Pick<MasterRepository, "getProfile">): Resul
  * 個人の事業体でなければ ENTITY_KIND_UNSUPPORTED。年度がなければ 001 の締め・解除と同じ
  * VALIDATION（会計期間が見つかりません）。種別の判定が先
  */
-function resolveYear(masters: MasterRepository, fiscalYear: number): Result<FiscalPeriod> {
+export function resolveYear(masters: MasterRepository, fiscalYear: number): Result<FiscalPeriod> {
   const individual = requireIndividual(masters);
   if (!individual.ok) return individual;
   const period = masters.getFiscalPeriodByYear(fiscalYear);
   return period === undefined ? err(periodNotFound(fiscalYear)) : ok(period);
+}
+
+/** 締め済みの年度に決算整理の仕訳・開業費の決定を書こうとしたとき（FR-021） */
+export const periodClosedError = (fiscalYear: number): Result<never> =>
+  err(
+    domainError(
+      "PERIOD_CLOSED",
+      `${fiscalYear}年度は締め済みです。決算整理の仕訳を登録するには締めを解除してください`,
+      { fiscalYear, suggest: "reopen_period" },
+    ),
+  );
+
+/** 有効な（取り消されていない）仕訳の ID。日付を問わず全年度から読む */
+function activeJournalIds(reports: Pick<ReportRepository, "linesInRange">): Set<string> {
+  return new Set(
+    reports
+      .linesInRange("0000-01-01", "9999-12-31")
+      .filter((l) => l.status === "active")
+      .map((l) => l.journalId),
+  );
+}
+
+/**
+ * 開業費の償却の仕訳の参照（全年度）と、その仕訳が有効か。開業費の上限の計算（前の年度の有効な償却額）に使う。
+ * 仕訳の状態は全年度の有効な行から読む（開業費の参照はなければ帳簿を読まない）
+ */
+export function deferredRefStatuses(
+  deps: {
+    closing: Pick<ClosingStore, "listAdjustmentRefsBySource">;
+    reports: Pick<ReportRepository, "linesInRange">;
+  },
+  assets: readonly DeferredAsset[],
+): AdjustmentRefStatus[] {
+  const refs = assets.flatMap((a) =>
+    deps.closing.listAdjustmentRefsBySource({ deferredAssetId: a.id }),
+  );
+  if (refs.length === 0) return [];
+  const active = activeJournalIds(deps.reports);
+  return refs.map((r) => ({ ...r, active: active.has(r.journalId) }));
 }
 
 /**
@@ -164,6 +209,7 @@ export function getBlueReturn(
 ): Result<BlueReturn> {
   const period = resolveYear(deps.masters, params.fiscalYear);
   if (!period.ok) return period;
+  const deferredAssets = deps.closing.listDeferredAssets();
   return ok(
     buildBlueReturn({
       period: period.value,
@@ -176,6 +222,9 @@ export function getBlueReturn(
       rentDetails: deps.closing.listRentDetails(params.fiscalYear),
       fixedAssets: deps.closing.listFixedAssets(),
       straightLineRates: deps.closing.listStraightLineRates(),
+      deferredAssets,
+      deferredAmortizations: deps.closing.listDeferredAmortizations(),
+      adjustmentRefsAll: deferredRefStatuses(deps, deferredAssets),
       opening: deps.reports.openingBalances(params.fiscalYear),
       priorPeriod: readPriorPeriod(deps, params.fiscalYear),
       closingNotes: deps.closing.listClosingNotes(params.fiscalYear),
@@ -723,6 +772,8 @@ type ProposalSources = {
     | "listHomeUseAllocations"
     | "listAdjustmentRefs"
     | "listAdjustmentRefsBySource"
+    | "listDeferredAssets"
+    | "listDeferredAmortizations"
     | "listFixedAssets"
     | "listStraightLineRates"
     | "listTaxParameters"
@@ -730,8 +781,8 @@ type ProposalSources = {
   reports: Pick<ReportRepository, "linesInRange">;
   /**
    * 仕訳が有効（取り消されていない）か。確定（commitAdjustment）はトランザクションの仕訳から読み、
-   * 一覧（getAdjustmentProposals）は年度の有効な行から読む（日付を年度の外へ訂正した仕訳は一覧では
-   * 未登録に見えるが、確定は登録済みとして拒否する。INV-60 を守るのは確定の側）
+   * 一覧（getAdjustmentProposals）は全年度の有効な行から読む（日付を問わない。前の年度の開業費の
+   * 償却の仕訳が今の年度の上限を決めるため。INV-60 を守るのは確定の側）
    */
   isActiveJournal: (journalId: string) => boolean;
 };
@@ -771,6 +822,43 @@ function assessDepreciation(
   return ok({ proposal: proposed.value, reason: null });
 }
 
+/**
+ * 開業費の償却の案（開業費・年度ごと。009/R5・R7）。その年度に有効な償却の仕訳が登録済みなら案を作らない
+ * （取り消した仕訳は未登録として案を戻す。INV-60）。決定がない・0 円の年度は案がない（NOT_APPLICABLE）。
+ * 上限（期首の未償却残高）は前の年度の有効な仕訳のある決定だけで減る。月数の税制の値がなければ
+ * TAX_PARAMETER_MISSING
+ */
+function assessDeferred(
+  src: ProposalSources,
+  period: FiscalPeriod,
+  asset: DeferredAsset,
+): Result<RebuiltProposal> {
+  const activeYears = new Set<number>();
+  for (const ref of src.closing.listAdjustmentRefsBySource({ deferredAssetId: asset.id })) {
+    if (ref.kind === "deferred_amortization" && src.isActiveJournal(ref.journalId)) {
+      activeYears.add(ref.fiscalYear);
+    }
+  }
+  const view = deferredAmortizationYear(asset, period.fiscalYear, {
+    decisions: src.closing.listDeferredAmortizations(),
+    activeRefs: activeYears,
+    taxParameters: src.closing.listTaxParameters(),
+  });
+  if (!view.ok) return view;
+  if (view.value.registered) return ok({ proposal: null, reason: "ALREADY_REGISTERED" });
+  const proposed = proposeDeferredAmortization(
+    asset,
+    view.value,
+    period.fiscalYear,
+    src.masters.listAccounts(),
+  );
+  if (!proposed.ok) return proposed;
+  return ok({
+    proposal: proposed.value,
+    reason: proposed.value === null ? "NOT_APPLICABLE" : null,
+  });
+}
+
 function assessHomeUse(
   src: Omit<ProposalSources, "isActiveJournal">,
   period: FiscalPeriod,
@@ -790,9 +878,9 @@ function assessHomeUse(
 /**
  * 決算整理の仕訳の案の一覧（差があるものだけ。FR-014・FR-016、FR-021）。按分の登録の順、
  * そのあとにその年度に償却のある資産の償却の案（台帳の順。定額法は startYear 以後の各年度）。
- * 締め済みの年度は償却の案を返さない（009 FR-021。按分の案は今のまま）。償却率・税制の値がない資産は
- * 案を出さず、一覧は失敗させない（決算書の DEPRECIATION_PARAMETER_MISSING が知らせる。確定は
- * TAX_PARAMETER_MISSING）
+ * そのあとに開業費の決定の案（開業日・ID の順）。締め済みの年度は償却・開業費の案を返さない
+ * （009 FR-021。按分の案は今のまま）。償却率・税制の値がない資産・開業費は案を出さず、一覧は
+ * 失敗させない（決算書の DEPRECIATION_PARAMETER_MISSING が知らせる。確定は TAX_PARAMETER_MISSING）
  */
 export function getAdjustmentProposals(
   deps: BlueReturnDeps,
@@ -809,18 +897,21 @@ export function getAdjustmentProposals(
   }
   if (period.value.status === "closed") return ok(proposals);
 
-  const activeJournals = new Set(
-    deps.reports
-      .linesInRange(period.value.startDate, period.value.endDate)
-      .filter((l) => l.status === "active")
-      .map((l) => l.journalId),
-  );
+  const activeJournals = activeJournalIds(deps.reports);
   const src: ProposalSources = {
     ...deps,
     isActiveJournal: (journalId) => activeJournals.has(journalId),
   };
   for (const asset of deps.closing.listFixedAssets()) {
     const assessed = assessDepreciation(src, period.value, asset);
+    if (!assessed.ok) {
+      if (assessed.error.code === "TAX_PARAMETER_MISSING") continue;
+      return assessed;
+    }
+    if (assessed.value.proposal !== null) proposals.push(assessed.value.proposal);
+  }
+  for (const asset of deps.closing.listDeferredAssets()) {
+    const assessed = assessDeferred(src, period.value, asset);
     if (!assessed.ok) {
       if (assessed.error.code === "TAX_PARAMETER_MISSING") continue;
       return assessed;
@@ -876,9 +967,15 @@ function rebuildProposal(
       }
       return assessDepreciation(src, period, asset);
     }
-    case "deferred_amortization":
-      // 開業費の案は T020 で作る
-      return err(domainError("VALIDATION", "開業費の案はまだ作れません", { field: "kind", kind }));
+    case "deferred_amortization": {
+      const asset = src.closing.listDeferredAssets().find((a) => a.id === sourceId);
+      if (asset === undefined) {
+        return err(
+          domainError("VALIDATION", "開業費が見つかりません", { field: "sourceId", sourceId }),
+        );
+      }
+      return assessDeferred(src, period, asset);
+    }
   }
 }
 
@@ -921,15 +1018,7 @@ export function commitAdjustment(
   return deps.uow.run((tx) => {
     const period = resolveYear(tx.masters, params.fiscalYear);
     if (!period.ok) return period;
-    if (period.value.status === "closed") {
-      return err(
-        domainError(
-          "PERIOD_CLOSED",
-          `${params.fiscalYear}年度は締め済みです。決算整理の仕訳を登録するには締めを解除してください`,
-          { fiscalYear: params.fiscalYear, suggest: "reopen_period" },
-        ),
-      );
-    }
+    if (period.value.status === "closed") return periodClosedError(params.fiscalYear);
 
     const rebuilt = rebuildProposal(
       {
