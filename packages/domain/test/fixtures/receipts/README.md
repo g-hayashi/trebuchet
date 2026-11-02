@@ -26,4 +26,16 @@
 
 - 手で書いたコードが作る。画像の生成ツールや使い捨てのスクリプトを使わない。1 つのファイルに畳んであるので、形式を足すときは `sample-files.ts` に関数を足し、`packages/domain/test/receipts/sample-files.test.ts` に先頭のマーカー・並びの確認を足す
 - 同じ指定なら同じバイト列になる（決定的）。SHA-256 の違うファイルが要るときは `seed` を変える
-- 評価用の画像 20 枚（R17。レシート・領収書・電子の PDF、HEIC 2 枚、PDF 2 枚、`expected.ts`）は US4 のタスクで同じ場所に足す
+
+## 評価用の画像（`pnpm eval:receipts`、R17。画像の用意は T042）
+
+| ファイル | 内容 |
+|---|---|
+| `eval/<ファイル名>` | 合成の証憑 20 枚（レシート・領収書・電子の PDF を混ぜる。HEIC 2 枚、PDF 2 枚を含む）。JPEG・PNG・HEIC・PDF。形式は中身で判定する |
+| `expected.ts` | `RECEIPT_EVAL_EXPECTED`: `eval/` のファイル名 → 正解（`transactionDate`・`amount`・`partnerName`・`accountCode`・`taxCategory`）。正解を決めない項目は `null`（集計しない） |
+
+- 画像は**合成だけ**（実データの写真・実在の取引先名を入れない。上の匿名化の方針と同じ）。作る手順はリポジトリに置かない使い捨てのスクリプト（002・007 と同じ）。正解は画像を作るときに決めた値
+- 画像を足す・消すときは `expected.ts` を同じファイル名で合わせる。食い違うと `pnpm eval:receipts` は AI を呼ばずに止まる
+- `accountCode` は初期の科目（`seed/accounts.individual.ts`）のコード、`taxCategory` は `TaxCategoryCode` の値
+- 目標: 取引年月日・金額の一致率が 90% 以上（20 枚中 18 枚）。取引先・科目・税区分は記録だけ。結果は `.tmp/eval-receipts/` に件数と割合だけ
+- 集計の確認（偽の reader）は `packages/domain/test/receipts/evals.test.ts`。外部の AI は CI で呼ばない
