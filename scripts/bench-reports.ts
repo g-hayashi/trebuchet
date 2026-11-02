@@ -2,17 +2,23 @@
  * SC-004 のベンチマーク: 年間 2,000 件（平均 3 行）の仕訳があるとき、各帳票の API が 1 秒以内に応答するかを測る。
  * あわせて SC-006（003）: 約 500 仕訳の帳簿で、決算書の画面が使う API が 2 秒以内に応答するかを測る。
  * さらに SC-005（009）: 資産 50 件（定額法・一括償却・少額の特例）と開業費 1 件の事業体で、同じ API が 2 秒以内かを測る。
+ * さらに SC-002（010）: 証憑 5,000 件（ファイルなし）の事業体で、日付 × 金額 × 取引先の検索 10 回が各 1 秒以内かを測る。
  * `.tmp/bench-<uuid>/` に一時的なテナントを作り、終了時に削除する。
  *
  *   pnpm bench:reports
  *   BENCH_LIMIT_MS=50 BENCH_RUNS=10 pnpm bench:reports   # しきい値・回数の変更
+ *   BENCH_RECEIPT_LIMIT_MS=1000 pnpm bench:reports       # 証憑の検索（010 の SC-002）のしきい値
  *   BENCH_BLUE_LIMIT_MS=2000 pnpm bench:reports          # 決算書（SC-006）のしきい値
  *   BENCH_ASSET_LIMIT_MS=2000 pnpm bench:reports         # 資産と開業費の決算書（009 の SC-005）のしきい値
  *
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む
  * （その先の hono や @trebuchet/db は各パッケージの node_modules から解決される）。
  */
+import { randomUUIDv7 } from "node:crypto";
+import { createReceiptUnitOfWork } from "../packages/db/src/receipt-repository.ts";
+import { openTenant } from "../packages/db/src/tenant-store.ts";
 import { useTempDataDir } from "../packages/db/src/testing.ts";
+import { normalizeReceiptText, ok, type ReceiptRow } from "../packages/domain/src/index.ts";
 import { positiveNumber, runBench } from "./lib/bench-common.ts";
 import { createBenchHeaders } from "./lib/bench-session.ts";
 
@@ -495,7 +501,110 @@ await runBench(
       );
       sc005Ok = true;
     }
-    return sc004Ok && sc006Ok && sc005Ok;
+    // SC-002（010）: 証憑 5,000 件（ファイルなし。証憑とファイルの版の行だけをリポジトリで入れる）の事業体で、
+    // 取引年月日の範囲 × 金額の範囲 × 取引先の部分一致の検索（GET /receipts）が各 1 秒以内（10 回）。
+    const RECEIPT_COUNT = 5_000;
+    const RECEIPT_QUERIES = 10;
+    const RECEIPT_LIMIT_MS = positiveNumber("BENCH_RECEIPT_LIMIT_MS", 1_000);
+    const { entity: receiptEntity } = await json<{ entity: { id: string } }>(
+      await call("POST", "/entities", {
+        name: "ベンチマーク（証憑）",
+        kind: "individual",
+        fiscalStartMonth: 1,
+        firstFiscalYear: FISCAL_YEAR,
+      }),
+      201,
+      "証憑用の事業体の作成",
+    );
+    const receiptBase = `/entities/${receiptEntity.id}`;
+    const partnerNames = Array.from(
+      { length: 100 },
+      (_, i) => `ベンチ商店${String(i).padStart(3, "0")}`,
+    );
+    const receiptSetupStart = performance.now();
+    const receiptUow = createReceiptUnitOfWork(openTenant(receiptEntity.id));
+    const receiptResult = receiptUow.run((tx) => {
+      for (let i = 0; i < RECEIPT_COUNT; i++) {
+        const at = new Date(Date.UTC(FISCAL_YEAR, 0, 1, 0, 0, 0) + i * 60_000).toISOString();
+        const sha256 = i.toString(16).padStart(64, "0");
+        const partnerName = partnerNames[i % partnerNames.length] ?? "";
+        const receipt: ReceiptRow = {
+          id: randomUUIDv7(),
+          receivedAt: at,
+          channel: "local",
+          category: i % 2 === 0 ? "paper_scan" : "electronic",
+          currentSha256: sha256,
+          transactionDate: dateOf(i, RECEIPT_COUNT),
+          amount: 1_000 + ((i * 7_919) % 90_000),
+          partnerName,
+          partnerKey: normalizeReceiptText(partnerName),
+          memo: null,
+          deletedAt: null,
+          deletedReason: null,
+          version: 1,
+          createdAt: at,
+          updatedAt: at,
+        };
+        tx.receipts.insertReceipt(receipt);
+        tx.receipts.insertFile({
+          sha256,
+          receiptId: receipt.id,
+          fileVersion: 1,
+          mediaType: "image/jpeg",
+          sizeBytes: 1_000,
+          originalName: `bench-${i}.jpg`,
+          width: 2_400,
+          height: 1_700,
+          fullColor: true,
+          addedAt: at,
+          channel: "local",
+        });
+      }
+      return ok(undefined);
+    });
+    if (!receiptResult.ok) throw new Error("証憑の行の登録に失敗しました");
+    console.log(
+      `証憑 ${RECEIPT_COUNT} 件（ファイルなし）を登録: ${(performance.now() - receiptSetupStart).toFixed(0)} ms`,
+    );
+
+    // 検索 10 通り（取引先の語・日付の範囲・金額の範囲を変える）
+    const receiptSearches = Array.from({ length: RECEIPT_QUERIES }, (_, i) => {
+      const monthFrom = String(1 + (i % 6)).padStart(2, "0");
+      const monthTo = String(7 + (i % 6)).padStart(2, "0");
+      const params = new URLSearchParams({
+        dateFrom: `${FISCAL_YEAR}-${monthFrom}-01`,
+        dateTo: `${FISCAL_YEAR}-${monthTo}-28`,
+        amountMin: String(1_000 + i * 2_000),
+        amountMax: String(60_000 + i * 3_000),
+        partner: i % 3 === 0 ? "ベンチ商店" : `商店${String(i * 7).padStart(3, "0")}`,
+      });
+      return `${receiptBase}/receipts?${params.toString()}`;
+    });
+    await measure(receiptSearches[0] ?? ""); // ウォームアップ
+    const receiptRows = [];
+    for (const [i, path] of receiptSearches.entries()) {
+      const elapsed = await measure(path);
+      receiptRows.push({
+        query: i + 1,
+        "time (ms)": Number(elapsed.toFixed(1)),
+        result: elapsed <= RECEIPT_LIMIT_MS ? "OK" : "NG",
+      });
+    }
+    console.log(`証憑の検索: 証憑 ${RECEIPT_COUNT} 件（日付 × 金額 × 取引先）`);
+    console.table(receiptRows);
+    const receiptFailed = receiptRows.filter((r) => r.result === "NG");
+    let sc002Ok = false;
+    if (receiptFailed.length > 0) {
+      console.error(
+        `SC-002（010）を満たしません: 検索 ${receiptFailed.map((r) => r.query).join(", ")} が ${RECEIPT_LIMIT_MS} ms を超えました`,
+      );
+    } else {
+      console.log(
+        `SC-002（010）OK: 証憑の検索が ${RECEIPT_LIMIT_MS} ms 以内（${RECEIPT_QUERIES} 回の最大値）`,
+      );
+      sc002Ok = true;
+    }
+    return sc004Ok && sc006Ok && sc005Ok && sc002Ok;
   },
   () => tmp.cleanup(),
 );
