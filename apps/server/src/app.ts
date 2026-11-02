@@ -18,7 +18,7 @@ import type { BackupRunner } from "./lib/backup-run.ts";
 import { ChallengeStore } from "./lib/challenges.ts";
 import type { FmServer } from "./lib/fm-server.ts";
 import { createJobStore, type JobStore } from "./lib/jobs.ts";
-import { type GetRemoteSettings, getRemoteSettingsDisabled } from "./lib/origin.ts";
+import type { GetRemoteSettings } from "./lib/origin.ts";
 import type { Vault } from "./lib/vault.ts";
 import type { WebAuthnVerifier } from "./lib/webauthn.ts";
 import { simpleWebAuthnVerifier } from "./lib/webauthn-simplewebauthn.ts";
@@ -39,6 +39,7 @@ import { masterRoutes } from "./routes/masters.ts";
 import { periodRoutes } from "./routes/periods.ts";
 import { recurringRoutes } from "./routes/recurring.ts";
 import { reportRoutes } from "./routes/reports.ts";
+import { remoteSettingsRoutes } from "./routes/settings.ts";
 import { statementRoutes } from "./routes/statements.ts";
 import { taxReturnRoutes } from "./routes/tax-return.ts";
 import { type TenantEnv, tenant } from "./tenant.ts";
@@ -72,7 +73,7 @@ function tenantRoutes(
 }
 
 export type AppOptions = {
-  /** リモート（ts.net）の設定の読み込み。既定は無効。T016b が `AuthStore.getRemoteSettings`（auth.sqlite）を渡す */
+  /** リモート（ts.net）の設定の読み込み。既定は `AuthStore.getRemoteSettings`（auth.sqlite。施錠中も読める）。テストは差し替える */
   getRemoteSettings?: GetRemoteSettings;
   store?: () => AuthStore;
   clock?: Clock;
@@ -107,8 +108,9 @@ export type AppOptions = {
  * テストは `createApp()` で新しいアプリを作ってダミーのルートを足せる
  */
 export function createApp(options: AppOptions = {}) {
-  const getRemoteSettings = options.getRemoteSettings ?? getRemoteSettingsDisabled;
   const store = options.store ?? authStore;
+  // 要求ごとに読む（再起動なしで反映）。auth.sqlite は施錠中も読める（Host の検査が LOCKED にならない）
+  const getRemoteSettings = options.getRemoteSettings ?? (() => store().getRemoteSettings());
   const clock = options.clock ?? defaultClock;
   const vault = options.vault ?? defaultVault;
   const jobs = options.jobs ?? createJobStore();
@@ -148,6 +150,7 @@ export function createApp(options: AppOptions = {}) {
       }),
     )
     .route("/settings", aiSettingsRoutes({ clock, ai }))
+    .route("/settings", remoteSettingsRoutes({ store, clock }))
     .route("/entities", entitiesRoutes({ clock }))
     .route(
       "/entities/:entityId",

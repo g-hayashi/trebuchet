@@ -28,6 +28,12 @@ export const RemoteSettings = z
   });
 export type RemoteSettings = z.infer<typeof RemoteSettings>;
 
+/**
+ * `PUT /settings/remote` の本文の形だけ（名前の検査は `RemoteSettings`。
+ * 形が違えば 400 VALIDATION、名前が不正なら 422 REMOTE_HOST_INVALID に分ける）
+ */
+export const RemoteSettingsInput = z.object({ enabled: z.boolean(), host: z.string().nullable() });
+
 export const AuthStatus = z.object({
   registered: z.boolean(),
   signedIn: z.boolean(),

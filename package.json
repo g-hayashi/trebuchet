@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,green \"pnpm --filter @trebuchet/server dev\" \"pnpm --filter @trebuchet/web dev\"",
+    "start": "pnpm --filter @trebuchet/web build && pnpm --filter @trebuchet/server start",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --parallel typecheck && tsc -p scripts",
