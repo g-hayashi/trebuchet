@@ -9,6 +9,7 @@ import {
   fakeReceiptUnitOfWork,
   SequentialIds,
 } from "./fakes.ts";
+import { setupBase } from "./ledger-setup.ts";
 import { NOW } from "./test-dates.ts";
 
 /** `Asia/Tokyo` の日付（`ReceiptDeps.dateOf` の偽物。UTC に 9 時間を足す。テスト専用） */
@@ -26,6 +27,38 @@ export function setupReceipts(options: { now?: string } = {}) {
   const ids = new SequentialIds();
   const deps: ReceiptDeps = { uow, files, clock, ids, dateOf: jstDateOf };
   return { uow, files, clock, ids, deps };
+}
+
+/**
+ * `setupReceipts` に、会計期間・科目つきの帳簿（`setupBase`）をつなぐ。仕訳を 001 の `createJournal` で
+ * 登録するテスト（結びつき、証憑から仕訳の登録）が使う。`accountId(名前)` で科目の ID を引く
+ */
+export function setupReceiptsWithLedger() {
+  const base = setupBase();
+  const uow: FakeReceiptUnitOfWork = fakeReceiptUnitOfWork(base.ledger, base.masters);
+  const files = new FakeReceiptFileStore();
+  const deps: ReceiptDeps = {
+    uow,
+    files,
+    clock: base.clock,
+    ids: base.ids,
+    dateOf: jstDateOf,
+  };
+  return { ...base, uow, files, deps };
+}
+
+/** 証憑（と版 1 のファイル）を直接足す。結びつきのテストの準備。`id`・`sha` は合成 */
+export function seedReceipt(
+  uow: FakeReceiptUnitOfWork,
+  over: Partial<ReceiptRow> & { id: string },
+): ReceiptRow {
+  const n = uow.receipts.state.receipts.length + 1;
+  const receipt = makeReceiptRow({ currentSha256: fakeSha(n), ...over });
+  uow.receipts.insertReceipt(receipt);
+  uow.receipts.insertFile(
+    makeReceiptFileRow({ sha256: receipt.currentSha256, receiptId: receipt.id }),
+  );
+  return receipt;
 }
 
 /** 帳簿に最小の仕訳（行なし）を足す。結びつきの相手として使う。名前・金額はなし */

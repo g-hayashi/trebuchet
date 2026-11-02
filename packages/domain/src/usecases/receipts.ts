@@ -179,6 +179,23 @@ function buildDetail(tx: ReadTx, deps: ReceiptDeps, receipt: ReceiptRow): Receip
   };
 }
 
+/** 結びつきのユースケース（`receipt-links.ts`）が使う。`uow.run` の中で呼ぶ */
+export const receiptDetailOf = buildDetail;
+
+/** 証憑の一覧の 1 件（仕訳の詳細の `receipts` に使う）。`uow.run` の中で呼ぶ */
+export function receiptSummaryOf(
+  tx: ReadTx,
+  deps: ReceiptDeps,
+  receipt: ReceiptRow,
+): ReceiptSummary {
+  const currentFile = tx.receipts
+    .listFiles(receipt.id)
+    .find((f) => f.sha256 === receipt.currentSha256);
+  if (currentFile === undefined) throw new Error(`current file not found: ${receipt.id}`);
+  const link = tx.receipts.getActiveLink(receipt.id);
+  return toSummary(deps, receipt, currentFile, link, journalRefOf(tx, link));
+}
+
 const notFound = () => domainError("RECEIPT_NOT_FOUND", "証憑が見つかりません");
 
 // ---- 追加 ----
