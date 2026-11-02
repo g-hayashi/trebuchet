@@ -1,6 +1,7 @@
 import type {
   ReceiptCategory,
   ReceiptChannel,
+  ReceiptHistoryAction,
   ReceiptLinkState,
   ReceiptMediaType,
   ReceiptWarning,
@@ -78,6 +79,26 @@ export function warningText(warning: ReceiptWarning): string {
   const label = warningLabel(warning);
   return NEEDS_ORIGINAL_NOTE.has(warning.code) ? `${label}。${KEEP_ORIGINAL_NOTE}。` : label;
 }
+
+/** 履歴の操作の表示名（`receipt_audit_log` の `action`。US5） */
+export const HISTORY_ACTION_LABELS: Record<ReceiptHistoryAction, string> = {
+  create: "追加",
+  update: "訂正",
+  replace_file: "ファイルを差し替え",
+  delete: "削除",
+  link: "仕訳に結びつけ",
+  unlink: "結びつきを解除",
+  read: "AI の読み取り",
+};
+
+/** 訂正の前後を比べる値の表示名（表示の順） */
+export const HISTORY_VALUE_LABELS = {
+  category: "区分",
+  transactionDate: "取引年月日",
+  amount: "金額",
+  partnerName: "取引先",
+  memo: "メモ",
+} as const;
 
 /** ファイルの大きさ（バイト数を 3 桁区切りで） */
 export const formatBytes = (bytes: number): string => `${bytes.toLocaleString("ja-JP")} バイト`;

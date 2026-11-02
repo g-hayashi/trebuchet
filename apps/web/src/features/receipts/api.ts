@@ -1,10 +1,13 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import type {
   ReceiptCreateOptions,
+  ReceiptDeleteInput,
   ReceiptDetail,
+  ReceiptHistoryEntry,
   ReceiptJournalInput,
   ReceiptLinkInput,
   ReceiptQuery,
+  ReceiptReplaceOptions,
   ReceiptUnlinkInput,
   ReceiptUpdateInput,
 } from "@trebuchet/schema";
@@ -21,6 +24,8 @@ export const receiptKeys = {
     ["entities", entityId, "receipts", "search", search] as const,
   detail: (entityId: string, receiptId: string) =>
     ["entities", entityId, "receipts", "detail", receiptId] as const,
+  history: (entityId: string, receiptId: string) =>
+    ["entities", entityId, "receipts", "history", receiptId] as const,
   candidates: (entityId: string, receiptId: string) =>
     ["entities", entityId, "receipts", "candidates", receiptId] as const,
 };
@@ -133,6 +138,42 @@ export const postReceiptJournal = async (
   receiptId: string,
   json: ReceiptJournalInput,
 ) => unwrap(await receiptApi[":receiptId"].journal.$post({ param: { entityId, receiptId }, json }));
+
+/** ファイルの差し替え（撮り直し。multipart: `file` と `options`。版 +1、前の版も残る。H: §2） */
+export const postReceiptFile = async (
+  entityId: string,
+  receiptId: string,
+  file: File,
+  options: ReceiptReplaceOptions,
+): Promise<{ receipt: ReceiptDetail }> =>
+  uploadForm(
+    `/api/entities/${encodeURIComponent(entityId)}/receipts/${encodeURIComponent(receiptId)}/files`,
+    { file, options: JSON.stringify(options) },
+  );
+
+/** 削除（理由つき。行・ファイル・履歴は残る。H: §2） */
+export const postReceiptDelete = async (
+  entityId: string,
+  receiptId: string,
+  json: ReceiptDeleteInput,
+): Promise<ReceiptDetail> =>
+  (
+    await unwrap(
+      await receiptApi[":receiptId"].delete.$post({ param: { entityId, receiptId }, json }),
+    )
+  ).receipt;
+
+/** 履歴（古い順。削除済みも引ける） */
+export const receiptHistoryQuery = (entityId: string, receiptId: string) =>
+  queryOptions({
+    queryKey: receiptKeys.history(entityId, receiptId),
+    queryFn: async (): Promise<ReceiptHistoryEntry[]> =>
+      (
+        await unwrap(
+          await receiptApi[":receiptId"].history.$get({ param: { entityId, receiptId } }),
+        )
+      ).history,
+  });
 
 /** 値の更新（未入力を埋める・メモ。入力済みの値の訂正は理由が要る） */
 export const patchReceipt = async (

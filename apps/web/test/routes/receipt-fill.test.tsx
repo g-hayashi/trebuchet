@@ -135,7 +135,7 @@ describe("証憑の値の入力（未入力を埋める）", () => {
     expect(patches(calls)).toHaveLength(0);
   });
 
-  it("入力済みの値を変えると、server が 422 REASON_REQUIRED を返し、その文を示す（値は変わらない）", async () => {
+  it("入力済みの値を変えると、server が 422 REASON_REQUIRED を返し、理由を求める（値は変わらない。訂正は receipt-edit.test.tsx）", async () => {
     const calls = statefulApi(
       {
         category: "electronic",
@@ -158,9 +158,7 @@ describe("証憑の値の入力（未入力を埋める）", () => {
     await userEvent.type(amount, "2000");
     await userEvent.click(within(form).getByRole("button", { name: "保存" }));
 
-    expect(await within(form).findByRole("alert")).toHaveTextContent(
-      "入力済みの値を変えるときは理由が必要です",
-    );
+    expect(await screen.findByRole("dialog")).toHaveTextContent("理由");
     expect(patches(calls)[0]?.body).toEqual({ version: 1, amount: 2000 });
     expect(within(form).queryByText("保存しました。")).not.toBeInTheDocument();
   });

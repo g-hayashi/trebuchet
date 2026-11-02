@@ -196,7 +196,7 @@ describe("POST /receipts/:receiptId/link", () => {
     expect(body.receipt.journal?.id).toBe(j2.id);
   });
 
-  // 409 RECEIPT_DELETED は削除の API（US5）ができてから足す。domain のテストは済み
+  // 409 RECEIPT_DELETED は receipts-edit.api.test.ts（削除の API と同じ場所）
 
   it("400 VALIDATION: journalId がない", async () => {
     const app = makeApp();

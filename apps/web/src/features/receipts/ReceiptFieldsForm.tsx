@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReceiptDetail, ReceiptUpdateInput } from "@trebuchet/schema";
 import { type FormEvent, useId, useState } from "react";
+import { ReasonDialog } from "@/components/reason-dialog";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
@@ -20,9 +21,10 @@ const valuesOf = (r: ReceiptDetail): Values => ({
 });
 
 /**
- * 証憑の値の入力（US1: 未入力の値を埋める・メモを変える。理由は要らない）。
+ * 証憑の値の入力と訂正（US1: 未入力の値を埋める・メモを変える。理由は要らない。US5: 訂正）。
  * 変えた項目だけを `version` と一緒に送る。入力済みの値を変える（訂正）ときは server が
- * `REASON_REQUIRED` を返す（理由つきの訂正は US5）。業務の判定は server に任せる
+ * `REASON_REQUIRED` を返すので、理由を求めて同じ変更に `reason` を足して送り直す。
+ * 理由が要るかの判定は server に任せる（web に業務ルールを持たない）
  */
 export function ReceiptFieldsForm({
   entityId,
@@ -36,6 +38,8 @@ export function ReceiptFieldsForm({
   const [values, setValues] = useState<Values>(() => valuesOf(receipt));
   const [amountError, setAmountError] = useState<string | undefined>();
   const [message, setMessage] = useState<"saved" | "unchanged" | undefined>();
+  // 理由を求められた入力（server が REASON_REQUIRED を返したとき）
+  const [correction, setCorrection] = useState<ReceiptUpdateInput | undefined>();
 
   const mutation = useMutation({
     mutationFn: (input: ReceiptUpdateInput) => patchReceipt(entityId, receipt.id, input),
@@ -85,77 +89,103 @@ export function ReceiptFieldsForm({
       setMessage("unchanged");
       return;
     }
-    mutation.mutate(input);
+    // 理由が要るか（訂正か）は server が決める。422 REASON_REQUIRED を受けたら理由を求める
+    mutation.mutate(input, {
+      onError: (error) => {
+        if (error instanceof ApiError && error.code === "REASON_REQUIRED") setCorrection(input);
+      },
+    });
   };
 
+  const needsReason =
+    mutation.error instanceof ApiError && mutation.error.code === "REASON_REQUIRED";
+
   return (
-    <form aria-label="証憑の値" noValidate onSubmit={submit} className="grid gap-4">
-      <p className="text-sm text-muted-foreground">
-        未入力の値とメモを入力できます。入力済みの値（取引年月日・金額・取引先・区分）を変えるには理由が必要です。
-      </p>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid content-start gap-1">
-          <Label htmlFor={`${id}-date`}>取引年月日</Label>
-          <Input
-            id={`${id}-date`}
-            type="date"
-            value={values.transactionDate}
-            onChange={(e) => set("transactionDate")(e.target.value)}
+    <>
+      <form aria-label="証憑の値" noValidate onSubmit={submit} className="grid gap-4">
+        <p className="text-sm text-muted-foreground">
+          未入力の値とメモを入力できます。入力済みの値（取引年月日・金額・取引先・区分）を変えるには理由が必要です。
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid content-start gap-1">
+            <Label htmlFor={`${id}-date`}>取引年月日</Label>
+            <Input
+              id={`${id}-date`}
+              type="date"
+              value={values.transactionDate}
+              onChange={(e) => set("transactionDate")(e.target.value)}
+            />
+          </div>
+          <div className="grid content-start gap-1">
+            <Label htmlFor={`${id}-amount`}>金額</Label>
+            <Input
+              id={`${id}-amount`}
+              inputMode="numeric"
+              autoComplete="off"
+              className="text-right tabular-nums"
+              value={values.amount}
+              aria-invalid={amountError ? true : undefined}
+              aria-describedby={`${id}-amount-error`}
+              onChange={(e) => {
+                set("amount")(e.target.value);
+                setAmountError(undefined);
+              }}
+            />
+            <FieldError id={`${id}-amount-error`} message={amountError} />
+          </div>
+          <div className="grid content-start gap-1">
+            <Label htmlFor={`${id}-partner`}>取引先</Label>
+            <Input
+              id={`${id}-partner`}
+              autoComplete="off"
+              maxLength={100}
+              value={values.partnerName}
+              onChange={(e) => set("partnerName")(e.target.value)}
+            />
+          </div>
+          <div className="grid content-start gap-1">
+            <Label htmlFor={`${id}-memo`}>メモ</Label>
+            <Input
+              id={`${id}-memo`}
+              autoComplete="off"
+              maxLength={500}
+              value={values.memo}
+              onChange={(e) => set("memo")(e.target.value)}
+            />
+          </div>
+        </div>
+        {!needsReason && <ApiErrorMessage error={mutation.error} />}
+        <div className="flex flex-wrap items-center gap-4">
+          <Button type="submit" disabled={mutation.isPending}>
+            {mutation.isPending ? "保存中…" : "保存"}
+          </Button>
+          <SaveNotice
+            message={
+              message === "saved"
+                ? "保存しました。"
+                : message === "unchanged"
+                  ? "変更がありません"
+                  : ""
+            }
           />
         </div>
-        <div className="grid content-start gap-1">
-          <Label htmlFor={`${id}-amount`}>金額</Label>
-          <Input
-            id={`${id}-amount`}
-            inputMode="numeric"
-            autoComplete="off"
-            className="text-right tabular-nums"
-            value={values.amount}
-            aria-invalid={amountError ? true : undefined}
-            aria-describedby={`${id}-amount-error`}
-            onChange={(e) => {
-              set("amount")(e.target.value);
-              setAmountError(undefined);
-            }}
-          />
-          <FieldError id={`${id}-amount-error`} message={amountError} />
-        </div>
-        <div className="grid content-start gap-1">
-          <Label htmlFor={`${id}-partner`}>取引先</Label>
-          <Input
-            id={`${id}-partner`}
-            autoComplete="off"
-            maxLength={100}
-            value={values.partnerName}
-            onChange={(e) => set("partnerName")(e.target.value)}
-          />
-        </div>
-        <div className="grid content-start gap-1">
-          <Label htmlFor={`${id}-memo`}>メモ</Label>
-          <Input
-            id={`${id}-memo`}
-            autoComplete="off"
-            maxLength={500}
-            value={values.memo}
-            onChange={(e) => set("memo")(e.target.value)}
-          />
-        </div>
-      </div>
-      <ApiErrorMessage error={mutation.error} />
-      <div className="flex flex-wrap items-center gap-4">
-        <Button type="submit" disabled={mutation.isPending}>
-          {mutation.isPending ? "保存中…" : "保存"}
-        </Button>
-        <SaveNotice
-          message={
-            message === "saved"
-              ? "保存しました。"
-              : message === "unchanged"
-                ? "変更がありません"
-                : ""
-          }
-        />
-      </div>
-    </form>
+      </form>
+      {/* ダイアログの submit が親の form に伝わらないよう、form の外に置く */}
+      <ReasonDialog
+        open={correction !== undefined}
+        title="入力済みの値の訂正"
+        description="訂正しても、元の値・理由・日時は履歴に残ります。"
+        confirmLabel="訂正を確定"
+        onConfirm={async (reason) => {
+          if (correction === undefined) return;
+          await mutation.mutateAsync({ ...correction, reason });
+          setCorrection(undefined);
+        }}
+        onCancel={() => {
+          setCorrection(undefined);
+          mutation.reset();
+        }}
+      />
+    </>
   );
 }

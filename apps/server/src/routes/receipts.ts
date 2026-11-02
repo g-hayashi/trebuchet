@@ -1,23 +1,29 @@
 import {
   addReceipt,
   createJournalFromReceipt,
+  deleteReceipt,
   detectReceiptFormat,
   getReceipt,
+  getReceiptHistory,
   linkReceipt,
   listJournalCandidates,
   listReceipts,
+  ok,
   readReceiptFile,
+  replaceReceiptFile,
   unlinkReceipt,
   updateReceipt,
 } from "@trebuchet/domain";
 import {
   RECEIPT_MAX_BYTES,
   ReceiptCreateOptions,
+  ReceiptDeleteInput,
   ReceiptFileParam,
   ReceiptJournalInput,
   ReceiptLinkInput,
   ReceiptParam,
   ReceiptQuery,
+  ReceiptReplaceOptions,
   ReceiptUnlinkInput,
   ReceiptUpdateInput,
 } from "@trebuchet/schema";
@@ -49,6 +55,16 @@ export function receiptRoutes({ clock, receipts }: RouteOptions & { receipts: Re
   const deps = (c: { var: TenantEnv["Variables"] }) =>
     receiptDeps(c.var.db, clock, c.var.entityId, receipts);
 
+  // 画素数・色は形式の判定の後に調べる（非同期。ここまでは何も書かない。R10）。
+  // 形式が違うファイルは probe に渡さず、domain が RECEIPT_FORMAT_UNSUPPORTED で返す。
+  // 画素数の超過（VALIDATION、details.maxPixels）は 422（contracts/http-api.md §1）
+  const probeOf = async (bytes: Uint8Array) => {
+    const mediaType = detectReceiptFormat(bytes);
+    if (mediaType === undefined) return ok(null);
+    const probed = await receipts.imageTool.probe(bytes, mediaType);
+    return probed.ok ? ok(probed.value ?? null) : probed;
+  };
+
   return (
     new Hono<TenantEnv>()
       // 追加。multipart: file（20 MB まで）と options（JSON）。経路は要求の Host で決める（R10）
@@ -57,16 +73,8 @@ export function receiptRoutes({ clock, receipts }: RouteOptions & { receipts: Re
         const options = await readJsonField(c, "options", ReceiptCreateOptions);
         const channel = isLocalHost(requestHost(c.req)) ? "local" : "remote";
 
-        // 画素数・色は形式の判定の後に調べる（非同期。ここまでは何も書かない。R10）。
-        // 形式が違うファイルは probe に渡さず、addReceipt が RECEIPT_FORMAT_UNSUPPORTED で返す
-        const mediaType = detectReceiptFormat(upload.bytes);
-        let probe = null;
-        if (mediaType !== undefined) {
-          const probed = await receipts.imageTool.probe(upload.bytes, mediaType);
-          // 画素数の超過（VALIDATION、details.maxPixels）は 422（contracts/http-api.md §1）
-          if (!probed.ok) return c.json(errorBody(probed.error), 422);
-          probe = probed.value ?? null;
-        }
+        const probed = await probeOf(upload.bytes);
+        if (!probed.ok) return c.json(errorBody(probed.error), 422);
 
         // addReceipt は同期の区間（await を挟まない）。ここから先に await を足さない
         const result = addReceipt(deps(c), {
@@ -74,9 +82,54 @@ export function receiptRoutes({ clock, receipts }: RouteOptions & { receipts: Re
           originalName: upload.name,
           channel,
           options,
-          probe,
+          probe: probed.value,
         });
         return respond(c, result, (receipt) => c.json({ receipt }, 201));
+      })
+      // ファイルの差し替え（撮り直し。版 +1、前の版も残る）。経路は追加と同じく Host で決める
+      .post(
+        "/receipts/:receiptId/files",
+        validate("param", ReceiptParam),
+        uploadLimitFor(1, RECEIPT_MAX_BYTES),
+        async (c) => {
+          const { receiptId } = c.req.valid("param");
+          const upload = await readUpload(c, RECEIPT_MAX_BYTES);
+          const options = await readJsonField(c, "options", ReceiptReplaceOptions);
+          const channel = isLocalHost(requestHost(c.req)) ? "local" : "remote";
+
+          const probed = await probeOf(upload.bytes);
+          if (!probed.ok) return c.json(errorBody(probed.error), 422);
+
+          // replaceReceiptFile は同期の区間（await を挟まない）
+          const result = replaceReceiptFile(deps(c), receiptId, {
+            bytes: upload.bytes,
+            originalName: upload.name,
+            channel,
+            reason: options.reason,
+            version: options.version,
+            probe: probed.value,
+          });
+          return respond(c, result, (receipt) => c.json({ receipt }, 201));
+        },
+      )
+      // 削除（DELETE ではなく POST。理由の本文を送る。001 の void と同じ形）
+      .post(
+        "/receipts/:receiptId/delete",
+        validate("param", ReceiptParam),
+        validate("json", ReceiptDeleteInput),
+        (c) => {
+          const result = deleteReceipt(
+            deps(c),
+            c.req.valid("param").receiptId,
+            c.req.valid("json"),
+          );
+          return respond(c, result, (receipt) => c.json({ receipt }, 200));
+        },
+      )
+      // 履歴（古い順。削除済みも引ける）
+      .get("/receipts/:receiptId/history", validate("param", ReceiptParam), (c) => {
+        const result = getReceiptHistory(deps(c), c.req.valid("param").receiptId);
+        return respond(c, result, (history) => c.json({ history }, 200));
       })
       .get("/receipts", validate("query", ReceiptQuery), (c) => {
         const result = listReceipts(deps(c), c.req.valid("query"));
@@ -86,7 +139,7 @@ export function receiptRoutes({ clock, receipts }: RouteOptions & { receipts: Re
         const result = getReceipt(deps(c), c.req.valid("param").receiptId);
         return respond(c, result, (receipt) => c.json({ receipt }, 200));
       })
-      // 値の更新。US1 では未入力の値を埋める・メモを変えるだけ（入力済みの値の訂正は US5。D1）
+      // 値の更新。未入力の値を埋める・メモを変えるのは理由なし、入力済みの値の訂正は reason が要る（422 REASON_REQUIRED）
       .patch(
         "/receipts/:receiptId",
         validate("param", ReceiptParam),

@@ -13,8 +13,11 @@ import {
   MEDIA_TYPE_LABELS,
   warningText,
 } from "@/features/receipts/labels";
+import { ReceiptDeleteSection } from "@/features/receipts/ReceiptDeleteSection";
 import { ReceiptFieldsForm } from "@/features/receipts/ReceiptFieldsForm";
+import { ReceiptHistory } from "@/features/receipts/ReceiptHistory";
 import { ReceiptLinkSection } from "@/features/receipts/ReceiptLinkSection";
+import { ReceiptReplaceSection } from "@/features/receipts/ReceiptReplaceSection";
 import { ReceiptViewer } from "@/features/receipts/ReceiptViewer";
 import { formatDateTime } from "@/lib/format";
 
@@ -81,7 +84,10 @@ function ReceiptBody({ entityId, receipt }: { entityId: string; receipt: Receipt
             </CardContent>
           </Card>
           <ReceiptLinkSection entityId={entityId} receipt={receipt} />
+          {!receipt.deleted && <ReceiptReplaceSection entityId={entityId} receipt={receipt} />}
           <ReceiptInfo entityId={entityId} receipt={receipt} />
+          <ReceiptHistory entityId={entityId} receiptId={receipt.id} />
+          {!receipt.deleted && <ReceiptDeleteSection entityId={entityId} receipt={receipt} />}
         </div>
       </div>
     </>

@@ -130,6 +130,20 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 仕訳に結びつける候補（010 US3）。候補なし。仕訳の一覧・詳細の既定の応答は各テストが持つので、
   // 証憑の項目（一覧の `receiptCount`、詳細の `receipts`）は画面が省略を 0・空として扱う
   "GET /receipts/:receiptId/journal-candidates": () => ok({ candidates: [] }),
+  // 証憑の履歴（010 US5）。追加の 1 件だけ
+  "GET /receipts/:receiptId/history": () =>
+    ok({
+      history: [
+        {
+          occurredAt: "2026-10-20T09:00:00.000Z",
+          targetType: "receipt",
+          action: "create",
+          reason: null,
+          before: null,
+          after: null,
+        },
+      ],
+    }),
   "PATCH /receipts/:receiptId": ({ body }) => {
     const { version, ...values } = body as { version: number } & Record<string, unknown>;
     return ok({ receipt: { ...receiptDetail(), ...values, version: version + 1 } });
