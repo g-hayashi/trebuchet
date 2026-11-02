@@ -1,17 +1,24 @@
 import {
   addReceipt,
+  createJournalFromReceipt,
   detectReceiptFormat,
   getReceipt,
+  linkReceipt,
+  listJournalCandidates,
   listReceipts,
   readReceiptFile,
+  unlinkReceipt,
   updateReceipt,
 } from "@trebuchet/domain";
 import {
   RECEIPT_MAX_BYTES,
   ReceiptCreateOptions,
   ReceiptFileParam,
+  ReceiptJournalInput,
+  ReceiptLinkInput,
   ReceiptParam,
   ReceiptQuery,
+  ReceiptUnlinkInput,
   ReceiptUpdateInput,
 } from "@trebuchet/schema";
 import { Hono } from "hono";
@@ -91,6 +98,50 @@ export function receiptRoutes({ clock, receipts }: RouteOptions & { receipts: Re
             c.req.valid("json"),
           );
           return respond(c, result, (receipt) => c.json({ receipt }, 200));
+        },
+      )
+      // 結びつける仕訳の候補（取引年月日の前後。R6）
+      .get("/receipts/:receiptId/journal-candidates", validate("param", ReceiptParam), (c) => {
+        const result = listJournalCandidates(deps(c), c.req.valid("param").receiptId);
+        return respond(c, result, (candidates) => c.json({ candidates }, 200));
+      })
+      // 仕訳に結びつける。付け替え（replace）は理由が要る（R5）
+      .post(
+        "/receipts/:receiptId/link",
+        validate("param", ReceiptParam),
+        validate("json", ReceiptLinkInput),
+        (c) => {
+          const result = linkReceipt(deps(c), c.req.valid("param").receiptId, c.req.valid("json"));
+          return respond(c, result, (receipt) => c.json({ receipt }, 201));
+        },
+      )
+      .post(
+        "/receipts/:receiptId/unlink",
+        validate("param", ReceiptParam),
+        validate("json", ReceiptUnlinkInput),
+        (c) => {
+          const result = unlinkReceipt(
+            deps(c),
+            c.req.valid("param").receiptId,
+            c.req.valid("json"),
+          );
+          // 有効な結びつきがない（domain は VALIDATION）は 422（contracts/http-api.md §3）。入力の形の違反は 400
+          if (!result.ok && result.error.code === "VALIDATION") {
+            return c.json(errorBody(result.error), 422);
+          }
+          return respond(c, result, (receipt) => c.json({ receipt }, 200));
+        },
+      )
+      // 証憑から仕訳を登録して結びつける（1 つのトランザクション。FR-010）
+      .post(
+        "/receipts/:receiptId/journal",
+        validate("param", ReceiptParam),
+        validate("json", ReceiptJournalInput),
+        (c) => {
+          const result = createJournalFromReceipt(deps(c), c.req.valid("param").receiptId, {
+            journal: c.req.valid("json").journal,
+          });
+          return respond(c, result, (value) => c.json(value, 201));
         },
       )
       // ファイルの取り出し。variant=display（既定。HEIC は JPEG に変換）| original、download=1 で attachment。
