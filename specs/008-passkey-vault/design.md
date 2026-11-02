@@ -22,8 +22,8 @@ invest-copilot の `specs/003-passkey-vault/design.md`（D1〜D8）を土台に�
 
 | ファイル | 暗号化 | 中身 |
 |---|---|---|
-| `data/auth.sqlite` | しない | `passkeys`（`prf_salt BLOB NOT NULL` を足す）、`key_wraps`、`sessions`（トークンのハッシュ）、`auth_events` |
-| `data/registry.sqlite` | DK から（D1） | `entities`、`app_settings`、`backup_runs`、`ai_settings`、`pairing_tokens`（US4 保留のまま） |
+| `data/auth.sqlite` | しない | `passkeys`（`prf_salt BLOB NOT NULL` を足す）、`key_wraps`、`sessions`（トークンのハッシュ）、`auth_events`、リモートの設定と `pairing_tokens`（004 の US4 で registry から移す。施錠中も Host の検査で読むため。2026-11-02） |
+| `data/registry.sqlite` | DK から（D1） | `entities`、`app_settings`、`backup_runs`、`ai_settings` |
 | `data/tenants/<id>.sqlite` | DK から（D1） | 帳簿 |
 
 - `key_wraps(id TEXT PK, kind TEXT CHECK(kind IN ('passkey','recovery')), credential_id TEXT NULL, salt BLOB, iv BLOB, tag BLOB, wrapped BLOB, created_at)`。passkey は資格情報ごとに 1 行、recovery は常に 1 行（部分 UNIQUE）。`kind='passkey'` ⇔ `credential_id` が NOT NULL。

@@ -28,17 +28,20 @@
 - **ゲート（Setup）**: `tailscale serve` の転送で server に届く `Host` と `X-Forwarded-Host` を、利用者の Mac で確かめる（公式に記載がない）。結果で R6 の名前の取り方を決める
 - **ゲートの結果（2026-10-20）**: 未確認（利用者の Mac に Tailscale が未導入）。US4（T016〜T018）の着手の前に確かめる
 - 出典: https://tailscale.com/kb/1312/serve （tailnet の中だけ。Funnel は使わない）、https://hono.dev/docs/getting-started/nodejs
+- **008 以降の変更（2026-11-02、US4 の再開）**: 静的配信は `apps/server/src/static.ts` を `/api` の外に足し、静的にも Host の検査を掛ける（認証は不要）。`/api` 以外の未知のパスは `index.html`、`/api/...` の未知は 404 JSON。`pnpm start` は web をビルドして server を起動し、待ち受けは `127.0.0.1:8787` のまま。cookie の `Secure` は `lib/session.ts` で実装済み。Host の取り方（`Host` か `X-Forwarded-Host` か）は T001(b) の結果をここに追記し、それに従って `requestHost`（`lib/origin.ts`）を直す
 
 ## R4. 認証の情報は registry の DB に置く
 
 - **Decision**: `registry.sqlite` に表を足す（マイグレーション `drizzle/registry/0001_auth_backup`）: `passkeys`、`recovery_codes`、`sessions`、`auth_events`、`app_settings`、`backup_runs`、`pairing_tokens`（7表）。`auth_events` は更新・削除をトリガーで禁止（Constitution II）
 - **Rationale**: アプリ全体の設定を置ける DB は registry だけ。事業体の DB に置くと、事業体ごとに認証が分かれてしまう
+- **008 以降の変更（2026-11-02）**: 認証の表（`passkeys`、`sessions`、`auth_events`。回復コードは回復キーの包みに替わった）は、平文の `data/auth.sqlite` に移った（008 design D2）。registry は DK で暗号化され、施錠中は開けない。US4 の再開で、**リモートの設定（`remote_enabled`・`remote_host`）と `pairing_tokens` も `auth.sqlite` に置く**（Host の検査とペアリングのトークンの確認は施錠中も要るため。秘密は持たない: ホスト名、トークンのハッシュと期限だけ）。registry の `app_settings` の `remote_*` と `pairing_tokens` は外す（開発中なので移行しない）
 
 ## R5. セッションは乱数のトークンと cookie
 
 - **Decision**: サインインで 32 バイトの乱数のトークンを作り、cookie（`HttpOnly`、`SameSite=Strict`、`Path=/`、https のときは `Secure`）で渡す。DB には SHA-256 のハッシュだけを保存する（ハッシュは db の `hashToken` に一本化し、server はそれを使う。server で別に SHA-256 を書かない）。最後の操作から 8 時間（`SESSION_IDLE_MS`）で失効。操作のたびに最後の操作の時刻を更新する（1分に1回まで）。セッションはオリジン（RP ID）と、作ったパスキー（`passkey_id`）を持つ。別のオリジンからは使えない。パスキーを削除したら、そのパスキーで作ったセッションを失効する。回復用の一時セッション（`kind = recovery`、作成から10分）は同じ表の別の種類で、パスキーの登録の手続きにだけ使える
 - **Rationale**: 依存を足さずに済み、サーバー側で個別に無効化できる（FR-013）。署名つきの cookie だけでは無効化ができない
 - **Alternatives**: JWT → 無効化に失効の表が要り、利点がない
+- **008 以降の変更（2026-11-02）**: 失効は無操作 30 分に変わった（8 時間ではない）。有効なセッションが 1 つもなくなると施錠する。回復用の一時セッションはなくなった
 
 ## R6. 接続先とクロスサイトの検査
 
@@ -47,6 +50,7 @@
   2. **CSRF**（FR-009）: `hono/csrf` は使わない（`hono/csrf` は本文の形式（フォームの Content-Type）にしか検査を掛けず、JSON の POST と本文なしの DELETE を通すため）。自前の小さなミドルウェアで、GET・HEAD・OPTIONS 以外の要求は、`Content-Type` によらず、`Origin` が許すオリジンの一覧（`lib/origin.ts`）にあること。`Origin` がなければ `Sec-Fetch-Site` が `same-origin` であること。どちらでもなければ 403 `CSRF_REJECTED`。cookie の `SameSite=Strict` と合わせる
   3. **認証**（FR-003）: 公開の手続きの完全一致の一覧（data-model §3 の `requiresAuth`）以外は、有効なセッションがなければ 401 `UNAUTHENTICATED`。公開の手続きのうち前提のあるもの（`register/*`: パスキー0件かつローカルの Host、`recovery/register/*`: 回復用の一時セッション、`pairing/register/*`: 有効なペアリングのトークン）は、前提がなければ 401 か 409 か 421 で拒否する
 - 出典: https://hono.dev/docs/helpers/cookie 、https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Site
+- **008 以降の変更（2026-11-02）**: Host の検査（`middleware/host.ts`）は、施錠中も `auth.sqlite` からリモートの設定を読み、`LOCKED` にならない（`createApp` の `getRemoteSettings` の口に main/deps が実装を渡す）。帳簿の API は、セッションがなければ 401、あって施錠中なら 401 `LOCKED`（008）。静的配信にも Host の検査を掛ける（R3）
 
 ## R7. 回復コード
 
@@ -137,3 +141,8 @@
   - 発行と使用は `auth_events`（`pairing_issued`・`pairing_used`）に残す
 - **Rationale**: ts.net からは最初の登録を受け付けないので、そのままでは ts.net のパスキーを作れない。一度きり・期限つきのトークンで、Mac の前にいる利用者の許可を、別の端末へ渡す
 - **Alternatives**: サインイン済みの端末の `/auth/passkeys/options` で追加 → 別の RP ID のパスキーは別のオリジンの画面でしか作れず、実現できない
+- **008 以降の変更（2026-11-02、US4 の再開）**:
+  - トークンは `auth.sqlite` の `pairing_tokens`（ハッシュと期限だけ。R4）。`POST /auth/pairing` は、ローカルの Host から、全権セッション＋直近 5 分の再認証（403 `REAUTH_REQUIRED`。`routes/auth.ts` の再認証と同じ検査）を要求する
+  - `pairing/register/*`（公開）は解錠中だけ有効。施錠中は 401 `LOCKED`。登録は既存の `beginRegistration`/`finishRegistration`（`prf_required` の 2 段）を共通化して使い、PRF の出力で DK を包む（`vault.withDataKey`、`store.addPasskey(passkey, wrap)`。INV-53）。PRF がなければ 400 `PRF_UNSUPPORTED`
+  - トークンの消費は、包みを作り終えてから同じ `auth.sqlite` のトランザクションで行う（失敗でトークンを失わない）。成功で ts.net の rpId の通常セッションを発行する
+  - スマホの PRF の対応は端末による。T022 の実機で確かめる

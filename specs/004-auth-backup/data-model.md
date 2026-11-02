@@ -66,6 +66,8 @@
 
 ### 1.5 `app_settings`（FR-010, FR-014, R14）
 
+> **008/US4（2026-11-02）**: `remote_enabled`・`remote_host` は registry の `app_settings` から外し、平文の `data/auth.sqlite` に移す（Host の検査が施錠中も読むため。research R4）。ここの CHECK の 7 種は、移した後は 5 種。
+
 | 列 | 型 | 制約 |
 |---|---|---|
 | `key` | text | PK。`mac_id` / `remote_enabled` / `remote_host` / `backup_folder` / `backup_passphrase_set` / `backup_force_write` / `recovery_code_acknowledged`（CHECK。7種） |
@@ -95,6 +97,8 @@
 - 設定・パスフレーズの変更の直後のバックアップの `trigger` は `manual`
 
 ### 1.7 `pairing_tokens`（FR-012）
+
+> **008/US4（2026-11-02）**: この表は registry から外し、平文の `data/auth.sqlite` に移す（列は同じ。ハッシュと期限だけで秘密は持たない。research R4・R17）。
 
 | 列 | 型 | 制約 |
 |---|---|---|
