@@ -9,6 +9,7 @@ export * from "./fakes/import.ts";
 export * from "./fakes/invoicing.ts";
 export * from "./fakes/ledger.ts";
 export * from "./fakes/master.ts";
+export * from "./fakes/receipts.ts";
 export * from "./fakes/recurring.ts";
 export * from "./fakes/statements.ts";
 export * from "./fakes/unit-of-work.ts";
