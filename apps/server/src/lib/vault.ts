@@ -97,12 +97,19 @@ export function createVault(deps: { store: () => AuthStore }): Vault {
 
 /**
  * 初回の設定の前に、前の DK で暗号化した registry（-wal・-shm を含む）と事業体の DB を
- * `<データ場所>/discarded-<時刻>/` に移す（D4.1 の「空から作る」。消さずに残す）。
+ * `<データ場所>/discarded-<時刻>/` に移す（D4.1 の「空から作る」。消さずに残す）。証憑の `receipts/` も同じ。
  * 施錠中に呼ぶ（開いたハンドルがない）。移したディレクトリを返す。移すものがなければ null
  */
 export function setAsideDataFiles(now: string): string | null {
   const registry = registryFile();
-  const targets = [registry, `${registry}-wal`, `${registry}-shm`, join(dataDir(), "tenants")];
+  // 証憑のファイル（`receipts/`）も前の DK の暗号文なので、事業体と一緒に移す（010/R9）
+  const targets = [
+    registry,
+    `${registry}-wal`,
+    `${registry}-shm`,
+    join(dataDir(), "tenants"),
+    join(dataDir(), "receipts"),
+  ];
   const existing = targets.filter((path) => existsSync(path));
   if (existing.length === 0) return null;
   const dir = join(dataDir(), `discarded-${now.replace(/[-:.]/g, "")}`);

@@ -145,6 +145,19 @@ describe("setAsideDataFiles（初回の設定で、前の DK の registry・事�
     expect(existsSync(join(tmp.dir, "auth.keep"))).toBe(true);
   });
 
+  it("証憑のファイル receipts/ も discarded-<時刻>/ に移す。消さない（010/R9）", () => {
+    mkdirSync(join(tmp.dir, "receipts", "0191f5a0-0000-7000-8000-000000000000"), {
+      recursive: true,
+    });
+    writeFileSync(join(tmp.dir, "receipts", "0191f5a0-0000-7000-8000-000000000000", "a.trc"), "x");
+    const moved = setAsideDataFiles("2026-10-30T01:02:03.004Z");
+    expect(moved).toBe(join(tmp.dir, "discarded-20261030T010203004Z"));
+    expect(existsSync(join(tmp.dir, "receipts"))).toBe(false);
+    expect(
+      existsSync(join(moved ?? "", "receipts", "0191f5a0-0000-7000-8000-000000000000", "a.trc")),
+    ).toBe(true);
+  });
+
   it("移すものがなければ何もしない（null）", () => {
     expect(setAsideDataFiles("2026-10-30T01:02:03.004Z")).toBeNull();
     expect(readdirSync(tmp.dir).filter((n) => n.startsWith("discarded-"))).toEqual([]);

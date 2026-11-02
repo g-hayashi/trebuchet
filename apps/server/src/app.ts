@@ -6,8 +6,10 @@ import {
   backupRunner,
   backupStore,
   clock as defaultClock,
+  defaultReceiptRuntime,
   vault as defaultVault,
   fmServer,
+  type ReceiptRuntime,
   type RouteOptions,
   type SuggestionProviders,
   secretStore,
@@ -39,6 +41,7 @@ import { journalRoutes } from "./routes/journals.ts";
 import { masterRoutes } from "./routes/masters.ts";
 import { pairingRoutes } from "./routes/pairing.ts";
 import { periodRoutes } from "./routes/periods.ts";
+import { receiptRoutes } from "./routes/receipts.ts";
 import { recurringRoutes } from "./routes/recurring.ts";
 import { reportRoutes } from "./routes/reports.ts";
 import { remoteSettingsRoutes } from "./routes/settings.ts";
@@ -55,6 +58,7 @@ function tenantRoutes(
     suggestion?: SuggestionProviders;
     jobs: JobStore;
     ai: AiRuntime;
+    receipts: ReceiptRuntime;
   },
 ) {
   return new Hono<TenantEnv>()
@@ -71,7 +75,8 @@ function tenantRoutes(
     .route("/", taxReturnRoutes(options))
     .route("/", invoicingRoutes(options))
     .route("/", recurringRoutes(options))
-    .route("/", statementRoutes(options));
+    .route("/", statementRoutes(options))
+    .route("/", receiptRoutes(options));
 }
 
 export type AppOptions = {
@@ -88,6 +93,8 @@ export type AppOptions = {
     settings?: () => AiSettingsStore;
     fm?: FmServer;
   };
+  /** 証憑（010 X3）の差し替え口。`imageTool` は画像の変換（既定は sips）、`files` は事業体ごとの暗号化したファイルの置き場 */
+  receipts?: Partial<ReceiptRuntime>;
   /** 評価のジョブの置き場（006 R17）。既定はこのアプリ専用の置き場 */
   jobs?: JobStore;
   /** WebAuthn の検証。既定は @simplewebauthn/server。ルートのテストは偽物を渡す */
@@ -169,6 +176,7 @@ export function createApp(options: AppOptions = {}) {
         clock,
         jobs,
         ai,
+        receipts: { ...defaultReceiptRuntime, ...options.receipts },
         ...(options.suggestion === undefined ? {} : { suggestion: options.suggestion }),
       }),
     );

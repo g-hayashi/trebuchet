@@ -3,6 +3,8 @@ import {
   createClosingUnitOfWork,
   createImportUnitOfWork,
   createInvoicingUnitOfWork,
+  createReceiptFileStore,
+  createReceiptUnitOfWork,
   createRecurringUnitOfWork,
   createStatementUnitOfWork,
   DrizzleAiSettingsStore,
@@ -40,6 +42,9 @@ import {
   type InvoicingUnitOfWork,
   type LedgerDeps,
   type MasterDeps,
+  type ReceiptDeps,
+  type ReceiptFileStore,
+  type ReceiptImageTool,
   type RecurringStore,
   type RecurringUnitOfWork,
   type ReportDeps,
@@ -50,7 +55,9 @@ import {
 } from "@trebuchet/domain";
 import { type BackupRunner, createBackupRunner } from "./lib/backup-run.ts";
 import { createFmServer } from "./lib/fm-server.ts";
+import { createImageTool } from "./lib/image-tool.ts";
 import { createKeychainSecretStore, createMemorySecretStore } from "./lib/keychain.ts";
+import { todayOf } from "./lib/today.ts";
 import { createVault, type Vault } from "./lib/vault.ts";
 
 /** R8: 主キーは UUIDv7 */
@@ -249,6 +256,49 @@ export function statementDeps(
       local: providers.local ?? unavailableSuggestionProvider,
       external: providers.external ?? unavailableSuggestionProvider,
     },
+  };
+}
+
+/** 証憑（010）の日付は `Asia/Tokyo` の暦日で決める（R2、I2。実行環境のタイムゾーンによらない） */
+export const RECEIPT_TIME_ZONE = "Asia/Tokyo";
+
+/** ISO 8601（UTC）の日時を `Asia/Tokyo` の `YYYY-MM-DD` にする（`ReceiptDeps.dateOf`） */
+export const receiptDateOf = (iso: string): string =>
+  todayOf({ now: () => iso }, RECEIPT_TIME_ZONE);
+
+/** 証憑の画像の変換器（sips。010/R12）。作業ファイルは `.tmp/` の下 */
+export const receiptImageTool: ReceiptImageTool = createImageTool({ tmpRoot: TMP_ROOT });
+
+/**
+ * 証憑のルートが使う、差し替えられる部品（`createApp({ receipts })`。010/X3）。
+ * `files` は事業体ごとの暗号化したファイルの置き場（既定は db の `createReceiptFileStore`。施錠中は VaultLockedError）
+ */
+export type ReceiptRuntime = {
+  imageTool: ReceiptImageTool;
+  files: (entityId: string) => ReceiptFileStore;
+};
+
+export const defaultReceiptRuntime: ReceiptRuntime = {
+  imageTool: receiptImageTool,
+  files: createReceiptFileStore,
+};
+
+/**
+ * 証憑（010）のユースケースの依存。証憑の記録・仕訳を 1 つのトランザクションで扱い（INV-62・64）、
+ * ファイルは事業体ごとの `ReceiptFileStore` に書く。`dateOf` は `Asia/Tokyo` 固定
+ */
+export function receiptDeps(
+  db: TenantDb,
+  clock: Clock,
+  entityId: string,
+  runtime: Pick<ReceiptRuntime, "files"> = defaultReceiptRuntime,
+): ReceiptDeps {
+  return {
+    uow: createReceiptUnitOfWork(db),
+    files: runtime.files(entityId),
+    clock,
+    ids,
+    dateOf: receiptDateOf,
   };
 }
 
