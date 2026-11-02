@@ -148,9 +148,9 @@ description: "Task list for 010-receipts"
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
-- [ ] T037 `scripts/bench-reports.ts` に「010 SC-002」を足す（R21）: 証憑 5,000 件（ファイルなし。リポジトリで行だけを入れる）の事業体で、日付の範囲 × 金額の範囲 × 取引先の部分一致の検索を 10 回、各 1 秒以内を確かめる。新しい bench のスクリプトは作らない。結果の数値はコミットしない
-- [ ] T038 [P] `docs/adr/0014-receipt-storage.md` を書く（R19。書式は `0001-sqlite-driver.md`、状態は「採用」）: 暗号化と名前（R8）、`.tbk` と別置きの増分の写し（R11）、**INV-45 の例外の判断（利用者が外部への画像の送信を明示的に選んだ、2026-11-02。憲法 III と 006 の規則への例外、1 つのポートに閉じ込める。R13、C1）**、タイムスタンプを使わず紙の原本を残す（R1、Q1 = (A)）。関連に 0011・0007・0009
-- [ ] T039 文書を更新する（C1）: ①**`.specify/memory/constitution.md` の III に、証憑の画像の読み取りを、利用者が別に有効にしたときだけ許す例外を 1 文足す**（PATCH の改定。Sync Impact Report に変更・理由〔利用者の判断、ADR 0014〕・影響を書き、`Version`・`Last Amended` を更新）②`AGENTS.md` の 006 の「AI へ送る情報は `buildAiPayload` を通したものだけ（INV-45）」の規則に「010 の証憑の画像は例外。専用の `ReceiptReader` を通す」を一言足す③`AGENTS.md` に「証憑（010）」の節（場所の表、暗号化と名前、INV-45 の例外の経路、`sips` の作業ファイルと `.tmp/receipt-convert-*`、バックアップの写しと復元のフラグ、`eval:receipts` の規則、税制の値の 4 key、紙の原本を保存する運用、区分の表示名）とコマンド表の `pnpm eval:receipts`・`bench:reports` の説明（SC-002）、不変条件の索引の記述を「INV-1〜68」に直す（今は「INV-1〜60」）④`docs/requirements.md` の FR-08・NFR-04・NFR-09 の状態⑤`specs/INVARIANTS.md` は済み（INV-61〜68 と合うか確かめる）
+- [X] T037 `scripts/bench-reports.ts` に「010 SC-002」を足す（R21）: 証憑 5,000 件（ファイルなし。リポジトリで行だけを入れる）の事業体で、日付の範囲 × 金額の範囲 × 取引先の部分一致の検索を 10 回、各 1 秒以内を確かめる。新しい bench のスクリプトは作らない。結果の数値はコミットしない
+- [X] T038 [P] `docs/adr/0014-receipt-storage.md` を書く（R19。書式は `0001-sqlite-driver.md`、状態は「採用」）: 暗号化と名前（R8）、`.tbk` と別置きの増分の写し（R11）、**INV-45 の例外の判断（利用者が外部への画像の送信を明示的に選んだ、2026-11-02。憲法 III と 006 の規則への例外、1 つのポートに閉じ込める。R13、C1）**、タイムスタンプを使わず紙の原本を残す（R1、Q1 = (A)）。関連に 0011・0007・0009
+- [X] T039 文書を更新する（C1）: ①**`.specify/memory/constitution.md` の III に、証憑の画像の読み取りを、利用者が別に有効にしたときだけ許す例外を 1 文足す**（PATCH の改定。Sync Impact Report に変更・理由〔利用者の判断、ADR 0014〕・影響を書き、`Version`・`Last Amended` を更新）②`AGENTS.md` の 006 の「AI へ送る情報は `buildAiPayload` を通したものだけ（INV-45）」の規則に「010 の証憑の画像は例外。専用の `ReceiptReader` を通す」を一言足す③`AGENTS.md` に「証憑（010）」の節（場所の表、暗号化と名前、INV-45 の例外の経路、`sips` の作業ファイルと `.tmp/receipt-convert-*`、バックアップの写しと復元のフラグ、`eval:receipts` の規則、税制の値の 4 key、紙の原本を保存する運用、区分の表示名）とコマンド表の `pnpm eval:receipts`・`bench:reports` の説明（SC-002）、不変条件の索引の記述を「INV-1〜68」に直す（今は「INV-1〜60」）④`docs/requirements.md` の FR-08・NFR-04・NFR-09 の状態⑤`specs/INVARIANTS.md` は済み（INV-61〜68 と合うか確かめる）
 
 ---
 
