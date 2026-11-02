@@ -273,6 +273,12 @@ export const fakeReceiptUnitOfWork = (
 };
 export type FakeReceiptUnitOfWork = ReturnType<typeof fakeReceiptUnitOfWork>;
 
+const unreadable = (message: string): Error => {
+  const error = new Error(message);
+  error.name = "ReceiptFileUnreadableError";
+  return error;
+};
+
 /**
  * ReceiptFileStore のフェイク（メモリー。暗号化はしない）。`puts` は実際に書いた名前、
  * `discarded` は `discard` した名前（INV-62 ③ の確認用）。`failOnPut` なら `put` は何も残さず例外。
@@ -299,10 +305,11 @@ export class FakeReceiptFileStore implements ReceiptFileStore {
     this.puts.push(sha256);
   }
 
+  /** 欠け・改ざんは db の `ReceiptFileUnreadableError` と同じ名前の例外（domain は名前で見分ける） */
   read(sha256: string): Uint8Array {
     const bytes = this.files.get(sha256);
-    if (bytes === undefined) throw new Error(`receipt file not found: ${sha256}`);
-    if (sha256Hex(bytes) !== sha256) throw new Error(`receipt file unreadable: ${sha256}`);
+    if (bytes === undefined) throw unreadable(`receipt file not found: ${sha256}`);
+    if (sha256Hex(bytes) !== sha256) throw unreadable(`receipt file unreadable: ${sha256}`);
     return new Uint8Array(bytes);
   }
 
