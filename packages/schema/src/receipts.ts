@@ -119,6 +119,8 @@ const QueryInt = z.union([
   z.number(),
   z.string().regex(/^\d+$/, "整数で指定してください").transform(Number),
 ]);
+/** URL の検索パラメーターは数字だけの値を数値に読むので、文字列に戻す（取引先が「7」のとき） */
+const QueryText = z.union([z.string(), z.number().transform(String)]);
 const QueryBool = z.union([z.boolean(), z.enum(["true", "false"]).transform((v) => v === "true")]);
 const AmountBound = QueryInt.pipe(z.number().int().nonnegative().lt(YEN_LIMIT));
 
@@ -133,7 +135,7 @@ export const ReceiptQuery = z.object({
   dateTo: DateString.optional(),
   amountMin: AmountBound.optional(),
   amountMax: AmountBound.optional(),
-  partner: z.string().min(1).max(100).optional(),
+  partner: QueryText.pipe(z.string().min(1).max(100)).optional(),
   category: ReceiptCategory.optional(),
   missing: QueryBool.optional(),
   link: ReceiptLinkState.optional(),

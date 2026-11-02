@@ -36,6 +36,8 @@ import { Route as EEntityIdJournalsIndexRouteImport } from './routes/e/$entityId
 import { Route as EEntityIdJournalsJournalIdRouteImport } from './routes/e/$entityId/journals/$journalId'
 import { Route as EEntityIdJournalsNewRouteImport } from './routes/e/$entityId/journals/new'
 import { Route as EEntityIdPeriodsIndexRouteImport } from './routes/e/$entityId/periods/index'
+import { Route as EEntityIdReceiptsIndexRouteImport } from './routes/e/$entityId/receipts/index'
+import { Route as EEntityIdReceiptsReceiptIdRouteImport } from './routes/e/$entityId/receipts/$receiptId'
 import { Route as EEntityIdRecurringIndexRouteImport } from './routes/e/$entityId/recurring/index'
 import { Route as EEntityIdRecurringRecurringIdRouteImport } from './routes/e/$entityId/recurring/$recurringId'
 import { Route as EEntityIdRecurringNewRouteImport } from './routes/e/$entityId/recurring/new'
@@ -198,6 +200,17 @@ const EEntityIdPeriodsIndexRoute = EEntityIdPeriodsIndexRouteImport.update({
   path: '/periods/',
   getParentRoute: () => EEntityIdRouteRoute,
 } as any)
+const EEntityIdReceiptsIndexRoute = EEntityIdReceiptsIndexRouteImport.update({
+  id: '/receipts/',
+  path: '/receipts/',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdReceiptsReceiptIdRoute =
+  EEntityIdReceiptsReceiptIdRouteImport.update({
+    id: '/receipts/$receiptId',
+    path: '/receipts/$receiptId',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
 const EEntityIdRecurringIndexRoute = EEntityIdRecurringIndexRouteImport.update({
   id: '/recurring/',
   path: '/recurring/',
@@ -337,6 +350,7 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
+  '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
   '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
   '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -355,6 +369,7 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/invoices/': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals/': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/receipts/': typeof EEntityIdReceiptsIndexRoute
   '/e/$entityId/recurring/': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/statements/': typeof EEntityIdStatementsIndexRoute
@@ -385,6 +400,7 @@ export interface FileRoutesByTo {
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
+  '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
   '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
   '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -403,6 +419,7 @@ export interface FileRoutesByTo {
   '/e/$entityId/invoices': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/receipts': typeof EEntityIdReceiptsIndexRoute
   '/e/$entityId/recurring': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/statements': typeof EEntityIdStatementsIndexRoute
@@ -435,6 +452,7 @@ export interface FileRoutesById {
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
+  '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
   '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
   '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -453,6 +471,7 @@ export interface FileRoutesById {
   '/e/$entityId/invoices/': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals/': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/receipts/': typeof EEntityIdReceiptsIndexRoute
   '/e/$entityId/recurring/': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/statements/': typeof EEntityIdStatementsIndexRoute
@@ -486,6 +505,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
+    | '/e/$entityId/receipts/$receiptId'
     | '/e/$entityId/recurring/$recurringId'
     | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -504,6 +524,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/'
     | '/e/$entityId/journals/'
     | '/e/$entityId/periods/'
+    | '/e/$entityId/receipts/'
     | '/e/$entityId/recurring/'
     | '/e/$entityId/reports/'
     | '/e/$entityId/statements/'
@@ -534,6 +555,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
+    | '/e/$entityId/receipts/$receiptId'
     | '/e/$entityId/recurring/$recurringId'
     | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -552,6 +574,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices'
     | '/e/$entityId/journals'
     | '/e/$entityId/periods'
+    | '/e/$entityId/receipts'
     | '/e/$entityId/recurring'
     | '/e/$entityId/reports'
     | '/e/$entityId/statements'
@@ -583,6 +606,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
+    | '/e/$entityId/receipts/$receiptId'
     | '/e/$entityId/recurring/$recurringId'
     | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -601,6 +625,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/'
     | '/e/$entityId/journals/'
     | '/e/$entityId/periods/'
+    | '/e/$entityId/receipts/'
     | '/e/$entityId/recurring/'
     | '/e/$entityId/reports/'
     | '/e/$entityId/statements/'
@@ -812,6 +837,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EEntityIdPeriodsIndexRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
+    '/e/$entityId/receipts/': {
+      id: '/e/$entityId/receipts/'
+      path: '/receipts'
+      fullPath: '/e/$entityId/receipts/'
+      preLoaderRoute: typeof EEntityIdReceiptsIndexRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/receipts/$receiptId': {
+      id: '/e/$entityId/receipts/$receiptId'
+      path: '/receipts/$receiptId'
+      fullPath: '/e/$entityId/receipts/$receiptId'
+      preLoaderRoute: typeof EEntityIdReceiptsReceiptIdRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
     '/e/$entityId/recurring/': {
       id: '/e/$entityId/recurring/'
       path: '/recurring'
@@ -970,6 +1009,7 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdInvoicesNewRoute: typeof EEntityIdInvoicesNewRoute
   EEntityIdJournalsJournalIdRoute: typeof EEntityIdJournalsJournalIdRoute
   EEntityIdJournalsNewRoute: typeof EEntityIdJournalsNewRoute
+  EEntityIdReceiptsReceiptIdRoute: typeof EEntityIdReceiptsReceiptIdRoute
   EEntityIdRecurringRecurringIdRoute: typeof EEntityIdRecurringRecurringIdRoute
   EEntityIdRecurringNewRoute: typeof EEntityIdRecurringNewRoute
   EEntityIdReportsBalanceSheetRoute: typeof EEntityIdReportsBalanceSheetRoute
@@ -988,6 +1028,7 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdInvoicesIndexRoute: typeof EEntityIdInvoicesIndexRoute
   EEntityIdJournalsIndexRoute: typeof EEntityIdJournalsIndexRoute
   EEntityIdPeriodsIndexRoute: typeof EEntityIdPeriodsIndexRoute
+  EEntityIdReceiptsIndexRoute: typeof EEntityIdReceiptsIndexRoute
   EEntityIdRecurringIndexRoute: typeof EEntityIdRecurringIndexRoute
   EEntityIdReportsIndexRoute: typeof EEntityIdReportsIndexRoute
   EEntityIdStatementsIndexRoute: typeof EEntityIdStatementsIndexRoute
@@ -1013,6 +1054,7 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdInvoicesNewRoute: EEntityIdInvoicesNewRoute,
   EEntityIdJournalsJournalIdRoute: EEntityIdJournalsJournalIdRoute,
   EEntityIdJournalsNewRoute: EEntityIdJournalsNewRoute,
+  EEntityIdReceiptsReceiptIdRoute: EEntityIdReceiptsReceiptIdRoute,
   EEntityIdRecurringRecurringIdRoute: EEntityIdRecurringRecurringIdRoute,
   EEntityIdRecurringNewRoute: EEntityIdRecurringNewRoute,
   EEntityIdReportsBalanceSheetRoute: EEntityIdReportsBalanceSheetRoute,
@@ -1031,6 +1073,7 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdInvoicesIndexRoute: EEntityIdInvoicesIndexRoute,
   EEntityIdJournalsIndexRoute: EEntityIdJournalsIndexRoute,
   EEntityIdPeriodsIndexRoute: EEntityIdPeriodsIndexRoute,
+  EEntityIdReceiptsIndexRoute: EEntityIdReceiptsIndexRoute,
   EEntityIdRecurringIndexRoute: EEntityIdRecurringIndexRoute,
   EEntityIdReportsIndexRoute: EEntityIdReportsIndexRoute,
   EEntityIdStatementsIndexRoute: EEntityIdStatementsIndexRoute,

@@ -1,5 +1,6 @@
 import type { ErrorCode } from "@trebuchet/schema";
 import { vi } from "vitest";
+import { receiptDetail } from "./receipts-fixtures";
 
 /** query はクエリ文字列（キーと値）。body は JSON のボディ、form は multipart/form-data のボディ */
 export type ApiCall = {
@@ -123,6 +124,13 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   "GET /inference-rules": () => ok({ rules: [] }),
   // 評価の履歴（US5）。実行はまだない
   "GET /statements/evals": () => ok({ runs: [] }),
+  // 証憑（010 US1）。一覧は空。詳細は電子取引の 1 件で、PATCH は送られた値を当てて version を進める
+  "GET /receipts": () => ok({ receipts: [], nextCursor: null }),
+  "GET /receipts/:receiptId": () => ok({ receipt: receiptDetail() }),
+  "PATCH /receipts/:receiptId": ({ body }) => {
+    const { version, ...values } = body as { version: number } & Record<string, unknown>;
+    return ok({ receipt: { ...receiptDetail(), ...values, version: version + 1 } });
+  },
   "GET /statement-settings": () =>
     ok({
       settings: { bulkThreshold: 80, externalThreshold: 60, updatedAt: "2026-10-26T00:00:00.000Z" },

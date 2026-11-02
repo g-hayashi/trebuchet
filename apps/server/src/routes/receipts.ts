@@ -4,6 +4,7 @@ import {
   getReceipt,
   listReceipts,
   readReceiptFile,
+  updateReceipt,
 } from "@trebuchet/domain";
 import {
   RECEIPT_MAX_BYTES,
@@ -11,9 +12,10 @@ import {
   ReceiptFileParam,
   ReceiptParam,
   ReceiptQuery,
+  ReceiptUpdateInput,
 } from "@trebuchet/schema";
 import { Hono } from "hono";
-import { type ReceiptRuntime, receiptDeps, type RouteOptions } from "../deps.ts";
+import { type ReceiptRuntime, type RouteOptions, receiptDeps } from "../deps.ts";
 import { errorBody, fail, respond, validationError } from "../errors.ts";
 import { isLocalHost, requestHost } from "../lib/origin.ts";
 import { readJsonField, readUpload, uploadLimitFor } from "../lib/upload.ts";
@@ -77,6 +79,20 @@ export function receiptRoutes({ clock, receipts }: RouteOptions & { receipts: Re
         const result = getReceipt(deps(c), c.req.valid("param").receiptId);
         return respond(c, result, (receipt) => c.json({ receipt }, 200));
       })
+      // 値の更新。US1 では未入力の値を埋める・メモを変えるだけ（入力済みの値の訂正は US5。D1）
+      .patch(
+        "/receipts/:receiptId",
+        validate("param", ReceiptParam),
+        validate("json", ReceiptUpdateInput),
+        (c) => {
+          const result = updateReceipt(
+            deps(c),
+            c.req.valid("param").receiptId,
+            c.req.valid("json"),
+          );
+          return respond(c, result, (receipt) => c.json({ receipt }, 200));
+        },
+      )
       // ファイルの取り出し。variant=display（既定。HEIC は JPEG に変換）| original、download=1 で attachment。
       // 平文をブラウザのキャッシュに残さない（no-store。R9）
       .get("/receipts/:receiptId/files/:sha256", validate("param", ReceiptFileParam), async (c) => {

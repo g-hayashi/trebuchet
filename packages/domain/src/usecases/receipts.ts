@@ -8,21 +8,23 @@ import {
   type ReceiptQuery,
   type ReceiptReadingView,
   type ReceiptSummary,
+  type ReceiptUpdateInput,
   YEN_LIMIT,
 } from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
 import { isValidDate } from "../dates.ts";
-import type {
-  Clock,
-  IdGenerator,
-  ReceiptFileStore,
-  ReceiptProbe,
-  ReceiptStore,
-  ReceiptUnitOfWork,
-  TenantTx,
+import {
+  type Clock,
+  type IdGenerator,
+  type ReceiptFileStore,
+  type ReceiptProbe,
+  type ReceiptStore,
+  type ReceiptUnitOfWork,
+  RepositoryConflictError,
+  type TenantTx,
 } from "../ports.ts";
 import { detectReceiptFormat } from "../receipts/format.ts";
-import { linkStateOf, receiptValuesOf } from "../receipts/history.ts";
+import { linkStateOf, needsReason, receiptValuesOf } from "../receipts/history.ts";
 import { normalizeReceiptText } from "../receipts/search.ts";
 import { receiptWarnings } from "../receipts/warnings.ts";
 import { TAX_PARAMETERS } from "../seed/tax-parameters.ts";
@@ -312,6 +314,98 @@ export function getReceipt(deps: ReceiptDeps, receiptId: string): Result<Receipt
     const receipt = tx.receipts.getReceipt(receiptId);
     if (receipt === undefined) return err(notFound());
     return ok(buildDetail(tx, deps, receipt));
+  });
+}
+
+// ---- 更新（未入力の値を埋める。US1 の段） ----
+
+const versionConflict = (receipt: ReceiptRow) =>
+  domainError("VERSION_CONFLICT", "別の操作で更新されています。開き直してください", {
+    receiptId: receipt.id,
+    currentVersion: receipt.version,
+  });
+
+/**
+ * 証憑の値を更新する（FR-005。contracts/domain-module.md §3 の US1 の段、D1）。
+ * 未入力（NULL）の取引年月日・金額・取引先を埋める・メモを変えるだけを、理由なしで受ける。
+ * 入力済みの値（区分を含む）の変更は `needsReason` が真で、この段では 422 `REASON_REQUIRED`
+ * （理由つきの訂正は US5 の T027 で足す）。何も変わらなければ書かない
+ */
+export function updateReceipt(
+  deps: ReceiptDeps,
+  receiptId: string,
+  input: ReceiptUpdateInput,
+): Result<ReceiptDetail> {
+  return deps.uow.run((tx) => {
+    const before = tx.receipts.getReceipt(receiptId);
+    if (before === undefined) return err(notFound());
+    if (before.deletedAt !== null) {
+      return err(domainError("RECEIPT_DELETED", "削除済みの証憑は変更できません"));
+    }
+    if (before.version !== input.version) return err(versionConflict(before));
+
+    // 指定のない項目は今の値のまま。指定した値だけ検査する（取引先は前後の空白を除く）
+    const checked = checkValues({
+      category: input.category ?? before.category,
+      transactionDate:
+        input.transactionDate === undefined ? before.transactionDate : input.transactionDate,
+      amount: input.amount === undefined ? before.amount : input.amount,
+      partnerName: input.partnerName === undefined ? before.partnerName : input.partnerName,
+      memo: input.memo === undefined ? before.memo : input.memo,
+    });
+    if (!checked.ok) return checked;
+    const values = checked.value;
+    const category = input.category ?? before.category;
+
+    const normalized: ReceiptUpdateInput = {
+      ...input,
+      ...(input.partnerName == null ? {} : { partnerName: values.partnerName }),
+    };
+    if (needsReason(before, normalized)) {
+      return err(
+        domainError("REASON_REQUIRED", "入力済みの値を変えるときは理由が必要です", {
+          receiptId: before.id,
+        }),
+      );
+    }
+
+    const unchanged =
+      category === before.category &&
+      values.transactionDate === before.transactionDate &&
+      values.amount === before.amount &&
+      values.partnerName === before.partnerName &&
+      values.memo === before.memo;
+    if (unchanged) return ok(buildDetail(tx, deps, before));
+
+    const now = deps.clock.now();
+    const after: ReceiptRow = {
+      ...before,
+      category,
+      transactionDate: values.transactionDate,
+      amount: values.amount,
+      partnerName: values.partnerName,
+      partnerKey: values.partnerName === null ? null : normalizeReceiptText(values.partnerName),
+      memo: values.memo,
+      version: before.version + 1,
+      updatedAt: now,
+    };
+    try {
+      tx.receipts.updateReceipt(after, before.version);
+    } catch (e) {
+      if (e instanceof RepositoryConflictError) return err(versionConflict(before));
+      throw e;
+    }
+    tx.receipts.appendAudit(
+      auditEntry(deps, {
+        targetType: "receipt",
+        targetId: after.id,
+        action: "update",
+        before: receiptValuesOf(before),
+        after: receiptValuesOf(after),
+        at: now,
+      }),
+    );
+    return ok(buildDetail(tx, deps, after));
   });
 }
 
