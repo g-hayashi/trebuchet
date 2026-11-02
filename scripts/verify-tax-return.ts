@@ -77,10 +77,6 @@ import { blueReturnToCsv } from "../packages/domain/src/blue-return/csv.ts";
 import { parseCsv } from "../packages/domain/src/import/csv.ts";
 import type { Result } from "../packages/domain/src/types.ts";
 import {
-  decideDeferredAmortization,
-  saveDeferredAsset,
-} from "../packages/domain/src/usecases/deferred-assets.ts";
-import {
   commitAdjustment,
   getAdjustmentProposals,
   getBlueReturn,
@@ -88,6 +84,10 @@ import {
   saveFixedAsset,
   saveHomeUseAllocation,
 } from "../packages/domain/src/usecases/blue-return.ts";
+import {
+  decideDeferredAmortization,
+  saveDeferredAsset,
+} from "../packages/domain/src/usecases/deferred-assets.ts";
 import {
   finishFreeeImport,
   type ImportContext,
