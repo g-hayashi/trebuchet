@@ -37,6 +37,8 @@ function Fields({ settings }: { settings: AiSettings }) {
     const input: AiSettingsInput = {
       localEnabled,
       externalEnabled,
+      // 証憑の画像の送信（010 R15）の画面は T034 以降。今の値を保ち、外部を無効にするなら false にする
+      receiptImagesEnabled: externalEnabled && settings.receiptImagesEnabled,
       ...(url.trim() === "" ? {} : { externalBaseUrl: url.trim() }),
       ...(model.trim() === "" ? {} : { externalModel: model.trim() }),
       ...(key === undefined ? {} : { apiKey: key }),

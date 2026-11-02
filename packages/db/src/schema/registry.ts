@@ -68,12 +68,19 @@ export const aiSettings = sqliteTable(
     externalEnabled: integer("external_enabled").notNull().default(0),
     externalBaseUrl: text("external_base_url"),
     externalModel: text("external_model"),
+    /** 010 R15: 証憑の画像を外部の AI へ送ってよいか。1 にできるのは external_enabled = 1 のときだけ */
+    receiptImagesEnabled: integer("receipt_images_enabled").notNull().default(0),
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [
     check("ai_settings_single", sql`${t.id} = 1`),
     check("ai_settings_local_enabled", sql`${t.localEnabled} IN (0, 1)`),
     check("ai_settings_external_enabled", sql`${t.externalEnabled} IN (0, 1)`),
+    check("ai_settings_receipt_images_enabled", sql`${t.receiptImagesEnabled} IN (0, 1)`),
+    check(
+      "ai_settings_receipt_images_external",
+      sql`${t.receiptImagesEnabled} = 0 OR ${t.externalEnabled} = 1`,
+    ),
     check(
       "ai_settings_external",
       sql`${t.externalEnabled} = 0 OR (${t.externalBaseUrl} IS NOT NULL AND ${t.externalModel} IS NOT NULL)`,

@@ -69,6 +69,8 @@ export const AiSettingsInput = z.object({
   externalEnabled: z.boolean(),
   externalBaseUrl: AiBaseUrl.optional(),
   externalModel: z.string().min(1).max(200).optional(),
+  /** 010 R15: 証憑の画像を外部の AI へ送る。必須（省略で既存の設定を黙って変えない）。true は externalEnabled のときだけ（server が検査する） */
+  receiptImagesEnabled: z.boolean(),
   apiKey: z.string().max(500).optional(),
 });
 export type AiSettingsInput = z.infer<typeof AiSettingsInput>;
@@ -80,6 +82,7 @@ export const AiSettings = z.object({
   externalEnabled: z.boolean(),
   externalBaseUrl: z.string().nullable(),
   externalModel: z.string().nullable(),
+  receiptImagesEnabled: z.boolean(),
   apiKeySet: z.boolean(),
 });
 export type AiSettings = z.infer<typeof AiSettings>;

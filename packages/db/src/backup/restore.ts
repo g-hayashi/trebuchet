@@ -187,6 +187,7 @@ type AiSettingsRow = {
   external_enabled: number;
   external_base_url: string | null;
   external_model: string | null;
+  receipt_images_enabled: number;
   updated_at: string;
 };
 
@@ -202,7 +203,7 @@ function readAiSettings(dataDir: string): AiSettingsRow | undefined {
     if (table === undefined) return undefined;
     return db
       .prepare(
-        "SELECT id, local_enabled, external_enabled, external_base_url, external_model, updated_at FROM ai_settings WHERE id = 1",
+        "SELECT id, local_enabled, external_enabled, external_base_url, external_model, receipt_images_enabled, updated_at FROM ai_settings WHERE id = 1",
       )
       .get() as AiSettingsRow | undefined;
   } finally {
@@ -464,7 +465,7 @@ async function applyRestore(
         if (aiSettings !== undefined) {
           registry
             .prepare(
-              "INSERT OR REPLACE INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+              "INSERT OR REPLACE INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, receipt_images_enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .run(
               aiSettings.id,
@@ -472,6 +473,7 @@ async function applyRestore(
               aiSettings.external_enabled,
               aiSettings.external_base_url,
               aiSettings.external_model,
+              aiSettings.receipt_images_enabled,
               aiSettings.updated_at,
             );
         }

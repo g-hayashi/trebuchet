@@ -21,6 +21,7 @@ export function aiSettingsRoutes({ clock, ai }: RouteOptions & { ai: AiRuntime }
       externalEnabled: s.externalEnabled,
       externalBaseUrl: s.externalBaseUrl,
       externalModel: s.externalModel,
+      receiptImagesEnabled: s.receiptImagesEnabled,
       apiKeySet: (await readApiKey(ai.secrets)) !== undefined,
     };
   };
@@ -66,6 +67,8 @@ export function aiSettingsRoutes({ clock, ai }: RouteOptions & { ai: AiRuntime }
           externalEnabled: input.externalEnabled,
           externalBaseUrl,
           externalModel,
+          // 外部が有効のときだけ true にできる検査（422 AI_NOT_CONFIGURED）は 010/T034 で足す
+          receiptImagesEnabled: input.receiptImagesEnabled,
         },
         clock.now(),
       );

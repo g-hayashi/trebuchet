@@ -49,6 +49,7 @@ const DEFAULT_AI_SETTINGS = {
   externalEnabled: false,
   externalBaseUrl: null,
   externalModel: null,
+  receiptImagesEnabled: false,
   apiKeySet: false,
 };
 

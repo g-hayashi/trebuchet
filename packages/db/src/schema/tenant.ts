@@ -3,6 +3,12 @@ import {
   CANDIDATE_METHODS,
   JOURNAL_SOURCES,
   PURPOSES,
+  ReceiptCategory,
+  ReceiptChannel,
+  ReceiptHistoryAction,
+  ReceiptHistoryTargetType,
+  ReceiptMediaType,
+  ReceiptReadingStatus,
   RULE_HISTORY_ACTIONS,
   RULE_ORIGINS,
   RULE_STATUSES,
@@ -416,6 +422,11 @@ export const taxParameters = sqliteTable(
         "LUMP_SUM_COST_MAX",
         "LUMP_SUM_YEARS",
         "OPENING_COST_AMORTIZATION_MONTHS",
+        // 010: 証憑の電子保存の期間・画素数（data-model §1.6）
+        "RECEIPT_INPUT_CYCLE_MONTHS",
+        "RECEIPT_INPUT_GRACE_BUSINESS_DAYS",
+        "RECEIPT_SCAN_MIN_LONG_PX",
+        "RECEIPT_SCAN_MIN_SHORT_PX",
       ],
     }).notNull(),
     effectiveFrom: text("effective_from").notNull(),
@@ -427,7 +438,7 @@ export const taxParameters = sqliteTable(
     primaryKey({ columns: [t.key, t.effectiveFrom] }),
     check(
       "tax_parameters_key",
-      sql`${t.key} IN ('SMALL_ASSET_THRESHOLD', 'SMALL_ASSET_ANNUAL_LIMIT', 'BLUE_DEDUCTION_MAX', 'BLUE_DEDUCTION_STANDARD', 'BLUE_DEDUCTION_BASIC', 'LUMP_SUM_COST_MIN', 'LUMP_SUM_COST_MAX', 'LUMP_SUM_YEARS', 'OPENING_COST_AMORTIZATION_MONTHS')`,
+      sql`${t.key} IN ('SMALL_ASSET_THRESHOLD', 'SMALL_ASSET_ANNUAL_LIMIT', 'BLUE_DEDUCTION_MAX', 'BLUE_DEDUCTION_STANDARD', 'BLUE_DEDUCTION_BASIC', 'LUMP_SUM_COST_MIN', 'LUMP_SUM_COST_MAX', 'LUMP_SUM_YEARS', 'OPENING_COST_AMORTIZATION_MONTHS', 'RECEIPT_INPUT_CYCLE_MONTHS', 'RECEIPT_INPUT_GRACE_BUSINESS_DAYS', 'RECEIPT_SCAN_MIN_LONG_PX', 'RECEIPT_SCAN_MIN_SHORT_PX')`,
     ),
     check("tax_parameters_value", sql`${t.value} > 0`),
   ],
@@ -1350,5 +1361,193 @@ export const statementAuditLog = sqliteTable(
       sql`${t.targetType} IN (${inList(STATEMENT_AUDIT_TARGETS)})`,
     ),
     check("statement_audit_log_action", sql`${t.action} IN (${inList(STATEMENT_AUDIT_ACTIONS)})`),
+  ],
+);
+
+// ---- 010-receipts（specs/010-receipts/data-model.md §1.1〜1.5） ----
+
+/** Zod の enum を drizzle の `enum` の形（空でない配列）にする。値は schema の定数と同じ */
+const enumValues = <T extends string>(zodEnum: { options: readonly T[] }) =>
+  zodEnum.options as unknown as readonly [T, ...T[]];
+
+const sha256Check = (column: AnySQLiteColumn) =>
+  sql`length(${column}) = 64 AND ${column} NOT GLOB '*[^0-9a-f]*'`;
+
+/**
+ * 証憑。`current_sha256` ⇔ `receipt_files.receipt_id` は循環した外部キー。どちらも
+ * `DEFERRABLE INITIALLY DEFERRED` にする（drizzle-kit は出力しないので 0014_receipts.sql に手で書き足す。§1.1・§5）
+ */
+export const receipts = sqliteTable(
+  "receipts",
+  {
+    id: text("id").primaryKey(),
+    receivedAt: text("received_at").notNull(),
+    channel: text("channel", { enum: enumValues(ReceiptChannel) }).notNull(),
+    category: text("category", { enum: enumValues(ReceiptCategory) }).notNull(),
+    currentSha256: text("current_sha256")
+      .notNull()
+      .references((): AnySQLiteColumn => receiptFiles.sha256),
+    transactionDate: text("transaction_date"),
+    amount: integer("amount"),
+    partnerName: text("partner_name"),
+    partnerKey: text("partner_key"),
+    memo: text("memo"),
+    deletedAt: text("deleted_at"),
+    deletedReason: text("deleted_reason"),
+    version: integer("version").notNull().default(1),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    index("receipts_search_date").on(t.deletedAt, t.transactionDate),
+    index("receipts_amount").on(t.amount),
+    index("receipts_received").on(t.receivedAt, t.id),
+    check("receipts_channel", sql`${t.channel} IN (${inList(ReceiptChannel.options)})`),
+    check("receipts_category", sql`${t.category} IN (${inList(ReceiptCategory.options)})`),
+    check(
+      "receipts_amount_range",
+      sql`${t.amount} IS NULL OR (${t.amount} > 0 AND ${t.amount} < 1000000000000)`,
+    ),
+    check(
+      "receipts_partner_name",
+      sql`${t.partnerName} IS NULL OR (length(trim(${t.partnerName})) > 0 AND length(${t.partnerName}) <= 100)`,
+    ),
+    check("receipts_partner_key", sql`(${t.partnerName} IS NULL) = (${t.partnerKey} IS NULL)`),
+    check("receipts_memo", sql`${t.memo} IS NULL OR length(${t.memo}) <= 500`),
+    check("receipts_deleted", sql`(${t.deletedAt} IS NULL) = (${t.deletedReason} IS NULL)`),
+    check("receipts_version", sql`${t.version} >= 1`),
+  ],
+);
+
+/** 証憑のファイルの版。不変（UPDATE・DELETE はトリガーで禁止。0015） */
+export const receiptFiles = sqliteTable(
+  "receipt_files",
+  {
+    sha256: text("sha256").primaryKey(),
+    receiptId: text("receipt_id")
+      .notNull()
+      .references((): AnySQLiteColumn => receipts.id),
+    fileVersion: integer("file_version").notNull(),
+    mediaType: text("media_type", { enum: enumValues(ReceiptMediaType) }).notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    originalName: text("original_name").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    fullColor: integer("full_color"),
+    addedAt: text("added_at").notNull(),
+    channel: text("channel", { enum: enumValues(ReceiptChannel) }).notNull(),
+  },
+  (t) => [
+    unique("receipt_files_version").on(t.receiptId, t.fileVersion),
+    check("receipt_files_sha256", sha256Check(t.sha256)),
+    check("receipt_files_version_min", sql`${t.fileVersion} >= 1`),
+    check("receipt_files_media_type", sql`${t.mediaType} IN (${inList(ReceiptMediaType.options)})`),
+    check("receipt_files_size", sql`${t.sizeBytes} > 0 AND ${t.sizeBytes} <= 20971520`),
+    check("receipt_files_width", sql`${t.width} IS NULL OR ${t.width} > 0`),
+    check("receipt_files_height", sql`${t.height} IS NULL OR ${t.height} > 0`),
+    check("receipt_files_full_color", sql`${t.fullColor} IS NULL OR ${t.fullColor} IN (0, 1)`),
+    check("receipt_files_channel", sql`${t.channel} IN (${inList(ReceiptChannel.options)})`),
+  ],
+);
+
+/** 証憑と仕訳の結びつき。有効 = `unlinked_at IS NULL`（証憑ごとに高々 1 件。INV-64） */
+export const receiptLinks = sqliteTable(
+  "receipt_links",
+  {
+    id: text("id").primaryKey(),
+    receiptId: text("receipt_id")
+      .notNull()
+      .references(() => receipts.id),
+    journalId: text("journal_id")
+      .notNull()
+      .references(() => journals.id),
+    linkedAt: text("linked_at").notNull(),
+    unlinkedAt: text("unlinked_at"),
+    unlinkReason: text("unlink_reason"),
+  },
+  (t) => [
+    uniqueIndex("receipt_links_active").on(t.receiptId).where(sql`unlinked_at IS NULL`),
+    index("receipt_links_journal").on(t.journalId).where(sql`unlinked_at IS NULL`),
+    check("receipt_links_unlinked", sql`(${t.unlinkedAt} IS NULL) = (${t.unlinkReason} IS NULL)`),
+  ],
+);
+
+/** 外部の AI の読み取りの記録。画像・応答の本文・reason は持たない（R14） */
+export const receiptReadings = sqliteTable(
+  "receipt_readings",
+  {
+    id: text("id").primaryKey(),
+    receiptId: text("receipt_id")
+      .notNull()
+      .references(() => receipts.id),
+    fileSha256: text("file_sha256")
+      .notNull()
+      .references(() => receiptFiles.sha256),
+    readAt: text("read_at").notNull(),
+    model: text("model").notNull(),
+    status: text("status", { enum: enumValues(ReceiptReadingStatus) }).notNull(),
+    errorCode: text("error_code"),
+    candDate: text("cand_date"),
+    candAmount: integer("cand_amount"),
+    candPartner: text("cand_partner"),
+    candAccountCode: text("cand_account_code"),
+    candTaxCategory: text("cand_tax_category"),
+    confidence: integer("confidence"),
+    comparedAt: text("compared_at"),
+    dateMatch: integer("date_match"),
+    amountMatch: integer("amount_match"),
+    partnerMatch: integer("partner_match"),
+    accountMatch: integer("account_match"),
+    taxMatch: integer("tax_match"),
+  },
+  (t) => [
+    index("receipt_readings_receipt").on(t.receiptId),
+    check("receipt_readings_status", sql`${t.status} IN (${inList(ReceiptReadingStatus.options)})`),
+    check("receipt_readings_error_code", sql`${t.status} <> 'succeeded' OR ${t.errorCode} IS NULL`),
+    check(
+      "receipt_readings_candidates",
+      sql`${t.status} = 'succeeded' OR (${t.candDate} IS NULL AND ${t.candAmount} IS NULL AND ${t.candPartner} IS NULL AND ${t.candAccountCode} IS NULL AND ${t.candTaxCategory} IS NULL AND ${t.confidence} IS NULL)`,
+    ),
+    check(
+      "receipt_readings_confidence",
+      sql`${t.confidence} IS NULL OR ${t.confidence} BETWEEN 0 AND 100`,
+    ),
+    check(
+      "receipt_readings_matches",
+      sql`(${t.dateMatch} IS NULL OR ${t.dateMatch} IN (0, 1)) AND (${t.amountMatch} IS NULL OR ${t.amountMatch} IN (0, 1)) AND (${t.partnerMatch} IS NULL OR ${t.partnerMatch} IN (0, 1)) AND (${t.accountMatch} IS NULL OR ${t.accountMatch} IN (0, 1)) AND (${t.taxMatch} IS NULL OR ${t.taxMatch} IN (0, 1))`,
+    ),
+  ],
+);
+
+/**
+ * 証憑の履歴（追記のみ）。`receipt_id` は記録の対象の証憑（`target_type = 'receipt'` なら `target_id` と同じ。
+ * 結びつき・読み取りの記録は `target_id` がその行の ID なので、証憑の ID で引けるように持つ。§1.5・§2.5）
+ */
+export const receiptAuditLog = sqliteTable(
+  "receipt_audit_log",
+  {
+    id: text("id").primaryKey(),
+    occurredAt: text("occurred_at").notNull(),
+    receiptId: text("receipt_id")
+      .notNull()
+      .references(() => receipts.id),
+    targetType: text("target_type", { enum: enumValues(ReceiptHistoryTargetType) }).notNull(),
+    targetId: text("target_id").notNull(),
+    action: text("action", { enum: enumValues(ReceiptHistoryAction) }).notNull(),
+    reason: text("reason"),
+    beforeJson: text("before_json"),
+    afterJson: text("after_json"),
+  },
+  (t) => [
+    index("receipt_audit_log_target").on(t.targetType, t.targetId),
+    index("receipt_audit_log_receipt").on(t.receiptId, t.occurredAt),
+    check(
+      "receipt_audit_log_target_type",
+      sql`${t.targetType} IN (${inList(ReceiptHistoryTargetType.options)})`,
+    ),
+    check(
+      "receipt_audit_log_action",
+      sql`${t.action} IN (${inList(ReceiptHistoryAction.options)})`,
+    ),
   ],
 );

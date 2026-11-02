@@ -11,8 +11,8 @@ const at = (key: TaxParameter["key"], date: string) =>
   resolveTaxParameter(key, date, TAX_PARAMETERS)?.value;
 
 describe("TAX_PARAMETERS の seed（research R3）", () => {
-  it("10行（003 の 6 行と 009 の 4 行）で、すべて出典 URL を持つ", () => {
-    expect(TAX_PARAMETERS).toHaveLength(10);
+  it("14行（003 の 6 行、009 の 4 行、010 の 4 行）で、すべて出典 URL を持つ", () => {
+    expect(TAX_PARAMETERS).toHaveLength(14);
     for (const p of TAX_PARAMETERS) {
       expect(p.sourceUrl).toMatch(/^https:\/\//);
       expect(p.value).toBeGreaterThan(0);

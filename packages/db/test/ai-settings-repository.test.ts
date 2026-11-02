@@ -25,6 +25,7 @@ describe("DrizzleAiSettingsStore", () => {
       externalEnabled: false,
       externalBaseUrl: null,
       externalModel: null,
+      receiptImagesEnabled: false,
     });
   });
 
@@ -35,6 +36,7 @@ describe("DrizzleAiSettingsStore", () => {
         externalEnabled: true,
         externalBaseUrl: "https://api.example.com",
         externalModel: "model-a",
+        receiptImagesEnabled: true,
       },
       AT,
     );
@@ -43,10 +45,17 @@ describe("DrizzleAiSettingsStore", () => {
       externalEnabled: true,
       externalBaseUrl: "https://api.example.com",
       externalModel: "model-a",
+      receiptImagesEnabled: true,
     });
 
     store.save(
-      { localEnabled: true, externalEnabled: false, externalBaseUrl: null, externalModel: null },
+      {
+        localEnabled: true,
+        externalEnabled: false,
+        externalBaseUrl: null,
+        externalModel: null,
+        receiptImagesEnabled: false,
+      },
       "2026-10-26T09:00:00.000Z",
     );
     expect(store.get().externalBaseUrl).toBeNull();
@@ -62,6 +71,20 @@ describe("DrizzleAiSettingsStore", () => {
           externalEnabled: true,
           externalBaseUrl: "https://api.example.com",
           externalModel: null,
+          receiptImagesEnabled: false,
+        },
+        AT,
+      ),
+    ).toThrow();
+    // 証憑の画像の送信は外部の AI が有効のときだけ（表の CHECK。検査は server にもある。010 R15）
+    expect(() =>
+      store.save(
+        {
+          localEnabled: true,
+          externalEnabled: false,
+          externalBaseUrl: null,
+          externalModel: null,
+          receiptImagesEnabled: true,
         },
         AT,
       ),

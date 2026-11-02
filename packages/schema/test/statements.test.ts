@@ -165,13 +165,38 @@ describe("AiSettings・AiSettingsInput（H:§7）", () => {
       externalEnabled: false,
       externalBaseUrl: null,
       externalModel: null,
+      receiptImagesEnabled: false,
       apiKeySet: false,
       apiKey: "secret",
     });
     expect(parsed).not.toHaveProperty("apiKey");
+    expect(parsed.receiptImagesEnabled).toBe(false);
+  });
+  it("receiptImagesEnabled は必須（010 H:§6、L2）。出力にも入力にも要る", () => {
+    const output = {
+      localEnabled: true,
+      localAvailable: true,
+      externalEnabled: false,
+      externalBaseUrl: null,
+      externalModel: null,
+      apiKeySet: false,
+    };
+    expect(AiSettings.safeParse(output).success).toBe(false);
+    expect(AiSettings.safeParse({ ...output, receiptImagesEnabled: false }).success).toBe(true);
+    const input = { localEnabled: true, externalEnabled: false };
+    expect(AiSettingsInput.safeParse(input).success).toBe(false);
+    expect(AiSettingsInput.safeParse({ ...input, receiptImagesEnabled: "yes" }).success).toBe(
+      false,
+    );
+    expect(AiSettingsInput.safeParse({ ...input, receiptImagesEnabled: false }).success).toBe(true);
   });
   it("URL は https か localhost だけ", () => {
-    const input = { localEnabled: true, externalEnabled: true, externalModel: "m" };
+    const input = {
+      localEnabled: true,
+      externalEnabled: true,
+      externalModel: "m",
+      receiptImagesEnabled: false,
+    };
     expect(
       AiSettingsInput.safeParse({ ...input, externalBaseUrl: "https://api.example.com/v1" })
         .success,
@@ -190,7 +215,7 @@ describe("AiSettings・AiSettingsInput（H:§7）", () => {
     );
   });
   it("apiKey は任意（空文字は削除の意味で受ける）", () => {
-    const input = { localEnabled: false, externalEnabled: false };
+    const input = { localEnabled: false, externalEnabled: false, receiptImagesEnabled: false };
     expect(AiSettingsInput.safeParse(input).success).toBe(true);
     expect(AiSettingsInput.safeParse({ ...input, apiKey: "" }).success).toBe(true);
   });

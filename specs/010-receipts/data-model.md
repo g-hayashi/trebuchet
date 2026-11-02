@@ -91,13 +91,14 @@
 |---|---|---|
 | `id` | text | PK |
 | `occurred_at` | text | NOT NULL |
+| `receipt_id` | text | NOT NULL、FK `receipts`。記録の対象の証憑（`target_type = 'receipt'` なら `target_id` と同じ。結びつき・読み取りの記録は `target_id` がその行の ID なので、証憑の ID で引くために持つ。§2.5） |
 | `target_type` | text | `receipt` / `receipt_link` / `receipt_reading`（CHECK） |
 | `target_id` | text | NOT NULL |
 | `action` | text | `create` / `update` / `replace_file` / `delete` / `link` / `unlink` / `read`（CHECK） |
 | `reason` | text | NULL 可 |
 | `before_json` / `after_json` | text | NULL 可（`auditEntry` の値） |
 
-- 索引 `receipt_audit_log_target`（`target_type`, `target_id`）。UPDATE・DELETE はトリガーで禁止
+- 索引 `receipt_audit_log_target`（`target_type`, `target_id`）、`receipt_audit_log_receipt`（`receipt_id`, `occurred_at`。証憑の履歴の取得）。UPDATE・DELETE はトリガーで禁止
 - 記録する値（§2.5）。`auditEntry`（`packages/domain/src/audit.ts`）で作る。型は `AuditEntry<ReceiptAuditTarget, ReceiptAuditAction>`
 
 ### 1.6 `tax_parameters`（key を追加。R2・R3・R20）
@@ -203,6 +204,7 @@
 | 解除 | `receipt_link` / `unlink` | `{ receiptId, journalId }` | `{ unlinkedAt }` | 必須（自動の閉じは「結びついた仕訳が取り消されたため」） |
 | 読み取り | `receipt_reading` / `read` | null | `{ receiptId, fileSha256, model, status }` | null |
 
+- **`receipt_id` の決め方**: `receipt` の記録は `target_id`、`receipt_link` の記録は `receiptId`（`after`。解除は `before`）、`receipt_reading` の記録は `after.receiptId`。履歴の取得（`listAudit(receiptId)`）は `receipt_id` 列で引く（domain の `FakeReceiptStore.listAudit` と同じ結果）。リポジトリが書き込みのときに埋める（`ReceiptAuditEntry` の型は変えない）
 - 証憑の値 = `{ category, transactionDate, amount, partnerName, memo, currentSha256, deletedAt }`（`partnerKey` は含めない）
 - 過去の値の復元（`replayReceiptHistory`、純関数）: `create` の `after` から始め、`update` の `after`・`replace_file` の `after.sha256`・`delete` を順に当てる（INV-63）
 

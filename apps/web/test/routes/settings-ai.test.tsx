@@ -13,6 +13,7 @@ const SETTINGS = {
   externalEnabled: false,
   externalBaseUrl: null as string | null,
   externalModel: null as string | null,
+  receiptImagesEnabled: false,
   apiKeySet: false,
 };
 
@@ -35,6 +36,7 @@ function openSettings(
         externalEnabled: body.externalEnabled,
         externalBaseUrl: body.externalBaseUrl ?? null,
         externalModel: body.externalModel ?? null,
+        receiptImagesEnabled: body.receiptImagesEnabled,
         apiKeySet: body.apiKey === undefined ? (settings.apiKeySet ?? false) : body.apiKey !== "",
       });
     },
@@ -100,8 +102,35 @@ describe("AI の設定の保存（H:§7.2）", () => {
       externalEnabled: true,
       externalBaseUrl: "https://api.example.com/v1",
       externalModel: "model-a",
+      receiptImagesEnabled: false,
     });
     expect(await screen.findByText("保存しました。")).toBeInTheDocument();
+  });
+
+  it("証憑の画像の送信（receiptImagesEnabled）は今の値を保って送る。外部を無効にすると false にする（010 R15）", async () => {
+    const all = openSettings({
+      externalBaseUrl: "https://api.example.com/v1",
+      externalModel: "model-a",
+      apiKeySet: true,
+      externalEnabled: true,
+      receiptImagesEnabled: true,
+    });
+    const u = user();
+    await screen.findByLabelText("端末内の AI を使う");
+    await u.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(putCalls(all)).toHaveLength(1));
+    expect(putCalls(all)[0]?.body).toMatchObject({
+      externalEnabled: true,
+      receiptImagesEnabled: true,
+    });
+
+    await u.click(screen.getByLabelText("外部の AI を使う"));
+    await u.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(putCalls(all)).toHaveLength(2));
+    expect(putCalls(all)[1]?.body).toMatchObject({
+      externalEnabled: false,
+      receiptImagesEnabled: false,
+    });
   });
 
   it("キーを打つと apiKey を送り、保存の後は入力欄を空に戻す", async () => {
@@ -120,6 +149,7 @@ describe("AI の設定の保存（H:§7.2）", () => {
       externalEnabled: true,
       externalBaseUrl: "http://localhost:11434/v1",
       externalModel: "model-b",
+      receiptImagesEnabled: false,
       apiKey: "sk-test-123",
     });
     await waitFor(() => expect(screen.getByLabelText("API キー")).toHaveValue(""));
