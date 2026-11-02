@@ -158,7 +158,7 @@ description: "Task list for 010-receipts"
 
 - [ ] T041 **（メイン・利用者）** `pnpm --filter @trebuchet/web e2e`（既存の E2E が壊れていないこと。E2E は足さない）と、Q: §2 の手動確認（利用者が `TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart-010" pnpm dev` を起動し、implementer がブラウザの MCP の snapshot で手順 1〜12 を確かめる）。画面の文言を quickstart に合わせ、終わったら `.tmp/quickstart-010*` を消す。手順 10 は偽の接続先
 - [X] T042 **（メイン・利用者）** 評価用の合成の証憑の画像 20 枚（レシート・領収書・電子の PDF を混ぜ、HEIC 2 枚・PDF 2 枚を含む）を `packages/domain/test/fixtures/receipts/` に置く（R17）。作り方はリポジトリに置かない使い捨てのスクリプトか、ブラウザで合成の文書を描いて保存。HEIC は利用者の Mac の `sips` で変換。`README.md`（作り方・匿名化・項目の正解）と `expected.ts`（正解）を書く。実データの写真・実在の店名・番号を入れない
-- [ ] T043 **（メイン・利用者）** 外部の AI の確認（SC-003・004）: 利用者が選んだ画像入力に対応するモデルで、`pnpm eval:receipts` を実行し、取引年月日・金額の一致率（目標 ≥ 90%）を控える（割合だけ。指示文などを変えるときは前後で比べる）。証憑から仕訳の登録までの時間（AI の候補あり 1 分、手入力 2 分）を計る。実データの証憑で試すかは利用者が決め、結果は件数と一致・不一致だけを控える
+- [X] T043 **（メイン・利用者）** 外部の AI の確認（SC-003・004）: 利用者が選んだ画像入力に対応するモデルで、`pnpm eval:receipts` を実行し、取引年月日・金額の一致率（目標 ≥ 90%）を控える（割合だけ。指示文などを変えるときは前後で比べる）。証憑から仕訳の登録までの時間（AI の候補あり 1 分、手入力 2 分）を計る。実データの証憑で試すかは利用者が決め、結果は件数と一致・不一致だけを控える
 - [ ] T044 **（メイン・利用者）** スマホの実機の確認（US2、SC-001、Q: §3。**004 の T022〔US4 の実機確認〕の後**）: `apps/web/public/manifest.webmanifest` と `index.html` の `apple-touch-icon` が 004 のままであることを確かめ（Service Worker は足さない。T018 から移した）、`pnpm start` と `tailscale serve` の ts.net を iPhone の Safari で開き、ホーム画面に追加 → アプリの中でパスキーでサインイン → 撮影の画面で撮る（5 MB 前後で送信から保存の表示まで 10 秒以内、経路が「スマホ・リモート」）、機内モードの送信は失敗と示される、Mac が施錠中は 401 `LOCKED` の表示。実際の証憑を貯め始めた後、置き場所の `trebuchet-receipts/` の大きさと自動のバックアップの時間（値だけ）を控える
 - [ ] T045 **（メイン）** 全体の検証: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`、`pnpm bench:reports`（SC-002）。落ちたら implementer に直させる。T041〜T044 で直した場合は再実行する
 
