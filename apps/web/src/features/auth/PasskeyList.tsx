@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
+import { PairingSection } from "../remote/PairingSection";
 import { addPasskey, authKeys, deletePasskey, passkeysQuery, renamePasskey } from "./api";
 
 /** パスキーの一覧（FR-005）。名前の変更・削除・追加。削除できるかどうかはサーバーが決める（LAST_PASSKEY） */
@@ -174,6 +175,7 @@ export function PasskeyList() {
           </Button>
         </form>
         <ApiErrorMessage error={add.error} />
+        {passkeys && <PairingSection passkeyRpIds={passkeys.map((p) => p.rpId)} />}
       </CardContent>
     </Card>
   );

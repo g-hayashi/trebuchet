@@ -64,7 +64,7 @@ const isPrfRequired = (body: unknown): body is PrfRequired =>
  * PRF の出力が返らなければ（`prf_required`）、返された options で認証して、同じ verify にもう一度送る。
  * 名前が空なら送らない（server の既定の名前になる）
  */
-async function registerWith<R extends object>(
+export async function registerWith<R extends object>(
   getOptions: () => Promise<Response>,
   verify: (input: RegisterVerifyInput) => Promise<R>,
   name?: string,

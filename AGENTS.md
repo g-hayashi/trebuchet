@@ -30,6 +30,7 @@ apps/server ──→ packages/schema
 | 目的 | コマンド |
 |---|---|
 | 開発サーバー（server 8787 と web 5173） | `pnpm dev` |
+| web をビルドして server を起動（web と API を `http://localhost:8787` から配信。004 US4。Tailscale の手順は README） | `pnpm start` |
 | 全テスト（Vitest の全プロジェクト） | `pnpm test` |
 | 1 プロジェクトのテスト | `pnpm vitest run --project <domain\|db\|server\|web\|schema>` |
 | 型チェック（全パッケージ + scripts） | `pnpm typecheck` |
@@ -161,7 +162,10 @@ apps/server ──→ packages/schema
 - **キーチェーン（`SecretStore`）は 006 の外部の AI の API キーだけに使う**。`/usr/bin/security -i` の標準入力に 1 行を流す（引数は `ps` に出る。004/R12）。テストはキーチェーンに触れず、`SecretStore` の偽物を使う。
 - **平文の写しは `.tmp/` の下に作り、`finally` で必ず消す**。server の起動時に、前回の異常終了で残った `.tmp/backup-snapshot-*/` を消す。
 - バックアップには、端末に結びつく設定（`app_settings`）と認証の表（`auth.sqlite`）を含めない。復元した帳簿は、次の起動で回復キーで解錠し、パスキーを登録するところから始まる。
-- **US4（Tailscale によるリモートの利用: `pnpm start`、server の静的配信、ペアリング）は保留**（2026-10-24）。未実装なので、これらのコマンドや場所を前提にしない。
+- **US4（Tailscale によるリモートの利用）は 2026-11-02 に 008 の形で再開した**。リモートの設定とペアリングのトークンは `auth.sqlite`（施錠中も読める）。手順は README の「スマホから使う」。Funnel は使わない。
+  - server: `apps/server/src/static.ts`（`TREBUCHET_WEB_DIST`、既定 `apps/web/dist` の静的配信。`pnpm start`）、`routes/settings.ts`（`GET/PUT /settings/remote`、422 `REMOTE_HOST_INVALID`）、`routes/pairing.ts`（`POST /auth/pairing`: 再認証つき・ローカルの Host だけ。`pairing/register/*`: 公開、解錠中だけ、トークンは包みを作ってから消費）、`lib/auth-support.ts`（`routes/auth.ts` と共有の登録・セッション・再認証の部品）
+  - web: `features/remote/`（`api.ts`、`RemoteSettingsForm.tsx`、`PairingSection.tsx`）、`routes/settings/remote.tsx`、`routes/pair.tsx`・`features/auth/Pair.tsx`（`/pair` は `routes/__root.tsx` の `PUBLIC_PATHS` で AuthGate の例外）
+  - ペアリングのトークン・URL をログ・`auth_events.detail` に出さない。`/pair` の画面は帳簿の API を呼ばない
 
 ## 請求と定期仕訳（005）
 

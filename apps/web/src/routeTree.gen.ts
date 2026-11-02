@@ -10,9 +10,11 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PairRouteImport } from './routes/pair'
 import { Route as EEntityIdRouteRouteImport } from './routes/e/$entityId/route'
 import { Route as SettingsAiRouteImport } from './routes/settings/ai'
 import { Route as SettingsBackupRouteImport } from './routes/settings/backup'
+import { Route as SettingsRemoteRouteImport } from './routes/settings/remote'
 import { Route as SettingsSecurityRouteImport } from './routes/settings/security'
 import { Route as EEntityIdIndexRouteImport } from './routes/e/$entityId/index'
 import { Route as EEntityIdAccountsRouteImport } from './routes/e/$entityId/accounts'
@@ -60,6 +62,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PairRoute = PairRouteImport.update({
+  id: '/pair',
+  path: '/pair',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EEntityIdRouteRoute = EEntityIdRouteRouteImport.update({
   id: '/e/$entityId',
   path: '/e/$entityId',
@@ -73,6 +80,11 @@ const SettingsAiRoute = SettingsAiRouteImport.update({
 const SettingsBackupRoute = SettingsBackupRouteImport.update({
   id: '/settings/backup',
   path: '/settings/backup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRemoteRoute = SettingsRemoteRouteImport.update({
+  id: '/settings/remote',
+  path: '/settings/remote',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsSecurityRoute = SettingsSecurityRouteImport.update({
@@ -305,9 +317,11 @@ const EEntityIdPeriodsYearOpeningBalancesRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/pair': typeof PairRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
   '/settings/ai': typeof SettingsAiRoute
   '/settings/backup': typeof SettingsBackupRoute
+  '/settings/remote': typeof SettingsRemoteRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
@@ -352,8 +366,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/pair': typeof PairRoute
   '/settings/ai': typeof SettingsAiRoute
   '/settings/backup': typeof SettingsBackupRoute
+  '/settings/remote': typeof SettingsRemoteRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
@@ -399,9 +415,11 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/pair': typeof PairRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
   '/settings/ai': typeof SettingsAiRoute
   '/settings/backup': typeof SettingsBackupRoute
+  '/settings/remote': typeof SettingsRemoteRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
@@ -448,9 +466,11 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/pair'
     | '/e/$entityId'
     | '/settings/ai'
     | '/settings/backup'
+    | '/settings/remote'
     | '/settings/security'
     | '/e/$entityId/accounts'
     | '/e/$entityId/invoice-settings'
@@ -495,8 +515,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/pair'
     | '/settings/ai'
     | '/settings/backup'
+    | '/settings/remote'
     | '/settings/security'
     | '/e/$entityId/accounts'
     | '/e/$entityId/invoice-settings'
@@ -541,9 +563,11 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/pair'
     | '/e/$entityId'
     | '/settings/ai'
     | '/settings/backup'
+    | '/settings/remote'
     | '/settings/security'
     | '/e/$entityId/accounts'
     | '/e/$entityId/invoice-settings'
@@ -589,9 +613,11 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  PairRoute: typeof PairRoute
   EEntityIdRouteRoute: typeof EEntityIdRouteRouteWithChildren
   SettingsAiRoute: typeof SettingsAiRoute
   SettingsBackupRoute: typeof SettingsBackupRoute
+  SettingsRemoteRoute: typeof SettingsRemoteRoute
   SettingsSecurityRoute: typeof SettingsSecurityRoute
 }
 
@@ -602,6 +628,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pair': {
+      id: '/pair'
+      path: '/pair'
+      fullPath: '/pair'
+      preLoaderRoute: typeof PairRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/e/$entityId': {
@@ -623,6 +656,13 @@ declare module '@tanstack/react-router' {
       path: '/settings/backup'
       fullPath: '/settings/backup'
       preLoaderRoute: typeof SettingsBackupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/remote': {
+      id: '/settings/remote'
+      path: '/settings/remote'
+      fullPath: '/settings/remote'
+      preLoaderRoute: typeof SettingsRemoteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/security': {
@@ -1008,9 +1048,11 @@ const EEntityIdRouteRouteWithChildren = EEntityIdRouteRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  PairRoute: PairRoute,
   EEntityIdRouteRoute: EEntityIdRouteRouteWithChildren,
   SettingsAiRoute: SettingsAiRoute,
   SettingsBackupRoute: SettingsBackupRoute,
+  SettingsRemoteRoute: SettingsRemoteRoute,
   SettingsSecurityRoute: SettingsSecurityRoute,
 }
 export const routeTree = rootRouteImport

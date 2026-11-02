@@ -151,6 +151,22 @@ export function describeError(error: unknown): ErrorDescription {
         message: "この操作の前に、パスキーでもう一度確認してください。",
         details: [],
       };
+    case "REMOTE_HOST_INVALID":
+      return {
+        message: "名前は *.ts.net の形で入力してください（例: mac.tail1234.ts.net）。",
+        details: [],
+      };
+    case "REMOTE_NOT_CONFIGURED":
+      return {
+        message:
+          "リモートが有効で、ts.net の名前が登録されているときだけ発行できます。設定の「リモート」で登録してください。",
+        details: [],
+      };
+    case "PAIRING_TOKEN_INVALID":
+      return {
+        message: "ペアリングの URL が無効か期限切れです。Mac でもう一度発行してください",
+        details: [],
+      };
     case "CSRF_REJECTED":
       return {
         message: "要求の送信元を確認できませんでした。画面を開き直してください。",
