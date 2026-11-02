@@ -748,3 +748,63 @@ describe("決算整理の案の内訳（009）", () => {
     expect(within(panel).getByText(/譲渡所得の計算はこのアプリの範囲外/)).toBeInTheDocument();
   });
 });
+
+describe("一括償却資産（009 US2）", () => {
+  it("台帳の一覧に「一括償却」と年度の償却費・未償却残高を示す。除却しても償却は続くので除却の表示だけが加わる", async () => {
+    mockScreen({
+      assets: [
+        asset({
+          id: "as-9",
+          name: "プリンター一式",
+          acquiredOn: "2025-07-10",
+          acquisitionCost: 150_000,
+          method: "lump_sum",
+          usefulLifeYears: null,
+          disposedOn: "2025-10-05",
+          disposalKind: "scrap",
+          depreciationError: null,
+          depreciation: depreciation({
+            method: "lump_sum",
+            cost: 150_000,
+            base: 150_000,
+            ordinary: 50_000,
+            total: 50_000,
+            businessRatio: 10000,
+            deductible: 50_000,
+            closingBookValue: 100_000,
+            ratePermille: null,
+            months: null,
+          }),
+        }),
+      ],
+    });
+    renderPage();
+
+    const table = await screen.findByRole("table", { name: "固定資産台帳" });
+    const cells = within(within(table).getByRole("row", { name: /プリンター一式/ }))
+      .getAllByRole("cell")
+      .map((c) => c.textContent);
+    expect(cells).toEqual(expect.arrayContaining(["一括償却", "50,000", "100,000"]));
+  });
+
+  it("業務エラー（取得価額が範囲外）を画面に出し、資産は登録されない", async () => {
+    mockScreen({
+      overrides: {
+        [`POST ${ASSETS}`]: () =>
+          apiError(
+            422,
+            "LUMP_SUM_COST_OUT_OF_RANGE",
+            "一括償却資産の取得価額は 100,000 円以上 200,000 円未満です",
+            { min: 100_000, max: 200_000 },
+          ),
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await fillBasics(user, "250000");
+    await user.selectOptions(screen.getByRole("combobox", { name: "償却の方法" }), "lump_sum");
+    await user.click(screen.getByRole("button", { name: "登録" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("200,000 円未満");
+  });
+});

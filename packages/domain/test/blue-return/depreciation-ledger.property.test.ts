@@ -17,7 +17,7 @@ import { createEntity } from "../../src/usecases/create-entity.ts";
 import { createJournal } from "../../src/usecases/create-journal.ts";
 import { createNextFiscalPeriod } from "../../src/usecases/masters.ts";
 import { voidJournal } from "../../src/usecases/void-journal.ts";
-import { straightLineAssetArb } from "../blue-return-arbitraries.ts";
+import { lumpSumAssetArb, straightLineAssetArb } from "../blue-return-arbitraries.ts";
 import {
   FixedClock,
   fakeClosingUnitOfWork,
@@ -173,49 +173,60 @@ function carryToNextYear(book: ReturnType<typeof setupBook>) {
 const YEARS_CHECKED = 7;
 
 describe("INV-59: 案をすべて登録して繰り越した帳簿は、帳簿と台帳が一致する", () => {
-  it("定額法の資産を供用の年度から毎年登録して繰り越すと、どの年度も ASSET_REGISTER_MISMATCH・DEPRECIATION_MISMATCH が出ない", () => {
-    fc.assert(
-      fc.property(straightLineAssetArb, (rawAsset) => {
-        const book = setupBook(rawAsset);
-        openFirstYear(book);
-        const disposalYear =
-          book.asset.disposedOn === null ? null : Number(book.asset.disposedOn.slice(0, 4));
-        const last = Math.min(
-          book.firstFiscalYear + YEARS_CHECKED,
-          disposalYear === null ? Number.POSITIVE_INFINITY : disposalYear + 1,
-        );
-        for (let year = book.firstFiscalYear; year <= last; year++) {
-          if (year > book.firstFiscalYear) carryToNextYear(book);
-          for (const p of book.proposals(year)) {
-            unwrap(book.commit(year, debitTotal(p)));
+  it.each([
+    ["定額法", straightLineAssetArb],
+    ["一括償却（勘定 1060・1070）", lumpSumAssetArb],
+  ])(
+    "%sの資産を供用の年度から毎年登録して繰り越すと、どの年度も ASSET_REGISTER_MISMATCH・DEPRECIATION_MISMATCH が出ない",
+    (_name, assetArb) => {
+      fc.assert(
+        fc.property(assetArb, (rawAsset) => {
+          const book = setupBook(rawAsset);
+          openFirstYear(book);
+          // 一括償却は除却しても償却を続ける（台帳が止まるのは定額法だけ）
+          const disposalYear =
+            book.asset.method !== "straight_line" || book.asset.disposedOn === null
+              ? null
+              : Number(book.asset.disposedOn.slice(0, 4));
+          const last = Math.min(
+            book.firstFiscalYear + YEARS_CHECKED,
+            disposalYear === null ? Number.POSITIVE_INFINITY : disposalYear + 1,
+          );
+          for (let year = book.firstFiscalYear; year <= last; year++) {
+            if (year > book.firstFiscalYear) carryToNextYear(book);
+            for (const p of book.proposals(year)) {
+              unwrap(book.commit(year, debitTotal(p)));
+            }
+            expect(book.proposals(year)).toEqual([]);
+            const warnings = unwrap(getBlueReturn(book.readDeps, { fiscalYear: year }))
+              .warnings.filter(
+                (w) => w.code === "ASSET_REGISTER_MISMATCH" || w.code === "DEPRECIATION_MISMATCH",
+              )
+              .map((w) => [year, w.code, w.details]);
+            expect(warnings).toEqual([]);
           }
-          expect(book.proposals(year)).toEqual([]);
-          const warnings = unwrap(getBlueReturn(book.readDeps, { fiscalYear: year }))
-            .warnings.filter(
-              (w) => w.code === "ASSET_REGISTER_MISMATCH" || w.code === "DEPRECIATION_MISMATCH",
-            )
-            .map((w) => [year, w.code, w.details]);
-          expect(warnings).toEqual([]);
-        }
-      }),
-      { numRuns: 60 },
-    );
-  });
+        }),
+        { numRuns: 60 },
+      );
+    },
+  );
 });
 
 type Op = { op: "commit" | "void"; offset: number };
 
 describe("INV-60: どの（資産, 年度）でも有効な償却の仕訳は高々 1 件", () => {
-  it("確定と取消を任意の順に繰り返しても、有効な仕訳は高々 1 件で、案はそれがないときだけ出る。2 回目の確定は ADJUSTMENT_NOT_NEEDED", () => {
-    const opArb: fc.Arbitrary<Op> = fc.record({
-      op: fc.constantFrom<"commit" | "void">("commit", "void"),
-      offset: fc.integer({ min: 0, max: 2 }),
-    });
-    fc.assert(
-      fc.property(
-        straightLineAssetArb,
-        fc.array(opArb, { minLength: 1, maxLength: 10 }),
-        (rawAsset, ops) => {
+  it.each([
+    ["定額法", straightLineAssetArb],
+    ["一括償却", lumpSumAssetArb],
+  ])(
+    "%s: 確定と取消を任意の順に繰り返しても、有効な仕訳は高々 1 件で、案はそれがないときだけ出る。2 回目の確定は ADJUSTMENT_NOT_NEEDED",
+    (_name, assetArb) => {
+      const opArb: fc.Arbitrary<Op> = fc.record({
+        op: fc.constantFrom<"commit" | "void">("commit", "void"),
+        offset: fc.integer({ min: 0, max: 2 }),
+      });
+      fc.assert(
+        fc.property(assetArb, fc.array(opArb, { minLength: 1, maxLength: 10 }), (rawAsset, ops) => {
           const book = setupBook(rawAsset);
           book.addYear();
           book.addYear();
@@ -261,9 +272,9 @@ describe("INV-60: どの（資産, 年度）でも有効な償却の仕訳は高
             }
             check();
           }
-        },
-      ),
-      { numRuns: 60 },
-    );
-  });
+        }),
+        { numRuns: 60 },
+      );
+    },
+  );
 });

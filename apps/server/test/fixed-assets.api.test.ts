@@ -385,3 +385,104 @@ describe("減価償却の案（FR-021〜023）", () => {
     expect((await okBody(after)).proposals).toEqual([]);
   });
 });
+
+const lumpSum = (over: Record<string, unknown> = {}) => ({
+  name: "プリンター一式",
+  acquiredOn: "2026-07-10",
+  acquisitionCost: 150_000,
+  method: "lump_sum",
+  businessRatio: 10000,
+  assetAccountId: acc("一括償却資産"),
+  ...over,
+});
+
+describe("一括償却資産（009 US2。FR-003、FR-010〜011）", () => {
+  it("登録でき、?year= の depreciation に年の額・未償却残高が出る（月割りしない。除却損は 0）", async () => {
+    const asset = await create(lumpSum());
+    expect(asset).toMatchObject({ method: "lump_sum", usefulLifeYears: null, disposalKind: null });
+    for (const [year, total, closing] of [
+      ["2026", 50_000, 100_000],
+      ["2028", 50_000, 0],
+      ["2029", 0, 0],
+    ] as const) {
+      const res = await assets.$get({ param: { entityId }, query: { year } });
+      const { assets: rows } = await okBody(res);
+      expect(rows[0]).toMatchObject({
+        id: asset.id,
+        depreciationError: null,
+        depreciation: {
+          method: "lump_sum",
+          ratePermille: null,
+          months: null,
+          total,
+          closingBookValue: closing,
+          disposalAmount: 0,
+          disposalDeductible: 0,
+        },
+      });
+    }
+  });
+
+  it("除却しても翌年度以後の額は変わらない", async () => {
+    const asset = await create(lumpSum({ acquisitionCost: 100_000 }));
+    const res = await one().dispose.$post({
+      param: { entityId, assetId: asset.id },
+      json: { disposedOn: "2026-10-05", reason: "処分", disposalKind: "scrap" },
+    });
+    expect(res.status).toBe(200);
+    const totals: number[] = [];
+    for (const year of ["2026", "2027", "2028"]) {
+      const list = await assets.$get({ param: { entityId }, query: { year } });
+      totals.push((await okBody(list)).assets[0]?.depreciation?.total ?? -1);
+    }
+    expect(totals).toEqual([33_333, 33_333, 33_334]);
+  });
+
+  it("422: 取得価額が範囲外（10 万円未満、20 万円以上）なら LUMP_SUM_COST_OUT_OF_RANGE（details.min・max）", async () => {
+    for (const cost of [99_999, 200_000]) {
+      const res = await post(lumpSum({ acquisitionCost: cost }));
+      expect(res.status).toBe(422);
+      const error = await errorOf(res);
+      expect(error.code).toBe("LUMP_SUM_COST_OUT_OF_RANGE");
+      expect(error.details).toMatchObject({ min: 100_000, max: 200_000 });
+    }
+    const list = await assets.$get({ param: { entityId }, query: {} });
+    expect((await okBody(list)).assets).toEqual([]);
+  });
+
+  it("422: 累計が取得価額を超えれば PRIOR_ACCUMULATED_INVALID。耐用年数を持つと VALIDATION", async () => {
+    const prior = await post(lumpSum({ priorAccumulated: 150_001, priorThroughYear: 2026 }));
+    expect(prior.status).toBe(422);
+    expect((await errorOf(prior)).code).toBe("PRIOR_ACCUMULATED_INVALID");
+    const life = await post(lumpSum({ usefulLifeYears: 4 }));
+    expect(life.status).toBe(400);
+    expect((await errorOf(life)).code).toBe("VALIDATION");
+  });
+
+  it("一括償却は少額の特例の年間の上限の集計に入らない", async () => {
+    for (let i = 0; i < 7; i++) await create({ acquisitionCost: 399_000, name: `備品${i}` });
+    await create(lumpSum({ acquisitionCost: 199_999, acquiredOn: "2026-06-15" }));
+    // 少額 2,793,000 円 + 207,000 円 = 上限 3,000,000 円ちょうど
+    const res = await post({ acquisitionCost: 207_000, name: "備品8" });
+    expect(res.status).toBe(201);
+  });
+
+  it("案: 供用の年の案が出て、確定すると案が消える", async () => {
+    const asset = await create(lumpSum());
+    const br = e["blue-return"][":year"];
+    const param = { entityId, year: "2026" };
+    const { proposals } = await okBody(await br.adjustments.$get({ param }));
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0]).toMatchObject({
+      kind: "depreciation",
+      sourceId: asset.id,
+      breakdown: { method: "lump_sum", depreciation: 50_000, disposalAmount: 0 },
+    });
+    const commit = await br.adjustments.$post({
+      param,
+      json: { kind: "depreciation", sourceId: asset.id, expected: { amount: 50_000 } } as never,
+    });
+    expect(commit.status).toBe(201);
+    expect((await okBody(await br.adjustments.$get({ param }))).proposals).toEqual([]);
+  });
+});

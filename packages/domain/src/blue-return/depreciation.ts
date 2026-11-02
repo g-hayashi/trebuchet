@@ -14,6 +14,7 @@ import {
   type TaxParameter,
 } from "../types.ts";
 import { computeHomeUse } from "./home-use.ts";
+import { lumpSumYear } from "./lump-sum.ts";
 import { assetStartYear, straightLineYear } from "./straight-line.ts";
 import { resolveStraightLineRate, resolveTaxParameter } from "./tax-parameters.ts";
 
@@ -46,13 +47,17 @@ export type DepreciationParams = {
 
 /**
  * 資産の登録を検証する（FR-001〜004、FR-018〜020、R1、R4、R7、INV-21）。
- * 方法は少額の特例と定額法（それ以外は DEPRECIATION_METHOD_UNSUPPORTED。一括償却は T017 で足す）、
+ * 方法は少額の特例・定額法・一括償却（それ以外は DEPRECIATION_METHOD_UNSUPPORTED）、
  * 資産の勘定は区分が資産の科目（ASSET_ACCOUNT_INVALID）。
  * 共通: 供用日は取得日以後（VALIDATION、field は inServiceOn）、前年までの累計は 0 以上の整数で、
  * 累計があれば累計の年が必要で供用の年以上（PRIOR_ACCUMULATED_INVALID）。
  * 定額法: 耐用年数が率の表にない・取得日に率がなければ USEFUL_LIFE_UNSUPPORTED
  * （details.usefulLifeYears・acquiredOn）、累計は取得価額 − 1 以下、結びつける仕訳は指定できない
  * （VALIDATION、field は linkedJournalId）。基準額・年間の上限の検査はしない。
+ * 一括償却（R4）: 累計は取得価額以下、結びつける仕訳・耐用年数は指定できない（VALIDATION）、取得日に適用される
+ * 取得価額の範囲（LUMP_SUM_COST_MIN 以上 LUMP_SUM_COST_MAX 未満）の外なら LUMP_SUM_COST_OUT_OF_RANGE
+ * （details.min・max）、範囲の行がなければ TAX_PARAMETER_MISSING（details.key・date）。
+ * 少額の特例の年間の上限の集計には数えない（FR-004）。
  * 少額の特例: 供用日・累計・累計の年は指定できない。取得の日に基準額・年間の上限が適用されなければ
  * SMALL_ASSET_NOT_APPLICABLE、取得価額が基準額以上なら SMALL_ASSET_OVER_THRESHOLD
  * （details.threshold・effectiveFrom）、同じ年（1〜12月）に取得した特例の資産の取得価額の合計（除却したか
@@ -69,11 +74,15 @@ export function validateFixedAsset(
     err(domainError("VALIDATION", message, { field }));
   const name = draft.name.trim();
   if (name === "") return fail("name", "資産名を入力してください");
-  if (draft.method !== "small_asset_28_2" && draft.method !== "straight_line") {
+  if (
+    draft.method !== "small_asset_28_2" &&
+    draft.method !== "straight_line" &&
+    draft.method !== "lump_sum"
+  ) {
     return err(
       domainError(
         "DEPRECIATION_METHOD_UNSUPPORTED",
-        "償却の方法は少額減価償却資産の特例（措置法28条の2）と定額法だけ選べます",
+        "償却の方法は少額減価償却資産の特例（措置法28条の2）・定額法・一括償却資産だけ選べます",
         { field: "method", method: draft.method },
       ),
     );
@@ -112,17 +121,14 @@ export function validateFixedAsset(
   }
   const priorFail = (field: "priorAccumulated" | "priorThroughYear", message: string) =>
     err(domainError("PRIOR_ACCUMULATED_INVALID", message, { field }));
-
-  if (draft.method === "straight_line") {
+  /** 前年までの累計と累計の年の検査（定額法・一括償却。累計の上限だけが方法で違う） */
+  const checkPrior = (maxPrior: number, maxMessage: string): Result<never> | null => {
     if (
       !Number.isSafeInteger(draft.priorAccumulated) ||
       draft.priorAccumulated < 0 ||
-      draft.priorAccumulated > draft.acquisitionCost - 1
+      draft.priorAccumulated > maxPrior
     ) {
-      return priorFail(
-        "priorAccumulated",
-        "前年までの償却累計額は 0 円以上、取得価額 − 1 円以下の整数で入力してください",
-      );
+      return priorFail("priorAccumulated", maxMessage);
     }
     const through = draft.priorThroughYear;
     if (through !== null && !Number.isSafeInteger(through)) {
@@ -137,6 +143,61 @@ export function validateFixedAsset(
     if (through !== null && through < Number(yearOf(inServiceOn ?? draft.acquiredOn))) {
       return priorFail("priorThroughYear", "累計の年は事業の用に供した年以後にしてください");
     }
+    return null;
+  };
+
+  if (draft.method === "lump_sum") {
+    const priorError = checkPrior(
+      draft.acquisitionCost,
+      "前年までの償却累計額は 0 円以上、取得価額以下の整数で入力してください",
+    );
+    if (priorError !== null) return priorError;
+    if (draft.linkedJournalId !== null) {
+      return fail(
+        "linkedJournalId",
+        "既存の仕訳を結びつけられるのは少額減価償却資産の特例だけです",
+      );
+    }
+    if (draft.usefulLifeYears !== null) {
+      return fail("usefulLifeYears", "一括償却資産には耐用年数を指定できません");
+    }
+    const min = resolveTaxParameter("LUMP_SUM_COST_MIN", draft.acquiredOn, params.taxParameters);
+    const max = resolveTaxParameter("LUMP_SUM_COST_MAX", draft.acquiredOn, params.taxParameters);
+    const missing =
+      min === undefined ? "LUMP_SUM_COST_MIN" : max === undefined ? "LUMP_SUM_COST_MAX" : null;
+    if (min === undefined || max === undefined) {
+      return err(
+        domainError(
+          "TAX_PARAMETER_MISSING",
+          `取得の日（${draft.acquiredOn}）に適用される一括償却資産の取得価額の範囲がありません`,
+          { key: missing, date: draft.acquiredOn },
+        ),
+      );
+    }
+    if (draft.acquisitionCost < min.value || draft.acquisitionCost >= max.value) {
+      return err(
+        domainError(
+          "LUMP_SUM_COST_OUT_OF_RANGE",
+          `一括償却資産の取得価額は ${formatSignedAmount(min.value)} 円以上 ${formatSignedAmount(max.value)} 円未満です`,
+          { field: "acquisitionCost", min: min.value, max: max.value },
+        ),
+      );
+    }
+    return ok({
+      ...draft,
+      name,
+      quantity: blankToNull(draft.quantity),
+      note: blankToNull(draft.note),
+      inServiceOn,
+    });
+  }
+
+  if (draft.method === "straight_line") {
+    const priorError = checkPrior(
+      draft.acquisitionCost - 1,
+      "前年までの償却累計額は 0 円以上、取得価額 − 1 円以下の整数で入力してください",
+    );
+    if (priorError !== null) return priorError;
     if (draft.linkedJournalId !== null) {
       return fail(
         "linkedJournalId",
@@ -327,10 +388,32 @@ function straightLineDepreciation(
   };
 }
 
+/** 一括償却の年度の償却（R4）。除却の種類・除却額・除却損は常になし（FR-011） */
+function lumpSumDepreciation(asset: FixedAsset, fiscalYear: number, years: number): Depreciation {
+  const y = lumpSumYear(asset, fiscalYear, years);
+  return {
+    method: "lump_sum",
+    cost: asset.acquisitionCost,
+    base: asset.acquisitionCost,
+    ratePermille: null,
+    months: null,
+    openingBookValue: y.openingBookValue,
+    ordinary: y.depreciation,
+    total: y.depreciation,
+    businessRatio: asset.businessRatio,
+    deductible: computeHomeUse(y.depreciation, asset.businessRatio).business,
+    closingBookValue: y.closingBookValue,
+    disposalKind: null,
+    disposalAmount: 0,
+    disposalDeductible: 0,
+  };
+}
+
 /**
  * 年度の償却の計算（FR-005〜011、R3、R4）。方法で分ける: 少額の特例は 003 のまま、定額法は
- * `straightLineYear`（率は取得日に適用される行）。率がなければ TAX_PARAMETER_MISSING
- * （details.key は STRAIGHT_LINE_RATE、date は取得日）。一括償却は T017 で足す（今は DEPRECIATION_METHOD_UNSUPPORTED）
+ * `straightLineYear`（率は取得日に適用される行）、一括償却は `lumpSumYear`（年数 `LUMP_SUM_YEARS` は
+ * 取得日に適用される行）。率・年数がなければ TAX_PARAMETER_MISSING
+ * （details.key は STRAIGHT_LINE_RATE・LUMP_SUM_YEARS、date は取得日）
  */
 export function depreciate(
   asset: FixedAsset,
@@ -360,13 +443,19 @@ export function depreciate(
       }
       return ok(straightLineDepreciation(asset, fiscalYear, rate.ratePermille));
     }
-    case "lump_sum":
-      return err(
-        domainError("DEPRECIATION_METHOD_UNSUPPORTED", "一括償却資産はまだ計算できません", {
-          field: "method",
-          method: asset.method,
-        }),
-      );
+    case "lump_sum": {
+      const years = resolveTaxParameter("LUMP_SUM_YEARS", asset.acquiredOn, params.taxParameters);
+      if (years === undefined) {
+        return err(
+          domainError(
+            "TAX_PARAMETER_MISSING",
+            `取得の日（${asset.acquiredOn}）に適用される一括償却資産の償却年数がありません`,
+            { key: "LUMP_SUM_YEARS", date: asset.acquiredOn },
+          ),
+        );
+      }
+      return ok(lumpSumDepreciation(asset, fiscalYear, years.value));
+    }
   }
 }
 
@@ -392,9 +481,11 @@ export function isDepreciationRow(
   if (asset.method === "small_asset_28_2") return isSmallAssetRow(asset, fiscalYear);
   if (asset.acquiredOn > `${fiscalYear}-12-31`) return false;
   if (fiscalYear < assetStartYear(asset)) return false;
-  if (asset.disposedOn !== null && fiscalYear > Number(yearOf(asset.disposedOn))) return false;
   const d = depreciate(asset, fiscalYear, params);
   if (!d.ok) return false;
+  // 一括償却は除却しても台帳に残し、その年度の額が正の間は載せ続ける（FR-011）
+  if (asset.method === "lump_sum") return d.value.total > 0;
+  if (asset.disposedOn !== null && fiscalYear > Number(yearOf(asset.disposedOn))) return false;
   return (
     d.value.total > 0 ||
     yearOf(asset.acquiredOn) === String(fiscalYear) ||
@@ -437,6 +528,9 @@ function depreciationMemo(asset: FixedAsset, d: Depreciation): string {
   if (d.method === "small_asset_28_2") {
     return `減価償却費の計上（${asset.name} 少額減価償却資産 ${percent}）`;
   }
+  if (d.method === "lump_sum") {
+    return `減価償却費の計上（${asset.name} 一括償却資産 ${percent}）`;
+  }
   const detail = `${asset.name} 定額法 償却率 ${formatRate(d.ratePermille ?? 0)} 本年中の償却期間 ${d.months ?? 0}/12 ${percent}`;
   switch (d.disposalKind) {
     case "scrap":
@@ -459,7 +553,8 @@ function depreciationMemo(asset: FixedAsset, d: Depreciation): string {
  *
  * 案なし（null）: 結びつけた仕訳（linkedJournalId）がある資産。少額の特例は取得した年以外・年度末日までに
  * 除却した資産。定額法は台帳の計算を始める年度より前と、償却費・除却の残高がともに 0 の年度（償却の終わった
- * 資産、除却の翌年度以後）。一括償却は T017 で足す（今は null）。
+ * 資産、除却の翌年度以後）。一括償却は台帳の計算を始める年度より前と、その年度の額が 0 の年度
+ * （除却しても案を作り続け、除却損・振替は出さない。FR-011）。
  * 科目がなければ ACCOUNT_NOT_FOUND（details.code。除却損の科目は廃棄の年度だけ要る）、
  * 率・税制の値がなければ `depreciate` の TAX_PARAMETER_MISSING。
  * 登録済みの案を除くのは呼び出す側（出所の参照を読む）
@@ -478,11 +573,9 @@ export function proposeDepreciationAdjustment(
       }
       break;
     case "straight_line":
+    case "lump_sum":
       if (fiscalYear < assetStartYear(asset)) return ok(null);
       break;
-    case "lump_sum":
-      // 一括償却の案は T017 で足す
-      return ok(null);
   }
   const computed = depreciate(asset, fiscalYear, params);
   if (!computed.ok) return computed;

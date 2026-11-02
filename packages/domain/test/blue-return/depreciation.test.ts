@@ -789,3 +789,286 @@ describe("proposeDepreciationAdjustment: 定額法（FR-009、FR-016、R8、data
     expect(!r.ok && r.error.code).toBe("TAX_PARAMETER_MISSING");
   });
 });
+
+describe("一括償却資産（FR-003〜004、FR-010〜011、R4、data-model §2.3、INV-56）", () => {
+  const LOSS = accountIdOf("5300");
+  const LUMP_ACCOUNT = accountIdOf("1070");
+  /** 2026-07-10 に取得・供用、150,000 円、勘定 1070 */
+  const lump = (over: Partial<FixedAsset> = {}): FixedAsset =>
+    asset({
+      id: "lump-1",
+      name: "プリンター一式",
+      acquiredOn: "2026-07-10",
+      acquisitionCost: 150_000,
+      method: "lump_sum",
+      assetAccountId: LUMP_ACCOUNT,
+      ...over,
+    });
+  const lumpDraft = (over: Partial<FixedAssetDraft> = {}): FixedAssetDraft =>
+    draft({
+      name: "プリンター一式",
+      acquiredOn: "2026-07-10",
+      acquisitionCost: 150_000,
+      method: "lump_sum",
+      assetAccountId: LUMP_ACCOUNT,
+      ...over,
+    });
+  const propose = (a: FixedAsset, year: number) => {
+    const r = proposeDepreciationAdjustment(a, year, INDIVIDUAL_ACCOUNT_LIST, params);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    return r.value;
+  };
+
+  describe("validateFixedAsset", () => {
+    it("10 万円以上 20 万円未満は登録できる（下限・上限の手前を含む）", () => {
+      for (const cost of [100_000, 150_000, 199_999]) {
+        const r = validate(lumpDraft({ acquisitionCost: cost }));
+        expect(r.ok && r.value).toMatchObject({ method: "lump_sum", usefulLifeYears: null });
+      }
+    });
+
+    it("範囲外（99,999、200,000）は LUMP_SUM_COST_OUT_OF_RANGE（details.min・max）", () => {
+      for (const cost of [99_999, 200_000, 1]) {
+        const e = errorOf(validate(lumpDraft({ acquisitionCost: cost })));
+        expect(e.code).toBe("LUMP_SUM_COST_OUT_OF_RANGE");
+        expect(e.details).toMatchObject({ min: 100_000, max: 200_000 });
+      }
+    });
+
+    it("取得日に適用される範囲がなければ TAX_PARAMETER_MISSING（details.key・date）", () => {
+      const e = errorOf(validate(lumpDraft({ acquiredOn: "2007-03-31" })));
+      expect(e.code).toBe("TAX_PARAMETER_MISSING");
+      expect(e.details).toMatchObject({ date: "2007-03-31" });
+    });
+
+    it("耐用年数を持つ・既存の仕訳を結びつけると VALIDATION", () => {
+      const life = errorOf(validate(lumpDraft({ usefulLifeYears: 4 })));
+      expect(life).toMatchObject({ code: "VALIDATION", details: { field: "usefulLifeYears" } });
+      const linked = errorOf(validate(lumpDraft({ linkedJournalId: "j-1" })));
+      expect(linked).toMatchObject({ code: "VALIDATION", details: { field: "linkedJournalId" } });
+    });
+
+    it("供用日は取得日以後。供用日を指定でき、前年までの累計は取得価額以下（取得価額と同じ額も可）", () => {
+      expect(errorOf(validate(lumpDraft({ inServiceOn: "2026-07-09" }))).code).toBe("VALIDATION");
+      const withService = validate(lumpDraft({ inServiceOn: "2026-08-01" }));
+      expect(withService.ok && withService.value.inServiceOn).toBe("2026-08-01");
+      expect(validate(lumpDraft({ priorAccumulated: 150_000, priorThroughYear: 2026 })).ok).toBe(
+        true,
+      );
+      expect(
+        errorOf(validate(lumpDraft({ priorAccumulated: 150_001, priorThroughYear: 2026 }))).code,
+      ).toBe("PRIOR_ACCUMULATED_INVALID");
+      expect(errorOf(validate(lumpDraft({ priorAccumulated: -1 }))).code).toBe(
+        "PRIOR_ACCUMULATED_INVALID",
+      );
+    });
+
+    it("累計があれば累計の年が要り、供用の年以上。なければ PRIOR_ACCUMULATED_INVALID", () => {
+      expect(errorOf(validate(lumpDraft({ priorAccumulated: 50_000 }))).code).toBe(
+        "PRIOR_ACCUMULATED_INVALID",
+      );
+      expect(
+        errorOf(validate(lumpDraft({ priorAccumulated: 50_000, priorThroughYear: 2025 }))).code,
+      ).toBe("PRIOR_ACCUMULATED_INVALID");
+      expect(validate(lumpDraft({ priorAccumulated: 50_000, priorThroughYear: 2026 })).ok).toBe(
+        true,
+      );
+    });
+
+    it("資産の勘定・割合の検査は一括償却でも効く", () => {
+      expect(errorOf(validate(lumpDraft({ assetAccountId: DEPRECIATION }))).code).toBe(
+        "ASSET_ACCOUNT_INVALID",
+      );
+      expect(errorOf(validate(lumpDraft({ businessRatio: 10001 }))).code).toBe("VALIDATION");
+    });
+
+    it("一括償却は少額の特例の年間の上限に数えない（FR-004。少額の特例だけを数える）", () => {
+      const others = [
+        ...[...Array(10).keys()].map((i) =>
+          asset({ id: `big-${i}`, acquisitionCost: 299_000, acquiredOn: "2025-02-01" }),
+        ),
+        lump({ id: "lump-same-year", acquisitionCost: 199_999, acquiredOn: "2025-03-01" }),
+      ];
+      // 少額 2,990,000 円 + 10,000 円 = 上限 3,000,000 円ちょうど。一括償却の 199,999 円は入らない
+      expect(validate(draft({ acquisitionCost: 10_000 }), others).ok).toBe(true);
+      expect(errorOf(validate(draft({ acquisitionCost: 10_001 }), others)).code).toBe(
+        "SMALL_ASSET_ANNUAL_LIMIT_EXCEEDED",
+      );
+    });
+
+    it("一括償却の登録は、少額の特例の基準額・年間の上限の検査をしない", () => {
+      const full = [...Array(10).keys()].map((i) =>
+        asset({ id: `s-${i}`, acquisitionCost: 299_999, acquiredOn: "2026-05-01" }),
+      );
+      expect(validate(lumpDraft({ acquisitionCost: 199_999 }), full).ok).toBe(true);
+    });
+  });
+
+  describe("depreciate", () => {
+    it("供用の年から 50,000 円ずつ 3 年度。割合 60% なら算入額は ⌊償却費 × 60%⌋、除却額は 0（シナリオ）", () => {
+      const a = lump({ businessRatio: 6000 });
+      expect(depOf(a, 2026)).toEqual({
+        method: "lump_sum",
+        cost: 150_000,
+        base: 150_000,
+        ratePermille: null,
+        months: null,
+        openingBookValue: 150_000,
+        ordinary: 50_000,
+        total: 50_000,
+        businessRatio: 6000,
+        deductible: 30_000,
+        closingBookValue: 100_000,
+        disposalKind: null,
+        disposalAmount: 0,
+        disposalDeductible: 0,
+      });
+      expect(depOf(a, 2028)).toMatchObject({ total: 50_000, closingBookValue: 0 });
+      expect(depOf(a, 2029)).toMatchObject({ total: 0, deductible: 0, closingBookValue: 0 });
+    });
+
+    it("100,000 円は 33,333・33,333・33,334", () => {
+      const a = lump({ acquisitionCost: 100_000 });
+      expect([2026, 2027, 2028, 2029].map((y) => depOf(a, y).total)).toEqual([
+        33_333, 33_333, 33_334, 0,
+      ]);
+    });
+
+    it("除却（廃棄・売却）の年度も額は同じで、除却額・除却損は 0", () => {
+      for (const disposalKind of ["scrap", "sale"] as const) {
+        const a = lump({ disposedOn: "2026-09-30", disposalKind });
+        expect(depOf(a, 2026)).toMatchObject({
+          total: 50_000,
+          closingBookValue: 100_000,
+          disposalKind: null,
+          disposalAmount: 0,
+          disposalDeductible: 0,
+        });
+        expect(depOf(a, 2027).total).toBe(50_000);
+        expect(depOf(a, 2028).total).toBe(50_000);
+      }
+    });
+
+    it("取得日に年数の行がなければ TAX_PARAMETER_MISSING（details.key は LUMP_SUM_YEARS、date は取得日）", () => {
+      const r = depreciate(lump(), 2026, { rates: STRAIGHT_LINE_RATES, taxParameters: [] });
+      expect(!r.ok && r.error).toMatchObject({
+        code: "TAX_PARAMETER_MISSING",
+        details: { key: "LUMP_SUM_YEARS", date: "2026-07-10" },
+      });
+    });
+  });
+
+  describe("isDepreciationRow", () => {
+    it("供用の年から 3 年度は載せる。4 年度目以降と供用の前の年度は載せない", () => {
+      const row = (a: FixedAsset, y: number) => isDepreciationRow(a, y, params);
+      expect([2025, 2026, 2027, 2028, 2029].map((y) => row(lump(), y))).toEqual([
+        false,
+        true,
+        true,
+        true,
+        false,
+      ]);
+    });
+
+    it("除却しても載せ続ける（台帳に残す。FR-011）", () => {
+      const a = lump({ disposedOn: "2026-09-30", disposalKind: "scrap" });
+      expect([2026, 2027, 2028, 2029].map((y) => isDepreciationRow(a, y, params))).toEqual([
+        true,
+        true,
+        true,
+        false,
+      ]);
+    });
+
+    it("累計の年以前の年度には載せない（台帳の計算は累計の年の翌年から）", () => {
+      const a = lump({ priorAccumulated: 50_000, priorThroughYear: 2026 });
+      expect([2026, 2027, 2028, 2029].map((y) => isDepreciationRow(a, y, params))).toEqual([
+        false,
+        true,
+        true,
+        false,
+      ]);
+    });
+
+    it("年数の行がなく計算できない資産は載せない", () => {
+      expect(
+        isDepreciationRow(lump(), 2026, { rates: STRAIGHT_LINE_RATES, taxParameters: [] }),
+      ).toBe(false);
+    });
+  });
+
+  describe("proposeDepreciationAdjustment", () => {
+    it("供用の年: 「減価償却費 / 資産の勘定（1070）」を 50,000 円。年度末日付、税区分は対象外", () => {
+      const p = propose(lump(), 2026);
+      expect(p).toMatchObject({
+        kind: "depreciation",
+        sourceId: "lump-1",
+        breakdown: {
+          method: "lump_sum",
+          acquisitionCost: 150_000,
+          depreciation: 50_000,
+          deductible: 50_000,
+          months: null,
+          ratePermille: null,
+          openingBookValue: 150_000,
+          closingBookValue: 100_000,
+          disposalKind: null,
+          disposalAmount: 0,
+          disposalDeductible: 0,
+        },
+      });
+      expect(p?.journal.date).toBe("2026-12-31");
+      expect(p?.journal.memo).toContain("一括償却資産");
+      expect(p?.journal.lines).toEqual([
+        { side: "debit", accountId: DEPRECIATION, amount: 50_000, taxCategory: "OUT_OF_SCOPE" },
+        { side: "credit", accountId: LUMP_ACCOUNT, amount: 50_000, taxCategory: "OUT_OF_SCOPE" },
+      ]);
+    });
+
+    it("割合 60% は、家事分の「事業主貸 / 減価償却費」が加わる", () => {
+      const p = propose(lump({ businessRatio: 6000 }), 2027);
+      expect(p?.journal.lines.map((l) => [l.side, l.accountId, l.amount])).toEqual([
+        ["debit", DEPRECIATION, 50_000],
+        ["credit", LUMP_ACCOUNT, 50_000],
+        ["debit", DRAWINGS, 20_000],
+        ["credit", DEPRECIATION, 20_000],
+      ]);
+    });
+
+    it("廃棄・売却でも、除却の年度以後も償却の行だけで、除却損・振替の行を出さない", () => {
+      for (const disposalKind of ["scrap", "sale"] as const) {
+        const a = lump({ disposedOn: "2026-09-30", disposalKind });
+        for (const year of [2026, 2027, 2028]) {
+          const p = propose(a, year);
+          expect(p?.journal.lines.map((l) => [l.side, l.accountId, l.amount])).toEqual([
+            ["debit", DEPRECIATION, 50_000],
+            ["credit", LUMP_ACCOUNT, 50_000],
+          ]);
+          expect(p?.journal.lines.some((l) => l.accountId === LOSS)).toBe(false);
+        }
+      }
+    });
+
+    it("除却損の科目（5300）がなくても作れる", () => {
+      const accounts = INDIVIDUAL_ACCOUNT_LIST.filter((a) => a.code !== "5300");
+      const a = lump({ disposedOn: "2026-09-30", disposalKind: "scrap" });
+      expect(proposeDepreciationAdjustment(a, 2026, accounts, params).ok).toBe(true);
+    });
+
+    it("案なし: 4 年度目以降、供用の前の年度、台帳の計算を始める年度より前、既存の仕訳を結びつけた資産", () => {
+      expect(propose(lump(), 2029)).toBeNull();
+      expect(propose(lump(), 2025)).toBeNull();
+      expect(propose(lump({ priorAccumulated: 50_000, priorThroughYear: 2026 }), 2026)).toBeNull();
+      expect(propose(lump({ linkedJournalId: "j-1" }), 2026)).toBeNull();
+      expect(propose(lump({ priorAccumulated: 150_000, priorThroughYear: 2026 }), 2027)).toBeNull();
+    });
+
+    it("年数の行がなければ TAX_PARAMETER_MISSING", () => {
+      const r = proposeDepreciationAdjustment(lump(), 2026, INDIVIDUAL_ACCOUNT_LIST, {
+        rates: STRAIGHT_LINE_RATES,
+        taxParameters: [],
+      });
+      expect(!r.ok && r.error.code).toBe("TAX_PARAMETER_MISSING");
+    });
+  });
+});

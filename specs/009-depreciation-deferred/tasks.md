@@ -80,7 +80,7 @@ description: "Task list for 009-depreciation-deferred"
 
 **Independent Test**: spec US2 のシナリオ 1〜5（150,000 円の 3 年度、100,000 円の端数、250,000 円の拒否、除却後も継続、上限の集計から外れる）
 
-- [ ] T017 [US2] テスト先行で新規 `packages/domain/src/blue-return/lump-sum.ts` の `lumpSumYear` を実装し、`depreciation.ts` の `validateFixedAsset`・`depreciate`・`isDepreciationRow`・`proposeDepreciationAdjustment` に一括償却の分岐を足す（D: §2、R4、data-model §2.2。除却・売却でも除却損・振替を出さない）。テスト `packages/domain/test/blue-return/lump-sum.test.ts`、`lump-sum.property.test.ts`（INV-56）、`depreciation.test.ts`。あわせて API・画面・台帳と帳簿の一致（INV-59・60）のテストを足し、落ちたところだけ直す（観点は R17/T017）
+- [X] T017 [US2] テスト先行で新規 `packages/domain/src/blue-return/lump-sum.ts` の `lumpSumYear` を実装し、`depreciation.ts` の `validateFixedAsset`・`depreciate`・`isDepreciationRow`・`proposeDepreciationAdjustment` に一括償却の分岐を足す（D: §2、R4、data-model §2.2。除却・売却でも除却損・振替を出さない）。テスト `packages/domain/test/blue-return/lump-sum.test.ts`、`lump-sum.property.test.ts`（INV-56）、`depreciation.test.ts`。あわせて API・画面・台帳と帳簿の一致（INV-59・60）のテストを足し、落ちたところだけ直す（観点は R17/T017）
 
 **Checkpoint**: 定額法と一括償却の資産が混ざった年度で、欄 18 と照合の警告が出ない
 
