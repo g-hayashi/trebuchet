@@ -448,6 +448,62 @@ describe("pairing tokens", () => {
     expect(await store.consumePairingToken("ph1", "mac.ts.net", MID)).toBe(true);
   });
 
+  describe("addPasskeyWithPairingToken（004/T017b。パスキー・包み・消費を 1 トランザクションで）", () => {
+    const paired = (id: string) => passkey(id, { rpId: "mac.ts.net", createdAt: MID });
+
+    it("有効なトークンなら true で、パスキーと包みが入りトークンが使用済みになる", async () => {
+      await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+      await store.createPairingToken(token());
+      expect(await store.addPasskeyWithPairingToken(paired("pk2"), wrap(3), "ph1", MID)).toBe(true);
+      expect((await store.getPasskey("pk2"))?.rpId).toBe("mac.ts.net");
+      expect(await store.getPasskeyWrap("pk2")).toBeDefined();
+      expect(await store.isPairingTokenValid("ph1", "mac.ts.net", MID)).toBe(false);
+    });
+
+    it("無効（使用済み・期限切れ・存在しない・rpId 違い）なら false で、何も書かない", async () => {
+      await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+      await store.createPairingToken(token());
+      await store.consumePairingToken("ph1", "mac.ts.net", MID);
+      expect(await store.addPasskeyWithPairingToken(paired("pk2"), wrap(3), "ph1", MID)).toBe(
+        false,
+      );
+      await store.createPairingToken(token({ id: "p2", tokenHash: "ph2" }));
+      expect(await store.addPasskeyWithPairingToken(paired("pk2"), wrap(3), "ph2", LATE)).toBe(
+        false,
+      );
+      expect(await store.addPasskeyWithPairingToken(paired("pk2"), wrap(3), "zz", MID)).toBe(false);
+      expect(
+        await store.addPasskeyWithPairingToken(
+          passkey("pk2", { rpId: "other.ts.net" }),
+          wrap(3),
+          "ph2",
+          MID,
+        ),
+      ).toBe(false);
+      expect(await store.getPasskey("pk2")).toBeUndefined();
+      expect(await store.isPairingTokenValid("ph2", "mac.ts.net", MID)).toBe(true);
+      expect(db.$client.prepare("SELECT count(*) AS n FROM key_wraps").get()).toEqual({ n: 2 });
+    });
+
+    it("パスキーの追加に失敗したら（同じ id）例外で、トークンは使用済みにならない", async () => {
+      await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+      await store.createPairingToken(token());
+      await expect(
+        store.addPasskeyWithPairingToken(paired("pk1"), wrap(3), "ph1", MID),
+      ).rejects.toThrow();
+      expect(await store.isPairingTokenValid("ph1", "mac.ts.net", MID)).toBe(true);
+      expect(db.$client.prepare("SELECT count(*) AS n FROM key_wraps").get()).toEqual({ n: 2 });
+    });
+
+    it("設定前（recovery の包みがない）なら例外で、トークンは使用済みにならない", async () => {
+      await store.createPairingToken(token());
+      await expect(
+        store.addPasskeyWithPairingToken(paired("pk2"), wrap(3), "ph1", MID),
+      ).rejects.toThrow();
+      expect(await store.isPairingTokenValid("ph1", "mac.ts.net", MID)).toBe(true);
+    });
+  });
+
   it("期限切れの削除は expiresAt < before だけ", async () => {
     await store.createPairingToken(token({ id: "p1", tokenHash: "a", expiresAt: T0 }));
     await store.createPairingToken(token({ id: "p2", tokenHash: "b", expiresAt: T1 }));

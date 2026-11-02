@@ -403,6 +403,34 @@ export class DrizzleAuthStore implements AuthStore {
     return rows.length > 0;
   }
 
+  /** トークンの消費とパスキー・包みの追加を同じトランザクションで行う。追加が失敗すれば消費も巻き戻る */
+  async addPasskeyWithPairingToken(
+    p: NewPasskey,
+    wrap: WrappedKey,
+    tokenHash: string,
+    now: string,
+  ): Promise<boolean> {
+    return this.db.transaction((tx) => {
+      if (!hasRecoveryWrap(tx)) throw new Error("vault is not initialized");
+      const consumed = tx
+        .update(pairingTokens)
+        .set({ usedAt: now })
+        .where(
+          and(
+            eq(pairingTokens.tokenHash, tokenHash),
+            eq(pairingTokens.rpId, p.rpId),
+            isNull(pairingTokens.usedAt),
+            sql`${now} < ${pairingTokens.expiresAt}`,
+          ),
+        )
+        .returning({ id: pairingTokens.id })
+        .all();
+      if (consumed.length === 0) return false;
+      insertPasskeyWithWrap(tx, p, wrap);
+      return true;
+    });
+  }
+
   async deleteExpiredPairingTokens(before: string): Promise<number> {
     return this.db
       .delete(pairingTokens)

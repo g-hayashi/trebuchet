@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/server";
 import {
   DK_BYTES,
   generateRecoveryKey,
@@ -8,7 +7,6 @@ import {
   wrapDataKey,
 } from "@trebuchet/db";
 import {
-  type AuthEventKind,
   type AuthStore,
   type Clock,
   canDeletePasskey,
@@ -21,27 +19,26 @@ import {
 import {
   type AuthStatus,
   PasskeyRenameInput,
-  type PasskeyView,
   RecoveryVerifyInput,
   RegisterVerifyInput,
   type SessionView,
 } from "@trebuchet/schema";
-import { type Context, Hono } from "hono";
-import { ids } from "../deps.ts";
+import { Hono } from "hono";
 import { DomainException } from "../errors.ts";
+import {
+  type AuthSupport,
+  type Ctx,
+  prfUnsupported,
+  refOf,
+  toPasskeyView,
+  webauthnFailed,
+} from "../lib/auth-support.ts";
 import type { ChallengeStore } from "../lib/challenges.ts";
 import { expectedOriginFor, isLocalHost, rpIdFor } from "../lib/origin.ts";
-import { ReauthTracker } from "../lib/reauth.ts";
-import {
-  clearSessionCookie,
-  isSecureHost,
-  issueSession,
-  setSessionCookie,
-} from "../lib/session.ts";
+import { clearSessionCookie } from "../lib/session.ts";
 import { sweepSessions } from "../lib/session-sweeper.ts";
 import { setAsideDataFiles, type Vault } from "../lib/vault.ts";
-import type { VerifiedRegistration, WebAuthnVerifier } from "../lib/webauthn.ts";
-import { challengeOf, readPrf, responseKind } from "../lib/webauthn-response.ts";
+import { readPrf, responseKind } from "../lib/webauthn-response.ts";
 import { findActiveSession } from "../middleware/auth.ts";
 import type { GuardEnv } from "../middleware/host.ts";
 import { validate } from "../validator.ts";
@@ -49,59 +46,29 @@ import { validate } from "../validator.ts";
 export type AuthRouteDeps = {
   store: () => AuthStore;
   clock: Clock;
-  webauthn: WebAuthnVerifier;
   challenges: ChallengeStore;
   /** 解錠中の DK（008 の D3） */
   vault: Vault;
+  /** 登録・セッション・再認証の共通部品（ペアリングのルートと共有する） */
+  support: AuthSupport;
   /** 回復キーの失敗のたびに待たせる（D5。既定は setTimeout。テストは待たない関数を渡す） */
   delay?: (ms: number) => Promise<void>;
 };
 
-type Ctx = Context<GuardEnv>;
-
 /** 回復キーの失敗ごとの遅延（D5。全体のロックはしない） */
 export const RECOVERY_FAILURE_DELAY_MS = 1000;
 
-const DEFAULT_PASSKEY_NAME = "パスキー";
 const DEFAULT_EVENT_LIMIT = 100;
 const MAX_EVENT_LIMIT = 500;
-const PRF_SALT_BYTES = 32;
 
 const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-const webauthnFailed = () =>
-  new DomainException(
-    domainError("WEBAUTHN_FAILED", "パスキーの確認に失敗しました。もう一度お試しください"),
-  );
-const prfUnsupported = () =>
-  new DomainException(
-    domainError(
-      "PRF_UNSUPPORTED",
-      "このパスキーは鍵の保護（PRF）に対応していません。iCloud キーチェーンや 1Password などのパスキーを使ってください",
-    ),
-  );
 const alreadyRegistered = () =>
   new DomainException(domainError("ALREADY_REGISTERED", "すでに設定されています"));
 const unauthenticated = () =>
   new DomainException(domainError("UNAUTHENTICATED", "サインインが必要です"));
-const reauthRequired = () =>
-  new DomainException(
-    domainError("REAUTH_REQUIRED", "この操作の前に、パスキーでもう一度確認してください"),
-  );
 
-const toPasskeyView = (p: Passkey): PasskeyView => ({
-  id: p.id,
-  name: p.name,
-  rpId: p.rpId,
-  createdAt: p.createdAt,
-  lastUsedAt: p.lastUsedAt,
-});
-
-const refOf = (p: { id: string; transports: string[] | null }) => ({
-  id: p.id,
-  ...(p.transports ? { transports: p.transports } : {}),
-});
 const refsOf = (passkeys: Passkey[], rpId: string) =>
   passkeys.filter((p) => p.rpId === rpId).map(refOf);
 
@@ -124,172 +91,26 @@ function sessionOf(c: Ctx): Session {
   return session;
 }
 
-/** 登録の options を出したときに覚える値 */
-type PendingRegistration = { prfSalt: Buffer };
-/** 登録で PRF の出力が返らなかったとき、続けて行う認証のために覚える値（D4.1 の `prf_required`） */
-type PendingPrf = { prfSalt: Buffer; credential: VerifiedRegistration };
-/** 登録を検証し、PRF の出力まで得たもの。`prfOutput` は包みを作ったら 0 で埋める */
-type Registered = { credential: VerifiedRegistration; prfSalt: Buffer; prfOutput: Buffer };
-type RegistrationStep =
-  | { kind: "done"; registered: Registered }
-  | { kind: "prf_required"; options: PublicKeyCredentialRequestOptionsJSON };
-
 export function authRoutes(deps: AuthRouteDeps) {
-  const { clock, webauthn, challenges, vault } = deps;
+  const { clock, challenges, vault, support } = deps;
+  const {
+    webauthn,
+    reauth,
+    nowMs,
+    secure,
+    record,
+    takeChallenge,
+    safely,
+    beginRegistration,
+    finishRegistration,
+    newPasskey,
+    assertNewCredential,
+    startSession,
+    requireReauth,
+  } = support;
   const delay = deps.delay ?? sleep;
-  const reauth = new ReauthTracker();
   /** 初回の設定を同時に 2 つ進めない（データの置き場所を移すため） */
   let settingUp = false;
-
-  const secure = (c: Ctx) => isSecureHost(c.var.host, c.var.remote);
-  const nowMs = () => Date.parse(clock.now());
-
-  async function record(
-    store: AuthStore,
-    c: Ctx,
-    kind: AuthEventKind,
-    extra: {
-      passkeyId?: string | null;
-      sessionId?: string | null;
-      detail?: Record<string, unknown>;
-    } = {},
-  ) {
-    await store.appendEvent({
-      id: ids.next(),
-      occurredAt: clock.now(),
-      kind,
-      rpId: rpIdFor(c.var.host, c.var.remote) ?? null,
-      passkeyId: extra.passkeyId ?? null,
-      sessionId: extra.sessionId ?? null,
-      userAgent: c.req.header("user-agent") ?? null,
-      detail: extra.detail ?? null,
-    });
-  }
-
-  /**
-   * 応答の challenge（clientDataJSON）を、用途（scope）が合うものとして 1 回だけ取り出す。
-   * 知らない・使い済み・期限切れ・用途違いは null
-   */
-  function takeChallenge(scope: string, response: unknown) {
-    const challenge = challengeOf(response);
-    if (challenge === null) return null;
-    const entry = challenges.take(scope, challenge);
-    return entry === undefined ? null : { challenge, data: entry.data };
-  }
-
-  /** 検証の失敗（null）と例外を同じに扱う（呼び出し側が 400 にする） */
-  async function safely<T>(run: () => Promise<T | null>): Promise<T | null> {
-    try {
-      return await run();
-    } catch {
-      return null;
-    }
-  }
-
-  /** 登録の options。除外する認証器は、この RP ID の既存のパスキー。PRF の salt を新しく作る */
-  async function beginRegistration(store: AuthStore, scope: string, rpId: string) {
-    const prfSalt = randomBytes(PRF_SALT_BYTES);
-    const options = await webauthn.registrationOptions({
-      rpId,
-      excluded: refsOf(await store.listPasskeys(), rpId),
-      prfSalt: b64(prfSalt),
-    });
-    challenges.issue(scope, options.challenge, { prfSalt } satisfies PendingRegistration);
-    return options;
-  }
-
-  /**
-   * 登録の応答を検証する（D4.1）。PRF が使えなければ 400 PRF_UNSUPPORTED。
-   * 登録で PRF の出力が返らない認証器には、続けて認証を 1 回求める（`prf_required`。同じ verify に送る）
-   */
-  async function finishRegistration(
-    scope: string,
-    response: Record<string, unknown>,
-    rpId: string,
-    origin: string,
-  ): Promise<RegistrationStep> {
-    const kind = responseKind(response);
-    if (kind === "registration") {
-      const taken = takeChallenge(scope, response);
-      if (taken === null) throw webauthnFailed();
-      const { prfSalt } = taken.data as PendingRegistration;
-      const credential = await safely(() =>
-        webauthn.verifyRegistration({
-          response,
-          expectedChallenge: (challenge) => challenge === taken.challenge,
-          expectedOrigin: origin,
-          expectedRpId: rpId,
-        }),
-      );
-      if (credential === null) throw webauthnFailed();
-      const prf = readPrf(response);
-      if (!prf.enabled) throw prfUnsupported();
-      if (prf.first !== null) {
-        return { kind: "done", registered: { credential, prfSalt, prfOutput: prf.first } };
-      }
-      const options = await webauthn.authenticationOptions({
-        rpId,
-        allowed: [refOf(credential)],
-        prfSalts: { [credential.id]: b64(prfSalt) },
-      });
-      challenges.issue(`${scope}:prf`, options.challenge, {
-        prfSalt,
-        credential,
-      } satisfies PendingPrf);
-      return { kind: "prf_required", options };
-    }
-    if (kind === "authentication") {
-      const taken = takeChallenge(`${scope}:prf`, response);
-      if (taken === null) throw webauthnFailed();
-      const pending = taken.data as PendingPrf;
-      if (response.id !== pending.credential.id) throw webauthnFailed();
-      const verified = await safely(() =>
-        webauthn.verifyAuthentication({
-          response,
-          expectedChallenge: (challenge) => challenge === taken.challenge,
-          expectedOrigin: origin,
-          expectedRpId: rpId,
-          credential: {
-            id: pending.credential.id,
-            publicKey: pending.credential.publicKey,
-            counter: pending.credential.counter,
-            ...(pending.credential.transports ? { transports: pending.credential.transports } : {}),
-          },
-        }),
-      );
-      if (verified === null) throw webauthnFailed();
-      const prf = readPrf(response);
-      if (prf.first === null) throw prfUnsupported();
-      return {
-        kind: "done",
-        registered: {
-          credential: { ...pending.credential, counter: verified.newCounter },
-          prfSalt: pending.prfSalt,
-          prfOutput: prf.first,
-        },
-      };
-    }
-    throw webauthnFailed();
-  }
-
-  function newPasskey(registered: Registered, rpId: string, name: string | undefined): NewPasskey {
-    const { credential, prfSalt } = registered;
-    return {
-      id: credential.id,
-      publicKey: credential.publicKey,
-      counter: credential.counter,
-      rpId,
-      transports: credential.transports,
-      name: name ?? DEFAULT_PASSKEY_NAME,
-      prfSalt,
-      createdAt: clock.now(),
-    };
-  }
-
-  /** すでにある資格情報の ID の登録は 400（同じ認証器の二重登録・行の差し替えを防ぐ） */
-  async function assertNewCredential(store: AuthStore, id: string) {
-    if ((await store.getPasskey(id)) !== undefined) throw webauthnFailed();
-  }
 
   /** 新しい回復キーで recovery の包みを作る（DK は解錠中のもの）。秘密の乱数は 0 で埋める */
   function newRecoveryWrap() {
@@ -305,37 +126,6 @@ export function authRoutes(deps: AuthRouteDeps) {
   /** 新しい回復キーを出したら、「控えた」の確認を外す */
   async function resetAcknowledgement(store: AuthStore) {
     await store.setSetting("recovery_code_acknowledged", "0", clock.now());
-  }
-
-  /**
-   * セッションを作って cookie に入れる。新しいセッションを入れてから期限切れを掃除する
-   * （逆にすると解錠の直後に施錠される。D3、落とし穴 5）
-   */
-  async function startSession(
-    store: AuthStore,
-    c: Ctx,
-    rpId: string,
-    kind: "normal" | "recovery",
-    passkeyId: string | null,
-  ) {
-    const session = await issueSession(store, {
-      id: ids.next(),
-      now: clock.now(),
-      kind,
-      rpId,
-      passkeyId,
-      userAgent: c.req.header("user-agent") ?? null,
-    });
-    setSessionCookie(c, session.token, { secure: secure(c) });
-    // パスキーで本人を確かめた直後のセッションは、再認証の済んだものとして扱う
-    if (kind === "normal") reauth.mark(session.id, nowMs());
-    await sweepSessions({ store, vault, now: clock.now() });
-    return session;
-  }
-
-  /** 全権のセッションで、直近 5 分以内のパスキーの再認証を求める（D4.4） */
-  function requireReauth(session: Session) {
-    if (!reauth.isFresh(session.id, nowMs())) throw reauthRequired();
   }
 
   /** 初回の設定の前提（未設定、ローカルの Host）。ミドルウェアでも検査済みだが二重に確かめる */

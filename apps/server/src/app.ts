@@ -14,6 +14,7 @@ import {
 } from "./deps.ts";
 import { onError } from "./errors.ts";
 import { type AiRuntime, type AiSettingsStore, createAiRuntime } from "./lib/ai-runtime.ts";
+import { createAuthSupport } from "./lib/auth-support.ts";
 import type { BackupRunner } from "./lib/backup-run.ts";
 import { ChallengeStore } from "./lib/challenges.ts";
 import type { FmServer } from "./lib/fm-server.ts";
@@ -36,6 +37,7 @@ import { importRoutes } from "./routes/imports.ts";
 import { invoicingRoutes } from "./routes/invoicing.ts";
 import { journalRoutes } from "./routes/journals.ts";
 import { masterRoutes } from "./routes/masters.ts";
+import { pairingRoutes } from "./routes/pairing.ts";
 import { periodRoutes } from "./routes/periods.ts";
 import { recurringRoutes } from "./routes/recurring.ts";
 import { reportRoutes } from "./routes/reports.ts";
@@ -120,6 +122,14 @@ export function createApp(options: AppOptions = {}) {
     settings: options.ai?.settings ?? aiSettingsStore,
     fm: options.ai?.fm ?? fmServer,
   });
+  const challenges = new ChallengeStore(clock);
+  // 認証のルートとペアリングのルートが共有する（再認証の記録は 1 つ）
+  const support = createAuthSupport({
+    clock,
+    webauthn: options.webauthn ?? simpleWebAuthnVerifier,
+    challenges,
+    vault,
+  });
   const app = new Hono<GuardEnv>()
     .basePath("/api")
     .use(hostCheck(getRemoteSettings))
@@ -131,12 +141,13 @@ export function createApp(options: AppOptions = {}) {
       authRoutes({
         store,
         clock,
-        webauthn: options.webauthn ?? simpleWebAuthnVerifier,
-        challenges: new ChallengeStore(clock),
+        challenges,
         vault,
+        support,
         ...(options.recoveryDelay === undefined ? {} : { delay: options.recoveryDelay }),
       }),
     )
+    .route("/auth", pairingRoutes({ store, clock, vault, support }))
     .route(
       "/backup",
       backupRoutes({

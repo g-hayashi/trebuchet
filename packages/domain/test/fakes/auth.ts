@@ -249,6 +249,21 @@ export class FakeAuthStore implements AuthStore {
     t.usedAt = now;
     return true;
   }
+  async addPasskeyWithPairingToken(
+    passkey: NewPasskey,
+    wrap: WrappedKey,
+    tokenHash: string,
+    now: string,
+  ): Promise<boolean> {
+    if (!this.keyWraps.some((w) => w.kind === "recovery")) {
+      throw new Error("vault is not initialized");
+    }
+    const t = this.findValidPairing(tokenHash, passkey.rpId, now);
+    if (!t) return false;
+    this.insertPasskey(passkey, wrap); // 失敗すれば例外で、トークンは使用済みにならない
+    t.usedAt = now;
+    return true;
+  }
   async deleteExpiredPairingTokens(before: string): Promise<number> {
     const keep = this.pairingTokens.filter((t) => t.expiresAt >= before);
     const n = this.pairingTokens.length - keep.length;

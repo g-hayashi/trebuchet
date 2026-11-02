@@ -563,6 +563,17 @@ export interface AuthStore {
   /** 有効なら used_at を付けて true（単回） */
   consumePairingToken(tokenHash: string, rpId: string, now: string): Promise<boolean>;
   deleteExpiredPairingTokens(before: string): Promise<number>;
+  /**
+   * ペアリングの登録: トークンを消費し、パスキーとその包みを入れる（1 トランザクション。INV-53）。
+   * トークンが有効でなければ（パスキーの rpId で確かめる）何も書かず false。
+   * 追加に失敗したら例外で、トークンは使用済みにならない。設定前（recovery の包みがない）も失敗
+   */
+  addPasskeyWithPairingToken(
+    passkey: NewPasskey,
+    wrap: WrappedKey,
+    tokenHash: string,
+    now: string,
+  ): Promise<boolean>;
   // リモート（Tailscale）の設定（auth.sqlite。秘密を持たず、施錠中も Host の検査のために読める）
   /** 未設定は `{ enabled: false, host: null }` */
   getRemoteSettings(): Promise<RemoteSettings>;
