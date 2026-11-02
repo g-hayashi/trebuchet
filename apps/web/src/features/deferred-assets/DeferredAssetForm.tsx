@@ -136,6 +136,8 @@ export function DeferredAssetForm({
     setTotalError(total === null ? TOTAL_ERROR : undefined);
     setPriorError(prior === null ? PRIOR_ERROR : undefined);
     setPriorYearError(yearInvalid ? PRIOR_YEAR_ERROR : undefined);
+    // 前の保存の知らせを、今回の結果（失敗を含む）と並べて出さない
+    onSaved("");
     if (required || total === null || prior === null || yearInvalid) return;
     save.mutate({ total, prior, priorThroughYear: year });
   };

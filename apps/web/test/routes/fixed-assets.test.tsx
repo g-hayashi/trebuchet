@@ -630,6 +630,35 @@ describe("償却の方法ごとの登録（009 US1）", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("償却率の表にありません");
   });
 
+  it("前の登録の「登録しました。」を、次の登録の失敗のときに残さない", async () => {
+    let posts = 0;
+    mockScreen({
+      overrides: {
+        [`POST ${ASSETS}`]: () => {
+          posts += 1;
+          return posts === 1
+            ? ok({ asset: asset({ id: "as-new", depreciation: depreciation() }) }, 201)
+            : apiError(422, "USEFUL_LIFE_UNSUPPORTED", "耐用年数 1 年は償却率の表にありません", {
+                usefulLifeYears: 1,
+              });
+        },
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await fillBasics(user, "200000");
+    await user.click(screen.getByRole("button", { name: "登録" }));
+    expect(await screen.findByText("登録しました。")).toBeInTheDocument();
+
+    await fillBasics(user, "500000");
+    await user.selectOptions(screen.getByRole("combobox", { name: "償却の方法" }), "straight_line");
+    await user.type(screen.getByRole("textbox", { name: "耐用年数" }), "1");
+    await user.click(screen.getByRole("button", { name: "登録" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("償却率の表にありません");
+    expect(screen.queryByText("登録しました。")).not.toBeInTheDocument();
+  });
+
   it("保存したあと、案と決算書の query を読み直す（資産の保存は仕訳を変えないので台帳と決算書の年度だけ）", async () => {
     const { calls } = mockScreen();
     const user = userEvent.setup();
@@ -945,6 +974,11 @@ describe("開業費（009 US3）", () => {
       note: null,
     });
     expect(await screen.findByText("開業費を登録しました。")).toBeInTheDocument();
+
+    // 次の登録が入力の不備で送られないとき、前の知らせを残さない
+    await user.click(screen.getByRole("button", { name: "開業費を登録" }));
+    expect(callsOf(calls, "POST", DEFERRED)).toHaveLength(1);
+    expect(screen.queryByText("開業費を登録しました。")).not.toBeInTheDocument();
   });
 
   it("前年までの累計とその年分を送る。累計があるのに年分がなければ、総額が整数でなければ送らない", async () => {

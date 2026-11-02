@@ -270,6 +270,8 @@ export function FixedAssetForm({
     setLifeError(fields.ok ? undefined : fields.lifeError);
     setPriorError(fields.ok ? undefined : fields.priorError);
     setPriorYearError(fields.ok ? undefined : fields.priorYearError);
+    // 前の保存の知らせを、今回の結果（失敗を含む）と並べて出さない
+    onSaved("");
     if (cost === null || ratio === undefined || !fields.ok) return;
     save.mutate({ cost, ratio, fields });
   };
