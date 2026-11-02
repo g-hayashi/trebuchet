@@ -104,8 +104,8 @@ description: "Task list for 009-depreciation-deferred"
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T023 `scripts/bench-reports.ts` に、資産 50 件（定額法・一括償却・少額の特例を混ぜ、数年分の年度）と開業費 1 件の事業体での、決算書の画面が使う API（`GET /blue-return/:year`、`/adjustments`、`/fixed-assets?year=`、`/deferred-assets?year=`）の計測を足し、2 秒以内を確かめる（SC-005。資産・年度の範囲は R15 のジェネレーターに合わせる）。結果の数値はコミットしない
-- [ ] T024 `scripts/verify-tax-return.ts` の `--closing` の JSON の形を広げる（形は R17/T024。先頭のコメントに形だけを書き、値は書かない）。登録・決定・案の登録の後、`ASSET_REGISTER_MISMATCH`・`DEPRECIATION_MISMATCH`・`DEPRECIATION_PARAMETER_MISSING` の件数と欄 18 の一致・不一致だけを出す（金額・資産名は出さない）。合成のフィクスチャで動くことを確かめる
+- [X] T023 `scripts/bench-reports.ts` に、資産 50 件（定額法・一括償却・少額の特例を混ぜ、数年分の年度）と開業費 1 件の事業体での、決算書の画面が使う API（`GET /blue-return/:year`、`/adjustments`、`/fixed-assets?year=`、`/deferred-assets?year=`）の計測を足し、2 秒以内を確かめる（SC-005。資産・年度の範囲は R15 のジェネレーターに合わせる）。結果の数値はコミットしない
+- [X] T024 `scripts/verify-tax-return.ts` の `--closing` の JSON の形を広げる（形は R17/T024。先頭のコメントに形だけを書き、値は書かない）。登録・決定・案の登録の後、`ASSET_REGISTER_MISMATCH`・`DEPRECIATION_MISMATCH`・`DEPRECIATION_PARAMETER_MISSING` の件数と欄 18 の一致・不一致だけを出す（金額・資産名は出さない）。合成のフィクスチャで動くことを確かめる
 - [ ] T025 文書を更新する: `AGENTS.md` に「定額法・一括償却資産・開業費（009）」の節、「決算書（003）」の節の少額の特例だけの記述の修正、「開発の進め方」の不変条件の索引の記述（INV-1〜50）を INV-1〜60 に直す（内容は R17/T025）、`docs/requirements.md` の FR-10 の状態（決算の残り）、`docs/adr/0005-closing-adjustments-as-journals.md` の「関連」に ADR 0012
 - [ ] T026 **（メイン）** 全体の検証: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`。落ちたら implementer に直させる
 - [ ] T027 **（利用者の端末）** `pnpm --filter @trebuchet/web e2e`（既存の E2E が壊れていないこと）と、quickstart §2 の手動確認（利用者が `TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart-009" pnpm dev` を起動し、implementer にブラウザの MCP の snapshot で手順 1〜11 を確かめさせる）。画面の文言と金額を quickstart.md に合わせ、手順2〜7 の所要時間を計る（SC-004: 資産 1 件の登録から仕訳の登録まで 3 分以内）
