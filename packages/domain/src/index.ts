@@ -90,6 +90,7 @@ export * from "./usecases/journal-edit.ts";
 export * from "./usecases/journal-queries.ts";
 export * from "./usecases/masters.ts";
 export * from "./usecases/receipt-links.ts";
+export * from "./usecases/receipt-reading.ts";
 export * from "./usecases/receipts.ts";
 export * from "./usecases/recurring.ts";
 export * from "./usecases/reports.ts";

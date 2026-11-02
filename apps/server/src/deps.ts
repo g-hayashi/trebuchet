@@ -45,6 +45,8 @@ import {
   type ReceiptDeps,
   type ReceiptFileStore,
   type ReceiptImageTool,
+  type ReceiptReader,
+  type ReceiptReadingDeps,
   type RecurringStore,
   type RecurringUnitOfWork,
   type ReportDeps,
@@ -276,11 +278,17 @@ export const receiptImageTool: ReceiptImageTool = createImageTool({ tmpRoot: TMP
 export type ReceiptRuntime = {
   imageTool: ReceiptImageTool;
   files: (entityId: string) => ReceiptFileStore;
+  /**
+   * 外部の AI による読み取り（010 R13。`createApp` が `ai-runtime.ts` の `receipts` を差す）。
+   * undefined（または `model()` が undefined）なら設定が無効で、`readReceipt` は呼ばずに AI_NOT_CONFIGURED
+   */
+  reader: ReceiptReader | undefined;
 };
 
 export const defaultReceiptRuntime: ReceiptRuntime = {
   imageTool: receiptImageTool,
   files: createReceiptFileStore,
+  reader: undefined,
 };
 
 /**
@@ -299,6 +307,20 @@ export function receiptDeps(
     clock,
     ids,
     dateOf: receiptDateOf,
+  };
+}
+
+/** 証憑の読み取り（010 US4）の依存。`reader` と `imageTool` は `ReceiptRuntime`（`createApp` が差す） */
+export function receiptReadingDeps(
+  db: TenantDb,
+  clock: Clock,
+  entityId: string,
+  runtime: ReceiptRuntime = defaultReceiptRuntime,
+): ReceiptReadingDeps {
+  return {
+    ...receiptDeps(db, clock, entityId, runtime),
+    images: runtime.imageTool,
+    reader: runtime.reader,
   };
 }
 

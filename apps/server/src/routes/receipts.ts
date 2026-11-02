@@ -9,6 +9,7 @@ import {
   listJournalCandidates,
   listReceipts,
   ok,
+  readReceipt,
   readReceiptFile,
   replaceReceiptFile,
   unlinkReceipt,
@@ -28,7 +29,12 @@ import {
   ReceiptUpdateInput,
 } from "@trebuchet/schema";
 import { Hono } from "hono";
-import { type ReceiptRuntime, type RouteOptions, receiptDeps } from "../deps.ts";
+import {
+  type ReceiptRuntime,
+  type RouteOptions,
+  receiptDeps,
+  receiptReadingDeps,
+} from "../deps.ts";
 import { errorBody, fail, respond, validationError } from "../errors.ts";
 import { isLocalHost, requestHost } from "../lib/origin.ts";
 import { readJsonField, readUpload, uploadLimitFor } from "../lib/upload.ts";
@@ -85,6 +91,16 @@ export function receiptRoutes({ clock, receipts }: RouteOptions & { receipts: Re
           probe: probed.value,
         });
         return respond(c, result, (receipt) => c.json({ receipt }, 201));
+      })
+      // 外部の AI による読み取り（US4）。候補を返すだけで証憑の値は変えない（INV-67）。
+      // 時間切れ・HTTP のエラー・形の不一致も 201 で記録の status・errorCode を返す。
+      // 外部の AI か証憑の画像の送信が無効なら 422 AI_NOT_CONFIGURED（AI を呼ばない。INV-66）
+      .post("/receipts/:receiptId/readings", validate("param", ReceiptParam), async (c) => {
+        const result = await readReceipt(
+          receiptReadingDeps(c.var.db, clock, c.var.entityId, receipts),
+          c.req.valid("param").receiptId,
+        );
+        return respond(c, result, (reading) => c.json({ reading }, 201));
       })
       // ファイルの差し替え（撮り直し。版 +1、前の版も残る）。経路は追加と同じく Host で決める
       .post(
@@ -191,8 +207,11 @@ export function receiptRoutes({ clock, receipts }: RouteOptions & { receipts: Re
         validate("param", ReceiptParam),
         validate("json", ReceiptJournalInput),
         (c) => {
+          const input = c.req.valid("json");
           const result = createJournalFromReceipt(deps(c), c.req.valid("param").receiptId, {
-            journal: c.req.valid("json").journal,
+            journal: input.journal,
+            // 読み取りの候補との比べ（account_match・tax_match）を書く（FR-017、R14）
+            readingId: input.readingId ?? undefined,
           });
           return respond(c, result, (value) => c.json(value, 201));
         },

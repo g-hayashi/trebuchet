@@ -93,7 +93,10 @@ export type AppOptions = {
     settings?: () => AiSettingsStore;
     fm?: FmServer;
   };
-  /** 証憑（010 X3）の差し替え口。`imageTool` は画像の変換（既定は sips）、`files` は事業体ごとの暗号化したファイルの置き場 */
+  /**
+   * 証憑（010 X3）の差し替え口。`imageTool` は画像の変換（既定は sips）、`files` は事業体ごとの暗号化したファイルの置き場、
+   * `reader` は外部の AI による読み取り（既定は `ai` の設定から作った `createReceiptReader`）
+   */
   receipts?: Partial<ReceiptRuntime>;
   /** 評価のジョブの置き場（006 R17）。既定はこのアプリ専用の置き場 */
   jobs?: JobStore;
@@ -176,7 +179,7 @@ export function createApp(options: AppOptions = {}) {
         clock,
         jobs,
         ai,
-        receipts: { ...defaultReceiptRuntime, ...options.receipts },
+        receipts: { ...defaultReceiptRuntime, reader: ai.receipts, ...options.receipts },
         ...(options.suggestion === undefined ? {} : { suggestion: options.suggestion }),
       }),
     );
