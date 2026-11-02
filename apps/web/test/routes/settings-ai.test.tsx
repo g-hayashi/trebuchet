@@ -229,7 +229,7 @@ describe("証憑の画像を外部の AI に送る（010 FR-015・R15）", () =>
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("マスクできず");
     expect(dialog).toHaveTextContent("そのまま外部の AI に送られます");
-    expect(dialog).toHaveTextContent("006 の送る情報の原則の例外");
+    expect(dialog).toHaveTextContent("明細の推定では送る情報を伏せていますが、画像はその例外です");
     await u.click(within(dialog).getByRole("button", { name: "やめる" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByLabelText(LABEL)).not.toBeChecked();
