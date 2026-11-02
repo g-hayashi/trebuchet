@@ -167,9 +167,15 @@ describe("実行の履歴", () => {
     open(
       {},
       status(),
-      (["FOLDER_NOT_FOUND", "WRITE_FAILED", "VERIFY_FAILED", "SNAPSHOT_FAILED"] as const).map(
-        (code, i) => run({ id: `f${i}`, status: "failed", errorCode: code }),
-      ),
+      (
+        [
+          "FOLDER_NOT_FOUND",
+          "WRITE_FAILED",
+          "VERIFY_FAILED",
+          "SNAPSHOT_FAILED",
+          "RECEIPTS_SYNC_FAILED",
+        ] as const
+      ).map((code, i) => run({ id: `f${i}`, status: "failed", errorCode: code })),
     );
     const table = await screen.findByRole("table", { name: "バックアップの実行履歴" });
     const text = table.textContent ?? "";
@@ -177,6 +183,8 @@ describe("実行の履歴", () => {
     expect(text).toContain("書き込みに失敗しました");
     expect(text).toContain("書いたファイルを読み戻せませんでした");
     expect(text).toContain("帳簿の写しを作れませんでした");
+    expect(text).toContain("証憑のファイルを置き場所に写せませんでした");
+    expect(text).not.toContain("RECEIPTS_SYNC_FAILED");
   });
 });
 

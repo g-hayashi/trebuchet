@@ -2,12 +2,14 @@ import { randomUUIDv7 } from "node:crypto";
 import { mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
+  createReceiptFileStore,
   DrizzleAuthStore,
   DrizzleBackupStore,
   dataDir,
   generateRecoveryKey,
   openAuth,
   openRegistry,
+  openTenant,
   wrapDataKey,
 } from "@trebuchet/db";
 import { TEST_DATA_KEY, type TempDataDir } from "@trebuchet/db/testing";
@@ -106,6 +108,31 @@ export function makeBackupEnv(
       tmp.cleanup();
     },
   };
+}
+
+/**
+ * 事業体に合成の証憑を 1 件足す（`receipts`・`receipt_files` の行と、暗号化したファイル）。
+ * 戻り値は平文の SHA-256（= データ場所のファイル名）。バックアップの証憑の写しのテスト用（010 T026）
+ */
+export function addReceiptFile(entityId: string, label: string): string {
+  const store = createReceiptFileStore(entityId);
+  const bytes = Buffer.from(`synthetic-receipt-${label}-${"x".repeat(64)}`);
+  const sha256 = store.digest(bytes);
+  store.put(sha256, bytes);
+  const at = "2026-10-20T09:00:00.000Z";
+  const id = randomUUIDv7();
+  const db = openTenant(entityId).$client;
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO receipts (id, received_at, channel, category, current_sha256, version, created_at, updated_at)
+       VALUES (?, ?, 'local', 'paper_scan', ?, 1, ?, ?)`,
+    ).run(id, at, sha256, at, at);
+    db.prepare(
+      `INSERT INTO receipt_files (sha256, receipt_id, file_version, media_type, size_bytes, original_name, added_at, channel)
+       VALUES (?, ?, 1, 'image/jpeg', ?, 'scan.jpg', ?, 'local')`,
+    ).run(sha256, id, bytes.length, at);
+  })();
+  return sha256;
 }
 
 /** 置き場所を設定済みにする（app_settings） */

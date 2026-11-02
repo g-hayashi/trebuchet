@@ -26,7 +26,10 @@ export const BackupRun = z.object({
   finishedAt: Timestamp,
   trigger: BackupTrigger,
   status: BackupRunStatus,
-  /** `FOLDER_NOT_FOUND`・`WRITE_FAILED`・`VERIFY_FAILED`・`SNAPSHOT_FAILED`・`LOCKED` など */
+  /**
+   * `FOLDER_NOT_FOUND`・`WRITE_FAILED`・`VERIFY_FAILED`・`SNAPSHOT_FAILED`・`LOCKED`・
+   * `RECEIPTS_SYNC_FAILED`（証憑のファイルを置き場所に写せなかった。010）など
+   */
   errorCode: z.string().nullable(),
   fileName: z.string().nullable(),
   sizeBytes: Count.nullable(),
