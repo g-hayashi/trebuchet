@@ -14,12 +14,7 @@ export const SNAPSHOT_DIR_PREFIX = "backup-snapshot-";
  * バックアップに含めない registry の表（すべて端末に結びつく。R9・FR-028）。
  * 認証の表は auth.sqlite（008 の D2）にあり、バックアップに含めない
  */
-const EXCLUDED_REGISTRY_TABLES = [
-  "app_settings",
-  "backup_runs",
-  "pairing_tokens",
-  "ai_settings",
-] as const;
+const EXCLUDED_REGISTRY_TABLES = ["app_settings", "backup_runs", "ai_settings"] as const;
 
 const MIGRATION_JOURNALS = {
   registry: fileURLToPath(new URL("../../drizzle/registry/meta/_journal.json", import.meta.url)),

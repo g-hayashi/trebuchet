@@ -2,7 +2,7 @@ import { LOCAL_RP_ID } from "@trebuchet/domain";
 
 /**
  * 許す Host・オリジン・RP ID の決定（research R2・R6）。ほかのコードはここを通す。
- * 純粋な関数だけ。リモートの設定（app_settings の remote_enabled・remote_host）は引数で受ける
+ * 純粋な関数だけ。リモートの設定（auth.sqlite の remote_settings。`AuthStore.getRemoteSettings`）は引数で受ける
  */
 
 /** リモート（Tailscale）の設定。既定は無効。読み込みは T016 が足す */

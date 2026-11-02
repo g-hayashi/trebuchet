@@ -72,7 +72,7 @@ function tenantRoutes(
 }
 
 export type AppOptions = {
-  /** リモート（ts.net）の設定の読み込み。既定は無効。T016 が app_settings からの読み込みを渡す */
+  /** リモート（ts.net）の設定の読み込み。既定は無効。T016b が `AuthStore.getRemoteSettings`（auth.sqlite）を渡す */
   getRemoteSettings?: GetRemoteSettings;
   store?: () => AuthStore;
   clock?: Clock;

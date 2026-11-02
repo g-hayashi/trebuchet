@@ -188,6 +188,13 @@ describe("FakeAuthStore", () => {
     expect(await s.deleteExpiredPairingTokens(T(11))).toBe(1);
   });
 
+  it("リモートの設定: 既定は無効、往復", async () => {
+    const s = new FakeAuthStore();
+    expect(await s.getRemoteSettings()).toEqual({ enabled: false, host: null });
+    await s.setRemoteSettings({ enabled: true, host: "x.ts.net" }, T(0));
+    expect(await s.getRemoteSettings()).toEqual({ enabled: true, host: "x.ts.net" });
+  });
+
   it("設定: 未設定は undefined、往復、mac_id は 2 回目で同じ値", async () => {
     const s = new FakeAuthStore();
     expect(await s.getSetting("backup_folder")).toBeUndefined();

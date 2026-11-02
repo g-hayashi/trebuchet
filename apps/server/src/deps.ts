@@ -69,7 +69,8 @@ export const registryRepository = () => new DrizzleRegistryRepository(openRegist
 
 /**
  * 認証の情報（auth.sqlite。暗号化しないので施錠中も使える。008 の D2）。要求のたびに今のデータの置き場所を開く。
- * 設定（app_settings）とペアリングだけは registry から読むので、施錠中は VaultLockedError
+ * リモートの設定とペアリングのトークンも auth.sqlite なので施錠中も使える（004/T016）。
+ * app_settings だけは registry から読むので、施錠中は VaultLockedError
  */
 export const authStore = (): AuthStore => new DrizzleAuthStore(openAuth(), openRegistry);
 

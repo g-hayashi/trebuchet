@@ -1,3 +1,4 @@
+import type { RemoteSettings } from "@trebuchet/schema";
 import { isSessionActive } from "../../src/auth/session.ts";
 import type {
   AppSettingKey,
@@ -253,6 +254,18 @@ export class FakeAuthStore implements AuthStore {
     const n = this.pairingTokens.length - keep.length;
     this.pairingTokens = keep;
     return n;
+  }
+
+  remote: RemoteSettings = { enabled: false, host: null };
+  async getRemoteSettings(): Promise<RemoteSettings> {
+    return { ...this.remote };
+  }
+  async setRemoteSettings(settings: RemoteSettings, _now: string): Promise<void> {
+    if (settings.host !== null && !/^(?:[^.]+\.)+ts\.net$/i.test(settings.host)) {
+      throw new Error("remote host must be *.ts.net");
+    }
+    if (settings.enabled && settings.host === null) throw new Error("remote host required");
+    this.remote = { ...settings };
   }
 
   async getSetting(key: AppSettingKey): Promise<string | undefined> {

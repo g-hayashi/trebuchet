@@ -17,19 +17,12 @@ export const entities = sqliteTable(
   (t) => [check("entities_kind", sql`${t.kind} IN ('individual', 'corporation')`)],
 );
 
-/** 端末に結びつく設定（バックアップに含めない）。data-model §1.5 */
+/** 端末に結びつく設定（バックアップに含めない）。data-model §1.5。リモートの設定は 004/T016 で auth.sqlite（`remote_settings`）へ移した */
 export const appSettings = sqliteTable(
   "app_settings",
   {
     key: text("key", {
-      enum: [
-        "mac_id",
-        "remote_enabled",
-        "remote_host",
-        "backup_folder",
-        "backup_force_write",
-        "recovery_code_acknowledged",
-      ],
+      enum: ["mac_id", "backup_folder", "backup_force_write", "recovery_code_acknowledged"],
     }).primaryKey(),
     value: text("value").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -37,7 +30,7 @@ export const appSettings = sqliteTable(
   (t) => [
     check(
       "app_settings_key",
-      sql`${t.key} IN ('mac_id', 'remote_enabled', 'remote_host', 'backup_folder', 'backup_force_write', 'recovery_code_acknowledged')`,
+      sql`${t.key} IN ('mac_id', 'backup_folder', 'backup_force_write', 'recovery_code_acknowledged')`,
     ),
   ],
 );
@@ -62,16 +55,6 @@ export const backupRuns = sqliteTable(
     check("backup_runs_status", sql`${t.status} IN ('succeeded', 'skipped', 'failed')`),
   ],
 );
-
-/** ペアリングのトークン（ハッシュのみ、単回・期限つき）。data-model §1.7 */
-export const pairingTokens = sqliteTable("pairing_tokens", {
-  id: text("id").primaryKey(),
-  tokenHash: text("token_hash").notNull().unique(),
-  rpId: text("rp_id").notNull(),
-  createdAt: text("created_at").notNull(),
-  expiresAt: text("expires_at").notNull(),
-  usedAt: text("used_at"),
-});
 
 /**
  * AI の接続の設定（1 行。端末に結びつくのでバックアップに含めない）。006 の data-model §2.1・R12。

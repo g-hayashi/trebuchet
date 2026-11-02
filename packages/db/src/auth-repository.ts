@@ -13,10 +13,18 @@ import {
   type Session,
   type WrappedKey,
 } from "@trebuchet/domain";
+import type { RemoteSettings } from "@trebuchet/schema";
 import { and, count, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { rowidOf } from "./internal.ts";
-import { authEvents, keyWraps, passkeys, sessions } from "./schema/auth.ts";
-import { appSettings, pairingTokens } from "./schema/registry.ts";
+import {
+  authEvents,
+  keyWraps,
+  pairingTokens,
+  passkeys,
+  remoteSettings,
+  sessions,
+} from "./schema/auth.ts";
+import { appSettings } from "./schema/registry.ts";
 import type { AuthDb, RegistryDb } from "./tenant-store.ts";
 
 type PasskeyRow = typeof passkeys.$inferSelect;
@@ -132,8 +140,8 @@ const newestFirst = [desc(authEvents.occurredAt), desc(rowidOf(authEvents))] as 
 
 /**
  * AuthStore の Drizzle（better-sqlite3-multiple-ciphers）による実装。パスキー・包み・セッション・記録は
- * auth.sqlite（施錠中も使える）、ペアリングのトークンと app_settings は registry（`registry()` を呼ぶたびに
- * 開くので、施錠中は VaultLockedError）。ドライバーは同期なので、各メソッドは同期に実行して Promise で返す
+ * auth.sqlite（リモートの設定・ペアリングのトークンを含む。施錠中も使える）、app_settings は registry
+ * （`registry()` を呼ぶたびに開くので、施錠中は VaultLockedError）。ドライバーは同期なので、各メソッドは同期に実行して Promise で返す
  */
 export class DrizzleAuthStore implements AuthStore {
   private readonly db: AuthDb;
@@ -339,7 +347,7 @@ export class DrizzleAuthStore implements AuthStore {
       .map(toEvent);
   }
 
-  // ペアリングのトークン
+  // ペアリングのトークン（auth.sqlite。施錠中も使える）
 
   async createPairingToken(t: {
     id: string;
@@ -348,7 +356,7 @@ export class DrizzleAuthStore implements AuthStore {
     now: string;
     expiresAt: string;
   }): Promise<void> {
-    this.registry()
+    this.db
       .insert(pairingTokens)
       .values({
         id: t.id,
@@ -362,7 +370,7 @@ export class DrizzleAuthStore implements AuthStore {
   }
 
   async isPairingTokenValid(tokenHash: string, rpId: string, now: string): Promise<boolean> {
-    const row = this.registry()
+    const row = this.db
       .select({ id: pairingTokens.id })
       .from(pairingTokens)
       .where(
@@ -379,7 +387,7 @@ export class DrizzleAuthStore implements AuthStore {
 
   /** `UPDATE … WHERE used_at IS NULL AND now < expires_at` の結果で単回を保証する */
   async consumePairingToken(tokenHash: string, rpId: string, now: string): Promise<boolean> {
-    const rows = this.registry()
+    const rows = this.db
       .update(pairingTokens)
       .set({ usedAt: now })
       .where(
@@ -396,11 +404,30 @@ export class DrizzleAuthStore implements AuthStore {
   }
 
   async deleteExpiredPairingTokens(before: string): Promise<number> {
-    return this.registry()
+    return this.db
       .delete(pairingTokens)
       .where(lt(pairingTokens.expiresAt, before))
       .returning({ id: pairingTokens.id })
       .all().length;
+  }
+
+  // リモートの設定（auth.sqlite。施錠中も使える）
+
+  async getRemoteSettings(): Promise<RemoteSettings> {
+    const row = this.db.select().from(remoteSettings).where(eq(remoteSettings.id, 1)).get();
+    return row === undefined
+      ? { enabled: false, host: null }
+      : { enabled: row.enabled === 1, host: row.host };
+  }
+
+  /** CHECK（`*.ts.net`、有効なら名前が必要）を破れば失敗し、何も書かない */
+  async setRemoteSettings(settings: RemoteSettings, now: string): Promise<void> {
+    const value = { enabled: settings.enabled ? 1 : 0, host: settings.host, updatedAt: now };
+    this.db
+      .insert(remoteSettings)
+      .values({ id: 1, ...value })
+      .onConflictDoUpdate({ target: remoteSettings.id, set: value })
+      .run();
   }
 
   // アプリの設定

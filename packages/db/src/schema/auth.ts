@@ -73,6 +73,36 @@ export const sessions = sqliteTable(
   (t) => [check("sessions_kind", sql`${t.kind} IN ('normal', 'recovery')`)],
 );
 
+/**
+ * リモート（Tailscale）の設定（1 行。端末に結びつくのでバックアップに含めない）。004/T016・R4。
+ * 秘密を持たない（ホスト名だけ）ので、施錠中も Host の検査のために読める
+ */
+export const remoteSettings = sqliteTable(
+  "remote_settings",
+  {
+    id: integer("id").primaryKey(),
+    enabled: integer("enabled").notNull().default(0),
+    host: text("host"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    check("remote_settings_single", sql`${t.id} = 1`),
+    check("remote_settings_enabled", sql`${t.enabled} IN (0, 1)`),
+    check("remote_settings_host", sql`${t.host} IS NULL OR ${t.host} LIKE '%.ts.net'`),
+    check("remote_settings_enabled_host", sql`${t.enabled} = 0 OR ${t.host} IS NOT NULL`),
+  ],
+);
+
+/** ペアリングのトークン（ハッシュのみ、単回・期限つき）。004 の data-model §1.7、004/T016 で registry から移した */
+export const pairingTokens = sqliteTable("pairing_tokens", {
+  id: text("id").primaryKey(),
+  tokenHash: text("token_hash").notNull().unique(),
+  rpId: text("rp_id").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  usedAt: text("used_at"),
+});
+
 /** 認証の監査ログ。追記のみ（トリガーは手書きの SQL）。004 の data-model §1.4 */
 export const authEvents = sqliteTable(
   "auth_events",

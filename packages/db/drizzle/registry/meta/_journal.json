@@ -8,6 +8,13 @@
       "when": 1793424888077,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793605538110,
+      "tag": "0001_registry_remote_to_auth",
+      "breakpoints": true
     }
   ]
 }

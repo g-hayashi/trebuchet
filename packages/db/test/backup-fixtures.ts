@@ -121,21 +121,19 @@ export function seedAuthRows(marker: string): void {
   db.prepare(
     "INSERT INTO backup_runs (id, started_at, finished_at, trigger, status, summary) VALUES (?, ?, ?, 'manual', 'succeeded', ?)",
   ).run(`br-${marker}`, now, now, `summary-${marker}`);
-  db.prepare(
-    "INSERT INTO pairing_tokens (id, token_hash, rp_id, created_at, expires_at) VALUES (?, ?, 'localhost', ?, ?)",
-  ).run(`pt-${marker}`, `pairing-${marker}`, now, now);
+  // 004/T016: ペアリングのトークンは auth.sqlite（バックアップに含めない）
+  auth
+    .prepare(
+      "INSERT INTO pairing_tokens (id, token_hash, rp_id, created_at, expires_at) VALUES (?, ?, 'localhost', ?, ?)",
+    )
+    .run(`pt-${marker}`, `pairing-${marker}`, now, now);
   // 006: AI の接続の設定も端末に結びつく（R12）
   db.prepare(
     "INSERT INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, updated_at) VALUES (1, 1, 1, ?, ?, ?)",
   ).run(`https://ai-${marker}.example.com/v1`, `model-${marker}`, now);
 }
 
-export const EXCLUDED_REGISTRY_TABLES = [
-  "app_settings",
-  "backup_runs",
-  "pairing_tokens",
-  "ai_settings",
-] as const;
+export const EXCLUDED_REGISTRY_TABLES = ["app_settings", "backup_runs", "ai_settings"] as const;
 
 /** すべての表の内容を、行の JSON の並べ替えた配列にして返す（VACUUM は rowid を振り直すため順序に依存しない） */
 export function dumpTables(db: Database.Database, exclude: readonly string[] = []) {

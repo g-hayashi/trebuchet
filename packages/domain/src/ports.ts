@@ -3,6 +3,7 @@ import type {
   InvoiceSettings,
   JournalOrigin,
   Recurring,
+  RemoteSettings,
   StatementAccount,
   StatementBatch,
   StatementSettings,
@@ -501,7 +502,8 @@ export interface SecretStore {
 }
 
 /**
- * passkeys・key_wraps・sessions・auth_events（auth.sqlite）と pairing_tokens・app_settings（registry）。
+ * passkeys・key_wraps・sessions・auth_events・remote_settings・pairing_tokens（auth.sqlite。施錠中も使える）と
+ * app_settings（registry。施錠中は VaultLockedError）。
  * 包みの規則（INV-53）: 設定済み（recovery の包みがある）なら recovery の包みは 1 つ、passkey の包みは
  * パスキーと 1 対 1、パスキーは 1 本以上。破る操作は例外を投げ、何も書かない
  */
@@ -561,6 +563,11 @@ export interface AuthStore {
   /** 有効なら used_at を付けて true（単回） */
   consumePairingToken(tokenHash: string, rpId: string, now: string): Promise<boolean>;
   deleteExpiredPairingTokens(before: string): Promise<number>;
+  // リモート（Tailscale）の設定（auth.sqlite。秘密を持たず、施錠中も Host の検査のために読める）
+  /** 未設定は `{ enabled: false, host: null }` */
+  getRemoteSettings(): Promise<RemoteSettings>;
+  /** host は null か `*.ts.net`、enabled なら host が必要（満たさなければ失敗し、何も書かない） */
+  setRemoteSettings(settings: RemoteSettings, now: string): Promise<void>;
   // アプリの設定（app_settings の読み書きはここに寄せる）
   getSetting(key: AppSettingKey): Promise<string | undefined>;
   setSetting(key: AppSettingKey, value: string, now: string): Promise<void>;
