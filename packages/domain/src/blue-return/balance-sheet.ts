@@ -41,6 +41,11 @@ export type Page4Input = {
   lines: readonly PostedLine[];
   priorPeriod: PriorPeriod | null;
   closingNotes: readonly ClosingNote[];
+  /**
+   * その年度の償却額の決定（0 円を含む）がある開業費の勘定の ID（009 FR-015、R10）。
+   * その勘定には DEFERRED_ASSET_NOT_AMORTIZED を出さない。なければ空
+   */
+  deferredDecidedAccountIds?: readonly string[];
 };
 
 type Page4 = BlueReturn["page4"];
@@ -285,8 +290,10 @@ export function buildPage4(input: Page4Input): { page4: Page4; warnings: BlueRet
     }
   }
   const byAccount = balancesByAccount(closingBalances);
+  const decidedAccounts = new Set(input.deferredDecidedAccountIds ?? []);
   for (const a of sorted) {
     if (a.category !== "asset" || !DEFERRED_ASSET_CODES.includes(a.code)) continue;
+    if (decidedAccounts.has(a.id)) continue;
     const b = byAccount.get(a.id);
     if (b === undefined || b.closing === 0 || b.opening !== b.closing) continue;
     warnings.push({

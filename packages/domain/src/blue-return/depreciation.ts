@@ -502,7 +502,8 @@ const ACCOUNT_LABELS: Record<string, string> = {
   [DISPOSAL_LOSS_ACCOUNT_CODE]: "固定資産除却損",
 };
 
-function accountByCode(accounts: readonly Account[], code: string): Result<Account> {
+/** 科目コードで科目を引く。なければ ACCOUNT_NOT_FOUND（details.code）。開業費の案（`deferred-asset.ts`）も使う */
+export function accountByCode(accounts: readonly Account[], code: string): Result<Account> {
   const account = accounts.find((a) => a.code === code);
   if (account === undefined) {
     return err(

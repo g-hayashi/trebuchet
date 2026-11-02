@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { type BuildBlueReturnInput, buildBlueReturn } from "../../src/blue-return/build.ts";
 import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
-import type { FixedAsset, PostedLine } from "../../src/types.ts";
+import type {
+  DeferredAmortization,
+  DeferredAsset,
+  FixedAsset,
+  PostedLine,
+} from "../../src/types.ts";
 import { makeFiscalPeriod } from "../arbitraries.ts";
 import { accountIdOf, INDIVIDUAL_ACCOUNT_LIST } from "../blue-return-arbitraries.ts";
 
@@ -335,6 +340,157 @@ describe("buildBlueReturn の定額法（009 FR-018〜020、R10・R11）", () =>
       bookOpening: 400_000,
       registerOpening: 437_500,
       difference: -37_500,
+    });
+  });
+});
+
+describe("buildBlueReturn の開業費（009 US3、FR-015、FR-019、R11）", () => {
+  const DEFERRED = accountIdOf("1080");
+
+  /** 開業費（2025-04-01 開業、総額 300,000 円、累計なし、1080 開業費） */
+  const deferred = (over: Partial<DeferredAsset> = {}): DeferredAsset => ({
+    id: "deferred-1",
+    name: "開業費",
+    totalAmount: 300_000,
+    openedOn: "2025-04-01",
+    priorAccumulated: 0,
+    priorThroughYear: null,
+    accountId: DEFERRED,
+    note: "開業準備",
+    createdAt: AT,
+    updatedAt: AT,
+    ...over,
+  });
+  const decided = (fiscalYear: number, amount: number): DeferredAmortization => ({
+    deferredAssetId: "deferred-1",
+    fiscalYear,
+    amount,
+    decidedAt: AT,
+    updatedAt: AT,
+  });
+  const refOf = (fiscalYear: number, active: boolean) => ({
+    journalId: `jr-${fiscalYear}`,
+    kind: "deferred_amortization" as const,
+    allocationId: null,
+    assetId: null,
+    deferredAssetId: "deferred-1",
+    fiscalYear,
+    active,
+  });
+  const line18 = (r: ReturnType<typeof build>) => r.page1.lines.find((l) => l.no === 18)?.amount;
+  const missing = (r: ReturnType<typeof build>) =>
+    r.warnings.filter((w) => w.code === "DEPRECIATION_PARAMETER_MISSING");
+  const registerMismatch = (r: ReturnType<typeof build>) =>
+    r.warnings.filter((w) => w.code === "ASSET_REGISTER_MISMATCH");
+
+  it("決定の額で開業費の行を 3 ページに載せ（source は deferred_asset、method は deferred）、欄18 と一致する", () => {
+    const r = build({
+      deferredAssets: [deferred()],
+      deferredAmortizations: [decided(2025, 45_000)],
+      lines: entry(DEPRECIATION, DEFERRED, 45_000),
+    });
+    expect(r.page3.depreciation).toEqual([
+      {
+        assetId: "deferred-1",
+        name: "開業費",
+        quantity: null,
+        acquiredOn: "2025-04-01",
+        cost: 300_000,
+        source: "deferred_asset",
+        method: "deferred",
+        usefulLifeYears: null,
+        ratePermille: null,
+        months: null,
+        disposedOn: null,
+        base: 300_000,
+        ordinary: 45_000,
+        total: 45_000,
+        businessRatio: 10000,
+        deductible: 45_000,
+        closingBookValue: 255_000,
+        note: "開業準備",
+      },
+    ]);
+    expect(line18(r)).toBe(45_000);
+    expect(mismatch(r)).toEqual([]);
+  });
+
+  it("資産の行の後に開業費の行を並べ、必要経費算入額の合計が欄18 と一致する", () => {
+    const r = build({
+      fixedAssets: [asset()],
+      deferredAssets: [deferred()],
+      deferredAmortizations: [decided(2025, 45_000)],
+      lines: [...entry(DEPRECIATION, EQUIPMENT, 200_000), ...entry(DEPRECIATION, DEFERRED, 45_000)],
+    });
+    expect(r.page3.depreciation.map((d) => d.assetId)).toEqual(["asset-1", "deferred-1"]);
+    expect(line18(r)).toBe(245_000);
+    expect(mismatch(r)).toEqual([]);
+  });
+
+  it("仕訳を登録していなければ、行は載り、欄18 との不一致の警告が出る", () => {
+    const r = build({
+      deferredAssets: [deferred()],
+      deferredAmortizations: [decided(2025, 45_000)],
+    });
+    expect(r.page3.depreciation).toHaveLength(1);
+    expect(mismatch(r).map((w) => w.details)).toEqual([
+      { depreciationTotal: 45_000, line18: 0, difference: 45_000 },
+    ]);
+  });
+
+  it("決定がない・0 円・別の年度の決定の開業費は載せない", () => {
+    for (const decisions of [[], [decided(2025, 0)], [decided(2026, 10_000)]]) {
+      const r = build({ deferredAssets: [deferred()], deferredAmortizations: decisions });
+      expect(r.page3.depreciation).toEqual([]);
+      expect(mismatch(r)).toEqual([]);
+    }
+  });
+
+  it("前の年度の有効な償却の仕訳を引いた残高で計算する（取り消した仕訳は引かない）", () => {
+    const input = (active: boolean) => ({
+      period: makeFiscalPeriod(2026),
+      deferredAssets: [deferred()],
+      deferredAmortizations: [decided(2025, 45_000), decided(2026, 20_000)],
+      adjustmentRefsAll: [refOf(2025, active)],
+    });
+    expect(build(input(true)).page3.depreciation[0]?.closingBookValue).toBe(235_000);
+    expect(build(input(false)).page3.depreciation[0]?.closingBookValue).toBe(280_000);
+  });
+
+  it("均等償却の月数の税制の値がなければ、行に載せず DEPRECIATION_PARAMETER_MISSING（source は deferred_asset）", () => {
+    const r = build({
+      taxParameters: TAX_PARAMETERS.filter((p) => p.key !== "OPENING_COST_AMORTIZATION_MONTHS"),
+      deferredAssets: [deferred()],
+      deferredAmortizations: [decided(2025, 45_000)],
+    });
+    expect(r.page3.depreciation).toEqual([]);
+    expect(missing(r).map((w) => w.details)).toEqual([
+      {
+        source: "deferred_asset",
+        sourceId: "deferred-1",
+        key: "OPENING_COST_AMORTIZATION_MONTHS",
+        date: "2025-04-01",
+      },
+    ]);
+  });
+
+  it("開業費の帳簿の期首と台帳の期首が違えば ASSET_REGISTER_MISMATCH", () => {
+    // 2026 年: 台帳の期首 = 総額 300,000 − 2025 年の有効な償却 45,000 = 255,000
+    const input = (amount: number) => ({
+      period: makeFiscalPeriod(2026),
+      deferredAssets: [deferred()],
+      deferredAmortizations: [decided(2025, 45_000)],
+      adjustmentRefsAll: [refOf(2025, true)],
+      opening: [{ accountId: DEFERRED, subAccountId: null, side: "debit" as const, amount }],
+    });
+    expect(registerMismatch(build(input(255_000)))).toEqual([]);
+    const [w, ...rest] = registerMismatch(build(input(250_000)));
+    expect(rest).toEqual([]);
+    expect(w?.details).toMatchObject({
+      accountId: DEFERRED,
+      bookOpening: 250_000,
+      registerOpening: 255_000,
+      difference: -5_000,
     });
   });
 });

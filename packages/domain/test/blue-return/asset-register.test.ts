@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { checkAssetRegister } from "../../src/blue-return/asset-register.ts";
 import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
-import type { FixedAsset } from "../../src/types.ts";
+import type { DeferredAmortization, DeferredAsset, FixedAsset } from "../../src/types.ts";
 import { accountIdOf, INDIVIDUAL_ACCOUNT_LIST } from "../blue-return-arbitraries.ts";
 
 const AT = "2026-01-10T00:00:00.000Z";
@@ -211,5 +211,117 @@ describe("checkAssetRegister（FR-020、R10、INV-59）", () => {
     const w = check([asset()], [debit("1060", OPENING_2026 + 2_500)]);
     expect(w[0]?.message).toContain("工具器具備品");
     expect(w[0]?.message).toContain("2,500");
+  });
+});
+
+/** 開業費（既定: 2025-04-01 開業、総額 300,000 円、累計なし、1080 開業費） */
+const deferred = (over: Partial<DeferredAsset> = {}): DeferredAsset => ({
+  id: "deferred-1",
+  name: "開業費",
+  totalAmount: 300_000,
+  openedOn: "2025-04-01",
+  priorAccumulated: 0,
+  priorThroughYear: null,
+  accountId: accountIdOf("1080"),
+  note: null,
+  createdAt: AT,
+  updatedAt: AT,
+  ...over,
+});
+
+const decided = (fiscalYear: number, amount: number): DeferredAmortization => ({
+  deferredAssetId: "deferred-1",
+  fiscalYear,
+  amount,
+  decidedAt: AT,
+  updatedAt: AT,
+});
+
+/** 開業費を渡して照合する（2025 年に 45,000 円を決め、有効な仕訳があれば 2026 年の期首は 255,000 円） */
+const checkDeferred = (
+  deferredAssets: readonly DeferredAsset[],
+  opening: OpeningRow[],
+  over: Partial<Parameters<typeof checkAssetRegister>[0]> = {},
+) =>
+  check([], opening, {
+    deferredAssets,
+    deferredDecisions: [decided(2025, 45_000)],
+    deferredActiveRefs: new Map([["deferred-1", new Set([2025])]]),
+    ...over,
+  });
+
+describe("checkAssetRegister の開業費（FR-020、R10、INV-59）", () => {
+  it("帳簿の期首と、開業費の期首の未償却残高（総額 − 累計 − 前の年度の有効な償却）が一致すれば警告なし", () => {
+    expect(checkDeferred([deferred()], [debit("1080", 255_000)])).toEqual([]);
+  });
+
+  it("差があれば開業費の勘定で ASSET_REGISTER_MISMATCH（差 = 帳簿 − 台帳）", () => {
+    const w = checkDeferred([deferred()], [debit("1080", 250_000)]);
+    expect(w).toHaveLength(1);
+    expect(w[0]?.code).toBe("ASSET_REGISTER_MISMATCH");
+    expect(w[0]?.details).toEqual({
+      accountId: accountIdOf("1080"),
+      accountName: "開業費",
+      bookOpening: 250_000,
+      registerOpening: 255_000,
+      difference: -5_000,
+    });
+  });
+
+  it("有効な仕訳のない決定は台帳の期首を減らさない（取り消した仕訳・未登録）", () => {
+    expect(
+      checkDeferred([deferred()], [debit("1080", 300_000)], { deferredActiveRefs: new Map() }),
+    ).toEqual([]);
+  });
+
+  it("累計を入れた開業費は、累計の翌年から積み上げた期首で比べる", () => {
+    const asset = deferred({ priorAccumulated: 45_000, priorThroughYear: 2025 });
+    expect(checkDeferred([asset], [debit("1080", 255_000)], { deferredDecisions: [] })).toEqual([]);
+  });
+
+  it("その年度に開業した開業費は期首に含めない。その年度より後の開業は対象にしない", () => {
+    const openedThisYear = deferred({ openedOn: "2026-02-01" });
+    expect(checkDeferred([openedThisYear], [], { deferredDecisions: [] })).toEqual([]);
+    const w = checkDeferred([openedThisYear], [debit("1080", 5_000)], { deferredDecisions: [] });
+    expect(w[0]?.details).toMatchObject({ registerOpening: 0, difference: 5_000 });
+    const later = deferred({ openedOn: "2027-02-01" });
+    expect(checkDeferred([later], [debit("1080", 5_000)], { deferredDecisions: [] })).toEqual([]);
+  });
+
+  it("累計の年が年度以後の開業費がある勘定は照合しない", () => {
+    const asset = deferred({ priorAccumulated: 45_000, priorThroughYear: 2026 });
+    expect(checkDeferred([asset], [debit("1080", 1)], { deferredDecisions: [] })).toEqual([]);
+  });
+
+  it("開業費を登録していない勘定（1080 の残高だけ）は対象にしない", () => {
+    expect(check([], [debit("1080", 100_000)])).toEqual([]);
+    expect(check([asset()], [debit("1060", OPENING_2026), debit("1080", 100_000)])).toEqual([]);
+  });
+
+  it("定額法の資産と同じ勘定の開業費は、台帳の期首を合計して比べる", () => {
+    const onEquipment = deferred({ accountId: accountIdOf("1060") });
+    expect(
+      check([asset()], [debit("1060", OPENING_2026 + 255_000)], {
+        deferredAssets: [onEquipment],
+        deferredDecisions: [decided(2025, 45_000)],
+        deferredActiveRefs: new Map([["deferred-1", new Set([2025])]]),
+      }),
+    ).toEqual([]);
+  });
+
+  it("勘定は科目コード順に、定額法の勘定と開業費の勘定をまとめて並べる", () => {
+    const w = check([asset()], [], {
+      deferredAssets: [deferred()],
+      deferredDecisions: [],
+    });
+    expect(w.map((x) => x.details?.accountId)).toEqual([accountIdOf("1060"), accountIdOf("1080")]);
+  });
+
+  it("均等償却の月数の税制の値がなく計算できない開業費がある勘定は照合しない", () => {
+    expect(
+      checkDeferred([deferred()], [debit("1080", 1)], {
+        params: { ...params, taxParameters: [] },
+      }),
+    ).toEqual([]);
   });
 });

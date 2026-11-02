@@ -7,6 +7,8 @@ import type {
   AdjustmentRef,
   ClosingNote,
   DeductionAnswers,
+  DeferredAmortization,
+  DeferredAsset,
   FiscalPeriod,
   FixedAsset,
   HomeUseAllocation,
@@ -18,6 +20,13 @@ import type {
 import { checkAssetRegister } from "./asset-register.ts";
 import { buildPage4, type PriorPeriod } from "./balance-sheet.ts";
 import { blueDeduction, blueDeductionCap } from "./deduction.ts";
+import {
+  type AdjustmentRefStatus,
+  activeDeferredYears,
+  deferredAmortizationYear,
+  deferredRows,
+  deferredStartYear,
+} from "./deferred-asset.ts";
 import { type DepreciationParams, depreciate, isDepreciationRow } from "./depreciation.ts";
 import { type BlueReturnForm, formForYear } from "./form.ts";
 import { proposeHomeUseAdjustment } from "./home-use.ts";
@@ -51,6 +60,15 @@ export type BuildBlueReturnInput = {
   fixedAssets?: readonly FixedAsset[];
   /** 定額法の償却率の表（009）。償却率がない定額法の資産は行に載せず、DEPRECIATION_PARAMETER_MISSING で警告する */
   straightLineRates: readonly StraightLineRate[];
+  /** 開業費（009 R5）。なければ空 */
+  deferredAssets?: readonly DeferredAsset[];
+  /** 開業費の全年度の償却額の決定（期首の上限は前の年度の決定から求める）。なければ空 */
+  deferredAmortizations?: readonly DeferredAmortization[];
+  /**
+   * 全年度の決算整理の出所の参照と、その仕訳が有効（取り消されていない）か。開業費の有効な償却額
+   * （前の年度の決定のうち有効な仕訳のあるもの）に使う。なければ空
+   */
+  adjustmentRefsAll?: readonly AdjustmentRefStatus[];
   /** 年度の期首残高（001）。なければ空 */
   opening?: readonly OpeningInput[];
   /** 前の年度（期首残高か仕訳があるときだけ）。なければ null で、繰越の検査をしない */
@@ -154,7 +172,6 @@ function depreciationRows(
           quantity: a.quantity,
           acquiredOn: a.acquiredOn,
           cost: d.cost,
-          // 開業費の行は T019 で足す
           source: "fixed_asset",
           method: a.method,
           usefulLifeYears: a.usefulLifeYears,
@@ -199,6 +216,40 @@ function parameterMissingWarnings(
       code: "DEPRECIATION_PARAMETER_MISSING",
       message: `${a.name}の減価償却費を計算できません（${d.error.message}）`,
       details: { source: "fixed_asset", sourceId: a.id, key, date },
+    });
+  }
+  return out;
+}
+
+/**
+ * 開業費の均等償却の月数がなく計算できない開業費の警告（009 data-model §2.1、R13）。開業費ごとに 1 件。
+ * 対象は開業日が年度末日以前で、台帳の計算の開始年度以後のもの。行には載せない（`deferredRows`）
+ */
+function deferredParameterMissingWarnings(
+  assets: readonly DeferredAsset[],
+  fiscalYear: number,
+  taxParameters: DepreciationParams["taxParameters"],
+): BlueReturnWarning[] {
+  const out: BlueReturnWarning[] = [];
+  for (const a of [...assets].sort(
+    (x, y) => x.openedOn.localeCompare(y.openedOn) || x.id.localeCompare(y.id),
+  )) {
+    if (a.openedOn > `${fiscalYear}-12-31` || fiscalYear < deferredStartYear(a)) continue;
+    const v = deferredAmortizationYear(a, fiscalYear, {
+      decisions: [],
+      activeRefs: new Set(),
+      taxParameters,
+    });
+    if (v.ok || v.error.code !== "TAX_PARAMETER_MISSING") continue;
+    out.push({
+      code: "DEPRECIATION_PARAMETER_MISSING",
+      message: `${a.name}の償却額を計算できません（${v.error.message}）`,
+      details: {
+        source: "deferred_asset",
+        sourceId: a.id,
+        key: v.error.details?.key,
+        date: v.error.details?.date,
+      },
     });
   }
   return out;
@@ -340,7 +391,17 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
     rates: input.straightLineRates,
     taxParameters: input.taxParameters,
   };
-  const depreciation = depreciationRows(fixedAssets, period.fiscalYear, depreciationParams);
+  const deferredAssets = input.deferredAssets ?? [];
+  const deferredDecisions = input.deferredAmortizations ?? [];
+  const deferredActiveRefs = activeDeferredYears(input.adjustmentRefsAll ?? []);
+  const depreciation = [
+    ...depreciationRows(fixedAssets, period.fiscalYear, depreciationParams),
+    ...deferredRows(deferredAssets, period.fiscalYear, {
+      decisions: deferredDecisions,
+      activeRefs: deferredActiveRefs,
+      taxParameters: input.taxParameters,
+    }),
+  ];
   const monthly = summarizeMonthlySales(input.lines, input.accounts, period);
   const partners = summarizeSalesPartners(
     input.lines,
@@ -354,14 +415,27 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
     ...rentDetailsWarnings(rentDetails, amounts.get(RENT_LINE_NO) ?? 0),
     ...depreciationWarnings(depreciation, amounts.get(DEPRECIATION_LINE_NO) ?? 0),
     ...parameterMissingWarnings(fixedAssets, period.fiscalYear, depreciationParams),
+    ...deferredParameterMissingWarnings(deferredAssets, period.fiscalYear, input.taxParameters),
     ...checkAssetRegister({
       fiscalYear: period.fiscalYear,
       accounts: input.accounts,
       opening: input.opening ?? [],
       fixedAssets,
+      deferredAssets,
+      deferredDecisions,
+      deferredActiveRefs,
       params: depreciationParams,
     }),
   );
+  // その年度の決定（0 円を含む）がある開業費の勘定には、償却していない知らせを出さない（FR-015）
+  const decidedAssetIds = new Set(
+    deferredDecisions
+      .filter((d) => d.fiscalYear === period.fiscalYear)
+      .map((d) => d.deferredAssetId),
+  );
+  const deferredDecidedAccountIds = deferredAssets
+    .filter((a) => decidedAssetIds.has(a.id))
+    .map((a) => a.accountId);
   const { page4, warnings: page4Warnings } = buildPage4({
     form,
     period,
@@ -370,6 +444,7 @@ export function buildBlueReturn(input: BuildBlueReturnInput): BlueReturn {
     lines: input.lines,
     priorPeriod: input.priorPeriod ?? null,
     closingNotes: input.closingNotes ?? [],
+    deferredDecidedAccountIds,
   });
   warnings.push(...page4Warnings);
   if (cap === undefined) {
