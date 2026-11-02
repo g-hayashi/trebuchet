@@ -82,7 +82,7 @@ description: "Task list for 010-receipts"
 
 **Independent Test**: spec US2 のシナリオ 1〜4（シナリオ 3 の後からの入力は T017b）。画面のコンポーネントテストと、T015 の経路のテスト。実機は T044
 
-- [ ] T018 [US2] テスト先行で `apps/web/src/features/receipts/CaptureForm.tsx` と `routes/e/$entityId/receipts/capture.tsx` を作る（R16、FR-006）: `<input type="file" accept="image/*" capture="environment">` と選択（`capture` なし、`accept` は JPEG・PNG・HEIC・PDF）、区分（表示名は `labels.ts`。「紙を撮影（原本は保存）」には注記「紙の原本は捨てずに保存する」と、警告文への同じ添え書き。E1）、任意の日付・金額・取引先、成功は 201 を受けてから表示、通信の切断・`LOCKED`・5xx は失敗とはっきり示す（保存されたと誤解させない）。`routes/index.tsx` の各事業体に「証憑を撮る」の入口（Service Worker は足さない。manifest の確認は T044）。テスト `apps/web/test/routes/receipts-capture.test.tsx`（注記と警告文を含む）。build で `routeTree.gen.ts` を再生成する
+- [X] T018 [US2] テスト先行で `apps/web/src/features/receipts/CaptureForm.tsx` と `routes/e/$entityId/receipts/capture.tsx` を作る（R16、FR-006）: `<input type="file" accept="image/*" capture="environment">` と選択（`capture` なし、`accept` は JPEG・PNG・HEIC・PDF）、区分（表示名は `labels.ts`。「紙を撮影（原本は保存）」には注記「紙の原本は捨てずに保存する」と、警告文への同じ添え書き。E1）、任意の日付・金額・取引先、成功は 201 を受けてから表示、通信の切断・`LOCKED`・5xx は失敗とはっきり示す（保存されたと誤解させない）。`routes/index.tsx` の各事業体に「証憑を撮る」の入口（Service Worker は足さない。manifest の確認は T044）。テスト `apps/web/test/routes/receipts-capture.test.tsx`（注記と警告文を含む）。build で `routeTree.gen.ts` を再生成する
 
 ---
 

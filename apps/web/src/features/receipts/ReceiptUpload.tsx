@@ -13,10 +13,9 @@ import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FilePicker } from "@/features/imports/FilePicker";
-import { ApiError } from "@/lib/api";
 import { parseWholeYen } from "@/lib/format";
 import { postReceipt, receiptKeys } from "./api";
-import { CATEGORY_LABELS, CATEGORY_OPTIONS, KEEP_ORIGINAL_NOTE, warningText } from "./labels";
+import { CategoryFieldset, duplicateOf, SavedNotice } from "./ReceiptFormParts";
 
 const MAX_MB = RECEIPT_MAX_BYTES / (1024 * 1024);
 
@@ -25,13 +24,6 @@ type Errors = {
   category?: string | undefined;
   amount?: string | undefined;
 };
-
-/** 重複の応答（409）が指す既存の証憑の ID。削除済みかどうかも返る */
-function duplicateOf(error: unknown): string | undefined {
-  if (!(error instanceof ApiError) || error.code !== "RECEIPT_DUPLICATE") return undefined;
-  const id = error.details?.receiptId;
-  return typeof id === "string" ? id : undefined;
-}
 
 /**
  * 証憑の追加（FR-001〜005）。画像・PDF を選び、区分（必須）と、分かる値（任意）を入れて保存する。
@@ -112,30 +104,15 @@ export function ReceiptUpload({ entityId }: { entityId: string }) {
             <FieldError id={`${id}-file-error`} message={errors.file} />
           </div>
 
-          <fieldset className="grid gap-2" aria-describedby={`${id}-category-error`}>
-            <legend className="mb-1 text-sm font-medium">区分</legend>
-            <div className="flex flex-wrap items-center gap-4">
-              {CATEGORY_OPTIONS.map((value) => (
-                <label key={value} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name={`${id}-category`}
-                    value={value}
-                    checked={category === value}
-                    onChange={() => {
-                      setCategory(value);
-                      setErrors((prev) => ({ ...prev, category: undefined }));
-                    }}
-                  />
-                  {CATEGORY_LABELS[value]}
-                </label>
-              ))}
-            </div>
-            {category === "paper_scan" && (
-              <p className="text-sm text-muted-foreground">{KEEP_ORIGINAL_NOTE}。</p>
-            )}
-            <FieldError id={`${id}-category-error`} message={errors.category} />
-          </fieldset>
+          <CategoryFieldset
+            id={id}
+            value={category}
+            error={errors.category}
+            onChange={(value) => {
+              setCategory(value);
+              setErrors((prev) => ({ ...prev, category: undefined }));
+            }}
+          />
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="grid content-start gap-1">
@@ -204,25 +181,7 @@ export function ReceiptUpload({ entityId }: { entityId: string }) {
           </div>
         </form>
 
-        {saved && (
-          <div role="status" className="mt-4 grid gap-2 rounded-md border px-3 py-2 text-sm">
-            <p className="font-medium">保存しました。</p>
-            {saved.warnings.length > 0 && (
-              <ul className="list-disc pl-5">
-                {saved.warnings.map((w) => (
-                  <li key={w.code}>{warningText(w)}</li>
-                ))}
-              </ul>
-            )}
-            <Link
-              to="/e/$entityId/receipts/$receiptId"
-              params={{ entityId, receiptId: saved.id }}
-              className="underline"
-            >
-              証憑を開く
-            </Link>
-          </div>
-        )}
+        {saved && <SavedNotice entityId={entityId} receipt={saved} />}
       </CardContent>
     </Card>
   );
