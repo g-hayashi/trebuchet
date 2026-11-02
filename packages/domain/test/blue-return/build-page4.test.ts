@@ -4,8 +4,15 @@ import { buildBlueReturn } from "../../src/blue-return/build.ts";
 import { formForYear } from "../../src/blue-return/form.ts";
 import type { CarryForwardBalance } from "../../src/carry-forward.ts";
 import type { OpeningInput } from "../../src/reports/common.ts";
+import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
-import type { Account, ClosingNote, PostedLine } from "../../src/types.ts";
+import type {
+  Account,
+  ClosingNote,
+  DeferredAmortization,
+  DeferredAsset,
+  PostedLine,
+} from "../../src/types.ts";
 import { makeAccount, makeFiscalPeriod } from "../arbitraries.ts";
 import { accountIdOf, INDIVIDUAL_ACCOUNT_LIST } from "../blue-return-arbitraries.ts";
 
@@ -58,6 +65,8 @@ const build = (
     accounts?: readonly Account[];
     priorPeriod?: PriorPeriod | null;
     closingNotes?: ClosingNote[];
+    deferredAssets?: DeferredAsset[];
+    deferredAmortizations?: DeferredAmortization[];
   } = {},
 ) =>
   buildBlueReturn({
@@ -66,9 +75,12 @@ const build = (
     lines: over.lines ?? [],
     deductionAnswers: null,
     taxParameters: TAX_PARAMETERS,
+    straightLineRates: STRAIGHT_LINE_RATES,
     opening: over.opening ?? [],
     priorPeriod: over.priorPeriod ?? null,
     closingNotes: over.closingNotes ?? [],
+    deferredAssets: over.deferredAssets ?? [],
+    deferredAmortizations: over.deferredAmortizations ?? [],
   });
 
 type Built = ReturnType<typeof build>;
@@ -277,6 +289,80 @@ describe("buildBlueReturn の4ページ（T027, US4, FR-028〜032, R8）", () =>
     });
     expect(codes(amortized)).not.toContain("DEFERRED_ASSET_NOT_AMORTIZED");
     expect(amountAt(amortized, "closing", "assets", "開業費")).toBe(80_000);
+  });
+
+  describe("開業費の登録と決定があるとき（009 FR-015）", () => {
+    const deferred = (over: Partial<DeferredAsset> = {}): DeferredAsset => ({
+      id: "deferred-1",
+      name: "開業費",
+      totalAmount: 100_000,
+      openedOn: "2025-04-01",
+      priorAccumulated: 0,
+      priorThroughYear: null,
+      accountId: id("1080"),
+      note: null,
+      createdAt: "2026-01-10T00:00:00.000Z",
+      updatedAt: "2026-01-10T00:00:00.000Z",
+      ...over,
+    });
+    const decided = (
+      fiscalYear: number,
+      amount: number,
+      deferredAssetId = "deferred-1",
+    ): DeferredAmortization => ({
+      deferredAssetId,
+      fiscalYear,
+      amount,
+      decidedAt: "2026-01-10T00:00:00.000Z",
+      updatedAt: "2026-01-10T00:00:00.000Z",
+    });
+    const opening = [
+      op("1010", "debit", 300_000),
+      op("1080", "debit", 100_000),
+      op("3020", "credit", 400_000),
+    ];
+    const notAmortized = (r: Built) => warningsOf(r, "DEFERRED_ASSET_NOT_AMORTIZED");
+
+    it("その年度の決定があれば、償却の仕訳がなくても知らせを出さない（0 円の決定も、償却しないと決めた記録として扱う）", () => {
+      for (const amount of [0, 20_000]) {
+        const r = build({
+          opening,
+          deferredAssets: [deferred()],
+          deferredAmortizations: [decided(2025, amount)],
+        });
+        expect(notAmortized(r)).toEqual([]);
+      }
+    });
+
+    it("開業費を登録していても、その年度の決定がなければ今のまま出る（別の年度の決定は数えない）。同じ勘定の別の開業費に決定があれば出さない", () => {
+      const withoutDecision = build({ opening, deferredAssets: [deferred()] });
+      expect(notAmortized(withoutDecision)).toHaveLength(1);
+      const otherYear = build({
+        opening,
+        deferredAssets: [deferred()],
+        deferredAmortizations: [decided(2026, 10_000)],
+      });
+      expect(notAmortized(otherYear)).toHaveLength(1);
+      const otherAsset = build({
+        opening,
+        deferredAssets: [deferred(), deferred({ id: "deferred-2" })],
+        deferredAmortizations: [decided(2025, 10_000, "deferred-2")],
+      });
+      expect(notAmortized(otherAsset)).toEqual([]);
+    });
+
+    it("決定は開業費の勘定ごとに効く。開業費を登録していない 1080 の残高には今のまま出る", () => {
+      const onOtherAccount = build({
+        opening,
+        deferredAssets: [deferred({ accountId: id("1070") })],
+        deferredAmortizations: [decided(2025, 10_000)],
+      });
+      expect(notAmortized(onOtherAccount).map((w) => w.details)).toEqual([
+        { accountId: id("1080"), accountName: "開業費", amount: 100_000 },
+      ]);
+      const unregistered = build({ opening, deferredAmortizations: [decided(2025, 10_000)] });
+      expect(notAmortized(unregistered)).toHaveLength(1);
+    });
   });
 
   it("シナリオ7: 前の年度の帳簿がなければ、繰越の検査は「前の年度なし」で警告なし", () => {

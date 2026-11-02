@@ -1,6 +1,6 @@
 import type { InvoiceDetail } from "@trebuchet/schema";
 import { formatYen } from "@/lib/format";
-import { quantityOf, recipientOf } from "./display";
+import { invoiceTaxSummary, quantityOf, recipientOf } from "./display";
 import "./print.css";
 
 /**
@@ -9,6 +9,7 @@ import "./print.css";
  */
 export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
   const { issuer } = invoice;
+  const summary = invoiceTaxSummary(invoice);
   const showBreakdown = invoice.taxDisplay === "separate" && invoice.taxBreakdown.length > 0;
   return (
     <article
@@ -47,8 +48,8 @@ export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
           <tr className="border-y">
             <th className="py-1 text-left font-medium">品名</th>
             <th className="py-1 text-right font-medium">数量</th>
-            <th className="py-1 text-right font-medium">単価</th>
-            <th className="py-1 text-right font-medium">金額</th>
+            <th className="py-1 text-right font-medium">{`単価（${summary.modeLabel}）`}</th>
+            <th className="py-1 text-right font-medium">{`金額（${summary.modeLabel}）`}</th>
           </tr>
         </thead>
         <tbody>
@@ -66,13 +67,19 @@ export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
       </table>
 
       <div className="grid justify-items-end gap-2">
+        {summary.exclusive && (
+          <div className="grid justify-items-end gap-1 tabular-nums">
+            <p>{`小計（税抜）${formatYen(summary.subtotal)} 円`}</p>
+            <p>{`${summary.taxLabel} ${formatYen(summary.tax)} 円`}</p>
+          </div>
+        )}
         {showBreakdown && (
           <table aria-label="消費税の内訳" className="border-collapse text-right tabular-nums">
             <thead>
               <tr className="border-b">
                 <th className="px-3 py-1 text-left font-medium">税率</th>
                 <th className="px-3 py-1 font-medium">税抜</th>
-                <th className="px-3 py-1 font-medium">消費税</th>
+                <th className="px-3 py-1 font-medium">{summary.taxLabel}</th>
                 <th className="px-3 py-1 font-medium">税込</th>
               </tr>
             </thead>

@@ -5,10 +5,13 @@ import type {
   ClosingStore,
   ClosingUnitOfWork,
   DeductionAnswers,
+  DeferredAmortization,
+  DeferredAsset,
   FiledDocument,
   FixedAsset,
   HomeUseAllocation,
   RentDetail,
+  StraightLineRate,
   TaxParameter,
   TaxReturnMemo,
 } from "@trebuchet/domain";
@@ -19,10 +22,13 @@ import {
   blueDeductionAnswers,
   closingAuditLog,
   closingNotes,
+  deferredAmortizations,
+  deferredAssets,
   filedDocuments,
   fixedAssets,
   homeUseAllocations,
   rentDetails,
+  straightLineRates,
   taxParameters,
   taxReturnMemos,
 } from "./schema/tenant.ts";
@@ -93,11 +99,11 @@ export class DrizzleClosingStore implements ClosingStore {
   }
 
   upsertFixedAsset(row: FixedAsset): void {
-    const { id: _id, ...set } = row;
+    const { id: _id, ...columns } = row;
     this.db
       .insert(fixedAssets)
-      .values(row)
-      .onConflictDoUpdate({ target: fixedAssets.id, set })
+      .values({ id: row.id, ...columns })
+      .onConflictDoUpdate({ target: fixedAssets.id, set: columns })
       .run();
   }
 
@@ -110,6 +116,17 @@ export class DrizzleClosingStore implements ClosingStore {
       .where(eq(adjustmentJournalRefs.fiscalYear, fiscalYear))
       .orderBy(insertionOrder)
       .all();
+  }
+
+  /** 出所ごとの参照（全年度）。登録の順 */
+  listAdjustmentRefsBySource(
+    source: { assetId: string } | { deferredAssetId: string },
+  ): AdjustmentRef[] {
+    const where =
+      "assetId" in source
+        ? eq(adjustmentJournalRefs.assetId, source.assetId)
+        : eq(adjustmentJournalRefs.deferredAssetId, source.deferredAssetId);
+    return this.db.select().from(adjustmentJournalRefs).where(where).orderBy(insertionOrder).all();
   }
 
   insertAdjustmentRef(ref: AdjustmentRef): void {
@@ -209,6 +226,54 @@ export class DrizzleClosingStore implements ClosingStore {
 
   appendClosingAudit(entry: ClosingAuditEntry): void {
     this.db.insert(closingAuditLog).values(entry).run();
+  }
+
+  // ---- 009: 定額法の償却率・開業費 ----
+
+  listStraightLineRates(): StraightLineRate[] {
+    return this.db
+      .select()
+      .from(straightLineRates)
+      .orderBy(asc(straightLineRates.usefulLifeYears), asc(straightLineRates.effectiveFrom))
+      .all();
+  }
+
+  listDeferredAssets(): DeferredAsset[] {
+    return this.db
+      .select()
+      .from(deferredAssets)
+      .orderBy(asc(deferredAssets.openedOn), asc(deferredAssets.id))
+      .all();
+  }
+
+  upsertDeferredAsset(row: DeferredAsset): void {
+    const { id: _id, ...set } = row;
+    this.db
+      .insert(deferredAssets)
+      .values(row)
+      .onConflictDoUpdate({ target: deferredAssets.id, set })
+      .run();
+  }
+
+  /** 全年度（開業費の期首の残高は前の年度の決定から求める） */
+  listDeferredAmortizations(): DeferredAmortization[] {
+    return this.db
+      .select()
+      .from(deferredAmortizations)
+      .orderBy(asc(deferredAmortizations.deferredAssetId), asc(deferredAmortizations.fiscalYear))
+      .all();
+  }
+
+  upsertDeferredAmortization(row: DeferredAmortization): void {
+    const { deferredAssetId: _assetId, fiscalYear: _fiscalYear, ...set } = row;
+    this.db
+      .insert(deferredAmortizations)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [deferredAmortizations.deferredAssetId, deferredAmortizations.fiscalYear],
+        set,
+      })
+      .run();
   }
 }
 

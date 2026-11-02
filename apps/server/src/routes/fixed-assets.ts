@@ -37,11 +37,12 @@ export function fixedAssetRoutes({ clock }: RouteOptions) {
     })
     .post("/fixed-assets/:assetId/dispose", validate("json", FixedAssetDisposeInput), (c) => {
       const id = c.req.param("assetId");
-      const { disposedOn, reason } = c.req.valid("json");
+      const { disposedOn, reason, disposalKind } = c.req.valid("json");
       const result = disposeFixedAsset(closingSettingsDeps(c.var.db, clock), {
         id,
         disposedOn,
         reason,
+        disposalKind,
       });
       return respond(c, result, (asset) => c.json({ asset }, 200));
     });

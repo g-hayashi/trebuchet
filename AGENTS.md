@@ -35,7 +35,7 @@ apps/server ──→ packages/schema
 | 型チェック（全パッケージ + scripts） | `pnpm typecheck` |
 | Lint（Biome） | `pnpm lint` |
 | 整形（Biome で書き換え） | `pnpm format` |
-| 性能計測（SC-004 の仕訳 2,000 件、003 の SC-006 の決算書。認証つき） | `pnpm bench:reports` |
+| 性能計測（SC-004 の仕訳 2,000 件、003 の SC-006 の決算書、009 の SC-005 の資産の画面。認証つき） | `pnpm bench:reports` |
 | 性能計測（freee 取込の 500 仕訳、002 の SC-002） | `pnpm bench:import` |
 | 性能計測（バックアップ、004 の SC-005） | `pnpm bench:backup`（環境変数でしきい値と件数を変えられる。使い方は `scripts/bench-backup.ts` の先頭のコメント） |
 | 性能計測（明細 500 件の CSV の読み取り・確認・候補、007 の SC-006。AI は呼ばない） | `pnpm bench:statements`（環境変数でしきい値・回数・件数を変えられる。使い方は `scripts/bench-statements.ts` の先頭のコメント） |
@@ -59,7 +59,7 @@ apps/server ──→ packages/schema
 - **月・日付（`YYYY-MM`、`YYYY-MM-DD`）の計算は `packages/domain/src/dates.ts` に集める**（`addDays`、`monthEnd`、`dateInMonth`、`addMonths`、`monthIndex`、`monthOfDate` など）。ユースケース・各機能で月の計算・`pad`・月の正規表現を書き直さない。
 - **db のリポジトリの共通部品は `packages/db/src/internal.ts`**（`TenantConn`、`insertionOrder`・`rowidOf`、`asTaxCategory`）。リポジトリごとに型や `rowid` の並びを書き直さない（外へは export しない）。
 - **server のルートは `respond(c, result, (v) => c.json(..., status))`**（`apps/server/src/errors.ts`）で結果を返す（失敗は `fail`）。パスの `:year` は `validate("param", FiscalYearParam)`（`validator.ts` が 4 桁でない年を「会計期間が見つかりません」にする）。時刻を使うルートは `routes(options: RouteOptions)` で clock を受け取り、`createApp({ clock })` が全ルートに渡す。Zod の issue は `validationError`（`errors.ts`）で `details.issues` にする。
-- **不変条件**は `specs/INVARIANTS.md`（INV-1〜50 の索引。正本は各 `data-model.md` §4）。対応するテストは fast-check の性質テストで書く。`fc.assert(fc.property(...))` を直接呼ぶ（`@fast-check/vitest` は使わない。001/R6）。
+- **不変条件**は `specs/INVARIANTS.md`（INV-1〜60 の索引。正本は各 `data-model.md` §4）。対応するテストは fast-check の性質テストで書く。`fc.assert(fc.property(...))` を直接呼ぶ（`@fast-check/vitest` は使わない。001/R6）。
 - **テストの共通部品を使う**（同じ準備を各ファイルに書かない）。db: `packages/db/src/testing.ts` の `createTestEntity`・`accountIdOf`・`useTempDataDir`・`NOW`/`TODAY`。domain: `packages/domain/test/fakes/`（ストアごとのフェイク。`fakes.ts` は再エクスポート）、`test-dates.ts`（`NOW`/`TODAY` の正本）、`ledger-setup.ts`（`setupBase`・`accountIdOf`）。server: `apps/server/test/helpers.ts`（`createTestEntity`・`accountLookup`・`errorOf`・`json`・`okBody`・`makeClock`。`backup-helpers.ts`・`invoicing-helpers.ts` はこれを拡張する）。bench: `scripts/lib/bench-common.ts`。
 - **web のテストはコンポーネントテスト**（Testing Library + jsdom。`apps/web/test/render-route.tsx`、`mock-api.ts`、置き場所は `apps/web/test/routes/`）。テストのためだけに node 専用のロジックを別ファイルに切り出さない。新しい API を呼ぶ画面を足したら `mock-api.ts` に既定の応答を足し、既存の web のテストが落ちないことを確かめる。ルートを足したら `pnpm --filter @trebuchet/web build` で `routeTree.gen.ts` を再生成してから typecheck する。
 - **web の API 呼び出しと query key は `features/<機能>/api.ts`**。画面・ルートのファイルで `api.api...` や `unwrap(...)` を直接呼ばない。`lib/queries.ts` には機能をまたぐ `invalidateLedger` だけを置く。
@@ -99,7 +99,7 @@ apps/server ──→ packages/schema
 
 ## 決算書（003）
 
-仕様: `specs/003-tax-return/`。青色申告決算書（一般用、個人の事業体だけ）。按分・少額減価償却を仕訳で登録する理由: [ADR 0005](docs/adr/0005-closing-adjustments-as-journals.md)。
+仕様: `specs/003-tax-return/`。青色申告決算書（一般用、個人の事業体だけ）。按分・減価償却を仕訳で登録する理由: [ADR 0005](docs/adr/0005-closing-adjustments-as-journals.md)。定額法・一括償却資産・開業費は下の 009 の節。
 
 | 層 | 場所 |
 |---|---|
@@ -109,7 +109,7 @@ apps/server ──→ packages/schema
 | HTTP | `apps/server/src/routes/blue-return.ts`、`fixed-assets.ts`、`tax-return.ts` |
 | 画面 | `apps/web/src/features/blue-return/`、`fixed-assets/`、`tax-return/`、`apps/web/src/routes/e/$entityId/` の `blue-return/`・`fixed-assets/`・`tax-return/` |
 
-- **按分と少額減価償却は、決算整理の「仕訳」として登録する**。ドメインが案を作り、利用者が確かめて 001 の `createJournal` で登録する。決算書は帳簿の損益計算書・貸借対照表と一致する。
+- **按分と減価償却（少額の特例のほか、009 の定額法・一括償却・開業費）は、決算整理の「仕訳」として登録する**。ドメインが案を作り、利用者が確かめて 001 の `createJournal` で登録する。決算書は帳簿の損益計算書・貸借対照表と一致する。
 - **税制の値の足し方**（基準額、控除額など。Constitution VI）: 次の**両方**に、適用の期間つきの行を足す。出典の URL は必須（国税庁・財務省などの一次資料）。
   1. `packages/domain/src/seed/tax-parameters.ts`（正本）
   2. マイグレーション。`pnpm --filter @trebuchet/db exec drizzle-kit generate --custom --config drizzle.tenant.config.ts` で空の SQL を作り、`INSERT` を手で書く（既存の行は書き換えず、適用の終了日を足すか新しい行を足す）。`packages/db/test/closing-repository.test.ts`（`listTaxParameters`）が、seed とマイグレーションの値の一致を確かめる
@@ -117,6 +117,25 @@ apps/server ──→ packages/schema
 - 様式の値（欄番号、行の定義）は `packages/domain/src/blue-return/form.ts` に置き、国税庁の様式の原本と照らして確かめる（003/R2）。
 - 性能は `pnpm bench:reports` が SC-006（約 500 仕訳で決算書の画面が使う API が 2 秒以内）も確かめる。
 - 実データでの照合は `pnpm verify:tax-return`（`--closing` の JSON の形はスクリプトの先頭のコメント）。出力は欄の識別子と一致・不一致の件数だけで、金額・取引先名・按分率は出さない。
+
+## 定額法・一括償却資産・開業費（009）
+
+仕様: `specs/009-depreciation-deferred/`。償却を属性から計算し、開業費の決定だけ保存する理由: [ADR 0012](docs/adr/0012-multi-year-depreciation.md)。003 の決算整理の仕組み（案 → 利用者が確かめて仕訳を登録）に、複数年の償却を足した。
+
+| 層 | 場所 |
+|---|---|
+| 償却の計算（定額法、一括償却、開業費の上限・目安・決定、台帳と帳簿の照合。純関数） | `packages/domain/src/blue-return/`（`straight-line.ts`、`lump-sum.ts`、`deferred-asset.ts`、`asset-register.ts`。少額の特例は 003 の `depreciation.ts`）、償却率の正本は `packages/domain/src/seed/depreciation-rates.ts` |
+| ユースケース | `packages/domain/src/usecases/deferred-assets.ts`（003 の `blue-return.ts` の `getAdjustmentProposals`・`commitAdjustment` も開業費を扱う） |
+| 永続化（償却率の表 `straight_line_rates`、開業費、年度ごとの決定） | `packages/db/src/closing-repository.ts` |
+| HTTP | `apps/server/src/routes/deferred-assets.ts`（資産は 003 の `fixed-assets.ts`） |
+| 画面 | `apps/web/src/features/deferred-assets/`（`api.ts`、`DeferredAssetForm.tsx`、`AmortizationDecision.tsx`）、資産の画面 `routes/e/$entityId/fixed-assets/` |
+
+- **償却率の表の足し方**（耐用年数省令の改正など）: `seed/depreciation-rates.ts`（正本）と、マイグレーション（`drizzle-kit generate --custom` の空の SQL に `INSERT` を手で書く。既存の行は書き換えず、適用の終了日を足すか新しい行を足す）の**両方**に、適用の期間と出典の URL つきの行を足す。`packages/db/test/closing-repository.test.ts`（`listStraightLineRates`）が値の一致を確かめる。率は取得日で選ぶ（009/R2）。
+- **定額法・一括償却の各年度の償却費は、資産の属性（取得価額、方法、耐用年数、供用日、前年までの累計、除却日）と税制の値から計算し、保存しない**（ADR 0012）。登録した仕訳の金額を計算に使わない。償却を忘れた年度も償却したものとして残高が減る（強制償却）。
+- **開業費だけ、年度ごとの償却額の決定（0 円を含む）を `deferred_amortizations` に保存する**。上限は期首の未償却残高（取り消されていない仕訳に結びつく決定を差し引く）、目安は 60 か月の均等。上限を超えれば 422 `DEFERRED_AMORTIZATION_OVER_LIMIT`（`details.limit`）。0 円は記録だけで、仕訳の案を作らない（任意償却）。
+- **登録済みの償却の仕訳がある資産・開業費は、計算に効く項目を変えると 409 `DEPRECIATION_JOURNAL_EXISTS`**（`details.years`）。仕訳を取り消してから変える。名称・備考だけの変更は通る。
+- **定額法の除却は種類（`disposal_kind`）で分ける**: 廃棄は除却の年度の月割りの償却と残りの未償却残高（除却損。家事分は事業主貸）を 1 つの案にする。売却は残高を事業主貸へ振り替える（譲渡所得の計算は範囲外）。一括償却は除却しても額が変わらない。
+- 実データの照合 `pnpm verify:tax-return` の `--closing` の JSON は 009 で広がった（`assets` の `method`・`inServiceOn` など、`deferredAssets`。形はスクリプトの先頭のコメント）。
 
 ## 認証とバックアップ（004）
 
@@ -163,7 +182,7 @@ apps/server ──→ packages/schema
 - **請求書は発行時の写しを持つ**。写しの列と明細は DB のトリガーで更新を止め、取消で書けるのは取消の列だけ。物理削除しない。
 - **「今日」は `today: string`（`YYYY-MM-DD`）で domain に渡す**。server は `todayOf(clock)` で作る（005/R22）。ルートは `invoicingRoutes({ clock })`・`recurringRoutes({ clock })`（ほかのルートも同じ形）。server のテストは偽の時計を渡し、時刻を日付の境目から離す。
 - **仕訳の科目はコードで引く**（005/R10）。定数 `INVOICING_ACCOUNT_CODES`（`journal-drafts.ts`）が売掛金・売上高・支払手数料のコードを持つ。科目の選択の設定は増やさない。
-- **工数は半時間の整数**、明細の金額は `Math.floor(quantityHalves * unitPrice / 2)`。別記の税額は 001 の `computeInclusiveTax` を税率ごとに 1 回。
+- **工数は半時間の整数**、明細の金額は `Math.floor(quantityHalves * unitPrice / 2)`。請求の `priceMode` は税込/税抜入力を表し、内訳表示 `taxDisplay` と分ける。税込の内訳は `computeInclusiveTax`、税抜の加算は税率ごとの小計に対し一度だけ切り捨てる（005/R27）。免税でも消費税相当額を請求でき、帳簿は加算後の全額を対象外の売上とする。
 - 請求・入金の操作は `invoicing_audit_log`（追記のみ）に記録する。仕訳そのものの記録は 001 の `audit_log`。
 
 ## 明細の取込と AI 仕訳（006）
@@ -185,7 +204,7 @@ apps/server ──→ packages/schema
 - **`inferWithAi` は 読む → AI を呼ぶ（UnitOfWork の外）→ 書く の 3 段**（006/R8）。AI の呼び出し（遅い、外部に出る）をトランザクションの中に入れない。取込と承認は 1 つの `StatementUnitOfWork` の中で書く（INV-47）。
 - **端末内のモデルは `fm serve`**（モデル名 `system`。`stream` は送らない（`stream: false` には応答しない。省くと SSE で返り、`ai-client.ts` が読み分ける）。ポート `TREBUCHET_FM_PORT`、既定 18790）。最初の推定で起動し、server の終了で止める（006/R10）。外部の AI の API キーはキーチェーン（004 と同じ `SecretStore`）に置く。`ai_settings` は registry の表で、バックアップに含めない（006/R12）。
 - **AI の設定の必須項目の検査**（外部を有効にするのに URL・モデル・API キーがそろっていなければ 422 `AI_NOT_CONFIGURED`）は `apps/server/src/routes/ai-settings.ts` にある。帳簿の業務ルールではなく、端末の設定値の検査なので server に置く。
-- **MF ME の画面からの取得（US4）は取りやめた**（2026-10-26。利用者の判断。汎用の明細取込を 007 で作った）。取込は貼り付けとファイル（007）。`apps/server` は Playwright に依存しない。
+- **銀行の自動連携は実装しない**（2026-11-02 利用者の判断。API でも画面からの取得でも作らない。MF ME の画面からの取得は 2026-10-26 に取りやめ済み）。取込は貼り付けとファイル（007）。`apps/server` は Playwright に依存しない。
 - **評価のジョブは同時に 1 つ**（409 `JOB_RUNNING`。`lib/jobs.ts` の `startTask`）。server の差し替えは `createApp({ jobs, ai: { fetch, secrets, settings, fm } })`。
 - **テストは `fm`・外部の AI を呼ばない**。偽の `SuggestionProvider`（domain）と偽の `fetch`（server）を使う。
 - **明細の承認だけが仕訳を作る**（INV-41）。仕訳の `source` は `statement`（通常どおり訂正・取消できる）。明細の状態は保存せず、結びつき・除外・仕訳の状態から導く（006/R15）。

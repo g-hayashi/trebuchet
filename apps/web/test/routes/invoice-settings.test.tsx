@@ -46,7 +46,8 @@ describe("請求の設定の画面（US4。FR-003, FR-004）", () => {
     expect(await screen.findByLabelText("氏名")).toHaveValue("");
     expect(screen.getByLabelText("次の通し番号")).toHaveValue(1);
     expect(screen.getByText(/1 以上/)).toBeInTheDocument();
-    expect(screen.getByLabelText("消費税の表示")).toHaveValue("inclusive_only");
+    expect(screen.getByLabelText("税率ごとの内訳表示")).toHaveValue("inclusive_only");
+    expect(screen.getByText(/請求額は変わりません/)).toBeInTheDocument();
   });
 
   it("保存済みの設定がフォームに入る", async () => {
@@ -56,7 +57,7 @@ describe("請求の設定の画面（US4。FR-003, FR-004）", () => {
     expect(await screen.findByLabelText("氏名")).toHaveValue("山田 太郎");
     expect(screen.getByLabelText("屋号")).toHaveValue("山田設計");
     expect(screen.getByLabelText("登録番号")).toHaveValue("T1234567890123");
-    expect(screen.getByLabelText("消費税の表示")).toHaveValue("separate");
+    expect(screen.getByLabelText("税率ごとの内訳表示")).toHaveValue("separate");
     expect(screen.getByLabelText("次の通し番号")).toHaveValue(43);
     expect(screen.getByText(/12 以上/)).toBeInTheDocument();
   });
@@ -71,7 +72,7 @@ describe("請求の設定の画面（US4。FR-003, FR-004）", () => {
     await screen.findByLabelText("氏名");
 
     await fillRequired(user);
-    await user.selectOptions(screen.getByLabelText("消費税の表示"), "separate");
+    await user.selectOptions(screen.getByLabelText("税率ごとの内訳表示"), "separate");
     await user.clear(screen.getByLabelText("次の通し番号"));
     await user.type(screen.getByLabelText("次の通し番号"), "43");
     await user.click(screen.getByRole("button", { name: "保存" }));

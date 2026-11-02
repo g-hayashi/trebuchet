@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   BillingTermsInput,
   ErrorCode,
+  InvoiceCalculationInput,
+  InvoiceCalculationResponse,
   InvoiceDraftRequest,
   InvoiceInput,
+  InvoicePriceMode,
   InvoiceSettingsInput,
   InvoicingVoidInput,
   PaymentInput,
@@ -13,6 +16,72 @@ import {
 
 const ID = "0190f3a0-0000-7000-8000-000000000001";
 const ID2 = "0190f3a0-0000-7000-8000-000000000002";
+
+describe("請求の計算契約", () => {
+  it("方式は税込/税抜、税率は10/8/null、明細は1〜5件", () => {
+    for (const priceMode of ["inclusive", "exclusive"]) {
+      for (const taxRate of [10, 8, null]) {
+        expect(
+          InvoiceCalculationInput.parse({ priceMode, items: [{ amount: 100, taxRate }] }),
+        ).toEqual({ priceMode, items: [{ amount: 100, taxRate }] });
+      }
+    }
+    expect(InvoicePriceMode.safeParse("other").success).toBe(false);
+    for (const items of [
+      [],
+      Array(6).fill({ amount: 100, taxRate: 10 }),
+      [{ amount: 100, taxRate: 7 }],
+      [{ amount: 0, taxRate: null }],
+      [{ amount: 1e12, taxRate: 10 }],
+    ]) {
+      expect(InvoiceCalculationInput.safeParse({ priceMode: "exclusive", items }).success).toBe(
+        false,
+      );
+    }
+    expect(
+      InvoiceCalculationResponse.safeParse({
+        subtotal: 100,
+        total: 110,
+        taxBreakdown: [{ rate: 10, inclusive: 110, exclusive: 100, tax: 10 }],
+      }).success,
+    ).toBe(true);
+    expect(
+      InvoiceCalculationResponse.safeParse({
+        subtotal: 999999999999,
+        total: 1e12,
+        taxBreakdown: [],
+      }).success,
+    ).toBe(false);
+  });
+  it("条件と明細は方式と税率を保持し、無効な値を拒否する", () => {
+    const terms = {
+      billingType: "monthly",
+      monthlyAmount: 100,
+      dueMonthsAfter: 1,
+      dueDay: 31,
+      defaultItemName: "業務",
+      priceMode: "exclusive",
+      taxRate: 8,
+    };
+    expect(BillingTermsInput.parse(terms)).toMatchObject({ priceMode: "exclusive", taxRate: 8 });
+    expect(BillingTermsInput.safeParse({ ...terms, taxRate: 7 }).success).toBe(false);
+    expect(BillingTermsInput.safeParse({ ...terms, priceMode: "other" }).success).toBe(false);
+    const invoice = {
+      partnerId: ID,
+      targetMonth: "2026-10",
+      priceMode: "exclusive",
+      items: [{ name: "業務", amount: 100, taxRate: null }],
+    };
+    expect(InvoiceInput.parse(invoice)).toMatchObject({
+      priceMode: "exclusive",
+      items: [{ taxRate: null }],
+    });
+    expect(
+      InvoiceInput.safeParse({ ...invoice, items: [{ name: "業務", amount: 100, taxRate: 7 }] })
+        .success,
+    ).toBe(false);
+  });
+});
 
 describe("ErrorCode（005 のコード、contracts/http-api.md §1）", () => {
   const added = [

@@ -385,8 +385,12 @@ describe("決算書の3ページ（減価償却費の計算）", () => {
     quantity: "1台",
     acquiredOn: "2025-06-15",
     cost: 200_000,
+    source: "fixed_asset" as const,
     method: "small_asset_28_2" as const,
     usefulLifeYears: null,
+    ratePermille: null,
+    months: null,
+    disposedOn: null,
     base: 200_000,
     ordinary: 200_000,
     total: 200_000,
@@ -425,7 +429,9 @@ describe("決算書の3ページ（減価償却費の計算）", () => {
       "200,000",
       "200,000",
       "少額減価償却資産の特例（措置法28条の2）",
-      "",
+      "", // 耐用年数
+      "", // 償却率（定額法だけ）
+      "", // 本年中の償却期間（定額法だけ）
       "200,000",
       "200,000",
       "50%",

@@ -125,6 +125,15 @@ export function describeError(error: unknown): ErrorDescription {
       };
     case "REPORT_LINE_INVALID":
       return { message: "決算書の欄は、費用の科目の 8〜31 から選んでください。", details: [] };
+    case "DEPRECIATION_JOURNAL_EXISTS": {
+      const years = Array.isArray(error.details?.years)
+        ? error.details.years.filter((y): y is number => typeof y === "number")
+        : [];
+      return {
+        message: `${years.length > 0 ? `${years.join("・")}年度の` : ""}減価償却の仕訳が登録されています。先にその仕訳を取り消してください。`,
+        details: [],
+      };
+    }
     case "ENTITY_KIND_UNSUPPORTED":
       return { message: "青色申告決算書は、個人の事業体でだけ作れます。", details: [] };
     case "UNAUTHENTICATED":

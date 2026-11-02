@@ -18,11 +18,21 @@ import { accountsQuery } from "@/features/accounts/api";
 import { AdjustmentPanel } from "@/features/blue-return/AdjustmentPanel";
 import { adjustmentsQuery } from "@/features/blue-return/api";
 import { formatRatioAsPercent } from "@/features/blue-return/ratio";
+import {
+  AmortizationDecision,
+  decisionLabel,
+} from "@/features/deferred-assets/AmortizationDecision";
+import { deferredAssetsQuery } from "@/features/deferred-assets/api";
+import { DeferredAssetForm } from "@/features/deferred-assets/DeferredAssetForm";
 import { fixedAssetsQuery } from "@/features/fixed-assets/api";
 import { DisposeDialog } from "@/features/fixed-assets/DisposeDialog";
 import { FixedAssetForm } from "@/features/fixed-assets/FixedAssetForm";
+import { depreciationErrorText, METHOD_SHORT_LABELS } from "@/features/fixed-assets/methods";
 import { thisYear } from "@/lib/dates";
 import { formatYen } from "@/lib/format";
+
+/** 除却の種類（定額法の資産だけが持つ）の表示。ないときは何も足さない */
+const DISPOSAL_KIND_SUFFIX: Record<string, string> = { scrap: "（廃棄）", sale: "（売却）" };
 
 /** 年分は暦年（個人）。不正な値は捨てて、今年にする */
 const Search = z.object({ year: z.number().int().min(1900).max(9999).optional().catch(undefined) });
@@ -43,12 +53,18 @@ function FixedAssetsPage() {
   const [disposingId, setDisposingId] = useState<string>();
   // 登録・更新の成功の知らせ。保存すると入力欄を作り直すので、ここで持つ
   const [notice, setNotice] = useState("");
+  // 開業費（009 US3）の編集の対象と成功の知らせ
+  const [editingDeferredId, setEditingDeferredId] = useState<string>();
+  const [deferredNotice, setDeferredNotice] = useState("");
 
   const assets = useQuery(fixedAssetsQuery(entityId, year));
+  const deferredAssets = useQuery(deferredAssetsQuery(entityId, year));
   const accounts = useQuery(accountsQuery(entityId));
   const adjustments = useQuery(adjustmentsQuery(entityId, String(year)));
   const rows = assets.data ?? [];
+  const deferredRows = deferredAssets.data ?? [];
   const editing = rows.find((a) => a.id === editingId);
+  const editingDeferred = deferredRows.find((d) => d.id === editingDeferredId);
   const disposing = rows.find((a) => a.id === disposingId);
 
   const changeYear = (text: string) => {
@@ -94,6 +110,7 @@ function FixedAssetsPage() {
                   <TableHead>数量</TableHead>
                   <TableHead>取得年月日</TableHead>
                   <TableHead className="text-right">取得価額</TableHead>
+                  <TableHead>償却方法</TableHead>
                   <TableHead className="text-right">事業専用割合</TableHead>
                   <TableHead className="text-right">本年分の償却費</TableHead>
                   <TableHead className="text-right">必要経費算入額</TableHead>
@@ -111,6 +128,7 @@ function FixedAssetsPage() {
                     <TableCell className="text-right tabular-nums">
                       {formatYen(a.acquisitionCost)}
                     </TableCell>
+                    <TableCell>{METHOD_SHORT_LABELS[a.method]}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatRatioAsPercent(a.businessRatio)}%
                     </TableCell>
@@ -123,7 +141,16 @@ function FixedAssetsPage() {
                     <TableCell className="text-right tabular-nums">
                       {a.depreciation ? formatYen(a.depreciation.closingBookValue) : ""}
                     </TableCell>
-                    <TableCell>{a.disposedOn ? `除却 ${a.disposedOn}` : "使用中"}</TableCell>
+                    <TableCell>
+                      {a.disposedOn
+                        ? `除却 ${a.disposedOn}${DISPOSAL_KIND_SUFFIX[a.disposalKind ?? ""] ?? ""}`
+                        : "使用中"}
+                      {a.depreciationError && (
+                        <span className="block text-destructive">
+                          償却を計算できません（{depreciationErrorText(a.depreciationError.code)}）
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell className="flex gap-2">
                       <Button
                         variant="outline"
@@ -162,14 +189,99 @@ function FixedAssetsPage() {
         />
       )}
 
+      <Card>
+        <CardHeader>
+          <CardTitle>開業費（{year}年分）</CardTitle>
+          <CardDescription>
+            開業費は固定資産とは別に、年分ごとに償却額を決めます。上限は期首の未償却残高、目安は 60
+            か月の均等償却です。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <ApiErrorMessage error={deferredAssets.error} />
+          {deferredAssets.data && deferredRows.length === 0 && (
+            <p className="text-sm text-muted-foreground">開業費はまだ登録されていません。</p>
+          )}
+          {deferredRows.length > 0 && (
+            <Table aria-label="開業費の一覧">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>名称</TableHead>
+                  <TableHead>開業日</TableHead>
+                  <TableHead className="text-right">総額</TableHead>
+                  <TableHead className="text-right">本年の上限</TableHead>
+                  <TableHead className="text-right">本年の目安</TableHead>
+                  <TableHead>本年の決定</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {deferredRows.map((d) => (
+                  <TableRow key={d.id}>
+                    <TableCell>{d.name}</TableCell>
+                    <TableCell>{d.openedOn}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatYen(d.totalAmount)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {d.amortization ? formatYen(d.amortization.openingBalance) : ""}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {d.amortization ? formatYen(d.amortization.target) : ""}
+                    </TableCell>
+                    <TableCell>{decisionLabel(d.amortization)}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setDeferredNotice("");
+                          setEditingDeferredId(d.id);
+                        }}
+                      >
+                        {`${d.name}を編集`}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {deferredRows.map((d) => (
+            <AmortizationDecision
+              key={`${d.id}-${year}`}
+              entityId={entityId}
+              year={year}
+              asset={d}
+            />
+          ))}
+        </CardContent>
+      </Card>
+
+      {accounts.data && (
+        <DeferredAssetForm
+          // 編集する開業費を切り替えたら入力欄を作り直す
+          key={`deferred-${editingDeferred?.id ?? "new"}`}
+          entityId={entityId}
+          accounts={accounts.data}
+          editing={editingDeferred}
+          onDone={() => setEditingDeferredId(undefined)}
+          notice={deferredNotice}
+          onSaved={setDeferredNotice}
+        />
+      )}
+
       <ApiErrorMessage error={adjustments.error ?? accounts.error} />
       {adjustments.data && accounts.data && (
         <AdjustmentPanel
           entityId={entityId}
           year={String(year)}
-          proposals={adjustments.data.filter((p) => p.kind === "depreciation")}
+          proposals={adjustments.data.filter(
+            (p) => p.kind === "depreciation" || p.kind === "deferred_amortization",
+          )}
           accounts={accounts.data}
           assets={rows}
+          deferredAssets={deferredRows}
         />
       )}
 

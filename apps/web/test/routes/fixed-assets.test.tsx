@@ -73,7 +73,68 @@ const PROPOSAL: AdjustmentProposal = {
       { side: "credit", accountId: "a-dep", amount: 100_000, taxCategory: "OUT_OF_SCOPE" },
     ],
   },
-  breakdown: { acquisitionCost: 200_000, businessRatio: 5000, deductible: 100_000 },
+  breakdown: {
+    method: "small_asset_28_2" as const,
+    acquisitionCost: 200_000,
+    businessRatio: 5000,
+    depreciation: 200_000,
+    deductible: 100_000,
+    months: null,
+    ratePermille: null,
+    openingBookValue: 200_000,
+    closingBookValue: 0,
+    disposalKind: null,
+    disposalAmount: 0,
+    disposalDeductible: 0,
+  },
+};
+
+const DEFERRED = `${ENTITY}/deferred-assets`;
+
+/** 年度の償却の見え方（API の `amortization`）。2025 年: 上限 300,000、目安 45,000（9 か月分） */
+const deferredView = (over: Record<string, unknown> = {}) => ({
+  fiscalYear: 2025,
+  openingBalance: 300_000,
+  target: 45_000,
+  decision: null,
+  registered: false,
+  closingBalance: 300_000,
+  ...over,
+});
+
+const deferred = (over: Record<string, unknown> = {}) => ({
+  id: "d-1",
+  name: "開業費",
+  totalAmount: 300_000,
+  openedOn: "2025-04-01",
+  priorAccumulated: 0,
+  priorThroughYear: null,
+  accountId: "a-open",
+  note: null,
+  createdAt: "2025-04-01T00:00:00.000Z",
+  updatedAt: "2025-04-01T00:00:00.000Z",
+  amortization: deferredView(),
+  ...over,
+});
+
+const DEFERRED_PROPOSAL: AdjustmentProposal = {
+  kind: "deferred_amortization",
+  sourceId: "d-1",
+  journal: {
+    date: "2025-12-31",
+    memo: "開業費の償却",
+    lines: [
+      { side: "debit", accountId: "a-dep", amount: 45_000, taxCategory: "OUT_OF_SCOPE" },
+      { side: "credit", accountId: "a-open", amount: 45_000, taxCategory: "OUT_OF_SCOPE" },
+    ],
+  },
+  breakdown: {
+    totalAmount: 300_000,
+    openingBalance: 300_000,
+    amount: 45_000,
+    target: 45_000,
+    closingBalance: 255_000,
+  },
 };
 
 const journal = (id: string, journalNo: number, date: string, memo: string | null) => ({
@@ -87,10 +148,51 @@ const journal = (id: string, journalNo: number, date: string, memo: string | nul
   lines: [],
 });
 
-type Opts = { assets?: unknown[]; proposals?: AdjustmentProposal[] };
+type Opts = {
+  assets?: unknown[];
+  /** 開業費（009 US3）。`amortization` を付けた API の応答の形 */
+  deferredAssets?: unknown[];
+  /** 開業費の科目（資産）を勘定の一覧に足す */
+  withOpenAccount?: boolean;
+  proposals?: AdjustmentProposal[];
+  /** 個別の応答（同じキーの既定の応答を置き換える） */
+  overrides?: Parameters<typeof mockApi>[0];
+};
+
+const straightLine = (over: Record<string, unknown> = {}) =>
+  asset({
+    name: "機材A",
+    acquiredOn: "2025-07-10",
+    inServiceOn: "2025-07-10",
+    acquisitionCost: 500_000,
+    method: "straight_line",
+    usefulLifeYears: 4,
+    priorAccumulated: 0,
+    priorThroughYear: null,
+    disposalKind: null,
+    businessRatio: 10000,
+    depreciationError: null,
+    depreciation: depreciation({
+      method: "straight_line",
+      cost: 500_000,
+      base: 500_000,
+      ordinary: 62_500,
+      total: 62_500,
+      businessRatio: 10000,
+      deductible: 62_500,
+      closingBookValue: 437_500,
+      ratePermille: 250,
+      months: 6,
+    }),
+    ...over,
+  });
 
 function mockScreen(opts: Opts = {}) {
-  const state = { assets: opts.assets ?? [], proposals: opts.proposals ?? [] };
+  const state = {
+    assets: opts.assets ?? [],
+    deferredAssets: opts.deferredAssets ?? [],
+    proposals: opts.proposals ?? [],
+  };
   const calls = mockApi({
     [`GET ${ENTITY}/accounts`]: () =>
       ok({
@@ -98,6 +200,8 @@ function mockScreen(opts: Opts = {}) {
           ...ACCOUNTS,
           account("a-dep", "減価償却費", "expense"),
           account("a-owner", "事業主貸", "equity"),
+          // 開業費の勘定。既存の「資産の勘定」の選択肢の検査を変えないよう、開業費のテストだけに足す
+          ...(opts.withOpenAccount ? [account("a-open", "開業費", "asset")] : []),
         ],
       }),
     [`GET ${ENTITY}/journals`]: () =>
@@ -124,6 +228,32 @@ function mockScreen(opts: Opts = {}) {
       state.assets = [saved];
       return ok({ asset: saved });
     },
+    [`GET ${DEFERRED}`]: () => ok({ deferredAssets: state.deferredAssets }),
+    [`POST ${DEFERRED}`]: (call) => {
+      const saved = deferred({ id: "d-new", ...(call.body as object), amortization: null });
+      state.deferredAssets = [...state.deferredAssets, saved];
+      return ok({ deferredAsset: saved }, 201);
+    },
+    [`PUT ${DEFERRED}/d-1`]: (call) => {
+      const saved = deferred({ ...(call.body as object) });
+      state.deferredAssets = [saved];
+      return ok({ deferredAsset: saved });
+    },
+    [`PUT ${DEFERRED}/d-1/amortizations/2025`]: (call) => {
+      const { amount } = call.body as { amount: number };
+      const amortization = deferredView({
+        decision: {
+          deferredAssetId: "d-1",
+          fiscalYear: 2025,
+          amount,
+          decidedAt: "2025-12-01T00:00:00.000Z",
+          updatedAt: "2025-12-01T00:00:00.000Z",
+        },
+        closingBalance: 300_000 - amount,
+      });
+      state.deferredAssets = [deferred({ amortization })];
+      return ok({ amortization, proposal: amount === 0 ? null : DEFERRED_PROPOSAL });
+    },
     [`GET ${ADJUSTMENTS}`]: () => ok({ proposals: state.proposals }),
     [`POST ${ADJUSTMENTS}`]: () => {
       state.proposals = [];
@@ -141,6 +271,7 @@ function mockScreen(opts: Opts = {}) {
         201,
       );
     },
+    ...opts.overrides,
   });
   return { calls, state };
 }
@@ -186,7 +317,7 @@ describe("固定資産台帳の画面（US3）", () => {
     expect(within(row).queryByRole("button", { name: "ノートパソコンを除却" })).toBeNull();
   });
 
-  it("資産の勘定は資産の科目（使用中のもの）だけ、償却の方法は少額の特例の1つだけ選べる", async () => {
+  it("資産の勘定は資産の科目（使用中のもの）だけ、償却の方法は 3 つ（既定は少額の特例）から選べる", async () => {
     mockScreen();
     renderPage();
 
@@ -202,7 +333,12 @@ describe("固定資産台帳の画面（US3）", () => {
       within(method)
         .getAllByRole("option")
         .map((o) => o.textContent),
-    ).toEqual(["少額減価償却資産の特例（措置法28条の2）"]);
+    ).toEqual(["少額減価償却資産の特例（措置法28条の2）", "定額法", "一括償却資産（3年均等）"]);
+    expect(method).toHaveValue("small_asset_28_2");
+    // 少額の特例では、耐用年数・供用日・累計の欄を出さない
+    expect(screen.queryByRole("textbox", { name: "耐用年数" })).toBeNull();
+    expect(screen.queryByLabelText("事業の用に供した年月日")).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "前年までの償却累計額" })).toBeNull();
   });
 
   it("登録する。取得価額は整数、割合は % から万分率、結びつける仕訳は任意で選べる", async () => {
@@ -229,6 +365,10 @@ describe("固定資産台帳の画面（US3）", () => {
       acquiredOn: "2025-06-15",
       acquisitionCost: 200_000,
       method: "small_asset_28_2",
+      usefulLifeYears: null,
+      inServiceOn: null,
+      priorAccumulated: 0,
+      priorThroughYear: null,
       businessRatio: 5000,
       assetAccountId: "a-tools",
       linkedJournalId: "j-1",
@@ -362,5 +502,707 @@ describe("固定資産台帳の画面（US3）", () => {
     });
     expect(await screen.findByText("登録する仕訳の案はありません。")).toBeInTheDocument();
     expect(screen.getByText("仕訳を登録しました（No.7）。")).toBeInTheDocument();
+  });
+});
+
+/** 資産の名前・取得日・価額・勘定を入れる（償却の方法の選択の前でも後でもよい） */
+async function fillBasics(user: ReturnType<typeof userEvent.setup>, cost: string) {
+  await user.type(await screen.findByRole("textbox", { name: "資産名" }), "機材A");
+  await user.type(screen.getByLabelText("取得年月日"), "2025-07-10");
+  await user.type(screen.getByRole("textbox", { name: "取得価額" }), cost);
+  await user.selectOptions(screen.getByRole("combobox", { name: "資産の勘定" }), "a-tools");
+}
+
+describe("償却の方法ごとの登録（009 US1）", () => {
+  it("定額法: 耐用年数の欄が出て、供用日・累計とその年分といっしょに送る", async () => {
+    const { calls } = mockScreen();
+    const user = userEvent.setup();
+    renderPage();
+
+    await fillBasics(user, "500000");
+    await user.selectOptions(screen.getByRole("combobox", { name: "償却の方法" }), "straight_line");
+    await user.type(screen.getByRole("textbox", { name: "耐用年数" }), "4");
+    await user.type(screen.getByLabelText("事業の用に供した年月日"), "2025-07-10");
+    await user.type(screen.getByRole("textbox", { name: "前年までの償却累計額" }), "100,000");
+    await user.type(screen.getByRole("textbox", { name: "累計の年分（何年分までか）" }), "2024");
+    await user.click(screen.getByRole("button", { name: "登録" }));
+
+    await waitFor(() => expect(callsOf(calls, "POST", ASSETS)).toHaveLength(1));
+    expect(callsOf(calls, "POST", ASSETS)[0]?.body).toMatchObject({
+      method: "straight_line",
+      usefulLifeYears: 4,
+      inServiceOn: "2025-07-10",
+      priorAccumulated: 100_000,
+      priorThroughYear: 2024,
+      acquisitionCost: 500_000,
+    });
+  });
+
+  it("定額法: 耐用年数が空か整数でなければ送らない。累計があるのに年分がなければ送らない", async () => {
+    const { calls } = mockScreen();
+    const user = userEvent.setup();
+    renderPage();
+
+    await fillBasics(user, "500000");
+    await user.selectOptions(screen.getByRole("combobox", { name: "償却の方法" }), "straight_line");
+    await user.click(screen.getByRole("button", { name: "登録" }));
+    expect(await screen.findByText(/耐用年数は1以上の整数/)).toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "耐用年数" }), "4");
+    await user.type(screen.getByRole("textbox", { name: "前年までの償却累計額" }), "100000");
+    await user.click(screen.getByRole("button", { name: "登録" }));
+    expect(await screen.findByText(/累計が何年分までかを入力/)).toBeInTheDocument();
+    expect(callsOf(calls, "POST", ASSETS)).toHaveLength(0);
+  });
+
+  it("一括償却: 耐用年数の欄は出ない。供用日と累計を送り、耐用年数は null", async () => {
+    const { calls } = mockScreen();
+    const user = userEvent.setup();
+    renderPage();
+
+    await fillBasics(user, "150000");
+    await user.selectOptions(screen.getByRole("combobox", { name: "償却の方法" }), "lump_sum");
+    expect(screen.queryByRole("textbox", { name: "耐用年数" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "前年までの償却累計額" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "登録" }));
+
+    await waitFor(() => expect(callsOf(calls, "POST", ASSETS)).toHaveLength(1));
+    expect(callsOf(calls, "POST", ASSETS)[0]?.body).toMatchObject({
+      method: "lump_sum",
+      usefulLifeYears: null,
+      inServiceOn: null,
+      priorAccumulated: 0,
+      priorThroughYear: null,
+    });
+  });
+
+  it("方法を少額の特例に戻すと、定額法の入力欄を隠し、送る値も既定に戻す", async () => {
+    const { calls } = mockScreen();
+    const user = userEvent.setup();
+    renderPage();
+
+    await fillBasics(user, "200000");
+    const method = screen.getByRole("combobox", { name: "償却の方法" });
+    await user.selectOptions(method, "straight_line");
+    await user.type(screen.getByRole("textbox", { name: "耐用年数" }), "4");
+    await user.selectOptions(method, "small_asset_28_2");
+    expect(screen.queryByRole("textbox", { name: "耐用年数" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "登録" }));
+
+    await waitFor(() => expect(callsOf(calls, "POST", ASSETS)).toHaveLength(1));
+    expect(callsOf(calls, "POST", ASSETS)[0]?.body).toMatchObject({
+      method: "small_asset_28_2",
+      usefulLifeYears: null,
+    });
+  });
+
+  it("定額法の資産を編集すると、耐用年数・供用日・累計を入力欄に入れる", async () => {
+    mockScreen({
+      assets: [straightLine({ id: "as-1", priorAccumulated: 100_000, priorThroughYear: 2024 })],
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "機材Aを編集" }));
+    expect(screen.getByRole("combobox", { name: "償却の方法" })).toHaveValue("straight_line");
+    expect(screen.getByRole("textbox", { name: "耐用年数" })).toHaveValue("4");
+    expect(screen.getByLabelText("事業の用に供した年月日")).toHaveValue("2025-07-10");
+    expect(screen.getByRole("textbox", { name: "前年までの償却累計額" })).toHaveValue("100000");
+    expect(screen.getByRole("textbox", { name: "累計の年分（何年分までか）" })).toHaveValue("2024");
+  });
+
+  it("業務エラー（耐用年数が表にない）を画面に出す", async () => {
+    mockScreen({
+      overrides: {
+        [`POST ${ASSETS}`]: () =>
+          apiError(422, "USEFUL_LIFE_UNSUPPORTED", "耐用年数 1 年は償却率の表にありません", {
+            usefulLifeYears: 1,
+          }),
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await fillBasics(user, "500000");
+    await user.selectOptions(screen.getByRole("combobox", { name: "償却の方法" }), "straight_line");
+    await user.type(screen.getByRole("textbox", { name: "耐用年数" }), "1");
+    await user.click(screen.getByRole("button", { name: "登録" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("償却率の表にありません");
+  });
+
+  it("前の登録の「登録しました。」を、次の登録の失敗のときに残さない", async () => {
+    let posts = 0;
+    mockScreen({
+      overrides: {
+        [`POST ${ASSETS}`]: () => {
+          posts += 1;
+          return posts === 1
+            ? ok({ asset: asset({ id: "as-new", depreciation: depreciation() }) }, 201)
+            : apiError(422, "USEFUL_LIFE_UNSUPPORTED", "耐用年数 1 年は償却率の表にありません", {
+                usefulLifeYears: 1,
+              });
+        },
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await fillBasics(user, "200000");
+    await user.click(screen.getByRole("button", { name: "登録" }));
+    expect(await screen.findByText("登録しました。")).toBeInTheDocument();
+
+    await fillBasics(user, "500000");
+    await user.selectOptions(screen.getByRole("combobox", { name: "償却の方法" }), "straight_line");
+    await user.type(screen.getByRole("textbox", { name: "耐用年数" }), "1");
+    await user.click(screen.getByRole("button", { name: "登録" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("償却率の表にありません");
+    expect(screen.queryByText("登録しました。")).not.toBeInTheDocument();
+  });
+
+  it("保存したあと、案と決算書の query を読み直す（資産の保存は仕訳を変えないので台帳と決算書の年度だけ）", async () => {
+    const { calls } = mockScreen();
+    const user = userEvent.setup();
+    renderPage();
+
+    await fillBasics(user, "200000");
+    await waitFor(() => expect(callsOf(calls, "GET", ADJUSTMENTS)).toHaveLength(1));
+    await user.click(screen.getByRole("button", { name: "登録" }));
+    await waitFor(() => expect(callsOf(calls, "POST", ASSETS)).toHaveLength(1));
+    await waitFor(() => expect(callsOf(calls, "GET", ADJUSTMENTS).length).toBeGreaterThan(1));
+  });
+});
+
+describe("除却の種類（009 FR-009）", () => {
+  it("定額法の資産: 廃棄が既定。売却を選ぶと範囲外の注意書きを出し、disposalKind を送る", async () => {
+    const { calls } = mockScreen({ assets: [straightLine({ id: "as-1" })] });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "機材Aを除却" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("radio", { name: "廃棄" })).toBeChecked();
+    expect(within(dialog).queryByText(/譲渡所得の計算はこのアプリの範囲外/)).toBeNull();
+    await user.click(within(dialog).getByRole("radio", { name: "売却" }));
+    expect(within(dialog).getByText(/譲渡所得の計算はこのアプリの範囲外/)).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("除却年月日"), "2025-10-05");
+    await user.type(within(dialog).getByRole("textbox", { name: "理由" }), "売却");
+    await user.click(within(dialog).getByRole("button", { name: "除却する" }));
+
+    await waitFor(() => expect(callsOf(calls, "POST", `${ASSETS}/as-1/dispose`)).toHaveLength(1));
+    expect(callsOf(calls, "POST", `${ASSETS}/as-1/dispose`)[0]?.body).toEqual({
+      disposedOn: "2025-10-05",
+      reason: "売却",
+      disposalKind: "sale",
+    });
+    // 保存したあと、案の query を読み直す
+    await waitFor(() => expect(callsOf(calls, "GET", ADJUSTMENTS).length).toBeGreaterThan(1));
+  });
+
+  it("廃棄のまま確定すると disposalKind: scrap を送る", async () => {
+    const { calls } = mockScreen({ assets: [straightLine({ id: "as-1" })] });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "機材Aを除却" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("除却年月日"), "2025-10-05");
+    await user.type(within(dialog).getByRole("textbox", { name: "理由" }), "廃棄");
+    await user.click(within(dialog).getByRole("button", { name: "除却する" }));
+
+    await waitFor(() => expect(callsOf(calls, "POST", `${ASSETS}/as-1/dispose`)).toHaveLength(1));
+    expect(callsOf(calls, "POST", `${ASSETS}/as-1/dispose`)[0]?.body).toMatchObject({
+      disposalKind: "scrap",
+    });
+  });
+
+  it("少額の特例の資産には種類の選択を出さない", async () => {
+    mockScreen({ assets: [asset()] });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "ノートパソコンを除却" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByRole("radio")).toBeNull();
+  });
+
+  it("409 DEPRECIATION_JOURNAL_EXISTS は仕訳のある年度を示し、先に仕訳を取り消すよう伝える", async () => {
+    mockScreen({
+      assets: [straightLine({ id: "as-1" })],
+      overrides: {
+        [`POST ${ASSETS}/as-1/dispose`]: () =>
+          apiError(409, "DEPRECIATION_JOURNAL_EXISTS", "登録されています", {
+            years: [2024, 2025],
+          }),
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "機材Aを除却" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("除却年月日"), "2025-10-05");
+    await user.type(within(dialog).getByRole("textbox", { name: "理由" }), "廃棄");
+    await user.click(within(dialog).getByRole("button", { name: "除却する" }));
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent("2024・2025年度の減価償却の仕訳が登録されています");
+    expect(alert).toHaveTextContent("先にその仕訳を取り消してください");
+  });
+
+  it("409 は資産の更新でも同じ文言で出る", async () => {
+    mockScreen({
+      assets: [straightLine({ id: "as-1" })],
+      overrides: {
+        [`PUT ${ASSETS}/as-1`]: () =>
+          apiError(409, "DEPRECIATION_JOURNAL_EXISTS", "登録されています", { years: [2025] }),
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "機材Aを編集" }));
+    await user.click(screen.getByRole("button", { name: "更新" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "2025年度の減価償却の仕訳が登録されています",
+    );
+  });
+});
+
+describe("台帳の一覧（009）", () => {
+  it("償却方法の列と、売却・廃棄の除却を示す", async () => {
+    mockScreen({
+      assets: [
+        straightLine({ id: "as-1", disposedOn: "2025-10-05", disposalKind: "sale" }),
+        asset({ id: "as-2", name: "備品B" }),
+      ],
+    });
+    renderPage();
+
+    const table = await screen.findByRole("table", { name: "固定資産台帳" });
+    const a = within(within(table).getByRole("row", { name: /機材A/ })).getAllByRole("cell");
+    expect(a.map((c) => c.textContent)).toEqual(
+      expect.arrayContaining(["定額法", "62,500", "437,500", "除却 2025-10-05（売却）"]),
+    );
+    const b = within(within(table).getByRole("row", { name: /備品B/ })).getAllByRole("cell");
+    expect(b.map((c) => c.textContent)).toContain("少額の特例");
+  });
+
+  it("depreciationError のある資産は、償却を計算できない理由を示す", async () => {
+    mockScreen({
+      assets: [
+        straightLine({
+          id: "as-1",
+          usefulLifeYears: 1,
+          depreciation: null,
+          depreciationError: {
+            code: "USEFUL_LIFE_UNSUPPORTED",
+            details: { usefulLifeYears: 1, acquiredOn: "2025-07-10" },
+          },
+        }),
+      ],
+    });
+    renderPage();
+
+    const row = await screen.findByRole("row", { name: /機材A/ });
+    expect(within(row).getByText(/償却を計算できません/)).toHaveTextContent(
+      "耐用年数が償却率の表にありません",
+    );
+  });
+});
+
+describe("決算整理の案の内訳（009）", () => {
+  const straightProposal = (over: Record<string, unknown> = {}): AdjustmentProposal => ({
+    ...PROPOSAL,
+    sourceId: "as-1",
+    breakdown: {
+      method: "straight_line",
+      acquisitionCost: 500_000,
+      businessRatio: 6000,
+      depreciation: 41_667,
+      deductible: 25_000,
+      months: 4,
+      ratePermille: 250,
+      openingBookValue: 500_000,
+      closingBookValue: 0,
+      disposalKind: "scrap",
+      disposalAmount: 458_333,
+      disposalDeductible: 274_999,
+      ...over,
+    } as AdjustmentProposal["breakdown"],
+  });
+
+  it("定額法の内訳に、方法・月数・率・除却の種類と金額を出す", async () => {
+    mockScreen({ assets: [straightLine({ id: "as-1" })], proposals: [straightProposal()] });
+    renderPage();
+
+    const panel = await screen.findByRole("group", { name: "機材Aの振替の案" });
+    expect(within(panel).getByText("償却方法")).toBeInTheDocument();
+    expect(within(panel).getByText("定額法")).toBeInTheDocument();
+    expect(within(panel).getByText("本年中の償却期間")).toBeInTheDocument();
+    expect(within(panel).getByText("4/12")).toBeInTheDocument();
+    expect(within(panel).getByText("償却率")).toBeInTheDocument();
+    expect(within(panel).getByText("0.250")).toBeInTheDocument();
+    expect(within(panel).getByText("除却損")).toBeInTheDocument();
+    expect(within(panel).getByText("458,333")).toBeInTheDocument();
+    expect(within(panel).getByText("除却損のうち必要経費算入額")).toBeInTheDocument();
+    expect(within(panel).getByText("274,999")).toBeInTheDocument();
+  });
+
+  it("売却は除却損でなく事業主貸への振替として示し、譲渡所得は範囲外と伝える", async () => {
+    mockScreen({
+      assets: [straightLine({ id: "as-1" })],
+      proposals: [straightProposal({ disposalKind: "sale", disposalDeductible: 0 })],
+    });
+    renderPage();
+
+    const panel = await screen.findByRole("group", { name: "機材Aの振替の案" });
+    expect(within(panel).getByText("売却による事業主貸への振替")).toBeInTheDocument();
+    expect(within(panel).queryByText("除却損")).toBeNull();
+    expect(within(panel).getByText(/譲渡所得の計算はこのアプリの範囲外/)).toBeInTheDocument();
+  });
+});
+
+describe("一括償却資産（009 US2）", () => {
+  it("台帳の一覧に「一括償却」と年度の償却費・未償却残高を示す。除却しても償却は続くので除却の表示だけが加わる", async () => {
+    mockScreen({
+      assets: [
+        asset({
+          id: "as-9",
+          name: "プリンター一式",
+          acquiredOn: "2025-07-10",
+          acquisitionCost: 150_000,
+          method: "lump_sum",
+          usefulLifeYears: null,
+          disposedOn: "2025-10-05",
+          disposalKind: "scrap",
+          depreciationError: null,
+          depreciation: depreciation({
+            method: "lump_sum",
+            cost: 150_000,
+            base: 150_000,
+            ordinary: 50_000,
+            total: 50_000,
+            businessRatio: 10000,
+            deductible: 50_000,
+            closingBookValue: 100_000,
+            ratePermille: null,
+            months: null,
+          }),
+        }),
+      ],
+    });
+    renderPage();
+
+    const table = await screen.findByRole("table", { name: "固定資産台帳" });
+    const cells = within(within(table).getByRole("row", { name: /プリンター一式/ }))
+      .getAllByRole("cell")
+      .map((c) => c.textContent);
+    expect(cells).toEqual(expect.arrayContaining(["一括償却", "50,000", "100,000"]));
+  });
+
+  it("業務エラー（取得価額が範囲外）を画面に出し、資産は登録されない", async () => {
+    mockScreen({
+      overrides: {
+        [`POST ${ASSETS}`]: () =>
+          apiError(
+            422,
+            "LUMP_SUM_COST_OUT_OF_RANGE",
+            "一括償却資産の取得価額は 100,000 円以上 200,000 円未満です",
+            { min: 100_000, max: 200_000 },
+          ),
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await fillBasics(user, "250000");
+    await user.selectOptions(screen.getByRole("combobox", { name: "償却の方法" }), "lump_sum");
+    await user.click(screen.getByRole("button", { name: "登録" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("200,000 円未満");
+  });
+});
+
+describe("開業費（009 US3）", () => {
+  const decisionBox = () => screen.findByRole("textbox", { name: "開業費の償却額（2025年分）" });
+
+  it("年分を指定して一覧を読み、総額・本年の上限・目安・決定の状態を出す", async () => {
+    const { calls } = mockScreen({ deferredAssets: [deferred()], withOpenAccount: true });
+    renderPage();
+
+    const table = await screen.findByRole("table", { name: "開業費の一覧" });
+    const cells = within(within(table).getByRole("row", { name: /開業費/ }))
+      .getAllByRole("cell")
+      .map((c) => c.textContent);
+    expect(cells).toEqual(
+      expect.arrayContaining(["開業費", "2025-04-01", "300,000", "45,000", "未決定"]),
+    );
+    expect(callsOf(calls, "GET", DEFERRED)[0]?.query).toEqual({ year: "2025" });
+  });
+
+  it("開業費がなければ、その旨を出す", async () => {
+    mockScreen();
+    renderPage();
+    expect(await screen.findByText("開業費はまだ登録されていません。")).toBeInTheDocument();
+  });
+
+  it("登録する。総額は整数、勘定は資産の科目から選ぶ。累計は空なら 0・年分は null", async () => {
+    const { calls } = mockScreen({ withOpenAccount: true });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(await screen.findByRole("textbox", { name: "開業費の名称" }), "開業費");
+    await user.type(screen.getByRole("textbox", { name: "開業費の総額" }), "300,000");
+    await user.type(screen.getByLabelText("開業日"), "2025-04-01");
+    const account = screen.getByRole("combobox", { name: "開業費の勘定" });
+    await waitFor(() => expect(within(account).getAllByRole("option").length).toBeGreaterThan(1));
+    expect(
+      within(account)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["選択してください", "工具器具備品", "普通預金", "開業費"]);
+    await user.selectOptions(account, "a-open");
+    await user.click(screen.getByRole("button", { name: "開業費を登録" }));
+
+    await waitFor(() => expect(callsOf(calls, "POST", DEFERRED)).toHaveLength(1));
+    expect(callsOf(calls, "POST", DEFERRED)[0]?.body).toEqual({
+      name: "開業費",
+      totalAmount: 300_000,
+      openedOn: "2025-04-01",
+      priorAccumulated: 0,
+      priorThroughYear: null,
+      accountId: "a-open",
+      note: null,
+    });
+    expect(await screen.findByText("開業費を登録しました。")).toBeInTheDocument();
+
+    // 次の登録が入力の不備で送られないとき、前の知らせを残さない
+    await user.click(screen.getByRole("button", { name: "開業費を登録" }));
+    expect(callsOf(calls, "POST", DEFERRED)).toHaveLength(1);
+    expect(screen.queryByText("開業費を登録しました。")).not.toBeInTheDocument();
+  });
+
+  it("前年までの累計とその年分を送る。累計があるのに年分がなければ、総額が整数でなければ送らない", async () => {
+    const { calls } = mockScreen({ withOpenAccount: true });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(await screen.findByRole("textbox", { name: "開業費の名称" }), "開業費");
+    await user.type(screen.getByRole("textbox", { name: "開業費の総額" }), "12.5");
+    await user.type(screen.getByLabelText("開業日"), "2025-04-01");
+    await user.type(screen.getByRole("textbox", { name: "開業費の前年までの償却累計額" }), "45000");
+    await user.click(screen.getByRole("button", { name: "開業費を登録" }));
+    expect(await screen.findByText(/開業費の総額は1円以上の整数/)).toBeInTheDocument();
+    expect(screen.getByText(/累計が何年分までかを入力してください/)).toBeInTheDocument();
+    expect(callsOf(calls, "POST", DEFERRED)).toHaveLength(0);
+
+    await user.clear(screen.getByRole("textbox", { name: "開業費の総額" }));
+    await user.type(screen.getByRole("textbox", { name: "開業費の総額" }), "300000");
+    await user.type(screen.getByRole("textbox", { name: "開業費の累計の年分" }), "2025");
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("combobox", { name: "開業費の勘定" })).getAllByRole("option"),
+      ).toHaveLength(4),
+    );
+    await user.selectOptions(screen.getByRole("combobox", { name: "開業費の勘定" }), "a-open");
+    await user.click(screen.getByRole("button", { name: "開業費を登録" }));
+    await waitFor(() => expect(callsOf(calls, "POST", DEFERRED)).toHaveLength(1));
+    expect(callsOf(calls, "POST", DEFERRED)[0]?.body).toMatchObject({
+      priorAccumulated: 45_000,
+      priorThroughYear: 2025,
+    });
+  });
+
+  it("編集すると入力欄に値を入れ、変更の理由を付けて PUT する。409 は仕訳のある年度を示す", async () => {
+    const { calls } = mockScreen({
+      deferredAssets: [deferred({ priorAccumulated: 45_000, priorThroughYear: 2024 })],
+      withOpenAccount: true,
+      overrides: {
+        [`PUT ${DEFERRED}/d-1`]: () =>
+          apiError(409, "DEPRECIATION_JOURNAL_EXISTS", "登録されています", { years: [2025] }),
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "開業費を編集" }));
+    expect(screen.getByRole("textbox", { name: "開業費の総額" })).toHaveValue("300000");
+    expect(screen.getByRole("textbox", { name: "開業費の前年までの償却累計額" })).toHaveValue(
+      "45000",
+    );
+    expect(screen.getByRole("textbox", { name: "開業費の累計の年分" })).toHaveValue("2024");
+    await user.type(screen.getByRole("textbox", { name: "開業費の変更の理由" }), "総額の訂正");
+    await user.click(screen.getByRole("button", { name: "開業費を更新" }));
+
+    await waitFor(() => expect(callsOf(calls, "PUT", `${DEFERRED}/d-1`)).toHaveLength(1));
+    expect(callsOf(calls, "PUT", `${DEFERRED}/d-1`)[0]?.body).toMatchObject({
+      totalAmount: 300_000,
+      accountId: "a-open",
+      priorAccumulated: 45_000,
+      priorThroughYear: 2024,
+      reason: "総額の訂正",
+    });
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("2025年度の減価償却の仕訳が登録されています");
+    expect(alert).toHaveTextContent("先にその仕訳を取り消してください");
+  });
+
+  it("保存したあと、案・決算書・開業費の query を読み直す", async () => {
+    const { calls } = mockScreen({ withOpenAccount: true });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(await screen.findByRole("textbox", { name: "開業費の名称" }), "開業費");
+    await user.type(screen.getByRole("textbox", { name: "開業費の総額" }), "300000");
+    await user.type(screen.getByLabelText("開業日"), "2025-04-01");
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("combobox", { name: "開業費の勘定" })).getAllByRole("option"),
+      ).toHaveLength(4),
+    );
+    await user.selectOptions(screen.getByRole("combobox", { name: "開業費の勘定" }), "a-open");
+    await waitFor(() => expect(callsOf(calls, "GET", ADJUSTMENTS)).toHaveLength(1));
+    const listReads = callsOf(calls, "GET", DEFERRED).length;
+    await user.click(screen.getByRole("button", { name: "開業費を登録" }));
+    await waitFor(() => expect(callsOf(calls, "POST", DEFERRED)).toHaveLength(1));
+    await waitFor(() => expect(callsOf(calls, "GET", ADJUSTMENTS).length).toBeGreaterThan(1));
+    await waitFor(() => expect(callsOf(calls, "GET", DEFERRED).length).toBeGreaterThan(listReads));
+  });
+
+  it("償却額の決定は上限と目安を見せ、整数を PUT する。決定のあと案・決算書・開業費を読み直す", async () => {
+    const { calls } = mockScreen({ deferredAssets: [deferred()], withOpenAccount: true });
+    const user = userEvent.setup();
+    renderPage();
+
+    const group = await screen.findByRole("group", { name: "開業費の償却額の決定" });
+    expect(within(group).getByText("上限（期首の未償却残高）")).toBeInTheDocument();
+    expect(within(group).getByText("300,000")).toBeInTheDocument();
+    expect(within(group).getByText("目安")).toBeInTheDocument();
+    expect(within(group).getByText("45,000")).toBeInTheDocument();
+    await waitFor(() => expect(callsOf(calls, "GET", ADJUSTMENTS)).toHaveLength(1));
+    const listReads = callsOf(calls, "GET", DEFERRED).length;
+
+    await user.type(await decisionBox(), "45,000");
+    await user.click(within(group).getByRole("button", { name: "開業費の償却額を決定" }));
+
+    await waitFor(() =>
+      expect(callsOf(calls, "PUT", `${DEFERRED}/d-1/amortizations/2025`)).toHaveLength(1),
+    );
+    expect(callsOf(calls, "PUT", `${DEFERRED}/d-1/amortizations/2025`)[0]?.body).toEqual({
+      amount: 45_000,
+    });
+    await waitFor(() => expect(callsOf(calls, "GET", ADJUSTMENTS).length).toBeGreaterThan(1));
+    await waitFor(() => expect(callsOf(calls, "GET", DEFERRED).length).toBeGreaterThan(listReads));
+    expect(await screen.findByText("2025年分の償却額を決定しました。")).toBeInTheDocument();
+    const row = screen.getByRole("row", { name: /開業費 2025-04-01/ });
+    expect(
+      within(row)
+        .getAllByRole("cell")
+        .map((c) => c.textContent),
+    ).toContain("45,000");
+  });
+
+  it("0 円は「償却しない」と表示する", async () => {
+    mockScreen({ deferredAssets: [deferred()], withOpenAccount: true });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(await decisionBox(), "0");
+    await user.click(screen.getByRole("button", { name: "開業費の償却額を決定" }));
+
+    expect(await screen.findByText("2025年分は償却しないと決定しました。")).toBeInTheDocument();
+    const row = screen.getByRole("row", { name: /開業費 2025-04-01/ });
+    await waitFor(() =>
+      expect(
+        within(row)
+          .getAllByRole("cell")
+          .map((c) => c.textContent),
+      ).toContain("償却しない"),
+    );
+  });
+
+  it("償却額が 0 以上の整数でなければ送らない", async () => {
+    const { calls } = mockScreen({ deferredAssets: [deferred()], withOpenAccount: true });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(await decisionBox(), "-1");
+    await user.click(screen.getByRole("button", { name: "開業費の償却額を決定" }));
+    expect(await screen.findByText(/償却額は0以上の整数で入力してください/)).toBeInTheDocument();
+    expect(callsOf(calls, "PUT", `${DEFERRED}/d-1/amortizations/2025`)).toHaveLength(0);
+  });
+
+  it("上限を超える決定は 422 のメッセージを画面に出す", async () => {
+    mockScreen({
+      deferredAssets: [deferred()],
+      withOpenAccount: true,
+      overrides: {
+        [`PUT ${DEFERRED}/d-1/amortizations/2025`]: () =>
+          apiError(
+            422,
+            "DEFERRED_AMORTIZATION_OVER_LIMIT",
+            "償却額は上限 300,000 円以下にしてください",
+            { limit: 300_000 },
+          ),
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(await decisionBox(), "300001");
+    await user.click(screen.getByRole("button", { name: "開業費の償却額を決定" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("上限 300,000 円以下");
+  });
+
+  it("仕訳を登録した年度は、決定を変えられない", async () => {
+    mockScreen({
+      deferredAssets: [
+        deferred({
+          amortization: deferredView({
+            registered: true,
+            decision: {
+              deferredAssetId: "d-1",
+              fiscalYear: 2025,
+              amount: 45_000,
+              decidedAt: "2025-12-01T00:00:00.000Z",
+              updatedAt: "2025-12-01T00:00:00.000Z",
+            },
+          }),
+        }),
+      ],
+      withOpenAccount: true,
+    });
+    renderPage();
+
+    const group = await screen.findByRole("group", { name: "開業費の償却額の決定" });
+    expect(within(group).getByText(/仕訳を登録済み/)).toBeInTheDocument();
+    expect(within(group).getByRole("button", { name: "開業費の償却額を決定" })).toBeDisabled();
+  });
+
+  it("開業費の案の内訳（総額・期首残高・償却額・目安・期末残高）を出し、「仕訳を登録」で確定したあと開業費を読み直す", async () => {
+    const { calls } = mockScreen({
+      deferredAssets: [deferred({ amortization: deferredView({ decision: null }) })],
+      proposals: [DEFERRED_PROPOSAL],
+      withOpenAccount: true,
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    const panel = await screen.findByRole("group", { name: "開業費の振替の案" });
+    for (const label of ["総額", "期首の未償却残高", "償却額", "目安", "期末の未償却残高"]) {
+      expect(within(panel).getByText(label)).toBeInTheDocument();
+    }
+    expect(within(panel).getByText("255,000")).toBeInTheDocument();
+    expect(within(panel).getByText("2025-12-31")).toBeInTheDocument();
+    const listReads = callsOf(calls, "GET", DEFERRED).length;
+    await user.click(within(panel).getByRole("button", { name: "仕訳を登録" }));
+
+    await waitFor(() => expect(callsOf(calls, "POST", ADJUSTMENTS)).toHaveLength(1));
+    expect(callsOf(calls, "POST", ADJUSTMENTS)[0]?.body).toEqual({
+      kind: "deferred_amortization",
+      sourceId: "d-1",
+      expected: { amount: 45_000 },
+    });
+    await waitFor(() => expect(callsOf(calls, "GET", DEFERRED).length).toBeGreaterThan(listReads));
+    expect(await screen.findByText("登録する仕訳の案はありません。")).toBeInTheDocument();
   });
 });

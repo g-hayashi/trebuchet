@@ -2,6 +2,7 @@ import { BlueReturn } from "@trebuchet/schema";
 import { describe, expect, it } from "vitest";
 import { buildBlueReturn } from "../../src/blue-return/build.ts";
 import { formForYear } from "../../src/blue-return/form.ts";
+import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type { Account, DeductionAnswers, PostedLine } from "../../src/types.ts";
 import { makeAccount, makeFiscalPeriod } from "../arbitraries.ts";
@@ -76,6 +77,7 @@ const build = (
     lines,
     deductionAnswers: over.deductionAnswers === undefined ? answers() : over.deductionAnswers,
     taxParameters: TAX_PARAMETERS,
+    straightLineRates: STRAIGHT_LINE_RATES,
   });
 
 const amountOf = (r: ReturnType<typeof build>, no: number) =>
@@ -113,6 +115,7 @@ describe("buildBlueReturn 1ページ（R1）", () => {
       lines: smallBook,
       deductionAnswers: answers(),
       taxParameters: TAX_PARAMETERS,
+      straightLineRates: STRAIGHT_LINE_RATES,
     });
     expect(closed.status).toBe("closed");
   });

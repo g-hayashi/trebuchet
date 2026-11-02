@@ -3,6 +3,7 @@ import type { NewJournal } from "../src/ports.ts";
 import type {
   AdjustmentRef,
   ClosingAuditEntry,
+  DeferredAsset,
   FixedAsset,
   HomeUseAllocation,
 } from "../src/types.ts";
@@ -69,11 +70,15 @@ const asset: FixedAsset = {
   acquisitionCost: 250000,
   method: "small_asset_28_2",
   usefulLifeYears: null,
+  inServiceOn: null,
+  priorAccumulated: 0,
+  priorThroughYear: null,
   businessRatio: 10000,
   assetAccountId: "b",
   linkedJournalId: null,
   note: null,
   disposedOn: null,
+  disposalKind: null,
   createdAt: AT,
   updatedAt: AT,
 };
@@ -83,7 +88,21 @@ const ref: AdjustmentRef = {
   kind: "home_use",
   allocationId: "alloc-1",
   assetId: null,
+  deferredAssetId: null,
   fiscalYear: 2025,
+};
+
+const deferred: DeferredAsset = {
+  id: "def-1",
+  name: "開業費",
+  totalAmount: 600000,
+  openedOn: "2025-04-01",
+  priorAccumulated: 0,
+  priorThroughYear: null,
+  accountId: "b",
+  note: null,
+  createdAt: AT,
+  updatedAt: AT,
 };
 
 const audit: ClosingAuditEntry = {
@@ -143,6 +162,86 @@ describe("fakeClosingUnitOfWork", () => {
     expect(uow.closing.listAdjustmentRefs(2025)).toEqual([ref]);
     expect(uow.closing.listAdjustmentRefs(2024)).toEqual([]);
     expect(uow.closing.listHomeUseAllocations(2024)).toEqual([]);
+  });
+
+  it("009 のメソッド: 償却率・開業費・決定の往復と出所ごとの参照", () => {
+    const uow = fakeClosingUnitOfWork();
+    const c = uow.closing;
+    expect(c.listStraightLineRates()).toEqual([]);
+    c.straightLineRates = [
+      {
+        usefulLifeYears: 4,
+        ratePermille: 250,
+        effectiveFrom: "2007-04-01",
+        effectiveTo: null,
+        sourceUrl: "https://example.test/",
+      },
+    ];
+    expect(c.listStraightLineRates().map((r) => r.ratePermille)).toEqual([250]);
+
+    c.upsertDeferredAsset(deferred);
+    c.upsertDeferredAsset({ ...deferred, name: "開業費（更新）" });
+    expect(c.listDeferredAssets().map((d) => d.name)).toEqual(["開業費（更新）"]);
+
+    const decision = {
+      deferredAssetId: "def-1",
+      fiscalYear: 2025,
+      amount: 100000,
+      decidedAt: AT,
+      updatedAt: AT,
+    };
+    c.upsertDeferredAmortization(decision);
+    c.upsertDeferredAmortization({ ...decision, fiscalYear: 2026, amount: 50000 });
+    c.upsertDeferredAmortization({ ...decision, amount: 120000 });
+    expect(c.listDeferredAmortizations().map((d) => [d.fiscalYear, d.amount])).toEqual([
+      [2025, 120000],
+      [2026, 50000],
+    ]);
+
+    uow.ledger.insertJournal(journal("j-1", 1));
+    uow.ledger.insertJournal(journal("j-2", 2));
+    uow.ledger.insertJournal(journal("j-3", 3));
+    c.insertAdjustmentRef({
+      ...ref,
+      journalId: "j-1",
+      kind: "depreciation",
+      allocationId: null,
+      assetId: "asset-1",
+    });
+    c.insertAdjustmentRef({
+      ...ref,
+      journalId: "j-2",
+      kind: "deferred_amortization",
+      allocationId: null,
+      deferredAssetId: "def-1",
+      fiscalYear: 2026,
+    });
+    c.insertAdjustmentRef({ ...ref, journalId: "j-3" });
+    expect(c.listAdjustmentRefsBySource({ assetId: "asset-1" }).map((r) => r.journalId)).toEqual([
+      "j-1",
+    ]);
+    expect(
+      c.listAdjustmentRefsBySource({ deferredAssetId: "def-1" }).map((r) => r.journalId),
+    ).toEqual(["j-2"]);
+  });
+
+  it("009 のメソッドの書き込みも途中の例外で戻る", () => {
+    const uow = fakeClosingUnitOfWork();
+    expect(() =>
+      uow.run(({ closing }) => {
+        closing.upsertDeferredAsset(deferred);
+        closing.upsertDeferredAmortization({
+          deferredAssetId: "def-1",
+          fiscalYear: 2025,
+          amount: 1,
+          decidedAt: AT,
+          updatedAt: AT,
+        });
+        throw new Error("途中で失敗");
+      }),
+    ).toThrow("途中で失敗");
+    expect(uow.closing.listDeferredAssets()).toEqual([]);
+    expect(uow.closing.listDeferredAmortizations()).toEqual([]);
   });
 
   it("参照の仕訳 ID は一意で、存在しない仕訳への参照は拒否する（FK）", () => {

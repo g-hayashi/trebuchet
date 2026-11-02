@@ -7,6 +7,7 @@ import { buildBalanceSheet } from "../../src/reports/balance-sheet.ts";
 import { computeBalances } from "../../src/reports/balances.ts";
 import type { OpeningInput } from "../../src/reports/common.ts";
 import { buildProfitAndLoss } from "../../src/reports/profit-and-loss.ts";
+import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type {
   Account,
@@ -24,7 +25,12 @@ import {
   makeFiscalPeriod,
   type OpeningRow,
 } from "../arbitraries.ts";
-import { accountIdOf, type YearLedger, yearLedgerArb } from "../blue-return-arbitraries.ts";
+import {
+  accountIdOf,
+  straightLineAssetArb,
+  type YearLedger,
+  yearLedgerArb,
+} from "../blue-return-arbitraries.ts";
 
 const answersArb: fc.Arbitrary<DeductionAnswers | null> = fc.option(
   fc.record({
@@ -49,6 +55,7 @@ describe("buildBlueReturn の性質（INV-18・INV-22）", () => {
           lines: ledger.lines,
           deductionAnswers,
           taxParameters: TAX_PARAMETERS,
+          straightLineRates: STRAIGHT_LINE_RATES,
         });
         const pl = buildProfitAndLoss({
           accounts: ledger.accounts,
@@ -100,6 +107,7 @@ describe("buildBlueReturn の性質（INV-18・INV-22）", () => {
           lines: ledger.lines,
           deductionAnswers,
           taxParameters: TAX_PARAMETERS,
+          straightLineRates: STRAIGHT_LINE_RATES,
         });
         expect(BlueReturn.safeParse(r).success).toBe(true);
         for (const l of r.page1.lines) {
@@ -114,6 +122,56 @@ describe("buildBlueReturn の性質（INV-18・INV-22）", () => {
     );
   });
 
+  it("INV-18・19（009）: 定額法の資産・除却損の科目を含めても、欄32・33 は PL と一致し、3 ページの行は整合し、4 ページは貸借が一致する", () => {
+    fc.assert(
+      fc.property(
+        yearLedgerArb,
+        fc.array(straightLineAssetArb, { maxLength: 5 }),
+        (ledger, fixedAssets) => {
+          const r = buildBlueReturn({
+            period: ledger.period,
+            accounts: ledger.accounts,
+            lines: ledger.lines,
+            deductionAnswers: null,
+            taxParameters: TAX_PARAMETERS,
+            straightLineRates: STRAIGHT_LINE_RATES,
+            fixedAssets,
+            opening: ledger.opening,
+          });
+          const pl = buildProfitAndLoss({
+            accounts: ledger.accounts,
+            lines: ledger.lines,
+            from: ledger.period.startDate,
+            to: ledger.period.endDate,
+          });
+          const section = (s: string) =>
+            pl.sections.find((x) => x.section === s)?.total.amount ?? 0;
+          const amountOf = (no: number) => r.page1.lines.find((l) => l.no === no)?.amount;
+          expect(amountOf(32)).toBe(section("PL_COGS") + section("PL_EXPENSE"));
+          expect(amountOf(33)).toBe(pl.netIncome.amount);
+          expect(r.warnings.map((w) => w.code)).not.toContain("PL_MISMATCH");
+          expect(BlueReturn.safeParse(r).success).toBe(true);
+          // 3 ページの行は、率の表にある定額法の資産だけで、必要経費算入額は償却費合計と割合から決まる
+          const ids = new Set(fixedAssets.map((a) => a.id));
+          for (const row of r.page3.depreciation) {
+            expect(ids.has(row.assetId)).toBe(true);
+            expect(row.source).toBe("fixed_asset");
+            expect(row.method).toBe("straight_line");
+            expect(row.ratePermille).not.toBeNull();
+            expect(row.months).not.toBeNull();
+            expect(row.deductible).toBe(Math.floor((row.total * row.businessRatio) / 10000));
+          }
+          // 4 ページ（INV-19）: 期首・期末とも資産合計 = 負債・資本合計
+          for (const when of ["opening", "closing"] as const) {
+            expect(r.page4[when].assets.total).toBe(r.page4[when].liabilityEquity.total);
+          }
+          // 率の表が全部ある（耐用年数 2〜50）ので、計算できない警告は出ない
+          expect(r.warnings.map((w) => w.code)).not.toContain("DEPRECIATION_PARAMETER_MISSING");
+        },
+      ),
+    );
+  });
+
   it("売上のない・仕訳のない年度でも欄はすべて 0", () => {
     fc.assert(
       fc.property(yearLedgerArb, (ledger) => {
@@ -123,6 +181,7 @@ describe("buildBlueReturn の性質（INV-18・INV-22）", () => {
           lines: [],
           deductionAnswers: null,
           taxParameters: TAX_PARAMETERS,
+          straightLineRates: STRAIGHT_LINE_RATES,
         });
         for (const l of r.page1.lines) {
           if (l.no === 44 || l.no === 45) expect(l.amount).toBeNull();
@@ -153,6 +212,7 @@ const build4 = (
     ...input,
     deductionAnswers: null,
     taxParameters: TAX_PARAMETERS,
+    straightLineRates: STRAIGHT_LINE_RATES,
     priorPeriod,
   });
 

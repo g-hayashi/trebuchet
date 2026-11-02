@@ -1,16 +1,23 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { type InvoiceItemInput, itemAmountOf, MAX_INVOICE_ITEMS } from "@trebuchet/schema";
+import {
+  InvoiceInput,
+  type InvoiceItemInput,
+  type InvoicePriceMode,
+  itemAmountOf,
+  MAX_INVOICE_ITEMS,
+  YEN_LIMIT,
+} from "@trebuchet/schema";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
-import { Input } from "@/components/ui/input";
+import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SaveNotice } from "@/components/ui/save-notice";
 import { ApiError } from "@/lib/api";
 import { formatYen, parseHalfStep, parseWholeYen, parseYenInput } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
-import { type InvoiceDraftView, postInvoice } from "./api";
+import { type InvoiceDraftView, invoiceCalculationQuery, postInvoice } from "./api";
 
 type Row = {
   key: number;
@@ -20,6 +27,8 @@ type Row = {
   unitPrice: string;
   amount: string;
   taxCategory: InvoiceItemInput["taxCategory"];
+  taxRate: 10 | 8 | null;
+  taxRateEdited: boolean;
 };
 
 /** 0.5 の倍数の正の数。そうでなければ null（空欄も null） */
@@ -47,6 +56,8 @@ const rowsOf = (draft: InvoiceDraftView): Row[] =>
     unitPrice: item.unitPrice === undefined ? "" : String(item.unitPrice),
     amount: String(item.amount),
     taxCategory: item.taxCategory,
+    taxRate: item.taxRate ?? null,
+    taxRateEdited: false,
   }));
 
 type Built =
@@ -64,17 +75,18 @@ function buildItems(rows: Row[]): Built {
     if (row.quantity.trim() !== "" && quantity === null)
       return { error: `${line}の数量は 0.5 単位の正の数で入力してください` };
     const unitPrice = parsePositiveYen(row.unitPrice);
-    if (row.unitPrice.trim() !== "" && unitPrice === null)
-      return { error: `${line}の単価は正の整数で入力してください` };
+    if (row.unitPrice.trim() !== "" && (unitPrice === null || unitPrice >= YEN_LIMIT))
+      return { error: `${line}の単価は 1 円以上、1 兆円未満の整数で入力してください` };
     const amount = amountOf(row);
-    if (!Number.isInteger(amount) || amount <= 0)
-      return { error: `${line}の金額は正の整数で入力してください` };
+    if (!Number.isInteger(amount) || amount <= 0 || amount >= YEN_LIMIT)
+      return { error: `${line}の金額は 1 円以上、1 兆円未満の整数で入力してください` };
     items.push({
       name,
       ...(quantity === null ? {} : { quantity }),
       ...(row.unit.trim() === "" ? {} : { unit: row.unit.trim() }),
       ...(unitPrice === null ? {} : { unitPrice }),
       amount,
+      taxRate: row.taxRate,
       ...(row.taxCategory === undefined ? {} : { taxCategory: row.taxCategory }),
     });
   }
@@ -99,11 +111,11 @@ export function InvoiceDraftEditor({
   const id = useId();
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<Row[]>(() => rowsOf(draft));
+  const [priceMode, setPriceMode] = useState<InvoicePriceMode>(draft.priceMode ?? "inclusive");
   const [nextKey, setNextKey] = useState(draft.items.length);
   const [issueDate, setIssueDate] = useState(draft.issueDate);
   const [salesDate, setSalesDate] = useState(draft.salesDate);
   const [confirmed, setConfirmed] = useState(false);
-  const [formError, setFormError] = useState("");
   const [duplicateSeen, setDuplicateSeen] = useState(false);
 
   const issue = useMutation({
@@ -113,6 +125,7 @@ export function InvoiceDraftEditor({
         targetMonth: draft.targetMonth,
         issueDate,
         salesDate,
+        priceMode,
         items,
         ...(confirmed ? { confirmDuplicate: true } : {}),
       }),
@@ -125,7 +138,31 @@ export function InvoiceDraftEditor({
 
   const duplicate =
     duplicateSeen || draft.warnings.some((w) => w.code === "INVOICE_DUPLICATE_MONTH");
-  const total = rows.reduce((sum, row) => sum + amountOf(row), 0);
+  const built = buildItems(rows);
+  const validInput = InvoiceInput.omit({ partnerId: true }).safeParse({
+    targetMonth: draft.targetMonth,
+    issueDate,
+    salesDate,
+    priceMode,
+    items: built.items,
+  });
+  const firstIssue = validInput.success ? undefined : validInput.error.issues[0];
+  const inputError =
+    built.error ??
+    (firstIssue === undefined
+      ? undefined
+      : firstIssue.path[0] === "items"
+        ? `${Number(firstIssue.path[1]) + 1} 行目の${firstIssue.path[2] === "name" ? "品名は200文字以内" : firstIssue.path[2] === "unit" ? "単位は20文字以内" : "明細を正しい値"}で入力してください`
+        : `${firstIssue.path[0] === "issueDate" ? "発行日" : "売上の計上日"}を正しい日付で入力してください`);
+  const calculation = useQuery({
+    ...invoiceCalculationQuery(entityId, {
+      priceMode,
+      items: rows.map((row) => ({ amount: amountOf(row), taxRate: row.taxRate })),
+    }),
+    enabled: validInput.success && issue.data === undefined,
+  });
+  const ready = validInput.success && calculation.isSuccess && !calculation.isFetching;
+  const total = calculation.data?.total;
   const hasZero = rows.some((row) => amountOf(row) <= 0);
   const issued = issue.data?.invoice;
 
@@ -134,14 +171,9 @@ export function InvoiceDraftEditor({
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    setFormError("");
+    if (!ready || issue.isPending || issued !== undefined || (duplicate && !confirmed)) return;
     issue.reset();
-    const built = buildItems(rows);
-    if (built.error !== undefined) {
-      setFormError(built.error);
-      return;
-    }
-    issue.mutate(built.items);
+    if (built.items !== undefined) issue.mutate(built.items);
   };
 
   return (
@@ -163,13 +195,41 @@ export function InvoiceDraftEditor({
         </ul>
       )}
       <form noValidate className="grid gap-4" onSubmit={onSubmit}>
-        <fieldset disabled={issued !== undefined} className="grid gap-4">
+        <fieldset disabled={issued !== undefined || issue.isPending} className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor={`${id}-mode`}>金額の入力方法</Label>
+            <NativeSelect
+              id={`${id}-mode`}
+              value={priceMode}
+              onChange={(e) => {
+                const mode = e.target.value as InvoicePriceMode;
+                setPriceMode(mode);
+                if (mode === "exclusive")
+                  setRows((prev) =>
+                    prev.map((row) =>
+                      row.taxRate === null && !row.taxRateEdited
+                        ? { ...row, taxRate: 10, taxCategory: undefined }
+                        : row,
+                    ),
+                  );
+              }}
+            >
+              <option value="inclusive">税込入力（消費税を加算しない）</option>
+              <option value="exclusive">税抜入力（消費税を加算する）</option>
+            </NativeSelect>
+            <p className="text-sm text-muted-foreground">
+              {priceMode === "exclusive"
+                ? "単価・金額は税抜で入力します。選んだ税率の消費税相当額を加算します。"
+                : "単価・金額は税込で入力します。消費税は加算しません。"}
+            </p>
+          </div>
           <div className="flex flex-wrap items-end gap-4">
             <div className="grid gap-2">
               <Label htmlFor={`${id}-issue`}>発行日</Label>
               <Input
                 id={`${id}-issue`}
                 type="date"
+                aria-describedby={`${id}-form-error`}
                 value={issueDate}
                 onChange={(e) => setIssueDate(e.target.value)}
               />
@@ -179,6 +239,7 @@ export function InvoiceDraftEditor({
               <Input
                 id={`${id}-sales`}
                 type="date"
+                aria-describedby={`${id}-form-error`}
                 value={salesDate}
                 onChange={(e) => setSalesDate(e.target.value)}
               />
@@ -187,6 +248,7 @@ export function InvoiceDraftEditor({
           </div>
 
           <div className="grid gap-2">
+            <p className="text-sm font-medium">{`単価・金額（${priceMode === "exclusive" ? "税抜" : "税込"}）`}</p>
             {rows.map((row, i) => {
               const n = i + 1;
               const computed = computedAmount(row);
@@ -195,6 +257,7 @@ export function InvoiceDraftEditor({
                   <Input
                     className="col-span-4"
                     aria-label={`品名 ${n}`}
+                    aria-describedby={`${id}-row-error-${row.key}`}
                     autoComplete="off"
                     value={row.name}
                     onChange={(e) => update(row.key, { name: e.target.value })}
@@ -205,12 +268,14 @@ export function InvoiceDraftEditor({
                     step={0.5}
                     min={0}
                     aria-label={`数量 ${n}`}
+                    aria-describedby={`${id}-row-error-${row.key}`}
                     value={row.quantity}
                     onChange={(e) => update(row.key, { quantity: e.target.value })}
                   />
                   <Input
                     className="col-span-1"
                     aria-label={`単位 ${n}`}
+                    aria-describedby={`${id}-row-error-${row.key}`}
                     autoComplete="off"
                     value={row.unit}
                     onChange={(e) => update(row.key, { unit: e.target.value })}
@@ -220,6 +285,7 @@ export function InvoiceDraftEditor({
                     type="number"
                     min={0}
                     aria-label={`単価 ${n}`}
+                    aria-describedby={`${id}-row-error-${row.key}`}
                     value={row.unitPrice}
                     onChange={(e) => update(row.key, { unitPrice: e.target.value })}
                   />
@@ -228,6 +294,7 @@ export function InvoiceDraftEditor({
                       className="col-span-2 text-right tabular-nums"
                       inputMode="numeric"
                       aria-label={`金額 ${n}`}
+                      aria-describedby={`${id}-row-error-${row.key}`}
                       value={row.amount}
                       onChange={(e) => update(row.key, { amount: e.target.value })}
                     />
@@ -236,6 +303,7 @@ export function InvoiceDraftEditor({
                       className="col-span-2 text-right tabular-nums"
                       readOnly
                       aria-label={`金額 ${n}`}
+                      aria-describedby={`${id}-row-error-${row.key}`}
                       value={formatYen(computed)}
                     />
                   )}
@@ -249,6 +317,31 @@ export function InvoiceDraftEditor({
                   >
                     削除
                   </Button>
+                  <div className="col-span-12 grid gap-1 sm:col-span-4">
+                    <Label htmlFor={`${id}-rate-${row.key}`}>{`請求税率 ${n}`}</Label>
+                    <NativeSelect
+                      id={`${id}-rate-${row.key}`}
+                      value={row.taxRate === null ? "none" : String(row.taxRate)}
+                      onChange={(e) =>
+                        update(row.key, {
+                          taxRate:
+                            e.target.value === "none" ? null : (Number(e.target.value) as 8 | 10),
+                          taxCategory: undefined,
+                          taxRateEdited: true,
+                        })
+                      }
+                    >
+                      <option value="10">10%</option>
+                      <option value="8">8%</option>
+                      <option value="none">加算なし</option>
+                    </NativeSelect>
+                  </div>
+                  <div className="col-span-12">
+                    <FieldError
+                      id={`${id}-row-error-${row.key}`}
+                      message={inputError?.startsWith(`${n} 行目`) ? inputError : undefined}
+                    />
+                  </div>
                 </div>
               );
             })}
@@ -268,6 +361,8 @@ export function InvoiceDraftEditor({
                       unitPrice: "",
                       amount: "",
                       taxCategory: undefined,
+                      taxRate: 10,
+                      taxRateEdited: false,
                     },
                   ]);
                   setNextKey(nextKey + 1);
@@ -281,9 +376,23 @@ export function InvoiceDraftEditor({
             </div>
           </div>
 
-          <p className="text-right text-base font-semibold tabular-nums">
-            {`合計 ${formatYen(total)} 円`}
-          </p>
+          {ready && calculation.data ? (
+            <div className="grid justify-items-end gap-1 tabular-nums" aria-live="polite">
+              <p>{`小計（${priceMode === "exclusive" ? "税抜" : "税込"}）${formatYen(calculation.data.subtotal)} 円`}</p>
+              {priceMode === "exclusive" && (
+                <p>{`加算する消費税相当額 ${formatYen(calculation.data.total - calculation.data.subtotal)} 円`}</p>
+              )}
+              <p className="text-base font-semibold">{`合計 ${formatYen(total ?? 0)} 円`}</p>
+            </div>
+          ) : (
+            <p className="text-right text-sm text-muted-foreground">
+              {validInput.success
+                ? calculation.isError
+                  ? "計算できません。入力を確認してください。"
+                  : "請求額を計算中…"
+                : "明細と日付を正しく入力してください。"}
+            </p>
+          )}
           {hasZero && (
             <p className="text-sm text-muted-foreground">
               金額が 0
@@ -304,12 +413,17 @@ export function InvoiceDraftEditor({
           )}
         </fieldset>
 
-        <FieldError id={`${id}-form-error`} message={formError} />
+        <FieldError
+          id={`${id}-form-error`}
+          message={
+            inputError !== undefined && !/^\d+ 行目/.test(inputError) ? inputError : undefined
+          }
+        />
         <div className="flex flex-wrap items-center gap-3">
           {issued === undefined && (
             <Button
               type="submit"
-              disabled={issue.isPending || hasZero || (duplicate && !confirmed)}
+              disabled={issue.isPending || !ready || hasZero || (duplicate && !confirmed)}
             >
               発行する
             </Button>
@@ -326,6 +440,7 @@ export function InvoiceDraftEditor({
           )}
         </div>
         <ApiErrorMessage error={issue.error} />
+        <ApiErrorMessage error={calculation.error} />
         {isCode(issue.error, "INVOICE_ISSUER_INCOMPLETE") && (
           <Link
             to="/e/$entityId/invoice-settings"

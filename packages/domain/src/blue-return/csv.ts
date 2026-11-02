@@ -29,7 +29,10 @@ function page2Rows(page: BlueReturn["page2"]): CsvValue[][] {
   return rows;
 }
 
-/** 3ページ: 売上先、減価償却費の計算（金額ごとに行を分ける）、特殊事情（金額でない唯一の行） */
+/**
+ * 3ページ: 売上先、減価償却費の計算（金額ごとに行を分ける。定額法の行は償却率と本年中の償却期間（`n/12`）を足す）、
+ * 特殊事情。金額でない行は、特殊事情と本年中の償却期間だけ
+ */
 function page3Rows(page: BlueReturn["page3"]): CsvValue[][] {
   const rows: CsvValue[][] = [];
   const partners = page.salesPartners;
@@ -41,6 +44,11 @@ function page3Rows(page: BlueReturn["page3"]): CsvValue[][] {
     rows.push(
       [3, no, `${d.name}: 取得価額`, d.cost],
       [3, no, `${d.name}: 償却の基礎になる金額`, d.base],
+    );
+    // 償却率（千分率 → 小数）と本年中の償却期間（n/12）は定額法の行だけ（R11）
+    if (d.ratePermille !== null) rows.push([3, no, `${d.name}: 償却率`, d.ratePermille / 1000]);
+    if (d.months !== null) rows.push([3, no, `${d.name}: 本年中の償却期間`, `${d.months}/12`]);
+    rows.push(
       [3, no, `${d.name}: 本年分の普通償却費`, d.ordinary],
       [3, no, `${d.name}: 本年分の償却費合計`, d.total],
       // 割合は万分率で持つので、% に直して出す（5000 → 50）
@@ -74,7 +82,8 @@ function page4Rows(page: BlueReturn["page4"]): CsvValue[][] {
  * - 1ページ: 欄番号 = 欄の番号、欄名 = 欄の名前
  * - 2〜4ページ: 欄番号 = 表の行の識別子（1月、内訳1、売上先1、資産1、期首:現金 など）、欄名 = 表示名。
  *   1行に複数の金額がある表は、金額ごとに行を分け、欄名に列名を添える
- * - 金額が null（回答待ち）の欄は空。金額でない行は3ページの `特殊事情`（金額の列にメモの本文）だけ
+ * - 金額が null（回答待ち）の欄は空。金額でない行は3ページの `特殊事情`（金額の列にメモの本文）と、
+ *   定額法の `本年中の償却期間`（`n/12`）だけ
  * - blankUnused なら、1ページの kind = unused の欄の金額を空にする（選択は保存せず、出力のときだけ
  *   切り替える。2〜4ページは変えない）
  * 書き方は 001 の帳票の CSV（encodeCsv）と同じ

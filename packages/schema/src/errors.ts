@@ -38,6 +38,13 @@ export const ErrorCode = z.enum([
   "REPORT_LINE_INVALID",
   "ADJUSTMENT_NOT_NEEDED",
   "ADJUSTMENT_CHANGED",
+  // 009-depreciation-deferred（contracts/http-api.md §1）
+  "USEFUL_LIFE_UNSUPPORTED",
+  "LUMP_SUM_COST_OUT_OF_RANGE",
+  "PRIOR_ACCUMULATED_INVALID",
+  "TAX_PARAMETER_MISSING",
+  "DEFERRED_AMORTIZATION_OVER_LIMIT",
+  "DEPRECIATION_JOURNAL_EXISTS",
   // 004-auth-backup（contracts/http-api.md）
   "UNAUTHENTICATED",
   "CSRF_REJECTED",

@@ -74,6 +74,14 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 工数・請求書の一覧（US1）。仕訳の詳細は出所を読む（`:id` は 1 つのパスの区切り）
   "GET /work-hours": () => ok({ entries: [] }),
   "GET /invoices": () => ok({ invoices: [], outstandingByPartner: [] }),
+  "POST /invoices/calculate": ({ body }) => {
+    const input = body as {
+      priceMode: string;
+      items: { amount: number; taxRate: number | null }[];
+    };
+    const subtotal = input.items.reduce((sum, item) => sum + item.amount, 0);
+    return ok({ subtotal, total: subtotal, taxBreakdown: [] });
+  },
   "GET /journals/:id/origin": () => ok({ origin: null }),
   // 請求書の詳細の消し込みの入力（US2）が入金先の科目・補助科目を読む
   "GET /accounts": () => ok({ accounts: [] }),
@@ -81,6 +89,8 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 定期仕訳（US3）。事業体の画面の上部の知らせが status を読む（`/recurring-journals/:id` より具体的なので先に当たる）
   "GET /recurring-journals": () => ok({ recurring: [] }),
   "GET /recurring-journals/status": () => ok({ unacknowledged: [], blocked: [] }),
+  // 固定資産台帳の画面（009 US3）が開業費の一覧を読む。開業費はまだない
+  "GET /deferred-assets": () => ok({ deferredAssets: [] }),
   // 明細の取込（006 US1）。取込元の口座と取込の履歴は空
   "GET /statement-accounts": () => ok({ accounts: [] }),
   "GET /statements/imports": () => ok({ batches: [] }),

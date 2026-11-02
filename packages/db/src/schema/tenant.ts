@@ -412,6 +412,10 @@ export const taxParameters = sqliteTable(
         "BLUE_DEDUCTION_MAX",
         "BLUE_DEDUCTION_STANDARD",
         "BLUE_DEDUCTION_BASIC",
+        "LUMP_SUM_COST_MIN",
+        "LUMP_SUM_COST_MAX",
+        "LUMP_SUM_YEARS",
+        "OPENING_COST_AMORTIZATION_MONTHS",
       ],
     }).notNull(),
     effectiveFrom: text("effective_from").notNull(),
@@ -423,9 +427,28 @@ export const taxParameters = sqliteTable(
     primaryKey({ columns: [t.key, t.effectiveFrom] }),
     check(
       "tax_parameters_key",
-      sql`${t.key} IN ('SMALL_ASSET_THRESHOLD', 'SMALL_ASSET_ANNUAL_LIMIT', 'BLUE_DEDUCTION_MAX', 'BLUE_DEDUCTION_STANDARD', 'BLUE_DEDUCTION_BASIC')`,
+      sql`${t.key} IN ('SMALL_ASSET_THRESHOLD', 'SMALL_ASSET_ANNUAL_LIMIT', 'BLUE_DEDUCTION_MAX', 'BLUE_DEDUCTION_STANDARD', 'BLUE_DEDUCTION_BASIC', 'LUMP_SUM_COST_MIN', 'LUMP_SUM_COST_MAX', 'LUMP_SUM_YEARS', 'OPENING_COST_AMORTIZATION_MONTHS')`,
     ),
     check("tax_parameters_value", sql`${t.value} > 0`),
+  ],
+);
+
+// ---- 009-depreciation-deferred（specs/009-depreciation-deferred/data-model.md §1） ----
+
+/** 定額法の償却率（千分率）。正本は domain の seed/depreciation-rates.ts。更新・削除しない */
+export const straightLineRates = sqliteTable(
+  "straight_line_rates",
+  {
+    usefulLifeYears: integer("useful_life_years").notNull(),
+    effectiveFrom: text("effective_from").notNull(),
+    effectiveTo: text("effective_to"),
+    ratePermille: integer("rate_permille").notNull(),
+    sourceUrl: text("source_url").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.usefulLifeYears, t.effectiveFrom] }),
+    check("straight_line_rates_years", sql`${t.usefulLifeYears} BETWEEN 2 AND 50`),
+    check("straight_line_rates_rate", sql`${t.ratePermille} BETWEEN 1 AND 1000`),
   ],
 );
 
@@ -488,7 +511,9 @@ export const fixedAssets = sqliteTable(
     quantity: text("quantity"),
     acquiredOn: text("acquired_on").notNull(),
     acquisitionCost: integer("acquisition_cost").notNull(),
-    method: text("method", { enum: ["small_asset_28_2"] }).notNull(),
+    method: text("method", {
+      enum: ["small_asset_28_2", "straight_line", "lump_sum"],
+    }).notNull(),
     usefulLifeYears: integer("useful_life_years"),
     businessRatio: integer("business_ratio").notNull(),
     assetAccountId: text("asset_account_id")
@@ -499,12 +524,85 @@ export const fixedAssets = sqliteTable(
     disposedOn: text("disposed_on"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    // 009（data-model §1.3）
+    inServiceOn: text("in_service_on"),
+    priorAccumulated: integer("prior_accumulated").notNull().default(0),
+    priorThroughYear: integer("prior_through_year"),
+    disposalKind: text("disposal_kind", { enum: ["scrap", "sale"] }),
   },
   (t) => [
     check("fixed_assets_name", sql`length(${t.name}) > 0`),
     check("fixed_assets_cost", sql`${t.acquisitionCost} > 0`),
-    check("fixed_assets_method", sql`${t.method} IN ('small_asset_28_2')`),
+    check(
+      "fixed_assets_method",
+      sql`${t.method} IN ('small_asset_28_2', 'straight_line', 'lump_sum')`,
+    ),
     check("fixed_assets_ratio", sql`${t.businessRatio} BETWEEN 0 AND 10000`),
+    check("fixed_assets_prior", sql`${t.priorAccumulated} >= 0`),
+    check(
+      "fixed_assets_prior_year",
+      sql`${t.priorAccumulated} = 0 OR ${t.priorThroughYear} IS NOT NULL`,
+    ),
+    check(
+      "fixed_assets_useful_life",
+      sql`${t.method} <> 'straight_line' OR ${t.usefulLifeYears} IS NOT NULL`,
+    ),
+    check("fixed_assets_disposal_kind", sql`${t.disposalKind} IN ('scrap', 'sale')`),
+    check(
+      "fixed_assets_disposal_pair",
+      sql`(${t.disposedOn} IS NULL) = (${t.disposalKind} IS NULL)`,
+    ),
+  ],
+);
+
+/** 繰延資産（開業費）（009 data-model §1.4）。物理削除しない */
+export const deferredAssets = sqliteTable(
+  "deferred_assets",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    totalAmount: integer("total_amount").notNull(),
+    openedOn: text("opened_on").notNull(),
+    priorAccumulated: integer("prior_accumulated").notNull().default(0),
+    priorThroughYear: integer("prior_through_year"),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    note: text("note"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    check("deferred_assets_name", sql`length(${t.name}) > 0`),
+    check("deferred_assets_total", sql`${t.totalAmount} > 0`),
+    check(
+      "deferred_assets_prior",
+      sql`${t.priorAccumulated} >= 0 AND ${t.priorAccumulated} <= ${t.totalAmount}`,
+    ),
+    check(
+      "deferred_assets_prior_year",
+      sql`${t.priorAccumulated} = 0 OR ${t.priorThroughYear} IS NOT NULL`,
+    ),
+  ],
+);
+
+/** 開業費の年度ごとの償却額の決定（009 data-model §1.5）。更新できる。削除はトリガーで禁止（0012） */
+export const deferredAmortizations = sqliteTable(
+  "deferred_amortizations",
+  {
+    deferredAssetId: text("deferred_asset_id")
+      .notNull()
+      .references(() => deferredAssets.id),
+    fiscalYear: integer("fiscal_year")
+      .notNull()
+      .references(() => fiscalPeriods.fiscalYear),
+    amount: integer("amount").notNull(),
+    decidedAt: text("decided_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.deferredAssetId, t.fiscalYear] }),
+    check("deferred_amortizations_amount", sql`${t.amount} >= 0`),
   ],
 );
 
@@ -514,17 +612,22 @@ export const adjustmentJournalRefs = sqliteTable(
     journalId: text("journal_id")
       .primaryKey()
       .references(() => journals.id),
-    kind: text("kind", { enum: ["home_use", "depreciation"] }).notNull(),
+    kind: text("kind", { enum: ["home_use", "depreciation", "deferred_amortization"] }).notNull(),
     allocationId: text("allocation_id").references(() => homeUseAllocations.id),
     assetId: text("asset_id").references(() => fixedAssets.id),
     fiscalYear: integer("fiscal_year").notNull(),
+    // 009（data-model §1.6）
+    deferredAssetId: text("deferred_asset_id").references(() => deferredAssets.id),
   },
   (t) => [
     index("adjustment_journal_refs_year").on(t.fiscalYear),
-    check("adjustment_journal_refs_kind", sql`${t.kind} IN ('home_use', 'depreciation')`),
+    check(
+      "adjustment_journal_refs_kind",
+      sql`${t.kind} IN ('home_use', 'depreciation', 'deferred_amortization')`,
+    ),
     check(
       "adjustment_journal_refs_source",
-      sql`(${t.kind} <> 'home_use' OR ${t.allocationId} IS NOT NULL) AND (${t.kind} <> 'depreciation' OR ${t.assetId} IS NOT NULL)`,
+      sql`(${t.kind} <> 'home_use' OR ${t.allocationId} IS NOT NULL) AND (${t.kind} <> 'depreciation' OR ${t.assetId} IS NOT NULL) AND (${t.kind} <> 'deferred_amortization' OR ${t.deferredAssetId} IS NOT NULL)`,
     ),
   ],
 );
@@ -629,6 +732,8 @@ export const closingAuditLog = sqliteTable(
         "blue_deduction_answer",
         "closing_note",
         "account_report_line",
+        "deferred_asset",
+        "deferred_amortization",
       ],
     }).notNull(),
     targetId: text("target_id").notNull(),
@@ -641,7 +746,7 @@ export const closingAuditLog = sqliteTable(
     index("closing_audit_log_target").on(t.targetType, t.targetId),
     check(
       "closing_audit_log_target_type",
-      sql`${t.targetType} IN ('home_use_allocation', 'rent_detail', 'fixed_asset', 'blue_deduction_answer', 'closing_note', 'account_report_line')`,
+      sql`${t.targetType} IN ('home_use_allocation', 'rent_detail', 'fixed_asset', 'blue_deduction_answer', 'closing_note', 'account_report_line', 'deferred_asset', 'deferred_amortization')`,
     ),
     check(
       "closing_audit_log_action",
@@ -686,6 +791,10 @@ export const partnerBillingTerms = sqliteTable(
       .primaryKey()
       .references(() => partners.id),
     billingType: text("billing_type", { enum: BILLING_TYPES }).notNull(),
+    priceMode: text("price_mode", { enum: ["inclusive", "exclusive"] })
+      .notNull()
+      .default("inclusive"),
+    taxRate: integer("tax_rate").default(-1),
     unitPrice: integer("unit_price"),
     monthlyAmount: integer("monthly_amount"),
     dueMonthsAfter: integer("due_months_after").notNull().default(1),
@@ -696,6 +805,11 @@ export const partnerBillingTerms = sqliteTable(
   },
   (t) => [
     check("partner_billing_terms_type", sql`${t.billingType} IN ('hourly', 'monthly')`),
+    check("partner_billing_terms_price_mode", sql`${t.priceMode} IN ('inclusive', 'exclusive')`),
+    check(
+      "partner_billing_terms_tax_rate",
+      sql`${t.taxRate} IS NULL OR ${t.taxRate} IN (-1, 8, 10)`,
+    ),
     check(
       "partner_billing_terms_amounts",
       sql`(${t.billingType} = 'hourly' AND ${t.unitPrice} IS NOT NULL AND ${t.unitPrice} > 0 AND ${t.monthlyAmount} IS NULL) OR (${t.billingType} = 'monthly' AND ${t.monthlyAmount} IS NOT NULL AND ${t.monthlyAmount} > 0 AND ${t.unitPrice} IS NULL)`,
@@ -739,6 +853,9 @@ export const invoices = sqliteTable(
     recipientName: text("recipient_name").notNull(),
     recipientHonorific: text("recipient_honorific", { enum: ["様", "御中"] }).notNull(),
     issuerJson: text("issuer_json").notNull(),
+    priceMode: text("price_mode", { enum: ["inclusive", "exclusive"] })
+      .notNull()
+      .default("inclusive"),
     taxDisplay: text("tax_display", { enum: ["separate", "inclusive_only"] }).notNull(),
     total: integer("total").notNull(),
     journalId: text("journal_id")
@@ -758,6 +875,7 @@ export const invoices = sqliteTable(
     check("invoices_recipient_name", sql`length(${t.recipientName}) > 0`),
     check("invoices_honorific", sql`${t.recipientHonorific} IN ('様', '御中')`),
     check("invoices_tax_display", sql`${t.taxDisplay} IN ('separate', 'inclusive_only')`),
+    check("invoices_price_mode", sql`${t.priceMode} IN ('inclusive', 'exclusive')`),
     check("invoices_total", sql`${t.total} > 0 AND ${t.total} < 1000000000000`),
     check("invoices_void", sql`(${t.voidedAt} IS NULL) = (${t.voidReason} IS NULL)`),
   ],

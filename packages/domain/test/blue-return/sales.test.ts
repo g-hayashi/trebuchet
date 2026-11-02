@@ -7,6 +7,7 @@ import {
   summarizeMonthlySales,
   summarizeSalesPartners,
 } from "../../src/blue-return/sales.ts";
+import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type { ClosingNote, PostedLine } from "../../src/types.ts";
 import { makeFiscalPeriod } from "../arbitraries.ts";
@@ -259,6 +260,7 @@ describe("buildBlueReturn の2・3ページ（US5）", () => {
       lines,
       deductionAnswers: null,
       taxParameters: TAX_PARAMETERS,
+      straightLineRates: STRAIGHT_LINE_RATES,
       closingNotes,
     });
   const line1 = (r: ReturnType<typeof build>) => r.page1.lines.find((l) => l.no === 1)?.amount;

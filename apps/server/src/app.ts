@@ -29,6 +29,7 @@ import { aiSettingsRoutes } from "./routes/ai-settings.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { backupRoutes } from "./routes/backup.ts";
 import { blueReturnRoutes } from "./routes/blue-return.ts";
+import { deferredAssetRoutes } from "./routes/deferred-assets.ts";
 import { entitiesRoutes, entityRoutes } from "./routes/entities.ts";
 import { fixedAssetRoutes } from "./routes/fixed-assets.ts";
 import { importRoutes } from "./routes/imports.ts";
@@ -63,6 +64,7 @@ function tenantRoutes(
     .route("/", importRoutes(options))
     .route("/", blueReturnRoutes(options))
     .route("/", fixedAssetRoutes(options))
+    .route("/", deferredAssetRoutes(options))
     .route("/", taxReturnRoutes(options))
     .route("/", invoicingRoutes(options))
     .route("/", recurringRoutes(options))

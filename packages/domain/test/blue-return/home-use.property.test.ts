@@ -183,6 +183,7 @@ describe("proposeHomeUseAdjustment の性質（INV-20・INV-23、SC-004）", () 
               kind: "home_use",
               allocationId: allocation.id,
               assetId: null,
+              deferredAssetId: null,
               fiscalYear: ledger.period.fiscalYear,
             });
 

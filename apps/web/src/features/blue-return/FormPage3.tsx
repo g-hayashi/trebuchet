@@ -15,14 +15,17 @@ import {
 } from "@/components/ui/table";
 import { formatSignedYen } from "@/lib/format";
 import { blueReturnKeys, putClosingNote } from "./api";
-import { formatRatioAsPercent } from "./ratio";
+import { formatDepreciationRate, formatRatioAsPercent } from "./ratio";
 import "./print.css";
 
 type Page3 = BlueReturn["page3"];
 
-/** 償却の方法の表示名（方法は少額の特例だけ。R7） */
+/** 償却の方法の表示名 */
 const METHOD_LABELS: Record<Page3["depreciation"][number]["method"], string> = {
   small_asset_28_2: "少額減価償却資産の特例（措置法28条の2）",
+  straight_line: "定額法",
+  lump_sum: "一括償却",
+  deferred: "任意償却",
 };
 
 /**
@@ -158,6 +161,8 @@ export function FormPage3({
               <TableHead className="text-right">償却の基礎になる金額</TableHead>
               <TableHead>償却方法</TableHead>
               <TableHead className="text-right">耐用年数</TableHead>
+              <TableHead className="text-right">償却率</TableHead>
+              <TableHead className="text-right">本年中の償却期間</TableHead>
               <TableHead className="text-right">本年分の普通償却費</TableHead>
               <TableHead className="text-right">本年分の償却費合計</TableHead>
               <TableHead className="text-right">事業専用割合</TableHead>
@@ -168,7 +173,7 @@ export function FormPage3({
           </TableHeader>
           <TableBody>
             {depreciation.map((d) => (
-              <TableRow key={d.assetId}>
+              <TableRow key={`${d.source}-${d.assetId}`}>
                 <TableCell>{d.name}</TableCell>
                 <TableCell>{d.quantity ?? ""}</TableCell>
                 <TableCell>{d.acquiredOn.slice(0, 7)}</TableCell>
@@ -176,6 +181,12 @@ export function FormPage3({
                 <TableCell className="text-right tabular-nums">{formatSignedYen(d.base)}</TableCell>
                 <TableCell>{METHOD_LABELS[d.method]}</TableCell>
                 <TableCell className="text-right tabular-nums">{d.usefulLifeYears ?? ""}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {d.ratePermille === null ? "" : formatDepreciationRate(d.ratePermille)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {d.months === null ? "" : `${d.months}/12`}
+                </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatSignedYen(d.ordinary)}
                 </TableCell>
@@ -191,7 +202,11 @@ export function FormPage3({
                 <TableCell className="text-right tabular-nums">
                   {formatSignedYen(d.closingBookValue)}
                 </TableCell>
-                <TableCell>{d.note ?? ""}</TableCell>
+                <TableCell>
+                  {[d.note, d.disposedOn === null ? null : `除却 ${d.disposedOn}`]
+                    .filter((s) => s !== null)
+                    .join(" ／ ")}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

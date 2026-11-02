@@ -120,6 +120,22 @@ describe("勘定科目の初期セット（個人事業）", () => {
     expect(ranks).not.toContain(-1);
   });
 
+  it("5300 固定資産除却損は費用で任意欄 30、5290 研修費と 5310 雑費の間に並ぶ（009/R9）", () => {
+    const a = INDIVIDUAL_ACCOUNTS.find((x) => x.code === "5300");
+    expect(a).toMatchObject({
+      name: "固定資産除却損",
+      category: "expense",
+      reportSection: "PL_EXPENSE",
+      reportLine: 30,
+    });
+    const sorted = [...INDIVIDUAL_ACCOUNTS]
+      .filter((x) => x.category === "expense")
+      .sort((x, y) => x.sortOrder - y.sortOrder)
+      .map((x) => x.code);
+    expect(sorted.indexOf("5300")).toBe(sorted.indexOf("5290") + 1);
+    expect(sorted.indexOf("5310")).toBe(sorted.indexOf("5300") + 1);
+  });
+
   it("経費は欄番号の順に並ぶ", () => {
     const lines = INDIVIDUAL_ACCOUNTS.filter((a) => a.category === "expense")
       .sort((a, b) => a.sortOrder - b.sortOrder)

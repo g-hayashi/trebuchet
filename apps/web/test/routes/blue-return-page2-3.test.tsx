@@ -263,3 +263,132 @@ describe("特殊事情のメモ（FR-027）", () => {
     );
   });
 });
+
+type DepreciationRow = Page3["depreciation"][number];
+
+const depreciationRow = (over: Partial<DepreciationRow> = {}): DepreciationRow => ({
+  assetId: "as-1",
+  name: "機材A",
+  quantity: null,
+  acquiredOn: "2025-07-10",
+  cost: 500_000,
+  source: "fixed_asset",
+  method: "straight_line",
+  usefulLifeYears: 4,
+  ratePermille: 250,
+  months: 6,
+  disposedOn: null,
+  base: 500_000,
+  ordinary: 62_500,
+  total: 62_500,
+  businessRatio: 10000,
+  deductible: 62_500,
+  closingBookValue: 437_500,
+  note: null,
+  ...over,
+});
+
+describe("決算書の3ページの減価償却（009 US1）", () => {
+  it("定額法の行に、償却率（0.250）と本年中の償却期間（6/12）を出す。少額の特例の行は空欄", async () => {
+    mockApi({
+      [`GET ${YEAR_API}`]: () =>
+        ok({
+          blueReturn: blueReturn({
+            page3: {
+              depreciation: [
+                depreciationRow(),
+                depreciationRow({
+                  assetId: "as-2",
+                  name: "備品B",
+                  method: "small_asset_28_2",
+                  usefulLifeYears: null,
+                  ratePermille: null,
+                  months: null,
+                }),
+                depreciationRow({
+                  assetId: "as-3",
+                  name: "一括の資産",
+                  method: "lump_sum",
+                  usefulLifeYears: null,
+                  ratePermille: null,
+                  months: null,
+                }),
+              ],
+            },
+          }),
+        }),
+    });
+    renderYear();
+
+    const table = await screen.findByRole("table", { name: "決算書 3ページ 減価償却費の計算" });
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent);
+    expect(headers).toEqual(expect.arrayContaining(["償却率", "本年中の償却期間"]));
+    const rateAt = headers.indexOf("償却率");
+    const monthsAt = headers.indexOf("本年中の償却期間");
+    const cellsOf = (name: string) =>
+      within(within(table).getByRole("row", { name: new RegExp(name) }))
+        .getAllByRole("cell")
+        .map((c) => c.textContent);
+    expect(cellsOf("機材A")[rateAt]).toBe("0.250");
+    expect(cellsOf("機材A")[monthsAt]).toBe("6/12");
+    expect(cellsOf("機材A")).toContain("定額法");
+    expect(cellsOf("備品B")[rateAt]).toBe("");
+    expect(cellsOf("備品B")[monthsAt]).toBe("");
+    expect(cellsOf("一括の資産")).toContain("一括償却");
+  });
+
+  it("除却した資産は、摘要に除却の日を出す", async () => {
+    mockApi({
+      [`GET ${YEAR_API}`]: () =>
+        ok({
+          blueReturn: blueReturn({
+            page3: {
+              depreciation: [depreciationRow({ disposedOn: "2025-10-05", note: "廃棄" })],
+            },
+          }),
+        }),
+    });
+    renderYear();
+
+    const table = await screen.findByRole("table", { name: "決算書 3ページ 減価償却費の計算" });
+    expect(within(table).getByText("廃棄 ／ 除却 2025-10-05")).toBeInTheDocument();
+  });
+
+  it("新しい警告（台帳と帳簿の期首の不一致、償却率の欠落）を出し、固定資産台帳へのリンクを付ける", async () => {
+    const warnings: Warning[] = [
+      {
+        code: "ASSET_REGISTER_MISMATCH",
+        message:
+          "工具器具備品の期首残高（100 円）が、減価償却の台帳の期首の未償却残高（80 円）と一致しません（差 20 円）",
+        details: {
+          accountId: "a",
+          accountName: "工具器具備品",
+          bookOpening: 100,
+          registerOpening: 80,
+          difference: 20,
+        },
+      },
+      {
+        code: "DEPRECIATION_PARAMETER_MISSING",
+        message: "機材Aの減価償却費を計算できません（償却率がありません）",
+        details: {
+          source: "fixed_asset",
+          sourceId: "as-1",
+          key: "STRAIGHT_LINE_RATE",
+          date: "2025-07-10",
+        },
+      },
+    ];
+    mockApi({ [`GET ${YEAR_API}`]: () => ok({ blueReturn: blueReturn({ warnings }) }) });
+    renderYear();
+
+    const list = await screen.findByRole("region", { name: "警告" });
+    for (const w of warnings)
+      expect(within(list).getByText(new RegExp(w.message.slice(0, 12)))).toBeInTheDocument();
+    const links = within(list).getAllByRole("link", { name: "固定資産台帳を開く" });
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAttribute("href", "/e/e1/fixed-assets?year=2025");
+  });
+});

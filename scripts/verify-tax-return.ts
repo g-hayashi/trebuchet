@@ -19,7 +19,20 @@
  *         "acquiredOn": "<YYYY-MM-DD>",
  *         "cost": <取得価額（円、正の整数）>,
  *         "ratio": <事業専用割合。0〜10000 の整数>,
- *         "linkedJournalNo": <結びつける freee の仕訳番号（省略できる。文字列か数）>
+ *         "linkedJournalNo": <結びつける freee の仕訳番号（省略できる。文字列か数）>,
+ *         "method": "<small_asset_28_2 | straight_line | lump_sum（省略は small_asset_28_2）>",
+ *         "inServiceOn": "<事業の用に供した日 YYYY-MM-DD（省略できる）>",
+ *         "usefulLifeYears": <耐用年数（正の整数。定額法で必要。省略できる）>,
+ *         "priorAccumulated": <前年までの償却累計額（円、0 以上の整数。省略は 0）>,
+ *         "priorThroughYear": <累計が何年分までか（4 桁の年。省略できる）>
+ *       }
+ *     ],
+ *     "deferredAssets": [          // 開業費（省略できる。省略は空）
+ *       {
+ *         "name": "<開業費の名前>", "totalAmount": <総額（円、正の整数）>, "openedOn": "<開業日 YYYY-MM-DD>",
+ *         "priorAccumulated": <前年までの償却累計額（省略は 0）>, "priorThroughYear": <累計が何年分までか（省略できる）>,
+ *         "accountCode": "<開業費の資産の勘定の科目コード>",
+ *         "decisions": [{ "year": <年度（4 桁）>, "amount": <その年度に償却する額（円、0 以上の整数）> }]
  *       }
  *     ],
  *     "deductionAnswers": {
@@ -35,8 +48,12 @@
  * ## 照合
  *
  * 取込のあと、按分（科目コードで科目を引く）・資産（`linkedJournalNo` があれば取り込んだ freee の仕訳に結びつけ、
- * 同じ名前・取得日・取得価額の資産があれば更新）・控除の回答を登録し、`getAdjustmentProposals` の案を登録してから、
+ * 同じ名前・取得日・取得価額の資産があれば更新。資産の勘定は一括償却が 1070、ほかは 1060）・開業費（同じ名前・開業日・
+ * 総額のものがあれば更新）と年度ごとの償却額の決定・控除の回答を登録し、`getAdjustmentProposals` の案を登録してから、
  * `getBlueReturn` の各欄を `expected` と照合する。
+ * - あわせて警告 `ASSET_REGISTER_MISMATCH`・`DEPRECIATION_MISMATCH`・`DEPRECIATION_PARAMETER_MISSING` の件数と、
+ *   欄 18 と 3 ページの必要経費算入額の合計の一致・不一致（`DEPRECIATION_MISMATCH` の有無）を出す
+ *   （金額・資産名は出さない）。この 3 つの警告が 1 件でもあれば終了コードは 1
  * - `expected` の page・no は、決算書の CSV の「ページ」「欄番号」と同じ値（1ページは欄の番号、2〜4ページは
  *   `1月`・`内訳1`・`売上先1`・`資産1`・`期首:現金` など）。
  *   同じ欄番号の行が複数ある表（月別の売上、地代家賃の内訳など）は、`name`（CSV の「欄名」）を足して 1 行に特定する。
@@ -68,6 +85,10 @@ import {
   saveHomeUseAllocation,
 } from "../packages/domain/src/usecases/blue-return.ts";
 import {
+  decideDeferredAmortization,
+  saveDeferredAsset,
+} from "../packages/domain/src/usecases/deferred-assets.ts";
+import {
   finishFreeeImport,
   type ImportContext,
   type Log,
@@ -77,12 +98,28 @@ import {
 } from "./lib/freee-import-runner.ts";
 
 type HomeUse = { accountCode: string; ratio: number; basis: string };
+type AssetMethod = "small_asset_28_2" | "straight_line" | "lump_sum";
 type Asset = {
   name: string;
   acquiredOn: string;
   cost: number;
   ratio: number;
   linkedJournalNo?: string | number;
+  method: AssetMethod;
+  inServiceOn: string | null;
+  usefulLifeYears: number | null;
+  priorAccumulated: number;
+  priorThroughYear: number | null;
+};
+type DeferredDecision = { year: number; amount: number };
+type DeferredAsset = {
+  name: string;
+  totalAmount: number;
+  openedOn: string;
+  priorAccumulated: number;
+  priorThroughYear: number | null;
+  accountCode: string;
+  decisions: DeferredDecision[];
 };
 type Expected = { page: number; no: number | string; name?: string; amount: number };
 type DeductionAnswers = {
@@ -95,6 +132,7 @@ type DeductionAnswers = {
 type ClosingInput = {
   homeUse: HomeUse[];
   assets: Asset[];
+  deferredAssets: DeferredAsset[];
   deductionAnswers: DeductionAnswers;
   expected: Expected[];
 };
@@ -103,8 +141,17 @@ const RATIO_MAX = 10000;
 const PAGE_MAX = 4;
 const NAME_MAX = 500;
 const BASIS_MAX = 1000;
-/** 少額減価償却資産の既定の資産の勘定（工具器具備品） */
+/** 少額減価償却資産・定額法の資産の勘定（工具器具備品） */
 const ASSET_ACCOUNT_CODE = "1060";
+/** 一括償却資産の勘定 */
+const LUMP_SUM_ACCOUNT_CODE = "1070";
+const ASSET_METHODS: readonly AssetMethod[] = ["small_asset_28_2", "straight_line", "lump_sum"];
+/** 償却の警告のうち、1 件でもあれば不一致として終了コード 1 にするもの（009 T024） */
+const DEPRECIATION_CODES = [
+  "ASSET_REGISTER_MISMATCH",
+  "DEPRECIATION_MISMATCH",
+  "DEPRECIATION_PARAMETER_MISSING",
+] as const;
 const DEDUCTION_KEYS = [
   "doubleEntry",
   "statementsAttached",
@@ -129,6 +176,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 const isText = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
 const isInt = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v);
 const isRatio = (v: unknown): v is number => isInt(v) && v >= 0 && v <= RATIO_MAX;
+const isYear = (v: unknown): v is number => isInt(v) && v >= 1000 && v <= 9999;
 const isDate = (v: unknown): v is string => {
   if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
   const d = new Date(`${v}T00:00:00Z`);
@@ -158,7 +206,18 @@ function parseHomeUse(rows: unknown[]): HomeUse[] {
 function parseAssets(rows: unknown[]): Asset[] {
   return rows.map((row, i) => {
     if (!isRecord(row)) throw new ClosingError(`assets[${i}] はオブジェクトにする`);
-    const { name, acquiredOn, cost, ratio, linkedJournalNo } = row;
+    const {
+      name,
+      acquiredOn,
+      cost,
+      ratio,
+      linkedJournalNo,
+      method = "small_asset_28_2",
+      inServiceOn,
+      usefulLifeYears,
+      priorAccumulated = 0,
+      priorThroughYear,
+    } = row;
     if (!isText(name) || name.trim().length > NAME_MAX) {
       throw new ClosingError(`assets[${i}].name は空でない ${NAME_MAX} 文字以下の文字列`);
     }
@@ -168,9 +227,91 @@ function parseAssets(rows: unknown[]): Asset[] {
     if (linkedJournalNo !== undefined && !isText(linkedJournalNo) && !isInt(linkedJournalNo)) {
       throw new ClosingError(`assets[${i}].linkedJournalNo は空でない文字列か整数（省略できる）`);
     }
-    const asset: Asset = { name: name.trim(), acquiredOn, cost, ratio };
+    if (!ASSET_METHODS.includes(method as AssetMethod)) {
+      throw new ClosingError(`assets[${i}].method は ${ASSET_METHODS.join("・")} のどれか`);
+    }
+    if (inServiceOn !== undefined && !isDate(inServiceOn)) {
+      throw new ClosingError(`assets[${i}].inServiceOn は YYYY-MM-DD（省略できる）`);
+    }
+    if (usefulLifeYears !== undefined && (!isInt(usefulLifeYears) || usefulLifeYears <= 0)) {
+      throw new ClosingError(`assets[${i}].usefulLifeYears は正の整数（省略できる）`);
+    }
+    if (!isInt(priorAccumulated) || priorAccumulated < 0) {
+      throw new ClosingError(`assets[${i}].priorAccumulated は 0 以上の整数（省略できる）`);
+    }
+    if (priorThroughYear !== undefined && !isYear(priorThroughYear)) {
+      throw new ClosingError(`assets[${i}].priorThroughYear は 4 桁の年（省略できる）`);
+    }
+    const asset: Asset = {
+      name: name.trim(),
+      acquiredOn,
+      cost,
+      ratio,
+      method: method as AssetMethod,
+      inServiceOn: inServiceOn ?? null,
+      usefulLifeYears: usefulLifeYears ?? null,
+      priorAccumulated,
+      priorThroughYear: priorThroughYear ?? null,
+    };
     if (linkedJournalNo !== undefined) asset.linkedJournalNo = linkedJournalNo;
     return asset;
+  });
+}
+
+/** 開業費。省略は空の配列 */
+function parseDeferredAssets(rows: unknown): DeferredAsset[] {
+  if (rows === undefined) return [];
+  if (!Array.isArray(rows)) throw new ClosingError("deferredAssets は配列にする");
+  return rows.map((row: unknown, i) => {
+    if (!isRecord(row)) throw new ClosingError(`deferredAssets[${i}] はオブジェクトにする`);
+    const {
+      name,
+      totalAmount,
+      openedOn,
+      priorAccumulated = 0,
+      priorThroughYear,
+      accountCode,
+      decisions = [],
+    } = row;
+    if (!isText(name) || name.trim().length > NAME_MAX) {
+      throw new ClosingError(`deferredAssets[${i}].name は空でない ${NAME_MAX} 文字以下の文字列`);
+    }
+    if (!isInt(totalAmount) || totalAmount <= 0) {
+      throw new ClosingError(`deferredAssets[${i}].totalAmount は正の整数`);
+    }
+    if (!isDate(openedOn)) throw new ClosingError(`deferredAssets[${i}].openedOn は YYYY-MM-DD`);
+    if (!isInt(priorAccumulated) || priorAccumulated < 0) {
+      throw new ClosingError(`deferredAssets[${i}].priorAccumulated は 0 以上の整数（省略できる）`);
+    }
+    if (priorThroughYear !== undefined && !isYear(priorThroughYear)) {
+      throw new ClosingError(`deferredAssets[${i}].priorThroughYear は 4 桁の年（省略できる）`);
+    }
+    if (!isText(accountCode)) {
+      throw new ClosingError(`deferredAssets[${i}].accountCode は空でない文字列`);
+    }
+    if (!Array.isArray(decisions)) {
+      throw new ClosingError(`deferredAssets[${i}].decisions は配列にする（省略できる）`);
+    }
+    const parsed = decisions.map((d: unknown, j): DeferredDecision => {
+      if (!isRecord(d))
+        throw new ClosingError(`deferredAssets[${i}].decisions[${j}] はオブジェクト`);
+      if (!isYear(d.year)) {
+        throw new ClosingError(`deferredAssets[${i}].decisions[${j}].year は 4 桁の年`);
+      }
+      if (!isInt(d.amount) || d.amount < 0) {
+        throw new ClosingError(`deferredAssets[${i}].decisions[${j}].amount は 0 以上の整数`);
+      }
+      return { year: d.year, amount: d.amount };
+    });
+    return {
+      name: name.trim(),
+      totalAmount,
+      openedOn,
+      priorAccumulated,
+      priorThroughYear: priorThroughYear ?? null,
+      accountCode,
+      decisions: parsed.sort((a, b) => a.year - b.year),
+    };
   });
 }
 
@@ -230,6 +371,7 @@ function readClosingFile(file: string): ClosingInput {
   return {
     homeUse: parseHomeUse(list(raw, "homeUse")),
     assets: parseAssets(list(raw, "assets")),
+    deferredAssets: parseDeferredAssets(raw.deferredAssets),
     deductionAnswers: parseDeductionAnswers(raw.deductionAnswers),
     expected: parseExpected(list(raw, "expected")),
   };
@@ -252,7 +394,14 @@ function findImportedJournalId(imports: DrizzleImportStore, no: string | number)
   return found.length === 1 ? (found[0] ?? null) : null;
 }
 
-type Registered = { homeUse: number; assets: number; linked: number; adjustments: number };
+type Registered = {
+  homeUse: number;
+  assets: number;
+  deferredAssets: number;
+  decisions: number;
+  linked: number;
+  adjustments: number;
+};
 
 /** 按分・資産・控除の回答を登録し、決算整理の仕訳の案をすべて登録する */
 function registerClosing(context: ImportContext, input: ClosingInput, year: number): Registered {
@@ -287,6 +436,10 @@ function registerClosing(context: ImportContext, input: ClosingInput, year: numb
   }
 
   const assetAccount = accountByCode(ASSET_ACCOUNT_CODE, "資産の勘定（工具器具備品）");
+  const needsLumpSum = input.assets.some((a) => a.method === "lump_sum");
+  const lumpSumAccount = needsLumpSum
+    ? accountByCode(LUMP_SUM_ACCOUNT_CODE, "資産の勘定（一括償却資産）")
+    : assetAccount;
   let linked = 0;
   for (const [i, asset] of input.assets.entries()) {
     let linkedJournalId: string | null = null;
@@ -314,13 +467,54 @@ function registerClosing(context: ImportContext, input: ClosingInput, year: numb
         name: asset.name,
         acquiredOn: asset.acquiredOn,
         acquisitionCost: asset.cost,
-        method: "small_asset_28_2",
+        method: asset.method,
+        usefulLifeYears: asset.usefulLifeYears,
+        inServiceOn: asset.inServiceOn,
+        priorAccumulated: asset.priorAccumulated,
+        priorThroughYear: asset.priorThroughYear,
         businessRatio: asset.ratio,
-        assetAccountId: assetAccount.id,
+        assetAccountId: asset.method === "lump_sum" ? lumpSumAccount.id : assetAccount.id,
         linkedJournalId,
       }),
       `assets[${i}] の資産の登録`,
     );
+  }
+
+  // 開業費の登録と、年度ごとの償却額の決定（仕訳は案の確定で作る）
+  let decisions = 0;
+  for (const [i, deferred] of input.deferredAssets.entries()) {
+    const account = accountByCode(deferred.accountCode, `deferredAssets[${i}].accountCode`);
+    const existing = closing
+      .listDeferredAssets()
+      .find(
+        (a) =>
+          a.name === deferred.name &&
+          a.openedOn === deferred.openedOn &&
+          a.totalAmount === deferred.totalAmount,
+      );
+    const saved = must(
+      saveDeferredAsset(settings, {
+        ...(existing === undefined ? {} : { id: existing.id }),
+        name: deferred.name,
+        totalAmount: deferred.totalAmount,
+        openedOn: deferred.openedOn,
+        priorAccumulated: deferred.priorAccumulated,
+        priorThroughYear: deferred.priorThroughYear,
+        accountId: account.id,
+      }),
+      `deferredAssets[${i}] の開業費の登録`,
+    );
+    for (const [j, decision] of deferred.decisions.entries()) {
+      must(
+        decideDeferredAmortization(settings, {
+          deferredAssetId: saved.id,
+          fiscalYear: decision.year,
+          amount: decision.amount,
+        }),
+        `deferredAssets[${i}].decisions[${j}] の償却額の決定`,
+      );
+      decisions++;
+    }
   }
 
   must(
@@ -331,7 +525,7 @@ function registerClosing(context: ImportContext, input: ClosingInput, year: numb
   // 案を1件ずつ登録し、そのたびに案を作り直す（登録で他の案の金額が変わっても、金額の不一致にならない）
   const blueDeps = { masters, reports: context.reports, closing };
   let adjustments = 0;
-  const limit = input.homeUse.length + input.assets.length + 1;
+  const limit = input.homeUse.length + input.assets.length + input.deferredAssets.length + 1;
   for (;;) {
     const proposal = must(getAdjustmentProposals(blueDeps, { fiscalYear: year }), "案の作成")[0];
     if (proposal === undefined) break;
@@ -356,9 +550,29 @@ function registerClosing(context: ImportContext, input: ClosingInput, year: numb
   return {
     homeUse: input.homeUse.length,
     assets: input.assets.length,
+    deferredAssets: input.deferredAssets.length,
+    decisions,
     linked,
     adjustments,
   };
+}
+
+/**
+ * 償却まわりの警告の件数と、欄 18 と 3 ページの必要経費算入額の合計の一致（DEPRECIATION_MISMATCH の有無）。
+ * 金額・資産名は出さない。3 つの警告がすべて 0 件のときだけ true
+ */
+function printDepreciationChecks(
+  warnings: readonly { code: string }[],
+  deferred: { deferredAssets: number; decisions: number },
+): boolean {
+  const count = (code: string) => warnings.filter((w) => w.code === code).length;
+  const counts = DEPRECIATION_CODES.map((code) => `${code} ${count(code)} 件`).join("、");
+  console.log(
+    `償却の照合: ${counts}（開業費 ${deferred.deferredAssets}、償却額の決定 ${deferred.decisions}）`,
+  );
+  const line18Matches = count("DEPRECIATION_MISMATCH") === 0;
+  console.log(`欄 18 と 3 ページの必要経費算入額の合計: ${line18Matches ? "一致" : "不一致"}`);
+  return DEPRECIATION_CODES.every((code) => count(code) === 0);
 }
 
 const WATCHED_CODES = ["NEGATIVE_BALANCE", "OPENING_MISMATCH"] as const;
@@ -513,15 +727,16 @@ try {
 
     const registered = registerClosing(context, closing, year);
     console.log(
-      `登録: 按分 ${registered.homeUse}、資産 ${registered.assets}（仕訳に結びつけ ${registered.linked}）、控除の回答、決算整理の仕訳 ${registered.adjustments}`,
+      `登録: 按分 ${registered.homeUse}、資産 ${registered.assets}（仕訳に結びつけ ${registered.linked}）、開業費 ${registered.deferredAssets}（償却額の決定 ${registered.decisions}）、控除の回答、決算整理の仕訳 ${registered.adjustments}`,
     );
     const blueReturn = must(getBlueReturn(blueDeps, { fiscalYear: year }), "決算書の作成");
     printWarnings(`${year} 年度`, blueReturn.warnings);
+    const depreciationOk = printDepreciationChecks(blueReturn.warnings, registered);
     const same = compareExpected(
       blueReturnToCsv(blueReturn, { blankUnused: false }),
       closing.expected,
     );
-    exitCode = same ? 0 : 1;
+    exitCode = same && depreciationOk ? 0 : 1;
   } else {
     for (const line of buffered) console.log(line);
   }

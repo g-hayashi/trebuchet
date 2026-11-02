@@ -95,7 +95,7 @@ describe("POST /invoices/drafts（§3.3。FR-006・FR-016）", () => {
       salesDate: "2026-10-31",
       dueDate: "2026-11-30",
       total: 1_205_000,
-      taxDisplay: "inclusive_only",
+      taxDisplay: "separate",
       taxBreakdown: [],
       warnings: [],
     });
@@ -107,6 +107,7 @@ describe("POST /invoices/drafts（§3.3。FR-006・FR-016）", () => {
         unitPrice: 10_000,
         amount: 1_205_000,
         taxCategory: "OUT_OF_SCOPE",
+        taxRate: null,
       },
     ]);
   });

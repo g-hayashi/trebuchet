@@ -168,15 +168,18 @@ export function IssuerSettingsForm({
         <FieldError id={`${id}-registration-error`} message={errors.registrationNumber} />
       </div>
       <div className="grid gap-2">
-        <Label htmlFor={`${id}-tax-display`}>消費税の表示</Label>
+        <Label htmlFor={`${id}-tax-display`}>税率ごとの内訳表示</Label>
         <NativeSelect
           id={`${id}-tax-display`}
           value={values.taxDisplay}
           onChange={(e) => set("taxDisplay")(e.target.value as Values["taxDisplay"])}
         >
-          <option value="inclusive_only">税込のみ</option>
-          <option value="separate">税抜と消費税を別記</option>
+          <option value="inclusive_only">表示しない</option>
+          <option value="separate">表示する</option>
         </NativeSelect>
+        <p className="text-sm text-muted-foreground">
+          請求額は変わりません。加算は請求条件や案で税抜入力を選びます。
+        </p>
       </div>
       <div className="grid gap-2">
         <Label htmlFor={`${id}-seq`}>次の通し番号</Label>

@@ -39,6 +39,8 @@ import type {
   ClosingAuditEntry,
   ClosingNote,
   DeductionAnswers,
+  DeferredAmortization,
+  DeferredAsset,
   EntityProfile,
   EntitySummary,
   EvalRunRecord,
@@ -67,6 +69,7 @@ import type {
   StatementCandidateRecord,
   StatementLinkRecord,
   StatementRecord,
+  StraightLineRate,
   SubAccount,
   Tag,
   TaxCategory,
@@ -277,6 +280,18 @@ export interface ClosingStore {
   upsertFiledDocument(row: FiledDocument): void;
   deleteFiledDocument(id: string): void;
   appendClosingAudit(entry: ClosingAuditEntry): void;
+  // ---- 009（定額法・一括償却資産・開業費） ----
+  /** 定額法の償却率の表（耐用年数、適用の開始日の順） */
+  listStraightLineRates(): StraightLineRate[];
+  listDeferredAssets(): DeferredAsset[];
+  upsertDeferredAsset(row: DeferredAsset): void;
+  /** 全年度（開業費の期首の残高は前の年度の決定から求める） */
+  listDeferredAmortizations(): DeferredAmortization[];
+  upsertDeferredAmortization(row: DeferredAmortization): void;
+  /** 出所ごとの参照（全年度）。変更の制限（R12）と開業費の有効な額に使う */
+  listAdjustmentRefsBySource(
+    source: { assetId: string } | { deferredAssetId: string },
+  ): AdjustmentRef[];
 }
 
 /** 決算整理の仕訳の登録・決算の設定の保存で、仕訳・マスタ・決算の記録を1つのトランザクションで扱う（research R4） */

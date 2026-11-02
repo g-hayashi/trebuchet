@@ -27,6 +27,8 @@
 |---|---|---|
 | `partner_id` | text | PK、FK → `partners.id` |
 | `billing_type` | text | `hourly` / `monthly`（CHECK） |
+| `price_mode` | text | `inclusive` / `exclusive`（既定 `inclusive`。R27） |
+| `tax_rate` | integer | -1（既定、未指定で既存の税率導出）/ NULL（明示して税率なし）/ 8 / 10（案の既定の請求税率。R27） |
 | `unit_price` | integer | `hourly` なら NOT NULL かつ `> 0`、`monthly` なら NULL（CHECK） |
 | `monthly_amount` | integer | `monthly` なら NOT NULL かつ `> 0`、`hourly` なら NULL（CHECK） |
 | `due_months_after` | integer | `BETWEEN 0 AND 12`。既定 1 |
@@ -62,8 +64,9 @@
 | `recipient_name` | text | `length > 0`（写し） |
 | `recipient_honorific` | text | `様` / `御中`（写し） |
 | `issuer_json` | text | NOT NULL（写し: `{ issuerName, tradeName, address, contact, bankAccount, registrationNumber }`） |
-| `tax_display` | text | `separate` / `inclusive_only`（写し。免税の期間は `inclusive_only`。R10） |
-| `total` | integer | `> 0 AND < 10^12`（税込の合計 = Σ明細の金額。INV-30） |
+| `tax_display` | text | `separate` / `inclusive_only`（内訳の表示の写し。免税でも別記可。R27） |
+| `price_mode` | text | `inclusive` / `exclusive`（税込/税抜入力の写し。既定 `inclusive`。更新禁止。R27） |
+| `total` | integer | `> 0 AND < 10^12`（請求合計。税抜入力では税率ごとに加算した額。INV-30） |
 | `journal_id` | text | NOT NULL UNIQUE、FK → `journals.id`（売上の仕訳） |
 | `created_at` | text | |
 | `voided_at` / `void_reason` | text | NULL 可。CHECK: 両方 NULL か両方 NOT NULL |
@@ -85,7 +88,7 @@
 | `unit_price` | integer | NULL 可、`> 0` |
 | `amount` | integer | `> 0 AND < 10^12`。数量と単価がともにあれば `amount = (quantity_halves * unit_price) / 2`（SQLite の整数の除算 = 切り捨て。CHECK） |
 | `tax_category` | text | FK → `tax_categories.code`（計上日で決めた値。R10） |
-| `tax_rate` | integer | NULL 可（課税の区分のときの税率。対象外は NULL） |
+| `tax_rate` | integer | NULL 可（請求書の税率の写し。免税でも消費税相当額の税率を保持できる。R27） |
 
 - 更新・削除を禁止（§2）
 
@@ -181,7 +184,7 @@
 
 ## 4. 不変条件（INV-1〜29 に追加。fast-check で検証。R25）
 
-- **INV-30**: 取消でない各請求書で、`total` = Σ明細の `amount` = 売上の仕訳の借方 売掛金 = Σ貸方 売上高。税区分ごとの貸方の `tax_amount` = その税率の明細の合計に対する `floor(合計 × r / (100 + r))`（請求書の「別記」の税額と同じ）。全行の取引先が請求書の取引先
+- **INV-30**: 取消でない各請求書で、`total` = 売上の仕訳の借方 売掛金 = Σ貸方 売上高。税込入力では `total` = Σ明細の `amount`、税抜入力では税率ごとの小計に `floor(小計 × r / 100)` を加算した合計。課税時の貸方の税額は対応する請求内訳と一致する。免税時は請求内訳の有無にかかわらず全額が `OUT_OF_SCOPE` の売上で仕訳税額は 0。全行の取引先が請求書の取引先（R27）
 - **INV-31**: 事業体の中で `seq`・`invoice_no` は重複しない。発行の順に `seq` は狭義に増え、取消した番号は再び使われない。常に `next_seq > max(seq)`
 - **INV-32**: 発行・消し込み・取消は全部か無か。任意の段階の失敗（障害の注入）の後、請求書（消し込み）があること ⇔ 対応する仕訳があること、が保たれ、`next_seq` も進まない
 - **INV-33**: 各請求書で、取消でない消し込みの充当額の合計 ≤ `total`。状態は残額（`total` − 充当額の合計）だけで決まる（0 なら `paid`、`total` なら `unpaid`、間は `partial`）

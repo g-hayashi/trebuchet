@@ -5,6 +5,8 @@ import {
   type ClosingNote,
   type ClosingUnitOfWork,
   type DeductionAnswers,
+  type DeferredAmortization,
+  type DeferredAsset,
   type FiledDocument,
   type FixedAsset,
   type HomeUseAllocation,
@@ -12,6 +14,8 @@ import {
   type NewJournal,
   ok,
   type RentDetail,
+  STRAIGHT_LINE_RATES,
+  type StraightLineRate,
   TAX_PARAMETERS,
   type TaxReturnMemo,
   validateJournal,
@@ -66,11 +70,15 @@ const assetOf = (overrides: Partial<FixedAsset> = {}): FixedAsset => ({
   acquisitionCost: 200_000,
   method: "small_asset_28_2",
   usefulLifeYears: null,
+  inServiceOn: null,
+  priorAccumulated: 0,
+  priorThroughYear: null,
   businessRatio: 10000,
   assetAccountId: accountId("工具器具備品"),
   linkedJournalId: null,
   note: null,
   disposedOn: null,
+  disposalKind: null,
   createdAt: NOW,
   updatedAt: NOW,
   ...overrides,
@@ -161,7 +169,12 @@ describe("DrizzleClosingStore（T008）", () => {
     store.upsertFixedAsset(later);
     store.upsertFixedAsset(first);
     expect(store.listFixedAssets()).toEqual([first, later]);
-    const disposed = { ...first, disposedOn: "2025-12-01", updatedAt: "y" };
+    const disposed = {
+      ...first,
+      disposedOn: "2025-12-01",
+      disposalKind: "scrap" as const,
+      updatedAt: "y",
+    };
     store.upsertFixedAsset(disposed);
     expect(store.listFixedAssets()).toEqual([disposed, later]);
   });
@@ -175,6 +188,7 @@ describe("DrizzleClosingStore（T008）", () => {
       kind: "home_use",
       allocationId: allocation.id,
       assetId: null,
+      deferredAssetId: null,
       fiscalYear: 2025,
     };
     store.insertAdjustmentRef(ref);
@@ -288,6 +302,233 @@ describe("DrizzleClosingStore（T008）", () => {
   });
 });
 
+describe("DrizzleClosingStore（009 T007）", () => {
+  const deferredOf = (overrides: Partial<DeferredAsset> = {}): DeferredAsset => ({
+    id: randomUUIDv7(),
+    name: "開業費",
+    totalAmount: 300_000,
+    openedOn: "2025-04-01",
+    priorAccumulated: 0,
+    priorThroughYear: null,
+    accountId: accountId("開業費"),
+    note: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    ...overrides,
+  });
+
+  const addPeriods = () => {
+    for (const year of [2026, 2027]) {
+      masters.insertFiscalPeriod({
+        id: randomUUIDv7(),
+        fiscalYear: year,
+        startDate: `${year}-01-01`,
+        endDate: `${year}-12-31`,
+        status: "open",
+        closedAt: null,
+      });
+    }
+  };
+
+  const adjustmentOn = (date: string): JournalDraft => ({
+    date,
+    lines: [
+      { side: "debit", accountId: accountId("事業主貸"), amount: 1_000 },
+      { side: "credit", accountId: accountId("地代家賃"), amount: 1_000 },
+    ],
+  });
+
+  const insertJournal = (date: string) =>
+    ledger.insertJournal(newJournal(adjustmentOn(date), ledger.nextJournalNo()));
+
+  it("listStraightLineRates は投入した償却率（STRAIGHT_LINE_RATES）と一致する", () => {
+    const key = (r: StraightLineRate) => `${r.usefulLifeYears}@${r.effectiveFrom}`;
+    const sorted = (xs: readonly StraightLineRate[]) =>
+      [...xs].sort((a, b) => key(a).localeCompare(key(b)));
+    const rows = store.listStraightLineRates();
+    expect(rows).toHaveLength(STRAIGHT_LINE_RATES.length);
+    expect(sorted(rows)).toEqual(sorted(STRAIGHT_LINE_RATES));
+  });
+
+  it("listTaxParameters は 009 の 4 行を含む", () => {
+    const keys = store.listTaxParameters().map((r) => r.key);
+    for (const k of [
+      "LUMP_SUM_COST_MIN",
+      "LUMP_SUM_COST_MAX",
+      "LUMP_SUM_YEARS",
+      "OPENING_COST_AMORTIZATION_MONTHS",
+    ]) {
+      expect(keys).toContain(k);
+    }
+  });
+
+  it("固定資産: 定額法・一括償却の新しい列（供用日・前年までの累計・除却の種類）が往復する", () => {
+    const straight = assetOf({
+      name: "定額法",
+      method: "straight_line",
+      usefulLifeYears: 4,
+      acquiredOn: "2025-03-10",
+      inServiceOn: "2025-04-01",
+      acquisitionCost: 400_000,
+      priorAccumulated: 100_000,
+      priorThroughYear: 2025,
+      disposedOn: "2027-06-30",
+      disposalKind: "sale",
+    });
+    const lump = assetOf({
+      name: "一括",
+      method: "lump_sum",
+      acquiredOn: "2025-06-01",
+      acquisitionCost: 150_000,
+    });
+    store.upsertFixedAsset(straight);
+    store.upsertFixedAsset(lump);
+    expect(store.listFixedAssets()).toEqual([straight, lump]);
+    const changed = { ...straight, disposalKind: "scrap" as const, updatedAt: "z" };
+    store.upsertFixedAsset(changed);
+    expect(store.listFixedAssets()).toEqual([changed, lump]);
+  });
+
+  it("固定資産: 定額法で耐用年数がない行は DB の CHECK が拒否する", () => {
+    expect(() =>
+      store.upsertFixedAsset(assetOf({ method: "straight_line", usefulLifeYears: null })),
+    ).toThrow(/CHECK/);
+  });
+
+  it("開業費: 往復、同じ id の upsert は更新、開業日・id の順", () => {
+    const later = deferredOf({ name: "後", openedOn: "2025-09-01" });
+    const first = deferredOf({ name: "先", openedOn: "2025-02-01", note: "メモ" });
+    store.upsertDeferredAsset(later);
+    store.upsertDeferredAsset(first);
+    expect(store.listDeferredAssets()).toEqual([first, later]);
+    const changed = {
+      ...first,
+      totalAmount: 500_000,
+      priorAccumulated: 100_000,
+      priorThroughYear: 2025,
+      note: null,
+      updatedAt: "u",
+    };
+    store.upsertDeferredAsset(changed);
+    expect(store.listDeferredAssets()).toEqual([changed, later]);
+  });
+
+  it("開業費: 累計が総額を超える行は DB の CHECK が拒否する", () => {
+    expect(() =>
+      store.upsertDeferredAsset(
+        deferredOf({ totalAmount: 100, priorAccumulated: 101, priorThroughYear: 2025 }),
+      ),
+    ).toThrow(/CHECK/);
+  });
+
+  it("開業費の決定: 全年度を返し、同じ PK の upsert は更新する", () => {
+    addPeriods();
+    const a = deferredOf();
+    const b = deferredOf({ name: "別" });
+    store.upsertDeferredAsset(a);
+    store.upsertDeferredAsset(b);
+    const row = (d: DeferredAsset, fiscalYear: number, amount: number): DeferredAmortization => ({
+      deferredAssetId: d.id,
+      fiscalYear,
+      amount,
+      decidedAt: NOW,
+      updatedAt: NOW,
+    });
+    const rows = [row(a, 2025, 10_000), row(a, 2026, 60_000), row(b, 2025, 0)];
+    for (const r of rows) store.upsertDeferredAmortization(r);
+    const byKey = (xs: DeferredAmortization[]) =>
+      [...xs].sort((x, y) =>
+        `${x.deferredAssetId}:${x.fiscalYear}`.localeCompare(
+          `${y.deferredAssetId}:${y.fiscalYear}`,
+        ),
+      );
+    expect(byKey(store.listDeferredAmortizations())).toEqual(byKey(rows));
+    const changed = { ...row(a, 2026, 70_000), updatedAt: "later" };
+    store.upsertDeferredAmortization(changed);
+    const after = store.listDeferredAmortizations();
+    expect(after).toHaveLength(3);
+    expect(after.find((r) => r.deferredAssetId === a.id && r.fiscalYear === 2026)).toEqual(changed);
+    expect(count("deferred_amortizations")).toBe(3);
+  });
+
+  it("開業費の決定: 負の額・存在しない開業費・存在しない年度は拒否される", () => {
+    const a = deferredOf();
+    store.upsertDeferredAsset(a);
+    const base = {
+      deferredAssetId: a.id,
+      fiscalYear: 2025,
+      amount: 0,
+      decidedAt: NOW,
+      updatedAt: NOW,
+    };
+    expect(() => store.upsertDeferredAmortization({ ...base, amount: -1 })).toThrow(/CHECK/);
+    expect(() =>
+      store.upsertDeferredAmortization({ ...base, deferredAssetId: randomUUIDv7() }),
+    ).toThrow(/FOREIGN KEY/);
+    expect(() => store.upsertDeferredAmortization({ ...base, fiscalYear: 2031 })).toThrow(
+      /FOREIGN KEY/,
+    );
+  });
+
+  it("決算整理の仕訳の出所: 開業費の参照（deferredAssetId）が往復する", () => {
+    addPeriods();
+    const a = deferredOf();
+    store.upsertDeferredAsset(a);
+    const journal = insertJournal("2025-12-31");
+    const ref: AdjustmentRef = {
+      journalId: journal.id,
+      kind: "deferred_amortization",
+      allocationId: null,
+      assetId: null,
+      deferredAssetId: a.id,
+      fiscalYear: 2025,
+    };
+    store.insertAdjustmentRef(ref);
+    expect(store.listAdjustmentRefs(2025)).toEqual([ref]);
+    // deferred_amortization で deferredAssetId がない参照は拒否される
+    const other = insertJournal("2025-12-31");
+    expect(() =>
+      store.insertAdjustmentRef({ ...ref, journalId: other.id, deferredAssetId: null }),
+    ).toThrow(/CHECK/);
+  });
+
+  it("listAdjustmentRefsBySource: 出所ごとに全年度の参照を返し、他の出所は混ざらない", () => {
+    addPeriods();
+    const asset = assetOf({ method: "straight_line", usefulLifeYears: 4 });
+    const otherAsset = assetOf({ method: "straight_line", usefulLifeYears: 5 });
+    const deferred = deferredOf();
+    store.upsertFixedAsset(asset);
+    store.upsertFixedAsset(otherAsset);
+    store.upsertDeferredAsset(deferred);
+    const depRef = (assetId: string, year: number): AdjustmentRef => ({
+      journalId: insertJournal(`${year}-12-31`).id,
+      kind: "depreciation",
+      allocationId: null,
+      assetId,
+      deferredAssetId: null,
+      fiscalYear: year,
+    });
+    const defRef = (year: number): AdjustmentRef => ({
+      journalId: insertJournal(`${year}-12-31`).id,
+      kind: "deferred_amortization",
+      allocationId: null,
+      assetId: null,
+      deferredAssetId: deferred.id,
+      fiscalYear: year,
+    });
+    const mine = [depRef(asset.id, 2025), depRef(asset.id, 2026), depRef(asset.id, 2027)];
+    const theirs = [depRef(otherAsset.id, 2025)];
+    const deferredRefs = [defRef(2025), defRef(2026)];
+    for (const r of [...mine, ...theirs, ...deferredRefs]) store.insertAdjustmentRef(r);
+    expect(store.listAdjustmentRefsBySource({ assetId: asset.id })).toEqual(mine);
+    expect(store.listAdjustmentRefsBySource({ assetId: otherAsset.id })).toEqual(theirs);
+    expect(store.listAdjustmentRefsBySource({ deferredAssetId: deferred.id })).toEqual(
+      deferredRefs,
+    );
+    expect(store.listAdjustmentRefsBySource({ assetId: randomUUIDv7() })).toEqual([]);
+  });
+});
+
 describe("createClosingUnitOfWork（T008、research R4）", () => {
   it("run の中で、仕訳・マスタ・決算の記録を同じ接続で読み書きできる", () => {
     const allocation = allocationOf();
@@ -299,6 +540,7 @@ describe("createClosingUnitOfWork（T008、research R4）", () => {
         kind: "home_use",
         allocationId: allocation.id,
         assetId: null,
+        deferredAssetId: null,
         fiscalYear: 2025,
       });
       expect(m.listAccounts().length).toBeGreaterThan(0);
@@ -321,6 +563,7 @@ describe("createClosingUnitOfWork（T008、research R4）", () => {
           kind: "home_use",
           allocationId: allocation.id,
           assetId: null,
+          deferredAssetId: null,
           fiscalYear: 2025,
         });
         closing.appendClosingAudit({

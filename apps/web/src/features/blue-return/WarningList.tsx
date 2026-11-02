@@ -89,7 +89,9 @@ export function WarningList({
               {w.code === "HOME_USE_ADJUSTMENT_STALE" && (
                 <HomeUseLink entityId={entityId} year={year} label="仕訳の案を見る" />
               )}
-              {w.code === "DEPRECIATION_MISMATCH" && (
+              {(w.code === "DEPRECIATION_MISMATCH" ||
+                w.code === "ASSET_REGISTER_MISMATCH" ||
+                w.code === "DEPRECIATION_PARAMETER_MISSING") && (
                 <Link
                   to="/e/$entityId/fixed-assets"
                   params={{ entityId }}
