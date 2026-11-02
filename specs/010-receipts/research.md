@@ -161,6 +161,7 @@
   - `sips` の作業ファイルは `.tmp/receipt-convert-<乱数>/`（R9）。子プロセスの環境の `TMPDIR` も `.tmp/` にする。時間切れ 20 秒。`sips` がない・失敗したら `RECEIPT_CONVERSION_FAILED`（表示）または読み取りの失敗（AI）
 - **ゲート**（tasks の **T040**。Phase 1 の直後、`image-tool.ts` の T013 より前に行い、T013 はその結果に従う。O1。利用者の Mac で行う。サンドボックスでは `sips` が一時ファイルを書けず確かめられなかった）: 合成の HEIC（iPhone の撮影）・PDF（1 ページの電子の領収書）で、①HEIC → JPEG の表示 ②PDF の 1 ページ目が 2,048 px で文字が読める ③iPhone の縦の撮影の向きが AI 用の JPEG で正しい、を確かめて research に追記する。②が `sips` でも `qlmanage` でもだめなら、PDF の読み取りを範囲外にする（利用者の判断。依存の候補 `pdfjs-dist` は承認が要る）
 - **Rationale**: Constitution VII（標準機能で代替できれば依存を足さない）。対象は macOS だけ（Technical Constraints）。iPhone の Safari はカメラの撮影・写真の選択を `accept="image/*"` で JPEG に変えて送ることが多く、HEIC は Mac のファイルの追加で来ることが多い
+- **ゲートの結果（2026-11-02、T040、利用者の Mac）**: `sips` で ①HEIC → 表示用 JPEG ②PDF の 1 ページ目 → PNG → 長辺 2,048 ③AI 用の JPEG（向き、GPS の項目なし）のすべてが OK。`qlmanage` の代替は使わない。R12 の設計どおり T013 を作る（PDF の読み取りは範囲内）
 - **Alternatives**（依存を足すなら利用者の承認が要る）: `sharp`（libvips のネイティブ、HEIC は別の libheif が要る）、`heic-convert`/`libheif-js`（WASM、遅い）、`pdfjs-dist`（PDF の描画に canvas が要る）。どれも `sips` で足りる間は足さない
 
 ## R13. 外部の AI による読み取り（INV-45 の例外を閉じ込める）

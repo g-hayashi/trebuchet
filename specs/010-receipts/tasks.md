@@ -35,7 +35,7 @@ description: "Task list for 010-receipts"
 **Purpose**: テストが共通で使う合成のバイト列と、`sips` のゲート（T040。番号は振り直さず、この位置で行う）
 
 - [X] T001 テスト先行で `packages/domain/test/fixtures/receipts/sample-files.ts` と `README.md` を作る: 最小の合成バイト列（JPEG〔Exif の APP1 に Orientation と GPS、APP13、COM、画素数が違う 2 種〕、PNG、PDF、HEIC〔`ftyp` の major・compatible brands の組み合わせ〕、拡張子と違う中身、空・短いバイト列）を返す関数と、作り方・匿名化の方針（R17）。テスト `packages/domain/test/receipts/sample-files.test.ts`（先頭のマーカー・brands・セグメントの並びを確かめる）。実データの写真・文字列を入れない
-- [ ] T040 **（メイン・利用者）ゲート。T013 の前に行う（O1）** 利用者の Mac で R12 のゲートを確かめ、結果（できた・できない、どの方法か）だけを research R12 に追記する: ① iPhone の HEIC（縦の撮影）→ 表示用の JPEG ② 1 ページの電子の PDF の 1 ページ目が長辺 2,048 で文字が読める（`sips`、だめなら `qlmanage`）③ AI 用の JPEG の向きが正しく、`sips -g all` に GPS の項目がない。②が両方でだめなら、PDF の読み取りは範囲外（手入力）にする（Q5。`image-tool.ts` の PDF の分岐を `RECEIPT_READ_UNSUPPORTED` だけにし、spec の Assumptions のとおり。依存は足さない）。**T013 はこの結果に従って作る**。結果が R12 の想定と違えば T013 を直す
+- [X] T040 **（メイン・利用者）ゲート。T013 の前に行う（O1）** 利用者の Mac で R12 のゲートを確かめ、結果（できた・できない、どの方法か）だけを research R12 に追記する: ① iPhone の HEIC（縦の撮影）→ 表示用の JPEG ② 1 ページの電子の PDF の 1 ページ目が長辺 2,048 で文字が読める（`sips`、だめなら `qlmanage`）③ AI 用の JPEG の向きが正しく、`sips -g all` に GPS の項目がない。②が両方でだめなら、PDF の読み取りは範囲外（手入力）にする（Q5。`image-tool.ts` の PDF の分岐を `RECEIPT_READ_UNSUPPORTED` だけにし、spec の Assumptions のとおり。依存は足さない）。**T013 はこの結果に従って作る**。結果が R12 の想定と違えば T013 を直す
 
 ---
 
