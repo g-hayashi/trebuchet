@@ -4,6 +4,7 @@ import {
   type ReceiptCreateOptions,
   type ReceiptDetail,
   type ReceiptFileView,
+  type ReceiptHistoryEntry,
   type ReceiptMediaType,
   type ReceiptQuery,
   type ReceiptReadingView,
@@ -40,6 +41,7 @@ import {
   type Result,
   validationError,
 } from "../types.ts";
+import { checkReason } from "./journal-edit.ts";
 
 // 証憑の追加・一覧・詳細・ファイルの取り出し（010 US1。contracts/domain-module.md §3、R10、FR-001〜005・007）
 
@@ -214,8 +216,8 @@ export type AddReceiptInput = {
  * 形式 → 大きさ → 値の検査 → `digest` → 重複 → `put` → `uow.run`（証憑・版 1・履歴 `create`）。
  * 失敗したら、この呼び出しが `put` したファイルだけ `discard` する（INV-62）
  */
-export function addReceipt(deps: ReceiptDeps, input: AddReceiptInput): Result<ReceiptDetail> {
-  const { bytes, originalName, channel, options, probe } = input;
+/** 形式（中身で判定）と大きさ。追加と差し替えで共通（R10） */
+function checkFileBytes(bytes: Uint8Array): Result<ReceiptMediaType> {
   const mediaType = detectReceiptFormat(bytes);
   if (mediaType === undefined) {
     return err(
@@ -230,21 +232,32 @@ export function addReceipt(deps: ReceiptDeps, input: AddReceiptInput): Result<Re
       domainError("FILE_TOO_LARGE", "ファイルが大きすぎます", { maxBytes: RECEIPT_MAX_BYTES }),
     );
   }
+  return ok(mediaType);
+}
+
+/** 同じ SHA-256 のファイルが事業体にあれば（削除済み・差し替え前の版を含む）`RECEIPT_DUPLICATE`（FR-004） */
+function checkNotDuplicate(tx: ReadTx, sha256: string): Result<undefined> {
+  const existing = tx.receipts.findFileBySha(sha256);
+  if (existing === undefined) return ok(undefined);
+  const owner = tx.receipts.getReceipt(existing.receiptId);
+  return err(
+    domainError("RECEIPT_DUPLICATE", "同じ内容の証憑がすでにあります", {
+      receiptId: existing.receiptId,
+      deleted: owner?.deletedAt != null,
+    }),
+  );
+}
+
+export function addReceipt(deps: ReceiptDeps, input: AddReceiptInput): Result<ReceiptDetail> {
+  const { bytes, originalName, channel, options, probe } = input;
+  const format = checkFileBytes(bytes);
+  if (!format.ok) return format;
+  const mediaType = format.value;
   const checked = checkValues(options);
   if (!checked.ok) return checked;
 
   const sha256 = deps.files.digest(bytes);
-  const duplicate = deps.uow.run((tx) => {
-    const existing = tx.receipts.findFileBySha(sha256);
-    if (existing === undefined) return ok(undefined);
-    const owner = tx.receipts.getReceipt(existing.receiptId);
-    return err(
-      domainError("RECEIPT_DUPLICATE", "同じ内容の証憑がすでにあります", {
-        receiptId: existing.receiptId,
-        deleted: owner?.deletedAt != null,
-      }),
-    );
-  });
+  const duplicate = deps.uow.run((tx) => checkNotDuplicate(tx, sha256));
   if (!duplicate.ok) return duplicate;
 
   // 前の異常終了で残った同じ内容のファイルは使い回す（このとき失敗しても消さない）
@@ -334,7 +347,7 @@ export function getReceipt(deps: ReceiptDeps, receiptId: string): Result<Receipt
   });
 }
 
-// ---- 更新（未入力の値を埋める。US1 の段） ----
+// ---- 更新・訂正・差し替え・削除（US1 の入力の段と US5。research R7） ----
 
 const versionConflict = (receipt: ReceiptRow) =>
   domainError("VERSION_CONFLICT", "別の操作で更新されています。開き直してください", {
@@ -342,11 +355,34 @@ const versionConflict = (receipt: ReceiptRow) =>
     currentVersion: receipt.version,
   });
 
+/** 変更できる証憑を読む: ない → `RECEIPT_NOT_FOUND`、削除済み → `RECEIPT_DELETED`、版の不一致 → `VERSION_CONFLICT` */
+function loadEditable(tx: ReadTx, receiptId: string, version: number): Result<ReceiptRow> {
+  const receipt = tx.receipts.getReceipt(receiptId);
+  if (receipt === undefined) return err(notFound());
+  if (receipt.deletedAt !== null) {
+    return err(domainError("RECEIPT_DELETED", "削除済みの証憑は変更できません"));
+  }
+  if (receipt.version !== version) return err(versionConflict(receipt));
+  return ok(receipt);
+}
+
+/** 版を確かめて証憑の行を書く。他の操作に先を越されていれば `VERSION_CONFLICT` */
+function writeReceipt(tx: ReadTx, before: ReceiptRow, after: ReceiptRow): Result<undefined> {
+  try {
+    tx.receipts.updateReceipt(after, before.version);
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof RepositoryConflictError) return err(versionConflict(before));
+    throw e;
+  }
+}
+
 /**
- * 証憑の値を更新する（FR-005。contracts/domain-module.md §3 の US1 の段、D1）。
- * 未入力（NULL）の取引年月日・金額・取引先を埋める・メモを変えるだけを、理由なしで受ける。
- * 入力済みの値（区分を含む）の変更は `needsReason` が真で、この段では 422 `REASON_REQUIRED`
- * （理由つきの訂正は US5 の T027 で足す）。何も変わらなければ書かない
+ * 証憑の値を更新する（FR-005・018。contracts/domain-module.md §3、D1）。
+ * 未入力（NULL）の取引年月日・金額・取引先を埋める・メモを変えるだけなら理由は要らない。
+ * 入力済みの値（区分を含む）の変更（訂正。`needsReason` が真）は理由が要る（001 の `checkReason`）。
+ * 理由がなければ（空白だけを含む）422 `REASON_REQUIRED`。添えた理由は訂正でなくても履歴に残す。
+ * 何も変わらなければ書かない
  */
 export function updateReceipt(
   deps: ReceiptDeps,
@@ -354,12 +390,9 @@ export function updateReceipt(
   input: ReceiptUpdateInput,
 ): Result<ReceiptDetail> {
   return deps.uow.run((tx) => {
-    const before = tx.receipts.getReceipt(receiptId);
-    if (before === undefined) return err(notFound());
-    if (before.deletedAt !== null) {
-      return err(domainError("RECEIPT_DELETED", "削除済みの証憑は変更できません"));
-    }
-    if (before.version !== input.version) return err(versionConflict(before));
+    const loaded = loadEditable(tx, receiptId, input.version);
+    if (!loaded.ok) return loaded;
+    const before = loaded.value;
 
     // 指定のない項目は今の値のまま。指定した値だけ検査する（取引先は前後の空白を除く）
     const checked = checkValues({
@@ -378,7 +411,13 @@ export function updateReceipt(
       ...input,
       ...(input.partnerName == null ? {} : { partnerName: values.partnerName }),
     };
-    if (needsReason(before, normalized)) {
+    let reason: string | null = null;
+    if (input.reason !== undefined && input.reason.trim().length > 0) {
+      const checkedReason = checkReason(input.reason);
+      if (!checkedReason.ok) return checkedReason;
+      reason = checkedReason.value;
+    }
+    if (reason === null && needsReason(before, normalized)) {
       return err(
         domainError("REASON_REQUIRED", "入力済みの値を変えるときは理由が必要です", {
           receiptId: before.id,
@@ -406,23 +445,200 @@ export function updateReceipt(
       version: before.version + 1,
       updatedAt: now,
     };
-    try {
-      tx.receipts.updateReceipt(after, before.version);
-    } catch (e) {
-      if (e instanceof RepositoryConflictError) return err(versionConflict(before));
-      throw e;
-    }
+    const written = writeReceipt(tx, before, after);
+    if (!written.ok) return written;
     tx.receipts.appendAudit(
       auditEntry(deps, {
         targetType: "receipt",
         targetId: after.id,
         action: "update",
+        reason,
         before: receiptValuesOf(before),
         after: receiptValuesOf(after),
         at: now,
       }),
     );
     return ok(buildDetail(tx, deps, after));
+  });
+}
+
+export type ReplaceReceiptFileInput = {
+  bytes: Uint8Array;
+  originalName: string;
+  /** この版を受け取った経路（証憑の `channel` は最初の受け取りのまま変えない） */
+  channel: ReceiptChannel;
+  reason: string;
+  version: number;
+  /** 呼び出し側（server）が `ReceiptImageTool.probe` で調べた寸法と色。調べられなければ null */
+  probe: ReceiptProbe | null;
+};
+
+/** 差し替えの検査（証憑・版・理由・重複）。書き込みの前と、書き込む `run` の中の両方で使う */
+function checkReplace(
+  tx: ReadTx,
+  receiptId: string,
+  input: ReplaceReceiptFileInput,
+  sha256: string,
+): Result<{ before: ReceiptRow; reason: string }> {
+  const loaded = loadEditable(tx, receiptId, input.version);
+  if (!loaded.ok) return loaded;
+  const reason = checkReason(input.reason);
+  if (!reason.ok) return reason;
+  const duplicate = checkNotDuplicate(tx, sha256);
+  if (!duplicate.ok) return duplicate;
+  return ok({ before: loaded.value, reason: reason.value });
+}
+
+/**
+ * 証憑のファイルを差し替える（FR-018、research R7・R10）。追加と同じ**同期の区間**（`await` を挟まない）:
+ * 形式 → 大きさ → `digest` → 検査（証憑・削除済み・版・理由・重複）→ `put` → `uow.run`
+ * （版 +1 の `receipt_files` → `current_sha256` の更新 → 履歴 `replace_file`）。
+ * 失敗したら、この呼び出しが `put` したファイルだけ `discard` する（INV-62）。前の版は残る（INV-63）
+ */
+export function replaceReceiptFile(
+  deps: ReceiptDeps,
+  receiptId: string,
+  input: ReplaceReceiptFileInput,
+): Result<ReceiptDetail> {
+  const { bytes, originalName, channel, probe } = input;
+  const format = checkFileBytes(bytes);
+  if (!format.ok) return format;
+  const mediaType = format.value;
+  const sha256 = deps.files.digest(bytes);
+  const checked = deps.uow.run((tx) => checkReplace(tx, receiptId, input, sha256));
+  if (!checked.ok) return checked;
+
+  // 前の異常終了で残った同じ内容のファイルは使い回す（このとき失敗しても消さない）
+  const created = !deps.files.has(sha256);
+  if (created) deps.files.put(sha256, bytes);
+  try {
+    const result = deps.uow.run((tx) => {
+      const rechecked = checkReplace(tx, receiptId, input, sha256);
+      if (!rechecked.ok) return rechecked;
+      const { before, reason } = rechecked.value;
+      const files = tx.receipts.listFiles(receiptId);
+      const latest = files.at(-1);
+      if (latest === undefined || latest.sha256 !== before.currentSha256) {
+        throw new Error(`current file is not the latest version: ${receiptId}`);
+      }
+      const now = deps.clock.now();
+      const fileVersion = latest.fileVersion + 1;
+      tx.receipts.insertFile({
+        sha256,
+        receiptId,
+        fileVersion,
+        mediaType,
+        sizeBytes: bytes.length,
+        originalName,
+        width: probe?.width ?? null,
+        height: probe?.height ?? null,
+        fullColor: probe?.fullColor ?? null,
+        addedAt: now,
+        channel,
+      });
+      const after: ReceiptRow = {
+        ...before,
+        currentSha256: sha256,
+        version: before.version + 1,
+        updatedAt: now,
+      };
+      const written = writeReceipt(tx, before, after);
+      if (!written.ok) return written;
+      tx.receipts.appendAudit(
+        auditEntry(deps, {
+          targetType: "receipt",
+          targetId: receiptId,
+          action: "replace_file",
+          reason,
+          before: { sha256: latest.sha256, fileVersion: latest.fileVersion },
+          after: { sha256, fileVersion },
+          at: now,
+        }),
+      );
+      return ok(buildDetail(tx, deps, after));
+    });
+    if (!result.ok && created) deps.files.discard(sha256);
+    return result;
+  } catch (e) {
+    if (created) deps.files.discard(sha256);
+    throw e;
+  }
+}
+
+/**
+ * 証憑を論理削除する（FR-019、research R7）。行・ファイル・履歴は残す。理由が要る。
+ * 有効な結びつき（仕訳が取り消されて `journal_voided` でも）があれば 409 `RECEIPT_LINKED`
+ * （`details.journalId`。先に解除する。INV-64）。削除の取り消しはない
+ */
+export function deleteReceipt(
+  deps: ReceiptDeps,
+  receiptId: string,
+  input: { reason: string; version: number },
+): Result<ReceiptDetail> {
+  return deps.uow.run((tx) => {
+    const loaded = loadEditable(tx, receiptId, input.version);
+    if (!loaded.ok) return loaded;
+    const before = loaded.value;
+    const reason = checkReason(input.reason);
+    if (!reason.ok) return reason;
+    const link = tx.receipts.getActiveLink(receiptId);
+    if (link !== undefined) {
+      return err(
+        domainError(
+          "RECEIPT_LINKED",
+          "仕訳に結びついた証憑は削除できません。先に解除してください",
+          {
+            journalId: link.journalId,
+          },
+        ),
+      );
+    }
+    const now = deps.clock.now();
+    const after: ReceiptRow = {
+      ...before,
+      deletedAt: now,
+      deletedReason: reason.value,
+      version: before.version + 1,
+      updatedAt: now,
+    };
+    const written = writeReceipt(tx, before, after);
+    if (!written.ok) return written;
+    tx.receipts.appendAudit(
+      auditEntry(deps, {
+        targetType: "receipt",
+        targetId: receiptId,
+        action: "delete",
+        reason: reason.value,
+        before: receiptValuesOf(before),
+        after: { deletedAt: now },
+        at: now,
+      }),
+    );
+    return ok(buildDetail(tx, deps, after));
+  });
+}
+
+const parseAuditJson = (json: string | null): unknown => (json === null ? null : JSON.parse(json));
+
+/** 証憑の履歴（`receipt_audit_log`。結びつき・読み取りの記録を含む）の古い順。削除済みも引ける */
+export function getReceiptHistory(
+  deps: ReceiptDeps,
+  receiptId: string,
+): Result<ReceiptHistoryEntry[]> {
+  return deps.uow.run((tx) => {
+    if (tx.receipts.getReceipt(receiptId) === undefined) return err(notFound());
+    return ok(
+      tx.receipts.listAudit(receiptId).map(
+        (e): ReceiptHistoryEntry => ({
+          occurredAt: e.occurredAt,
+          targetType: e.targetType,
+          action: e.action,
+          reason: e.reason,
+          before: parseAuditJson(e.beforeJson),
+          after: parseAuditJson(e.afterJson),
+        }),
+      ),
+    );
   });
 }
 

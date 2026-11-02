@@ -124,7 +124,7 @@ describe("updateReceipt: 未入力の値を埋める（理由なし）", () => {
   });
 });
 
-describe("updateReceipt: 訂正はまだ受けない（US5 の T027 まで）", () => {
+describe("updateReceipt: 理由のない訂正は受けない", () => {
   it("入力済みの値の変更は 422 REASON_REQUIRED で、何も書かない", () => {
     const { deps, receipt, uow } = setup(FULL);
     const before = receiptSnapshotOf(uow);
@@ -147,9 +147,9 @@ describe("updateReceipt: 訂正はまだ受けない（US5 の T027 まで）", 
     expect(receiptSnapshotOf(uow)).toEqual(before);
   });
 
-  it("reason を添えても、この段では訂正として受けない（REASON_REQUIRED）", () => {
+  it("空白だけの reason は理由にならない（REASON_REQUIRED）。理由つきの訂正は receipts-update.test.ts", () => {
     const { deps, receipt } = setup(FULL);
-    expect(update(deps, receipt.id, { version: 1, amount: 2000, reason: "誤入力" })).toMatchObject({
+    expect(update(deps, receipt.id, { version: 1, amount: 2000, reason: "  " })).toMatchObject({
       ok: false,
       error: { code: "REASON_REQUIRED" },
     });
