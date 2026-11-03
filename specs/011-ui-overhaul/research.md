@@ -21,6 +21,7 @@
 
 - ルートの増減: 足す `e/$entityId/settings.tsx`、`receipts/new.tsx`、`deferred-assets/index.tsx`。消す `invoices/$invoiceId_.print.tsx`、`tax-return/$year.tsx`、`statements/evals.tsx`、`blue-return/$year/deduction.tsx`（ダイアログに移す）、`receipts/capture.tsx`（`receipts/new` にまとめる）。旧 URL の転送は作らない（spec の Assumptions）。
 - `reports/index.tsx` の転送先を損益計算書に変える。
+- 足すルートは US1 で先に作る（メニューの型つきの `Link` が行き先のルートを要るため）: `settings.tsx` は今のホームの事業体の名前の変更を移す（FR-052）。`receipts/new.tsx` は今の `capture.tsx` の部品を描くだけ（US4 で作り直す）。`deferred-assets/index.tsx` は `fixed-assets/index.tsx:194` 以降の開業費の節を部品に切り出して描く（US7 で仕上げる）。
 
 **Rationale**: 毎日の作業（仕訳・明細・証憑）を 1 段目に出し、入力と一覧に 1 回で届く（SC-001）。グループの名前とメニューの `aria-label` は E2E の `openNav` が参照するので、contracts/ui-shell.md に名前を固定する。
 
@@ -43,7 +44,7 @@
 
 **Decision**: `GET /api/entities/:id/home`（新設）が `HomeSummary`（contracts/http-api.md §1）を返す。domain のユースケース `getHomeSummary` が、項目ごとに既存のユースケース・ストアを呼んで組み立て、項目ごとに例外・`err` を捕まえて `{ status: "error" }` にする（FR-009。1 つの失敗で応答全体を失敗にしない）。
 - 今日やること: 未処理の明細（`listStatements` の `status=unprocessed` の件数）、仕訳のない証憑（`ReceiptStore` に `count(query)` を足し、`link=none`・削除済みを除く）、未入金の請求書（`unpaid|partial` の件数）とそのうち期限切れ（`overdue`）、登録できなかった定期仕訳（今の `blocked` の判定の件数。保存されていない。D4）、今の年度の決算書の警告（`buildBlueReturn` の `warnings` の件数。今の年度の会計期間がなければ 0）。
-- 今期の数字: 今日を含む会計期間の損益計算書（`from` = 期首、`to` = 期末）の売上高（`PL_SALES` の合計）、経費（`PL_COGS` + `PL_EXPENSE` の合計）、利益（`netIncome`。青色申告特別控除の前）。今日時点の貸借対照表の現金と預金（最初からある科目の現金・預金のコードの行の合計。コードの一覧は schema の定数 `CASH_AND_DEPOSIT_CODES`。tasks で seed のコードを確かめて決める）。未回収の合計（`outstandingByPartner` の `outstanding` の合計）。帳票と同じ関数（`buildProfitAndLoss`・`buildBalanceSheet`）を同じ引数で呼ぶので一致する（INV-72）。
+- 今期の数字: 今日を含む会計期間の損益計算書（`from` = 期首、`to` = 期末）の売上高（`PL_SALES` の合計）、経費（`PL_COGS` + `PL_EXPENSE` の合計）、利益（`netIncome`。青色申告特別控除の前）。今日時点の貸借対照表の現金と預金（最初からある科目の現金・預金のコードの行の合計。コードの一覧は schema の定数 `CASH_AND_DEPOSIT_CODES = ["1010", "1020"]`〔seed の現金・普通預金。2026-11-03 に確かめた〕）。未回収の合計（`outstandingByPartner` の `outstanding` の合計）。帳票と同じ関数（`buildProfitAndLoss`・`buildBalanceSheet`）を同じ引数で呼ぶので一致する（INV-72）。
 - 最近の仕訳 5 件: 取消を除き、登録日時（`journals.created_at`）の新しい順。
 - 最後の明細の取込の日時: 取込の回の `createdAt` の最大。
 - 前回の成功したバックアップは端末の情報なので、web が既存の `GET /api/backup/status` を別に読む。
@@ -119,6 +120,8 @@
 
 **Decision**: 表 `eval_runs`、`usecases/evals.ts` のうち実行と保存、`POST/GET /statements/evals`、`statements/evals.tsx`・`EvalRuns.tsx` を消す。評価の採点の純関数（`statements/evals.ts`）は残し、`scripts/eval-statements.ts`（`pnpm eval:statements`）から使う。データは合成の明細（`packages/domain/test/fixtures/statements/` の README の方針で作る）と、R19 の仕訳の入力の場面の合成の例。結果は `.tmp/eval-statements/` に件数と割合だけを残して前回と比べる（007 の `eval:columns` と同じ形）。CI に含めない。`lib/jobs.ts` の評価のジョブは、ほかに使う所がなければ消す（tasks で grep する）。
 
+**削除の対象（2026-11-03 の grep）**: 表 `eval_runs`（`packages/db/src/schema/tenant.ts` とマイグレーション）、`packages/domain/src/usecases/evals.ts` の実行と保存、`ports.ts`・`types.ts`・`test/fakes/statements.ts` の該当、`packages/db/src/statement-repository.ts` の該当、`apps/server/src/routes/statements.ts` の `POST/GET /statements/evals` と `/jobs/:jobId`、`apps/server/src/lib/jobs.ts`（評価だけが使う）と `app.ts` の `jobs`、エラーコード `JOB_RUNNING`・`JOB_NOT_FOUND`（`schema/errors.ts`・`server/errors.ts`）、web の `routes/e/$entityId/statements/evals.tsx`・`features/statements/EvalRuns.tsx`・`features/statements/api.ts` の該当。テストは `db/test/statement-evals.test.ts`・`server/test/statements.evals.api.test.ts` を消し、`db/test/statement-schema.test.ts`・`schema/test/statements.test.ts`・`web/test/routes/statements-ai.test.tsx` の該当を直す。
+
 **Rationale**: 日々の画面に要らない（U11）。憲法 IV の評価は 007・010 と同じくスクリプトで満たす（FR-025）。
 
 **Alternatives**: 画面だけ消して API と表を残す → 使われない保存が残る。
@@ -162,7 +165,7 @@
 ## R14. 決算・申告
 
 **Decision**:
-- 申告の控えの削除（FR-042）: 表 `tax_return_memos`・`filed_documents`（マイグレーションで `DROP TABLE`）、`closing-repository.ts:177-223`、`ports.ts:286-` の該当部分、`usecases/blue-return.ts:1102-1200`、`routes/tax-return.ts`、web の `features/tax-return/` と `routes/tax-return/`、関連のテスト（`tax-return.api.test.ts`、`tax-return.test.tsx`、`usecase-tax-return.test.ts`、`closing-repository.test.ts:240` 付近、`closing-schema.test.ts` の該当、`fakes/closing.ts`）。バックアップ・復元の表の一覧に名前があれば直す（tasks で grep）。
+- 申告の控えの削除（FR-042）: 表 `tax_return_memos`・`filed_documents`（マイグレーションで `DROP TABLE`）、`closing-repository.ts:177-223`、`ports.ts:286-` の該当部分、`usecases/blue-return.ts:1102-1200`、`routes/tax-return.ts`、web の `features/tax-return/` と `routes/tax-return/`、関連のテスト（`tax-return.api.test.ts`、`tax-return.test.tsx`、`usecase-tax-return.test.ts`、`closing-repository.test.ts:240` 付近、`closing-schema.test.ts` の該当、`fakes/closing.ts`）。バックアップ・復元の表の一覧に名前はない（2026-11-03 の grep）。ほかに grep で見つかった参照: `packages/db/src/schema/tenant.ts`、`packages/domain/src/types.ts`、`packages/schema/src/blue-return.ts`（と `schema/test/blue-return.test.ts`）、`packages/domain/test/fake-closing-unit-of-work.test.ts`、`apps/web/src/features/tax-return/`（`MemoSection.tsx`・`labels.ts`）、`createApp` の登録。
 - 決算書（FR-043）: `blue-return/index.tsx` を、今日を含む会計期間の年（なければ最新）へ転送する。年度の切替は `$year` の画面の上の select。
 - 控除の要件（FR-044）: `deduction.tsx` の回答の欄を `DeductionAnswersDialog` に移し、決算書の欄 44 の近くに「要件を直す」を置く。回答がなければ欄の近くに「要件に回答すると控除額が出ます」。保存の後、決算書を読み直す。
 - 使わない欄（FR-045）: 画面の切替をなくし、常に隠す。CSV は今の `blankUnused=true` を常に付ける。
