@@ -184,6 +184,6 @@ describe("AI で推定（H:§4.3）", () => {
     mockApi({});
     renderStatements();
     await screen.findByRole("button", { name: "AI で推定" });
-    expect(screen.queryByRole("link", { name: "推定の評価", exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "推定の評価" })).not.toBeInTheDocument();
   });
 });

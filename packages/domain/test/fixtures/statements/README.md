@@ -14,6 +14,7 @@
 | `custom-header.csv` | カンマ区切り、UTF-8 | 見出しが辞書（R4）に当たらない独自の名前（発生日・取引の内容・増減額・整理番号）。US4（AI の列の案）の入力。8 行 |
 | `load.ts` | | ファイルを読む小さな関数（`readStatementFixture`＝バイト列、`readStatementText`＝UTF-8 の文字列） |
 | `expected.ts` | | 形ごとの件数、入金と出金の合計、前置きの行数、正しい列の対応（`StatementColumnMapping` と同じ形の素の object）。`headerRow` は元のテキストの行の番号（0 起点） |
+| `statement-evals.ts` | TypeScript | 明細推定の合成評価（011/R10）。学習用4件と採点用16件、基準日は2026-01-01。広告・通信・交通・消耗品・電気・家賃・売上・返金・私用と自己資金補充、マスク対象の架空連絡先を含む。正解の科目コード・税区分・事業/私用は明示し、取引先はすべてnull。口座・内容・日付・金額・識別子は新規作成で実データ由来ではない |
 
 ## 匿名化の方針
 
@@ -46,3 +47,9 @@
 - 和暦の CSV の日付が `expected.ts` の `dates` と一致する
 
 フィクスチャを変えたら、同じ検算をしてから `expected.ts` を直す。
+
+`statement-evals.ts` は `pnpm eval:statements` で本番のルール・AI推定経路を評価する。
+基準日より前だけからルールを作り、以後16件だけを採点する。先頭4件の採点用は学習用と同じ内容でルール優先を確認し、残り12件はAIで推定する。
+結果は `.tmp/eval-statements/` に件数と割合・AI利用状態だけを保存する（明細・モデル・URL・キー・回答を保存しない）。
+AIを呼ばないCIの集計テストは偽の `SuggestionProvider` を使う。実AIの精度はCLIの実行で別に確認する。
+評価例・正解を変更した場合は `scripts/eval-statements.ts` の `FIXTURE_VERSION` を上げ、異なる版の率を比較しない。
