@@ -1,4 +1,4 @@
-import type { TaxCategoryCode } from "@trebuchet/schema";
+import type { JournalDraft as SavedJournalInput, TaxCategoryCode } from "@trebuchet/schema";
 import fc from "fast-check";
 import type { CarryForwardBalance } from "../src/carry-forward.ts";
 import type {
@@ -16,6 +16,28 @@ import type {
 export { NOW, TODAY } from "./test-dates.ts";
 /** fast-check を依存に持たないパッケージ（db）のテスト用に再エクスポートする */
 export { fc };
+
+/** 011/INV-69: 未完成の入力を含む、保存用の下書き。仕訳の案の型とは別。 */
+export const journalDraftArb: fc.Arbitrary<SavedJournalInput> = fc.record({
+  mode: fc.constantFrom("quick" as const, "detailed" as const),
+  date: fc.option(fc.string(), { nil: null }),
+  memo: fc.string({ maxLength: 1000 }),
+  partnerId: fc.option(fc.string(), { nil: null }),
+  tagIds: fc.array(fc.string()),
+  lines: fc.array(
+    fc.record({
+      side: fc.constantFrom("debit" as const, "credit" as const),
+      accountId: fc.option(fc.string(), { nil: null }),
+      subAccountId: fc.option(fc.string(), { nil: null }),
+      amount: fc.option(fc.integer(), { nil: null }),
+      taxCategory: fc.option(fc.string(), { nil: null }),
+      partnerId: fc.option(fc.string(), { nil: null }),
+      tagIds: fc.array(fc.string()),
+      description: fc.option(fc.string(), { nil: null }),
+    }),
+    { maxLength: 50 },
+  ),
+});
 
 const NORMAL_SIDE: Record<AccountCategory, Side> = {
   asset: "debit",

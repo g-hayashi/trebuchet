@@ -14,7 +14,7 @@
 | `payload` | TEXT | NOT NULL。`JournalDraft` の JSON |
 | `updated_at` | TEXT | NOT NULL。ISO 8601 |
 
-- `JournalDraft`（schema）: `{ mode: "quick" | "detailed", date: string | null, memo: string, partnerId: string | null, tagIds: string[], lines: { side: "debit" | "credit", accountId: string | null, subAccountId: string | null, amount: number | null, taxCategory: string | null }[] }`。完成していない値を許す。金額は整数か null。行は 50 行まで、摘要は仕訳と同じ上限。
+- `JournalDraft`（schema）: `{ mode: "quick" | "detailed", date: string | null, memo: string, partnerId: string | null, tagIds: string[], lines: { side: "debit" | "credit", accountId: string | null, subAccountId: string | null, amount: number | null, taxCategory: string | null, partnerId: string | null, tagIds: string[], description: string | null }[] }`。完成していない値を許す。金額は整数か null。行は 50 行まで、摘要は仕訳と同じ上限。詳細入力の左右の取引先・タグ・行説明・税区分も保存し復元する。検証済みの仕訳入力へ自動変換しない。
 - 書くのは `PUT /journal-draft`（全体の置き換え）、消すのは `DELETE` と仕訳の登録の成功の後（web が呼ぶ）。仕訳の登録のトランザクションには入れない（下書きの削除の失敗で登録を止めない）。
 - 監査の記録（`audit_log`）に書かない。バックアップには事業体の DB ごと含まれる。
 

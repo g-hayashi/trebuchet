@@ -39,6 +39,7 @@ import { fixedAssetRoutes } from "./routes/fixed-assets.ts";
 import { homeRoutes } from "./routes/home.ts";
 import { importRoutes } from "./routes/imports.ts";
 import { invoicingRoutes } from "./routes/invoicing.ts";
+import { journalDraftRoutes } from "./routes/journal-drafts.ts";
 import { journalRoutes } from "./routes/journals.ts";
 import { masterRoutes } from "./routes/masters.ts";
 import { pairingRoutes } from "./routes/pairing.ts";
@@ -69,6 +70,7 @@ function tenantRoutes(
     .route("/", masterRoutes(options))
     .route("/", periodRoutes(options))
     .route("/", journalRoutes(options))
+    .route("/", journalDraftRoutes(options))
     .route("/", reportRoutes)
     .route("/", homeRoutes(options))
     .route("/", importRoutes(options))

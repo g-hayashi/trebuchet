@@ -30,7 +30,14 @@ describe("openTenant", () => {
     expect(existsSync(tenantFile(id))).toBe(true);
     const tables = tableNames(db);
     expect(tables.map((t) => t.name)).toEqual(
-      expect.arrayContaining(["journals", "journal_lines", "audit_log", "tax_rates", "accounts"]),
+      expect.arrayContaining([
+        "journals",
+        "journal_lines",
+        "audit_log",
+        "tax_rates",
+        "accounts",
+        "journal_drafts",
+      ]),
     );
     // R2: 生成後の SQL に STRICT を付けている
     for (const t of tables) expect(t.sql).toMatch(/\)\s*STRICT$/);

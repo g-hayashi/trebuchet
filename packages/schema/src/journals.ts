@@ -48,6 +48,30 @@ export const JournalInput = JournalInputFields.refine(hasBothSides, {
 });
 export type JournalInput = z.infer<typeof JournalInput>;
 
+/** 新規入力の保存用。未完成の文字列・金額を保持し、仕訳として検証しない（011/R6）。 */
+export const JournalDraft = z.object({
+  mode: z.enum(["quick", "detailed"]),
+  date: z.string().nullable(),
+  memo: z.string().max(1000),
+  partnerId: z.string().nullable(),
+  tagIds: z.array(z.string()),
+  lines: z
+    .array(
+      z.object({
+        side: Side,
+        accountId: z.string().nullable(),
+        subAccountId: z.string().nullable(),
+        amount: z.number().int().nullable(),
+        taxCategory: z.string().nullable(),
+        partnerId: z.string().nullable(),
+        tagIds: z.array(z.string()),
+        description: z.string().nullable(),
+      }),
+    )
+    .max(50),
+});
+export type JournalDraft = z.infer<typeof JournalDraft>;
+
 export const JournalStatus = z.enum(["active", "voided"]);
 export type JournalStatus = z.infer<typeof JournalStatus>;
 

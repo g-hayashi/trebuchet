@@ -13,6 +13,7 @@ import {
   DrizzleClosingStore,
   DrizzleImportStore,
   DrizzleInvoicingStore,
+  DrizzleJournalDraftStore,
   DrizzleLedgerRepository,
   DrizzleMasterRepository,
   DrizzleRecurringStore,
@@ -41,6 +42,7 @@ import {
   type ImportUnitOfWork,
   type InvoicingStore,
   type InvoicingUnitOfWork,
+  type JournalDraftDeps,
   type LedgerDeps,
   type MasterDeps,
   type ReceiptDeps,
@@ -182,6 +184,10 @@ export function journalDeps(db: TenantDb, clock: Clock): LedgerDeps {
     ids,
     clock,
   };
+}
+
+export function journalDraftDeps(db: TenantDb, clock: Clock): JournalDraftDeps {
+  return { store: new DrizzleJournalDraftStore(db), clock };
 }
 
 /** リクエストの事業体の DB に対する帳票のユースケースの依存 */

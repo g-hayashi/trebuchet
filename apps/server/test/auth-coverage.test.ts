@@ -43,6 +43,14 @@ function listRoutes(): { method: string; path: string }[] {
 const protectedRoutes = () => listRoutes().filter((r) => requiresAuth(r.method, r.path));
 
 describe("INV-29 全ルートの保護", () => {
+  it("下書きの全操作が保護対象", () => {
+    for (const method of ["GET", "PUT", "DELETE"]) {
+      expect(protectedRoutes()).toContainEqual({
+        method,
+        path: "/api/entities/:entityId/journal-draft",
+      });
+    }
+  });
   it("列挙したルートの数が下限を下回らない（列挙が空で素通りしない）", () => {
     expect(listRoutes().length).toBeGreaterThanOrEqual(40);
     expect(protectedRoutes().length).toBeGreaterThanOrEqual(35);

@@ -7,6 +7,7 @@ export * from "./fakes/closing.ts";
 export * from "./fakes/core.ts";
 export * from "./fakes/import.ts";
 export * from "./fakes/invoicing.ts";
+export * from "./fakes/journal-draft-store.ts";
 export * from "./fakes/ledger.ts";
 export * from "./fakes/master.ts";
 export * from "./fakes/receipts.ts";

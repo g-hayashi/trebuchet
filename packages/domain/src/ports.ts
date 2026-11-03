@@ -6,11 +6,13 @@ import type {
   ReceiptQuery,
   Recurring,
   RemoteSettings,
+  JournalDraft as SavedJournalInput,
   StatementAccount,
   StatementBatch,
   StatementSettings,
   StatementSource,
 } from "@trebuchet/schema";
+
 import type {
   AppSettingKey,
   AuthEvent,
@@ -90,6 +92,17 @@ import type {
   ValidJournal,
   WorkHoursRow,
 } from "./types.ts";
+
+/** 帳簿とは独立した、新規入力の保存枠（事業体ごとに1件）。監査は記録しない。 */
+export type SavedJournalDraft = {
+  draft: SavedJournalInput | null;
+  updatedAt: string | null;
+};
+export interface JournalDraftStore {
+  get(): SavedJournalDraft;
+  replace(draft: SavedJournalInput, updatedAt: string): void;
+  delete(): void;
+}
 
 export interface IdGenerator {
   next(): string;

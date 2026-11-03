@@ -34,6 +34,17 @@ import {
 
 const bool = (name: string) => integer(name, { mode: "boolean" }).notNull();
 
+/** 011/R6: 暗号化した事業体DBに、新規入力の状態だけを保存する。 */
+export const journalDrafts = sqliteTable(
+  "journal_drafts",
+  {
+    id: integer("id").primaryKey(),
+    payload: text("payload").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [check("journal_drafts_singleton", sql`${t.id} = 1`)],
+);
+
 // ---- §2 マスタ ----
 
 export const entityProfile = sqliteTable(
