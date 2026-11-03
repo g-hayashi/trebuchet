@@ -9,6 +9,8 @@
  * 外部有効時はURL・モデル・キーが必須。registryや実データ（work/・data/）は読まない。
  * fmのポートはTREBUCHET_FM_PORT（既定18791。本番18790とは別）。終了時finallyで止める。
  * fmが使えない・起動できない、設定不足、接続失敗は終了コード1で結果を保存しない。
+ * 通信失敗は最初の1件で停止し、local/external・固定の失敗種別・HTTP番号だけを表示する。
+ * 推定の前後はAI呼出の開始/完了件数を表示する（ルールだけの採点は含まない）。
  * 形の不正なAI出力は本番と同じく候補なしとして採点する。
  * .tmp/eval-statements/には件数・千分率・AI利用状態と最低限のmetadataだけを保存し前回比較する。
  * モデル名・URL・キー・明細・AIの回答や失敗の本文は表示も保存もしない。
@@ -37,6 +39,7 @@ import {
 } from "../packages/domain/test/fixtures/statements/statement-evals.ts";
 import { isAllowedAiBaseUrl } from "../packages/schema/src/ai.ts";
 import { positiveNumber } from "./lib/bench-common.ts";
+import { createEvalProviderGuard, EvalProviderError } from "./lib/eval-provider.ts";
 
 type SavedEval = StatementSceneEvaluation & {
   at: string;
@@ -146,12 +149,15 @@ try {
     endpoint: async () => endpoint,
   });
   const threshold = DEFAULT_STATEMENT_SETTINGS.externalThreshold;
+  const guard = createEvalProviderGuard((phase, count) => {
+    console.log(phase === "started" ? `  AI推定開始: ${count} 件目` : `  AI推定完了: ${count} 件`);
+  });
   console.log("合成の明細を1件ずつ推定します（端末内AIと、有効なら外部AIに送信）");
   const result = await evaluateStatementScenes(
     STATEMENT_EVAL_CASES,
     {
-      local,
-      external,
+      local: guard(local, "local"),
+      external: guard(external, "external"),
       externalEnabled: endpoint !== undefined,
       models: { local: LOCAL_AI_MODEL, external: endpoint?.model ?? "" },
     },
@@ -178,7 +184,9 @@ try {
   console.log(`  保存: .tmp/eval-statements/${name}`);
 } catch (error) {
   console.error(
-    error instanceof EvalSetupError ? error.message : "評価に失敗しました（結果は残しません）",
+    error instanceof EvalSetupError || error instanceof EvalProviderError
+      ? error.message
+      : "評価に失敗しました（結果は残しません）",
   );
   process.exitCode = 1;
 } finally {
