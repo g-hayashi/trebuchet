@@ -303,7 +303,7 @@ describe("追加の直後の自動の読み取り", () => {
     const form = await screen.findByRole("form", { name: "証憑を追加" });
     const user = userEvent.setup();
     await user.upload(
-      within(form).getByLabelText("証憑のファイル"),
+      within(form).getByLabelText("ファイルを選ぶ"),
       new File([new Uint8Array(1000)], "領収書.jpg", { type: "image/jpeg" }),
     );
     await user.click(within(form).getByRole("radio", { name: "電子取引" }));

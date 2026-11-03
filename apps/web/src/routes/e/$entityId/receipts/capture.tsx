@@ -1,22 +1,11 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { CaptureForm } from "@/features/receipts/CaptureForm";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+/**
+ * 旧い「撮影の画面」の URL。追加の入口は証憑の一覧の 1 つだけにしたので、一覧へ送る
+ * （ホーム画面に追加したアプリやブックマークを壊さない）
+ */
 export const Route = createFileRoute("/e/$entityId/receipts/capture")({
-  component: CapturePage,
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/e/$entityId/receipts", params, replace: true });
+  },
 });
-
-function CapturePage() {
-  const { entityId } = Route.useParams();
-  return (
-    <main className="mx-auto grid max-w-xl gap-4">
-      <h1 className="text-xl font-semibold">証憑を撮る</h1>
-      <p className="text-sm text-muted-foreground">
-        領収書・請求書を撮影するか、ファイルを選んで送ります。送信が終わるまで、この画面を閉じないでください。
-      </p>
-      <CaptureForm entityId={entityId} />
-      <Link to="/e/$entityId/receipts" params={{ entityId }} className="text-sm underline">
-        証憑の一覧へ
-      </Link>
-    </main>
-  );
-}

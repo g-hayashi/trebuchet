@@ -83,11 +83,11 @@ function EntityList() {
                   </TableCell>
                   <TableCell>
                     <Link
-                      to="/e/$entityId/receipts/capture"
+                      to="/e/$entityId/receipts"
                       params={{ entityId: e.id }}
                       className="underline-offset-4 hover:underline"
                     >
-                      証憑を撮る
+                      証憑を追加
                     </Link>
                   </TableCell>
                 </TableRow>

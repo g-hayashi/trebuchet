@@ -17,8 +17,14 @@ export const CATEGORY_LABELS: Record<ReceiptCategory, string> = {
 /** 区分の選択肢（表示の順） */
 export const CATEGORY_OPTIONS: ReceiptCategory[] = ["paper_scan", "electronic"];
 
-/** 「紙を撮影」を選んだときと、保存・解像度などの警告に添える注記 */
+/** 保存・解像度などの警告と、「紙を撮影」の説明に添える注記 */
 export const KEEP_ORIGINAL_NOTE = "紙の原本は捨てずに保存する";
+
+/** 区分を選ぶ理由の短い説明（追加のフォームで、選ぶ前から示す） */
+export const CATEGORY_HINTS: Record<ReceiptCategory, string> = {
+  paper_scan: `紙の領収書・レシートを撮影したもの。${KEEP_ORIGINAL_NOTE}。解像度と入力期限の目安の警告の対象になります。`,
+  electronic: "メールやサイトで受け取った PDF や画像など。電子のまま保存すれば足ります。",
+};
 
 export const CHANNEL_LABELS: Record<ReceiptChannel, string> = {
   local: "この Mac から",

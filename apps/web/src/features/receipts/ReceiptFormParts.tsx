@@ -2,9 +2,9 @@ import { Link } from "@tanstack/react-router";
 import type { ReceiptCategory, ReceiptDetail } from "@trebuchet/schema";
 import { FieldError } from "@/components/ui/form-error";
 import { ApiError } from "@/lib/api";
-import { CATEGORY_LABELS, CATEGORY_OPTIONS, KEEP_ORIGINAL_NOTE, warningText } from "./labels";
+import { CATEGORY_HINTS, CATEGORY_LABELS, CATEGORY_OPTIONS, warningText } from "./labels";
 
-// 証憑の追加の画面（一覧の画面・撮影の画面）が共有する部品
+// 証憑の追加のフォームの部品
 
 /** 重複の応答（409）が指す既存の証憑の ID。削除済みかどうかも返る */
 export function duplicateOf(error: unknown): string | undefined {
@@ -13,7 +13,7 @@ export function duplicateOf(error: unknown): string | undefined {
   return typeof id === "string" ? id : undefined;
 }
 
-/** 区分の選択（必須）。「紙を撮影」を選んだときは「紙の原本は捨てずに保存する」の注記を出す */
+/** 区分の選択（必須）。それぞれを選ぶ理由（`CATEGORY_HINTS`）を、選ぶ前から示す */
 export function CategoryFieldset({
   id,
   value,
@@ -28,23 +28,24 @@ export function CategoryFieldset({
   return (
     <fieldset className="grid gap-2" aria-describedby={`${id}-category-error`}>
       <legend className="mb-1 text-sm font-medium">区分</legend>
-      <div className="flex flex-wrap items-center gap-4">
-        {CATEGORY_OPTIONS.map((option) => (
-          <label key={option} className="flex items-center gap-2 text-sm">
+      {CATEGORY_OPTIONS.map((option) => (
+        <div key={option} className="grid gap-0.5">
+          <label className="flex items-center gap-2 text-sm">
             <input
               type="radio"
               name={`${id}-category`}
               value={option}
               checked={value === option}
+              aria-describedby={`${id}-${option}-hint`}
               onChange={() => onChange(option)}
             />
             {CATEGORY_LABELS[option]}
           </label>
-        ))}
-      </div>
-      {value === "paper_scan" && (
-        <p className="text-sm text-muted-foreground">{KEEP_ORIGINAL_NOTE}。</p>
-      )}
+          <p id={`${id}-${option}-hint`} className="pl-6 text-sm text-muted-foreground">
+            {CATEGORY_HINTS[option]}
+          </p>
+        </div>
+      ))}
       <FieldError id={`${id}-category-error`} message={error} />
     </fieldset>
   );
