@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { ToastProvider } from "@/components/ui/toast";
 import { AuthGate } from "@/features/auth/AuthGate";
 import { BackupStatusBanner } from "@/features/backup/BackupStatusBanner";
 import { EntitySwitcher } from "@/features/entities/EntitySwitcher";
@@ -15,6 +16,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 const PUBLIC_PATHS: readonly string[] = ["/pair"];
 
 function RootLayout() {
+  return (
+    <ToastProvider>
+      <RootContent />
+    </ToastProvider>
+  );
+}
+
+function RootContent() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   if (PUBLIC_PATHS.includes(pathname)) {
     return (

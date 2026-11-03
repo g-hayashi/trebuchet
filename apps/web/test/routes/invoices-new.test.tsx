@@ -338,7 +338,8 @@ describe("請求書の案と発行（US1。FR-006〜016）", () => {
 
     await u.click(within(a).getByRole("button", { name: "発行する" }));
 
-    await waitFor(() => expect(within(a).getByRole("status")).toHaveTextContent("2026-0001"));
+    // 発行の知らせは画面の上の toast に出る（請求書の案の外）
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("2026-0001"));
     expect(within(a).getByRole("link", { name: "請求書 2026-0001 を開く" })).toHaveAttribute(
       "href",
       expect.stringContaining("/e/e1/invoices/inv1"),
@@ -378,7 +379,7 @@ describe("請求書の案と発行（US1。FR-006〜016）", () => {
     await u.type(within(b).getByLabelText("売上の計上日"), "2026-11-01");
     await u.click(within(b).getByRole("button", { name: "発行する" }));
 
-    await waitFor(() => expect(within(b).getByRole("status")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
     expect(calls.find((c) => c.method === "POST" && c.path === `${BASE}/invoices`)?.body).toEqual({
       priceMode: "inclusive",
       partnerId: "p2",
@@ -414,7 +415,7 @@ describe("請求書の案と発行（US1。FR-006〜016）", () => {
     await u.click(within(a).getByLabelText("それでも発行する"));
     await u.click(within(a).getByRole("button", { name: "発行する" }));
 
-    await waitFor(() => expect(within(a).getByRole("status")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
     expect(calls.find((c) => c.method === "POST" && c.path === `${BASE}/invoices`)?.body).toEqual(
       expect.objectContaining({ confirmDuplicate: true }),
     );

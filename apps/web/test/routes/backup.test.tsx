@@ -96,7 +96,8 @@ describe("バックアップの設定（008 の D9: パスフレーズ・同意�
     expect(callsTo(calls, "PUT", "/api/backup/settings")[0]?.body).toEqual({
       folder: "/Users/me/backup",
     });
-    expect(await form.findByText(/保存しました/)).toBeInTheDocument();
+    // 保存の知らせは画面の上の toast に出る（フォームの外）
+    expect(await screen.findByText(/保存しました/)).toBeInTheDocument();
   });
 
   it("サーバーの拒否（置き場所がない）の文言を表示する", async () => {

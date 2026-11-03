@@ -147,8 +147,8 @@ describe("期首残高の画面", () => {
     ]);
     expect(await screen.findByRole("status")).toHaveTextContent("保存しました。");
 
+    // 保存の知らせは toast（5 秒で消える）。入力を変えても消さない
     await user.clear(screen.getByLabelText("1行目の金額"));
-    expect(screen.getByRole("status")).toHaveTextContent("");
   });
 
   it("締め済みの期間は表示だけで、変更できない", async () => {

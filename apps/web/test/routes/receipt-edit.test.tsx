@@ -59,7 +59,8 @@ describe("訂正（入力済みの値の変更）", () => {
       amount: 2000,
       reason: "金額の誤り",
     });
-    expect(await within(form).findByText("保存しました。")).toBeInTheDocument();
+    // 保存の知らせは画面の上の toast に出る（フォームの外）
+    expect(await screen.findByText("保存しました。")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 

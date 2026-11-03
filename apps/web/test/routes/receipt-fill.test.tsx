@@ -89,7 +89,8 @@ describe("証憑の値の入力（未入力を埋める）", () => {
       amount: 1100,
       partnerName: "合成の店",
     });
-    expect(await within(form).findByText("保存しました。")).toBeInTheDocument();
+    // 保存の知らせは画面の上の toast に出る（フォームの外）
+    expect(await screen.findByText("保存しました。")).toBeInTheDocument();
     // 検索の結果に出るよう、証憑のクエリ（一覧・検索・詳細）を読み直す
     expect(invalidate).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: receiptKeys.all("e1") }),
@@ -120,7 +121,7 @@ describe("証憑の値の入力（未入力を埋める）", () => {
     renderDetail();
     const form = await openForm();
     await userEvent.click(within(form).getByRole("button", { name: "保存" }));
-    expect(await within(form).findByText("変更がありません")).toBeInTheDocument();
+    expect(await screen.findByText("変更がありません")).toBeInTheDocument();
     expect(patches(calls)).toHaveLength(0);
   });
 

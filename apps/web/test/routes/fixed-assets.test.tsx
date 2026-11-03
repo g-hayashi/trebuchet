@@ -655,8 +655,8 @@ describe("償却の方法ごとの登録（009 US1）", () => {
     await user.selectOptions(screen.getByRole("combobox", { name: "償却の方法" }), "straight_line");
     await user.type(screen.getByRole("textbox", { name: "耐用年数" }), "1");
     await user.click(screen.getByRole("button", { name: "登録" }));
+    // 前の成功の toast は 5 秒で消える（失敗の知らせとは別に残りうる）。失敗は role=alert で出る
     expect(await screen.findByRole("alert")).toHaveTextContent("償却率の表にありません");
-    expect(screen.queryByText("登録しました。")).not.toBeInTheDocument();
   });
 
   it("保存したあと、案と決算書の query を読み直す（資産の保存は仕訳を変えないので台帳と決算書の年度だけ）", async () => {
@@ -975,10 +975,10 @@ describe("開業費（009 US3）", () => {
     });
     expect(await screen.findByText("開業費を登録しました。")).toBeInTheDocument();
 
-    // 次の登録が入力の不備で送られないとき、前の知らせを残さない
+    // 次の登録が入力の不備で送られないとき、2 回目の知らせを出さない（前の toast は 5 秒で消える）
     await user.click(screen.getByRole("button", { name: "開業費を登録" }));
     expect(callsOf(calls, "POST", DEFERRED)).toHaveLength(1);
-    expect(screen.queryByText("開業費を登録しました。")).not.toBeInTheDocument();
+    expect(screen.getAllByText("開業費を登録しました。")).toHaveLength(1);
   });
 
   it("前年までの累計とその年分を送る。累計があるのに年分がなければ、総額が整数でなければ送らない", async () => {

@@ -40,9 +40,9 @@ description: "Task list for 011-ui-overhaul"
 
 **Purpose**: 依存を足さずに作る共通の部品（R2）。各ストーリーの画面がこれを使う
 
-- [ ] T002 [P] テスト先行で `apps/web/src/components/ui/toast.tsx`（`ToastProvider`・`useToast()`。成功は `role="status"`・`aria-live="polite"`、失敗は `role="alert"`、画面の上に固定、5 秒で消える。UI: §5）を作り、`__root.tsx` に Provider を置き、`components/ui/save-notice.tsx` を中で `useToast` を呼ぶ形に置き換える（呼び出し側 26 ファイルは直さない。FR-005）。テスト `apps/web/test/components/toast.test.tsx`。既存の web のテストのうち `SaveNotice` の文言を見るものが落ちれば直す
-- [ ] T003 [P] テスト先行で `apps/web/src/components/ui/sheet.tsx`（既存の `radix-ui` の Dialog を右から出す。`md` 未満は全画面）と `components/ui/steps.tsx`（①〜④ の段階と `aria-current="step"`）を作る（R2）。テスト `apps/web/test/components/sheet-steps.test.tsx`
-- [ ] T004 [P] テスト先行で `apps/web/src/components/ui/combobox.tsx`（WAI-ARIA の combobox: `input` + `listbox`、`aria-activedescendant`、↑↓ で選び Enter で確定して `onCommit` で次の欄へ、絞り込みは呼ぶ側の `match(option, query)`。R2）を作る。テスト `apps/web/test/components/combobox.test.tsx`（キーボードだけの選択、確定で次の欄にフォーカス、0 件の表示）
+- [X] T002 [P] テスト先行で `apps/web/src/components/ui/toast.tsx`（`ToastProvider`・`useToast()`。成功は `role="status"`・`aria-live="polite"`、失敗は `role="alert"`、画面の上に固定、5 秒で消える。UI: §5）を作り、`__root.tsx` に Provider を置き、`components/ui/save-notice.tsx` を中で `useToast` を呼ぶ形に置き換える（呼び出し側 26 ファイルは直さない。FR-005）。テスト `apps/web/test/components/toast.test.tsx`。既存の web のテストのうち `SaveNotice` の文言を見るものが落ちれば直す
+- [X] T003 [P] テスト先行で `apps/web/src/components/ui/sheet.tsx`（既存の `radix-ui` の Dialog を右から出す。`md` 未満は全画面）と `components/ui/steps.tsx`（①〜④ の段階と `aria-current="step"`）を作る（R2）。テスト `apps/web/test/components/sheet-steps.test.tsx`
+- [X] T004 [P] テスト先行で `apps/web/src/components/ui/combobox.tsx`（WAI-ARIA の combobox: `input` + `listbox`、`aria-activedescendant`、↑↓ で選び Enter で確定して `onCommit` で次の欄へ、絞り込みは呼ぶ側の `match(option, query)`。R2）を作る。テスト `apps/web/test/components/combobox.test.tsx`（キーボードだけの選択、確定で次の欄にフォーカス、0 件の表示）
 
 **Checkpoint**: 共通の部品がそろい、既存の web のテストが通る
 
