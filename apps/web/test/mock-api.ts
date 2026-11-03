@@ -78,6 +78,10 @@ const DEFAULT_ROUTES: Record<string, Handler> = {
  * 取引先の画面など既存の画面が読むので、既存のテストが落ちないよう空の応答を置く
  */
 const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
+  "GET /journal-draft": () => ok({ draft: null, updatedAt: null }),
+  "PUT /journal-draft": () => ok({ updatedAt: "2026-10-31T01:00:00.000Z" }),
+  "DELETE /journal-draft": () => ok(undefined, 204),
+  "GET /journals/suggestions": () => ok({ suggestions: [] }),
   // ホーム（011 US1）。作業は 0 件、今日を含む会計期間なし、仕訳・取込なし
   "GET /home": () =>
     ok({

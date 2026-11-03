@@ -9,6 +9,7 @@ import { accountsQuery } from "@/features/accounts/api";
 import { taxCategoriesQuery, taxSettingsQuery } from "@/features/entities/api";
 import { journalQuery, postJournal } from "@/features/journals/api";
 import { JournalForm } from "@/features/journals/JournalForm";
+import { NewJournalEntry } from "@/features/journals/NewJournalEntry";
 import { partnersQuery, tagsQuery } from "@/features/masters/api";
 import { postReceiptJournal, receiptQuery } from "@/features/receipts/api";
 import { journalSourceOf, suggestionOf } from "@/features/receipts/journal-source";
@@ -20,7 +21,11 @@ import { invalidateLedger } from "@/lib/queries";
  * correctsJournalId を付けて開くと、その仕訳の訂正仕訳を起票する（FR-019a）。
  * receiptId を付けて開くと、その証憑の値を初期値にして仕訳を作り、証憑に結びつける（010 FR-010）
  */
-const NewJournalSearch = z.object({ correctsJournalId: Id.optional(), receiptId: Id.optional() });
+const NewJournalSearch = z.object({
+  correctsJournalId: Id.optional(),
+  receiptId: Id.optional(),
+  from: Id.optional(),
+});
 
 export const Route = createFileRoute("/e/$entityId/journals/new")({
   validateSearch: NewJournalSearch,
@@ -29,7 +34,7 @@ export const Route = createFileRoute("/e/$entityId/journals/new")({
 
 function NewJournalPage() {
   const { entityId } = Route.useParams();
-  const { correctsJournalId, receiptId } = Route.useSearch();
+  const { correctsJournalId, receiptId, from } = Route.useSearch();
   const corrects = useQuery({
     ...journalQuery(entityId, correctsJournalId ?? ""),
     enabled: correctsJournalId !== undefined,
@@ -54,8 +59,10 @@ function NewJournalPage() {
     mutationFn: (json: JournalInput) => postJournal(entityId, json),
     onSuccess: async ({ journal }) => {
       // 続けて入力できるよう、日付を残してフォームを空にする
-      setDefaultDate(journal.date);
-      setFormKey((k) => k + 1);
+      if (correctsJournalId) {
+        setDefaultDate(journal.date);
+        setFormKey((k) => k + 1);
+      }
       await invalidateLedger(queryClient, entityId);
     },
   });
@@ -183,7 +190,22 @@ function NewJournalPage() {
             taxSettings.data &&
             taxCategories.data &&
             !savedFromReceipt &&
-            (receiptId === undefined ? (
+            (receiptId === undefined && correctsJournalId === undefined ? (
+              <NewJournalEntry
+                key={`${entityId}:${from ?? ""}`}
+                entityId={entityId}
+                from={from}
+                accounts={accounts.data}
+                partners={partners.data}
+                tags={tags.data}
+                taxSettings={taxSettings.data}
+                taxCategories={taxCategories.data}
+                defaultDate={defaultDate}
+                autoBalance
+                submitLabel="登録"
+                onSubmit={(input) => save.mutateAsync(input)}
+              />
+            ) : receiptId === undefined ? (
               <JournalForm
                 key={formKey}
                 initialMode={correctsJournalId ? "detailed" : "quick"}

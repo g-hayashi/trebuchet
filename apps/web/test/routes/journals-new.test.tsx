@@ -1,5 +1,6 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { JournalDraft, JournalSuggestion } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Account } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/journals/new";
@@ -590,5 +591,393 @@ describe("訂正仕訳の起票（US3, FR-019a）", () => {
 
     await waitFor(() => expect(body).toMatchObject({ correctsJournalId: original.id }));
     expect(await screen.findByText("仕訳 No.2 を登録しました。")).toBeInTheDocument();
+  });
+});
+
+const pause = (ms: number) => act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+const draftFixture = (): JournalDraft => ({
+  mode: "detailed",
+  date: "2026-09-15",
+  memo: "保存した下書き",
+  partnerId: null,
+  tagIds: [],
+  lines: [
+    {
+      side: "debit",
+      accountId: receivable.id,
+      subAccountId: subA.id,
+      amount: 1200,
+      taxCategory: "OUT_OF_SCOPE",
+      partnerId: partnerA.id,
+      tagIds: [uuid(8001)],
+      description: "借方の説明",
+    },
+    {
+      side: "credit",
+      accountId: sales.id,
+      subAccountId: null,
+      amount: null,
+      taxCategory: "SALES_8R",
+      partnerId: partnerB.id,
+      tagIds: [uuid(8002)],
+      description: "貸方の説明",
+    },
+  ],
+});
+const renderQuick = (search = "") =>
+  renderRoute(Route, { path: "/e/$entityId/journals/new", url: `/e/e1/journals/new${search}` });
+
+describe("下書き・複製・履歴（011/T016）", () => {
+  it("読込と続行の選択前は空の下書きを書かず、詳細行の情報を復元し変更後1秒で保存する", async () => {
+    const read = deferred<ReturnType<typeof ok>>();
+    const draft = draftFixture();
+    const calls = mockJournalApi(undefined, {
+      [`GET ${ENTITY}/journal-draft`]: () => read.promise,
+      [`PUT ${ENTITY}/journal-draft`]: () => ok({ updatedAt: "now" }),
+    });
+    const u = user();
+    renderQuick();
+    await pause(1100);
+    expect(screen.queryByRole("form", { name: "仕訳" })).not.toBeInTheDocument();
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+    read.resolve(ok({ draft, updatedAt: "before" }));
+    await u.click(await screen.findByRole("button", { name: "続ける" }));
+    expect(screen.getByLabelText("1行目の摘要")).toHaveValue("借方の説明");
+    expect(screen.getByLabelText("2行目の取引先")).toHaveValue(partnerB.id);
+    expect(screen.getByLabelText("2行目の税区分")).toHaveValue("SALES_8R");
+    expect(screen.getByLabelText("1行目の税区分")).toHaveValue("OUT_OF_SCOPE");
+    expect(screen.getByRole("button", { name: "かんたん入力" })).toBeDisabled();
+    await u.type(screen.getByLabelText("1行目の摘要"), "追記");
+    await pause(1100);
+    const put = calls.find((call) => call.method === "PUT" && call.path.endsWith("/journal-draft"));
+    expect(put?.body).toMatchObject({
+      mode: "detailed",
+      memo: draft.memo,
+      lines: [
+        { subAccountId: subA.id, description: "借方の説明追記", tagIds: [uuid(8001)] },
+        { amount: null, description: "貸方の説明", tagIds: [uuid(8002)], partnerId: partnerB.id },
+      ],
+    });
+  });
+
+  it("下書き保存の失敗を表示し、最新の入力を再試行できる", async () => {
+    let attempt = 0;
+    const calls = mockJournalApi(undefined, {
+      [`GET ${ENTITY}/journal-draft`]: () => ok({ draft: null, updatedAt: null }),
+      [`PUT ${ENTITY}/journal-draft`]: () =>
+        ++attempt === 1
+          ? apiError(500, "INTERNAL", "下書きを保存できません")
+          : ok({ updatedAt: "now" }),
+    });
+    const u = user();
+    renderQuick();
+    await u.type(await screen.findByLabelText("摘要", { exact: true }), "未完成の仕訳");
+    await pause(1100);
+    expect(await screen.findByRole("alert")).toHaveTextContent("サーバーでエラー");
+    await u.click(screen.getByRole("button", { name: "下書き保存を再試行" }));
+    await waitFor(() => expect(attempt).toBe(2));
+    expect(calls.filter((call) => call.method === "PUT").at(-1)?.body).toMatchObject({
+      mode: "quick",
+      memo: "未完成の仕訳",
+    });
+  });
+
+  it("進行中のPUTを待ってから登録後DELETEし、削除失敗でも登録成功を保ち削除だけ再試行する", async () => {
+    const write = deferred<ReturnType<typeof ok>>();
+    let deletes = 0;
+    const calls = mockJournalApi(
+      (call) => ok({ journal: savedJournal(call.body as JournalBody), warnings: [] }, 201),
+      {
+        [`GET ${ENTITY}/journal-draft`]: () => ok({ draft: null, updatedAt: null }),
+        [`PUT ${ENTITY}/journal-draft`]: () => write.promise,
+        [`DELETE ${ENTITY}/journal-draft`]: () =>
+          ++deletes === 1
+            ? apiError(500, "INTERNAL", "下書きを削除できません")
+            : ok(undefined, 204),
+      },
+    );
+    const u = user();
+    renderQuick();
+    await u.type(await screen.findByRole("combobox", { name: "借方科目" }), "6010{Enter}");
+    await u.keyboard("1020{Enter}1100");
+    await u.type(screen.getByLabelText("摘要", { exact: true }), "登録する入力");
+    await pause(1100);
+    expect(calls.filter((call) => call.method === "PUT")).toHaveLength(1);
+    await u.click(screen.getByRole("button", { name: "登録" }));
+    expect(await screen.findByText("仕訳 No.1 を登録しました。")).toBeInTheDocument();
+    expect(deletes).toBe(0);
+    write.resolve(ok({ updatedAt: "now" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("サーバーでエラー");
+    await u.click(screen.getByRole("button", { name: "下書き削除を再試行" }));
+    await waitFor(() => expect(deletes).toBe(2));
+    await pause(1100);
+    expect(
+      calls.filter((call) => call.method === "POST" && call.path.endsWith("/journals")),
+    ).toHaveLength(1);
+    expect(calls.filter((call) => call.method === "PUT")).toHaveLength(1);
+    expect(calls.at(-1)?.method).toBe("DELETE");
+  });
+
+  it("捨てる操作はDELETE完了後に空フォームを出し、初期値で保存し直さない", async () => {
+    const calls = mockJournalApi(undefined, {
+      [`GET ${ENTITY}/journal-draft`]: () => ok({ draft: draftFixture(), updatedAt: "before" }),
+      [`DELETE ${ENTITY}/journal-draft`]: () => ok(undefined, 204),
+    });
+    const u = user();
+    renderQuick();
+    await u.click(await screen.findByRole("button", { name: "捨てる" }));
+    expect(await screen.findByLabelText("摘要", { exact: true })).toHaveValue("");
+    await pause(1100);
+    expect(calls.filter((call) => call.method === "DELETE")).toHaveLength(1);
+    expect(calls.filter((call) => call.method === "PUT")).toHaveLength(0);
+  });
+
+  it("画面を開き直して捨てた場合も、前の画面の進行中PUTの後にDELETEする", async () => {
+    const writing = deferred<ReturnType<typeof ok>>();
+    let deletes = 0;
+    mockJournalApi(undefined, {
+      [`GET ${ENTITY}/journal-draft`]: () => ok({ draft: draftFixture(), updatedAt: "before" }),
+      [`PUT ${ENTITY}/journal-draft`]: () => writing.promise,
+      [`DELETE ${ENTITY}/journal-draft`]: () => {
+        deletes += 1;
+        return ok(undefined, 204);
+      },
+    });
+    const u = user();
+    const first = renderQuick();
+    await u.click(await screen.findByRole("button", { name: "続ける" }));
+    await u.type(screen.getByLabelText("1行目の摘要"), "進行中");
+    await pause(1100);
+    first.unmount();
+    renderQuick();
+    await u.click(await screen.findByRole("button", { name: "捨てる" }));
+    expect(deletes).toBe(0);
+    writing.resolve(ok({ updatedAt: "now" }));
+    await waitFor(() => expect(deletes).toBe(1));
+    expect(await screen.findByLabelText("摘要", { exact: true })).toHaveValue("");
+  });
+
+  it("複製と既存下書きの競合を選ばせ、複製の全項目を今日の日付で保持する", async () => {
+    const original = savedJournal({
+      date: "2025-12-20",
+      memo: "複製元",
+      lines: [
+        {
+          side: "debit",
+          accountId: receivable.id,
+          amount: 1200,
+          subAccountId: subA.id,
+          description: "行の説明",
+          taxCategory: "OUT_OF_SCOPE",
+          partnerId: partnerA.id,
+          tagIds: [uuid(8001)],
+        },
+        {
+          side: "credit",
+          accountId: sales.id,
+          amount: 1200,
+          taxCategory: "SALES_8R",
+          partnerId: partnerB.id,
+          tagIds: [uuid(8002)],
+        },
+      ],
+    });
+    const calls = mockJournalApi(undefined, {
+      [`GET ${ENTITY}/journal-draft`]: () => ok({ draft: draftFixture(), updatedAt: "before" }),
+      [`GET ${ENTITY}/journals/${original.id}`]: () =>
+        ok({ journal: original, correctsJournal: null, correctingJournals: [] }),
+      [`DELETE ${ENTITY}/journal-draft`]: () => ok(undefined, 204),
+    });
+    const u = user();
+    renderQuick(`?from=${original.id}`);
+    expect(await screen.findByText(/保存済みの下書き/)).toBeInTheDocument();
+    expect(calls.filter((call) => ["PUT", "DELETE"].includes(call.method))).toHaveLength(0);
+    await u.click(screen.getByRole("button", { name: "複製を使う" }));
+    expect(await screen.findByLabelText("日付")).toHaveValue("2026-10-31");
+    expect(screen.getByLabelText("メモ")).toHaveValue("複製元");
+    expect(screen.getByLabelText("1行目の摘要")).toHaveValue("行の説明");
+    expect(screen.getByLabelText("2行目の取引先")).toHaveValue(partnerB.id);
+    expect(screen.getByLabelText("2行目の税区分")).toHaveValue("SALES_8R");
+  });
+
+  it("履歴は300ms待ち、古い応答を表示せず、左右の値だけを反映し停止中の候補は使わせない", async () => {
+    const old = deferred<ReturnType<typeof ok>>();
+    const suggestion: JournalSuggestion = {
+      debitAccountId: supplies.id,
+      creditAccountId: bank.id,
+      debitTaxCategory: "PURCHASE_8R",
+      creditTaxCategory: "OUT_OF_SCOPE",
+      debitPartnerId: partnerA.id,
+      creditPartnerId: partnerB.id,
+      sourceJournalId: uuid(9001),
+      date: "2026-09-01",
+    };
+    const calls = mockJournalApi(undefined, {
+      [`GET ${ENTITY}/journal-draft`]: () => ok({ draft: null, updatedAt: null }),
+      [`GET ${ENTITY}/journals/suggestions`]: (call) =>
+        call.query.memo === "古い摘要"
+          ? old.promise
+          : ok({
+              suggestions: [
+                suggestion,
+                { ...suggestion, sourceJournalId: uuid(9002), debitAccountId: stopped.id },
+              ],
+            }),
+    });
+    const u = user();
+    renderQuick();
+    const memo = await screen.findByLabelText("摘要", { exact: true });
+    await u.type(memo, "古い摘要");
+    expect(calls.some((call) => call.path.endsWith("/suggestions"))).toBe(false);
+    await pause(350);
+    await u.clear(memo);
+    await u.type(memo, "新しい摘要");
+    await u.type(screen.getByLabelText("金額", { exact: true }), "2200");
+    await pause(350);
+    expect(await screen.findByRole("button", { name: "候補2を入れる" })).toBeDisabled();
+    old.resolve(
+      ok({
+        suggestions: [{ ...suggestion, sourceJournalId: uuid(9003), debitAccountId: sales.id }],
+      }),
+    );
+    await u.click(screen.getByRole("button", { name: "候補1を入れる" }));
+    expect(screen.getByRole("combobox", { name: "借方科目" })).toHaveValue("6010 消耗品費");
+    expect(screen.getByLabelText("摘要", { exact: true })).toHaveValue("新しい摘要");
+    expect(screen.getByLabelText("金額", { exact: true })).toHaveValue("2200");
+    await u.click(screen.getByText("任意項目", { exact: true }));
+    expect(screen.getByLabelText("借方税区分")).toHaveValue("PURCHASE_8R");
+    expect(screen.getByLabelText("貸方税区分")).toHaveValue("OUT_OF_SCOPE");
+    expect(screen.getByRole("combobox", { name: "貸方取引先" })).toHaveValue("取引先B");
+  });
+
+  it("下書き読込・複製元読込の失敗は明示し、再試行前に入力を保存しない", async () => {
+    let reads = 0;
+    const calls = mockJournalApi(undefined, {
+      [`GET ${ENTITY}/journal-draft`]: () =>
+        ++reads === 1
+          ? apiError(500, "INTERNAL", "下書きを読めません")
+          : ok({ draft: null, updatedAt: null }),
+    });
+    const u = user();
+    renderQuick();
+    expect(await screen.findByRole("alert")).toHaveTextContent("サーバーでエラー");
+    expect(screen.queryByRole("form", { name: "仕訳" })).not.toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "下書き読込を再試行" }));
+    expect(await screen.findByLabelText("摘要", { exact: true })).toHaveValue("");
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+  });
+
+  it("履歴検索は最後に変更した側の取引先1件で行い、同日の候補順を応答どおり表示する", async () => {
+    const base: JournalSuggestion = {
+      debitAccountId: supplies.id,
+      creditAccountId: bank.id,
+      debitTaxCategory: "PURCHASE_10",
+      creditTaxCategory: "OUT_OF_SCOPE",
+      debitPartnerId: null,
+      creditPartnerId: null,
+      sourceJournalId: uuid(9001),
+      date: "2026-09-01",
+    };
+    const calls = mockJournalApi(undefined, {
+      [`GET ${ENTITY}/journals/suggestions`]: (call) =>
+        ok({
+          suggestions:
+            call.query.partnerId === partnerB.id
+              ? [
+                  { ...base, debitAccountId: sales.id, sourceJournalId: uuid(9010) },
+                  { ...base, sourceJournalId: uuid(9009) },
+                ]
+              : [{ ...base }],
+        }),
+    });
+    const u = user();
+    renderQuick();
+    await screen.findByLabelText("摘要", { exact: true });
+    await u.click(screen.getByText("任意項目", { exact: true }));
+    await u.type(screen.getByRole("combobox", { name: "借方取引先" }), "取引先A{Enter}");
+    await pause(350);
+    expect(calls.filter((call) => call.path.endsWith("/suggestions")).at(-1)?.query.partnerId).toBe(
+      partnerA.id,
+    );
+    await u.type(screen.getByRole("combobox", { name: "貸方取引先" }), "取引先B{Enter}");
+    await pause(350);
+    expect(
+      (await screen.findByRole("button", { name: "候補1を入れる" })).parentElement,
+    ).toHaveTextContent("売上高 ／ 普通預金");
+    expect(screen.getByRole("button", { name: "候補2を入れる" }).parentElement).toHaveTextContent(
+      "消耗品費 ／ 普通預金",
+    );
+    expect(screen.queryByRole("button", { name: "候補3を入れる" })).not.toBeInTheDocument();
+    expect(calls.filter((call) => call.path.endsWith("/suggestions")).at(-1)?.query.partnerId).toBe(
+      partnerB.id,
+    );
+    await u.clear(screen.getByRole("combobox", { name: "借方取引先" }));
+    await u.type(screen.getByRole("combobox", { name: "借方取引先" }), "取引先A{Enter}");
+    await pause(350);
+    expect(
+      (await screen.findByRole("button", { name: "候補1を入れる" })).parentElement,
+    ).toHaveTextContent("消耗品費 ／ 普通預金");
+    expect(screen.queryByRole("button", { name: "候補2を入れる" })).not.toBeInTheDocument();
+  });
+
+  it.each([2, 3])(
+    "複製の%d行を今日の日付で開き、情報を表せる2行だけ簡易入力にする",
+    async (count) => {
+      const original = savedJournal({
+        date: "2025-12-20",
+        memo: "コピーの摘要",
+        lines: [
+          { side: "debit", accountId: supplies.id, amount: count === 2 ? 1200 : 600 },
+          { side: "credit", accountId: bank.id, amount: 1200 },
+          ...(count === 3 ? [{ side: "debit", accountId: supplies.id, amount: 600 }] : []),
+        ],
+      });
+      mockJournalApi(undefined, {
+        [`GET ${ENTITY}/journals/${original.id}`]: () =>
+          ok({ journal: original, correctsJournal: null, correctingJournals: [] }),
+      });
+      renderQuick(`?from=${original.id}`);
+      expect(await screen.findByLabelText("日付")).toHaveValue("2026-10-31");
+      if (count === 2) {
+        expect(screen.getByLabelText("摘要", { exact: true })).toHaveValue("コピーの摘要");
+        expect(screen.getByLabelText("金額", { exact: true })).toHaveValue("1200");
+      } else {
+        expect(screen.getByLabelText("メモ")).toHaveValue("コピーの摘要");
+        expect(screen.getByLabelText("3行目の金額")).toHaveValue("600");
+      }
+    },
+  );
+
+  it("複製元の取得失敗で空フォームを出さず、再取得後に複製できる", async () => {
+    const original = savedJournal({
+      date: "2025-12-20",
+      memo: "再取得した複製",
+      lines: [
+        { side: "debit", accountId: supplies.id, amount: 1200 },
+        { side: "credit", accountId: bank.id, amount: 1200 },
+      ],
+    });
+    let failed = true;
+    const calls = mockJournalApi(undefined, {
+      [`GET ${ENTITY}/journals/${original.id}`]: () =>
+        failed
+          ? apiError(404, "JOURNAL_NOT_FOUND", "仕訳が見つかりません")
+          : ok({ journal: original, correctsJournal: null, correctingJournals: [] }),
+    });
+    const u = user();
+    renderQuick(`?from=${original.id}`);
+    expect(await screen.findByRole("alert")).toHaveTextContent("仕訳が見つかりません");
+    expect(screen.queryByRole("form", { name: "仕訳" })).not.toBeInTheDocument();
+    expect(calls.some((call) => ["PUT", "DELETE"].includes(call.method))).toBe(false);
+    failed = false;
+    await u.click(screen.getByRole("button", { name: "複製元を再読込" }));
+    expect(await screen.findByLabelText("摘要", { exact: true })).toHaveValue("再取得した複製");
   });
 });

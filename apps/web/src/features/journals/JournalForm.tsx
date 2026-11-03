@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
   defaultTaxCategory,
+  type JournalDraft,
   type JournalInput,
   JournalInputFields,
   JournalLineInput,
@@ -10,7 +11,7 @@ import {
   type TaxCategoryCode,
   Yen,
 } from "@trebuchet/schema";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Control,
   type FieldError as RhfFieldError,
@@ -30,6 +31,7 @@ import { groupAccountsBySection } from "@/lib/accounts";
 import { ApiError } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { JournalSuggestions } from "./JournalSuggestions";
 import { QuickEntryForm } from "./QuickEntryForm";
 
 const SIDE_LABELS: Record<Side, string> = { debit: "借方", credit: "貸方" };
@@ -47,6 +49,54 @@ type FormOutput = z.output<typeof FormSchema>;
 export type JournalFormControl = UseFormReturn<FormInput, unknown, FormOutput>;
 type Form = JournalFormControl;
 type LineValues = FormInput["lines"][number];
+
+/** 簡易入力へ移しても行ごとの情報を失わない形だけを許す。 */
+export function canUseQuickEntry(lines: JournalDraft["lines"]): boolean {
+  return (
+    lines.length === 2 &&
+    lines[0]?.side === "debit" &&
+    lines[1]?.side === "credit" &&
+    lines[0]?.amount === lines[1]?.amount &&
+    lines.every((line) => !line.subAccountId && !line.description) &&
+    JSON.stringify(lines[0]?.tagIds ?? []) === JSON.stringify(lines[1]?.tagIds ?? [])
+  );
+}
+
+function draftOf(values: FormInput, mode: JournalDraft["mode"]): JournalDraft {
+  return {
+    mode,
+    date: values.date || null,
+    memo: values.memo ?? "",
+    partnerId: null,
+    tagIds: [],
+    lines: values.lines.map((line) => ({
+      side: line.side,
+      accountId: line.accountId || null,
+      subAccountId: line.subAccountId ?? null,
+      amount: typeof line.amount === "number" && Number.isInteger(line.amount) ? line.amount : null,
+      taxCategory: line.taxCategory ?? null,
+      partnerId: line.partnerId ?? null,
+      tagIds: line.tagIds ?? [],
+      description: line.description ?? null,
+    })),
+  };
+}
+
+function draftValues(draft: JournalDraft): FormInput {
+  return {
+    date: draft.date ?? "",
+    memo: draft.memo,
+    lines: draft.lines.map((line) => ({
+      ...line,
+      accountId: line.accountId ?? "",
+      subAccountId: line.subAccountId ?? undefined,
+      amount: line.amount ?? undefined,
+      taxCategory: line.taxCategory === null ? undefined : (line.taxCategory as TaxCategoryCode),
+      partnerId: line.partnerId ?? undefined,
+      description: line.description ?? undefined,
+    })),
+  };
+}
 
 const emptyLine = (side: Side): LineValues => ({
   side,
@@ -184,6 +234,11 @@ const messageOf = (
 // ---- フォーム ----
 
 export type JournalFormProps = {
+  draft?: JournalDraft | undefined;
+  onDraftChange?: ((draft: JournalDraft) => void) | undefined;
+  historySuggestions?: boolean | undefined;
+  disabled?: boolean | undefined;
+  allowModeSwitch?: boolean | undefined;
   initialMode?: "quick" | "detailed" | undefined;
   focusAfterSave?: boolean | undefined;
   autoBalance?: boolean | undefined;
@@ -231,36 +286,50 @@ export function JournalForm({
   initialMode = "detailed",
   focusAfterSave = false,
   autoBalance = false,
+  draft,
+  onDraftChange,
+  historySuggestions = false,
+  disabled = false,
+  allowModeSwitch = initialMode === "quick",
 }: JournalFormProps) {
   const form: Form = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(FormSchema),
-    defaultValues: journal
-      ? valuesOf(journal, accounts, taxSettings)
-      : {
-          date: defaultDate,
-          correctsJournalId,
-          lines: [emptyLine("debit"), emptyLine("credit")],
-        },
+    defaultValues: draft
+      ? draftValues(draft)
+      : journal
+        ? valuesOf(journal, accounts, taxSettings)
+        : {
+            date: defaultDate,
+            correctsJournalId,
+            lines: [emptyLine("debit"), emptyLine("credit")],
+          },
   });
   const keep = useMemo(
     () =>
       new Set(
-        journal?.lines.flatMap((l) =>
-          [l.accountId, l.subAccountId ?? [], l.partnerId ?? []].flat(),
+        (draft?.lines ?? journal?.lines)?.flatMap((l) =>
+          [l.accountId ?? [], l.subAccountId ?? [], l.partnerId ?? []].flat(),
         ),
       ),
-    [journal],
+    [journal, draft],
   );
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "lines" });
   const [mode, setMode] = useState(initialMode);
+  // 値の変更を購読し、未完成の値も同じフォームから保存用に取り出す。
+  useWatch({ control: form.control });
+  const changeListener = useRef(onDraftChange);
+  changeListener.current = onDraftChange;
+  const snapshot = JSON.stringify(draftOf(form.getValues(), mode));
+  const previousSnapshot = useRef(snapshot);
+  useEffect(() => {
+    if (previousSnapshot.current === snapshot) return;
+    previousSnapshot.current = snapshot;
+    changeListener.current?.(JSON.parse(snapshot) as JournalDraft);
+  }, [snapshot]);
   const currentLines = useWatch({ control: form.control, name: "lines" });
-  const canQuick =
-    currentLines.length === 2 &&
-    currentLines[0]?.side === "debit" &&
-    currentLines[1]?.side === "credit" &&
-    currentLines[0]?.amount === currentLines[1]?.amount &&
-    currentLines.every((line) => !line.subAccountId && !line.description) &&
-    JSON.stringify(currentLines[0]?.tagIds ?? []) === JSON.stringify(currentLines[1]?.tagIds ?? []);
+  const canQuick = canUseQuickEntry(
+    draftOf({ ...form.getValues(), lines: currentLines }, mode).lines,
+  );
 
   // 最後の空欄だけを補う。自動で入れた値も、その後は入力済みとして保護する。
   const fillRemainder = () => {
@@ -325,9 +394,9 @@ export function JournalForm({
 
   return (
     <form noValidate aria-label={formLabel} onSubmit={submit}>
-      <fieldset disabled={pending} className="grid gap-4">
+      <fieldset disabled={pending || disabled} className="grid gap-4">
         {leading}
-        {initialMode === "quick" && (
+        {allowModeSwitch && (
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
@@ -435,6 +504,15 @@ export function JournalForm({
           </div>
         )}
 
+        {historySuggestions && (
+          <JournalSuggestions
+            form={form}
+            entityId={entityId}
+            accounts={accounts}
+            partners={partners}
+            taxCategories={taxCategories}
+          />
+        )}
         <div aria-live="assertive">
           {(generalErrors.length > 0 || linesError) && (
             <ul
