@@ -331,6 +331,17 @@ describe("ヘッダー（contracts/ui-shell.md §1）", () => {
     }
   });
 
+  it("事業体の切替の「一覧・作成」でトップ（`/`）の一覧へ移る", async () => {
+    const { router } = renderApp(`/e/${entityA.id}`);
+    const banner = await header();
+    const switcher = await within(banner).findByRole("combobox", { name: "事業体" });
+    await userEvent.selectOptions(
+      switcher,
+      within(switcher).getByRole("option", { name: "一覧・作成" }),
+    );
+    await waitFor(() => expect(path(router)).toBe("/"));
+  });
+
   it("「施錠してサインアウト」は確認のダイアログを出し、「やめる」では何も送らない", async () => {
     const { calls } = renderApp(`/e/${entityA.id}`, {
       "POST /api/auth/sign-out": () => ({ status: 204, body: undefined }),

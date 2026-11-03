@@ -8,6 +8,9 @@ import { entitiesQuery, entityKeys } from "./api";
 /** 最後に開いた事業体の ID を覚えるブラウザの鍵（011 R4） */
 const LAST_ENTITY_KEY = "trebuchet:lastEntityId";
 
+/** 切替の最後の項目「一覧・作成」の値（トップ画面 `/` へ移る）。事業体の ID と重ならない */
+const LIST_VALUE = "__list__";
+
 /**
  * 最後に開いた事業体の ID。一覧に残っているものだけ返す（消えた事業体の ID・一覧を読む前は undefined）。
  * ロゴ・トップ画面の一覧が使う
@@ -65,7 +68,9 @@ export function EntitySwitcher() {
         value={current ?? ""}
         onChange={(event) => {
           const next = event.currentTarget.value;
-          if (next !== "" && next !== current) {
+          if (next === LIST_VALUE) {
+            void navigate({ to: "/" });
+          } else if (next !== "" && next !== current) {
             void navigate({ to: "/e/$entityId", params: { entityId: next } });
           }
         }}
@@ -80,6 +85,7 @@ export function EntitySwitcher() {
             {e.name}
           </option>
         ))}
+        <option value={LIST_VALUE}>一覧・作成</option>
       </NativeSelect>
     </div>
   );
