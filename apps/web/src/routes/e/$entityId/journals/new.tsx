@@ -135,7 +135,7 @@ function NewJournalPage() {
         <CardHeader>
           <CardTitle>{correctsJournalId ? "訂正仕訳" : "新しい仕訳"}</CardTitle>
           <CardDescription>
-            借方と貸方を1行以上ずつ入力します。借方合計と貸方合計が一致すると登録できます。
+            日付・科目・金額・摘要を入力します。複数行の仕訳は「詳細」で入力できます。
           </CardDescription>
           {correctsJournalId && (
             <p className="text-sm">
@@ -186,6 +186,10 @@ function NewJournalPage() {
             (receiptId === undefined ? (
               <JournalForm
                 key={formKey}
+                initialMode={correctsJournalId ? "detailed" : "quick"}
+                focusAfterSave={formKey > 0}
+                autoBalance
+                submitLabel="登録"
                 entityId={entityId}
                 accounts={accounts.data}
                 partners={partners.data}
@@ -200,6 +204,7 @@ function NewJournalPage() {
               receiptSource &&
               !receipt.data?.deleted && (
                 <JournalForm
+                  submitLabel="登録"
                   entityId={entityId}
                   accounts={accounts.data}
                   partners={partners.data}

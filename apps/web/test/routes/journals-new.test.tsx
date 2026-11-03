@@ -48,6 +48,8 @@ const accounts = [sales, bank, supplies, receivable, stopped, owner];
 
 const subA = { id: uuid(5001), accountId: receivable.id, name: "A社", isActive: true };
 const partnerA = { id: uuid(7001), name: "取引先A", honorific: "御中", memo: null, isActive: true };
+const partnerB = { ...partnerA, id: uuid(7002), name: "取引先B" };
+const stoppedPartner = { ...partnerA, id: uuid(7003), name: "停止中の取引先", isActive: false };
 const tags = [
   { id: uuid(8001), name: "定期" },
   { id: uuid(8002), name: "源泉" },
@@ -115,7 +117,7 @@ function mockJournalApi(
   return mockApi({
     ...extra,
     [`GET ${ENTITY}/accounts`]: () => ok({ accounts }),
-    [`GET ${ENTITY}/partners`]: () => ok({ partners: [partnerA] }),
+    [`GET ${ENTITY}/partners`]: () => ok({ partners: [partnerA, partnerB, stoppedPartner] }),
     [`GET ${ENTITY}/tags`]: () => ok({ tags }),
     [`GET ${ENTITY}/tax-settings`]: () => ok({ taxSettings }),
     [`GET ${ENTITY}/tax-categories`]: () => ok({ taxCategories: TAX_CATEGORIES, taxRates: [] }),
@@ -129,8 +131,13 @@ function mockJournalApi(
   });
 }
 
-function renderNewJournal() {
-  return renderRoute(Route, { path: "/e/$entityId/journals/new", url: "/e/e1/journals/new" });
+async function renderNewJournal() {
+  const result = renderRoute(Route, {
+    path: "/e/$entityId/journals/new",
+    url: "/e/e1/journals/new",
+  });
+  await user().click(await screen.findByRole("button", { name: "詳細" }));
+  return result;
 }
 
 /** 合計欄の「借方合計」「貸方合計」「差額」の値 */
@@ -145,6 +152,104 @@ function messageOf(field: HTMLElement) {
 }
 
 const user = () => userEvent.setup();
+
+describe("かんたん入力（011/T015）", () => {
+  it("Enterだけで2行を登録し、自動の税は送らず日付を残して借方へ戻る", async () => {
+    let posted: JournalBody | undefined;
+    mockJournalApi((call) => {
+      posted = call.body as JournalBody;
+      return ok({ journal: savedJournal(posted), warnings: [] }, 201);
+    });
+    const u = user();
+    renderRoute(Route, { path: "/e/$entityId/journals/new", url: "/e/e1/journals/new" });
+    const date = await screen.findByLabelText("日付");
+    expect(date).toHaveFocus();
+    await u.keyboard("{Enter}");
+    expect(screen.getByRole("combobox", { name: "借方科目" })).toHaveFocus();
+    await u.keyboard("6010{Enter}");
+    expect(screen.getByRole("combobox", { name: "貸方科目" })).toHaveFocus();
+    await u.keyboard("1020{Enter}");
+    expect(screen.getByLabelText("金額", { exact: true })).toHaveFocus();
+    await u.keyboard("1100{Enter}");
+    expect(screen.getByLabelText("摘要", { exact: true })).toHaveFocus();
+    await u.keyboard("文房具{Enter}");
+    await waitFor(() =>
+      expect(posted).toMatchObject({
+        date: "2026-10-31",
+        memo: "文房具",
+        lines: [
+          { side: "debit", accountId: supplies.id, amount: 1100 },
+          { side: "credit", accountId: bank.id, amount: 1100 },
+        ],
+      }),
+    );
+    expect(posted?.lines.every((line) => line.taxCategory === undefined)).toBe(true);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "借方科目" })).toHaveFocus());
+    expect(screen.getByLabelText("日付")).toHaveValue("2026-10-31");
+    expect(screen.getByLabelText("金額", { exact: true })).toHaveValue("");
+  });
+
+  it("左右別の税・取引先とタグを保持して詳細と往復でき、停止中の候補は出さない", async () => {
+    let posted: JournalBody | undefined;
+    mockJournalApi((call) => {
+      posted = call.body as JournalBody;
+      return ok({ journal: savedJournal(posted), warnings: [] });
+    });
+    const u = user();
+    renderRoute(Route, { path: "/e/$entityId/journals/new", url: "/e/e1/journals/new" });
+    const debit = await screen.findByRole("combobox", { name: "借方科目" });
+    await u.click(debit);
+    expect(screen.queryByRole("option", { name: /停止中/ })).not.toBeInTheDocument();
+    await u.type(debit, "6010{Enter}");
+    await u.keyboard("1020{Enter}1100");
+    await u.click(screen.getByText("任意項目", { exact: true }));
+    expect(
+      within(screen.getByLabelText("借方税区分")).getByRole("option", { selected: true }),
+    ).toHaveTextContent("自動（課税仕入 10%）");
+    await u.clear(screen.getByLabelText("日付"));
+    await u.type(screen.getByLabelText("日付"), "2026-06-30");
+    expect(
+      within(screen.getByLabelText("借方税区分")).getByRole("option", { selected: true }),
+    ).toHaveTextContent("自動（対象外）");
+    await u.selectOptions(screen.getByLabelText("借方税区分"), "PURCHASE_8R");
+    await u.selectOptions(screen.getByLabelText("貸方税区分"), "OUT_OF_SCOPE");
+    const debitPartner = screen.getByRole("combobox", { name: "借方取引先" });
+    await u.click(debitPartner);
+    expect(screen.queryByRole("option", { name: "停止中の取引先" })).not.toBeInTheDocument();
+    await u.type(debitPartner, "取引先A{Enter}");
+    await u.type(screen.getByRole("combobox", { name: "貸方取引先" }), "取引先B{Enter}");
+    await u.selectOptions(screen.getByLabelText("タグ", { exact: true }), uuid(8001));
+    await u.click(screen.getByRole("button", { name: "詳細" }));
+    expect(screen.getByLabelText("1行目の金額")).toHaveValue("1100");
+    expect(screen.getByLabelText("1行目の税区分")).toHaveValue("PURCHASE_8R");
+    await u.click(screen.getByRole("button", { name: "かんたん入力" }));
+    expect(screen.getByLabelText("金額", { exact: true })).toHaveValue("1100");
+    await u.click(screen.getByRole("button", { name: "登録" }));
+    await waitFor(() =>
+      expect(posted?.lines).toMatchObject([
+        { taxCategory: "PURCHASE_8R", partnerId: partnerA.id, tagIds: [uuid(8001)] },
+        { taxCategory: "OUT_OF_SCOPE", partnerId: partnerB.id, tagIds: [uuid(8001)] },
+      ]),
+    );
+  });
+
+  it("詳細で最後の空欄に差額を補い、入力済み金額を変えず、情報を落とす切替を止める", async () => {
+    mockJournalApi();
+    const u = user();
+    await renderNewJournal();
+    await fillLine(u, 1, { account: "消耗品費", amount: "1000" });
+    await u.tab();
+    expect(screen.getByLabelText("2行目の金額")).toHaveValue("1000");
+    await fillLine(u, 1, { account: "消耗品費", amount: "2000" });
+    await u.tab();
+    expect(screen.getByLabelText("2行目の金額")).toHaveValue("1000");
+    expect(screen.getByRole("button", { name: "かんたん入力" })).toBeDisabled();
+    await fillLine(u, 2, { account: "普通預金", amount: "2000" });
+    await u.type(screen.getByLabelText("1行目の摘要"), "行だけの摘要");
+    expect(screen.getByRole("button", { name: "かんたん入力" })).toBeDisabled();
+    expect(screen.getByText(/詳細の入力を保持/)).toBeInTheDocument();
+  });
+});
 
 async function fillLine(
   u: ReturnType<typeof userEvent.setup>,
@@ -172,7 +277,7 @@ describe("仕訳の入力画面（US2）", () => {
   it("借方・貸方の2行と今日の日付で始まり、行を追加・削除できる", async () => {
     mockJournalApi();
     const u = user();
-    renderNewJournal();
+    await renderNewJournal();
 
     expect(await screen.findByLabelText("日付")).toHaveValue("2026-10-31");
     expect(screen.getByLabelText("1行目の貸借")).toHaveValue("debit");
@@ -195,8 +300,8 @@ describe("仕訳の入力画面（US2）", () => {
   it("借方合計・貸方合計・差額を常に表示し、一致しないと差額を示して登録できない", async () => {
     mockJournalApi();
     const u = user();
-    renderNewJournal();
-    const save = await screen.findByRole("button", { name: "登録する" });
+    await renderNewJournal();
+    const save = await screen.findByRole("button", { name: "登録" });
     expect([total("借方合計"), total("貸方合計"), total("差額")]).toEqual(["0 円", "0 円", "0 円"]);
 
     await fillLine(u, 1, { account: "売掛金", amount: "500,000" });
@@ -217,7 +322,7 @@ describe("仕訳の入力画面（US2）", () => {
 
   it("使用停止の科目は選べない", async () => {
     mockJournalApi();
-    renderNewJournal();
+    await renderNewJournal();
     const select = await screen.findByLabelText("1行目の勘定科目");
     const names = within(select)
       .getAllByRole("option")
@@ -230,7 +335,7 @@ describe("仕訳の入力画面（US2）", () => {
   it("税区分の既定値を日付と科目から決める（免税の期間は対象外）", async () => {
     mockJournalApi();
     const u = user();
-    renderNewJournal();
+    await renderNewJournal();
     const tax = await screen.findByLabelText("2行目の税区分");
 
     await u.selectOptions(screen.getByLabelText("2行目の勘定科目"), "売上高");
@@ -254,7 +359,7 @@ describe("仕訳の入力画面（US2）", () => {
       return ok({ journal: savedJournal(posted), warnings: [] }, 201);
     });
     const u = user();
-    const { queryClient } = renderNewJournal();
+    const { queryClient } = await renderNewJournal();
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     await screen.findByLabelText("1行目の勘定科目");
 
@@ -271,7 +376,7 @@ describe("仕訳の入力画面（US2）", () => {
     await u.selectOptions(screen.getByLabelText("1行目のタグ"), ["源泉", "定期"]);
     await fillLine(u, 2, { account: "売上高", amount: "495000" });
     await u.selectOptions(screen.getByLabelText("2行目の税区分"), "課税売上 8%（軽減）");
-    await u.click(screen.getByRole("button", { name: "登録する" }));
+    await u.click(screen.getByRole("button", { name: "登録" }));
 
     expect(await screen.findByText("仕訳 No.1 を登録しました。")).toBeInTheDocument();
     expect(posted).toEqual({
@@ -295,8 +400,8 @@ describe("仕訳の入力画面（US2）", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["entities", "e1", "journals"] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["entities", "e1", "reports"] });
     // 次の仕訳のために入力を空にする（日付は残す）
-    expect(screen.getByLabelText("1行目の金額")).toHaveValue("");
-    expect(screen.getByLabelText("メモ")).toHaveValue("");
+    expect(screen.getByLabelText("金額", { exact: true })).toHaveValue("");
+    expect(screen.getByLabelText("摘要", { exact: true })).toHaveValue("");
     expect(screen.getByLabelText("日付")).toHaveValue("2026-10-31");
   });
 
@@ -307,14 +412,14 @@ describe("仕訳の入力画面（US2）", () => {
       return ok({ journal: savedJournal(posted, 7), warnings: [] }, 201);
     });
     const u = user();
-    renderNewJournal();
+    await renderNewJournal();
     await screen.findByLabelText("1行目の勘定科目");
 
     await fillLine(u, 1, { account: "普通預金", amount: "487037" });
     await u.click(screen.getByRole("button", { name: "行を追加" }));
     await fillLine(u, 2, { side: "借方", account: "事業主貸", amount: "7963" });
     await fillLine(u, 3, { side: "貸方", account: "売掛金", amount: "495000" });
-    await u.click(screen.getByRole("button", { name: "登録する" }));
+    await u.click(screen.getByRole("button", { name: "登録" }));
 
     expect(await screen.findByText("仕訳 No.7 を登録しました。")).toBeInTheDocument();
     expect(posted?.lines.map((l) => [l.side, l.accountId, l.amount])).toEqual([
@@ -342,11 +447,11 @@ describe("仕訳の入力画面（US2）", () => {
       ),
     );
     const u = user();
-    renderNewJournal();
+    await renderNewJournal();
     await screen.findByLabelText("1行目の勘定科目");
     await fillLine(u, 1, { account: "売掛金", amount: "495000" });
     await fillLine(u, 2, { account: "売上高", amount: "495000" });
-    await u.click(screen.getByRole("button", { name: "登録する" }));
+    await u.click(screen.getByRole("button", { name: "登録" }));
 
     const status = await screen.findByRole("status", { name: "登録の結果" });
     expect(status).toHaveTextContent("仕訳 No.2 を登録しました。");
@@ -378,13 +483,13 @@ describe("仕訳の入力画面（US2）", () => {
       }),
     );
     const u = user();
-    renderNewJournal();
+    await renderNewJournal();
     await screen.findByLabelText("1行目の勘定科目");
     await u.clear(screen.getByLabelText("日付"));
     await u.type(screen.getByLabelText("日付"), "2027-01-05");
     await fillLine(u, 1, { account: "売掛金", amount: "495000" });
     await fillLine(u, 2, { account: "売上高", amount: "495000" });
-    await u.click(screen.getByRole("button", { name: "登録する" }));
+    await u.click(screen.getByRole("button", { name: "登録" }));
 
     const date = screen.getByLabelText("日付");
     await waitFor(() => expect(date).toHaveAttribute("aria-invalid", "true"));
@@ -415,11 +520,11 @@ describe("仕訳の入力画面（US2）", () => {
     );
     mockJournalApi(() => reply);
     const u = user();
-    renderNewJournal();
+    await renderNewJournal();
     await screen.findByLabelText("1行目の勘定科目");
     await fillLine(u, 1, { account: "売掛金", amount: "1000" });
     await fillLine(u, 2, { account: "売上高", amount: "1000" });
-    await u.click(screen.getByRole("button", { name: "登録する" }));
+    await u.click(screen.getByRole("button", { name: "登録" }));
 
     const date = screen.getByLabelText("日付");
     await waitFor(() => expect(messageOf(date)).toContain("2026年度は締め済みです"));
@@ -428,7 +533,7 @@ describe("仕訳の入力画面（US2）", () => {
     reply = apiError(400, "VALIDATION", "入力が正しくありません", {
       issues: [{ path: ["lines", "1", "amount"], message: "金額が大きすぎます" }],
     });
-    await u.click(screen.getByRole("button", { name: "登録する" }));
+    await u.click(screen.getByRole("button", { name: "登録" }));
     const amount2 = screen.getByLabelText("2行目の金額");
     await waitFor(() => expect(messageOf(amount2)).toBe("金額が大きすぎます"));
     expect(messageOf(date)).toBe("");
@@ -481,7 +586,7 @@ describe("訂正仕訳の起票（US3, FR-019a）", () => {
     );
     await fillLine(u, 1, { account: "売掛金", amount: "5000" });
     await fillLine(u, 2, { account: "売上高", amount: "5000" });
-    await u.click(screen.getByRole("button", { name: "登録する" }));
+    await u.click(screen.getByRole("button", { name: "登録" }));
 
     await waitFor(() => expect(body).toMatchObject({ correctsJournalId: original.id }));
     expect(await screen.findByText("仕訳 No.2 を登録しました。")).toBeInTheDocument();

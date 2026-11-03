@@ -414,7 +414,7 @@ describe("証憑から仕訳を作るときの候補（readingId）", () => {
     expect(note).toHaveTextContent("文具の購入");
 
     await user.selectOptions(screen.getByLabelText("2行目の勘定科目"), "普通預金");
-    await user.click(screen.getByRole("button", { name: "登録する" }));
+    await user.click(screen.getByRole("button", { name: "登録" }));
     await waitFor(() => expect(posts(calls, JOURNAL)).toHaveLength(1));
     const body = posts(calls, JOURNAL)[0]?.body as { readingId?: string; journal: unknown };
     expect(body.readingId).toBe(uuid(11));
@@ -445,7 +445,7 @@ describe("証憑から仕訳を作るときの候補（readingId）", () => {
     expect(screen.queryByRole("note", { name: "AI の候補" })).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("1行目の勘定科目"), "消耗品費");
     await user.selectOptions(screen.getByLabelText("2行目の勘定科目"), "普通預金");
-    await user.click(screen.getByRole("button", { name: "登録する" }));
+    await user.click(screen.getByRole("button", { name: "登録" }));
     await waitFor(() => expect(posts(calls, JOURNAL)).toHaveLength(1));
     expect(posts(calls, JOURNAL)[0]?.body).not.toHaveProperty("readingId");
   });

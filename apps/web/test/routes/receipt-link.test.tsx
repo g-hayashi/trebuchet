@@ -394,7 +394,7 @@ describe("証憑から仕訳を作る", () => {
 
     await u.selectOptions(screen.getByLabelText("1行目の勘定科目"), "消耗品費");
     await u.selectOptions(screen.getByLabelText("2行目の勘定科目"), "普通預金");
-    await u.click(screen.getByRole("button", { name: "登録する" }));
+    await u.click(screen.getByRole("button", { name: "登録" }));
 
     await waitFor(() => expect(posts(calls, "journal")).toHaveLength(1));
     const body = posts(calls, "journal")[0]?.body as { journal: JournalBody };
@@ -416,7 +416,7 @@ describe("証憑から仕訳を作る", () => {
       `/e/e1/receipts/${RECEIPT_ID}`,
     );
     // 二重に登録しないよう、登録したあとは入力を閉じる
-    expect(screen.queryByRole("button", { name: "登録する" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "登録" })).not.toBeInTheDocument();
   });
 
   it("すでに仕訳に結びついていれば（409 RECEIPT_ALREADY_LINKED）エラーを示す", async () => {
@@ -428,7 +428,7 @@ describe("証憑から仕訳を作る", () => {
     await screen.findByLabelText("1行目の勘定科目");
     await u.selectOptions(screen.getByLabelText("1行目の勘定科目"), "消耗品費");
     await u.selectOptions(screen.getByLabelText("2行目の勘定科目"), "普通預金");
-    await u.click(screen.getByRole("button", { name: "登録する" }));
+    await u.click(screen.getByRole("button", { name: "登録" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "この証憑はすでに仕訳に結びついています",
     );

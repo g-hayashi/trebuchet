@@ -30,6 +30,7 @@ import { groupAccountsBySection } from "@/lib/accounts";
 import { ApiError } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { QuickEntryForm } from "./QuickEntryForm";
 
 const SIDE_LABELS: Record<Side, string> = { debit: "借方", credit: "貸方" };
 
@@ -43,7 +44,8 @@ const FormSchema = JournalInputFields.extend({ lines: z.array(LineSchema).min(2)
 );
 type FormInput = z.input<typeof FormSchema>;
 type FormOutput = z.output<typeof FormSchema>;
-type Form = UseFormReturn<FormInput, unknown, FormOutput>;
+export type JournalFormControl = UseFormReturn<FormInput, unknown, FormOutput>;
+type Form = JournalFormControl;
 type LineValues = FormInput["lines"][number];
 
 const emptyLine = (side: Side): LineValues => ({
@@ -182,6 +184,9 @@ const messageOf = (
 // ---- フォーム ----
 
 export type JournalFormProps = {
+  initialMode?: "quick" | "detailed" | undefined;
+  focusAfterSave?: boolean | undefined;
+  autoBalance?: boolean | undefined;
   entityId: string;
   accounts: Account[];
   partners: Partner[];
@@ -223,6 +228,9 @@ export function JournalForm({
   hideDate = false,
   leading,
   onSubmit,
+  initialMode = "detailed",
+  focusAfterSave = false,
+  autoBalance = false,
 }: JournalFormProps) {
   const form: Form = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(FormSchema),
@@ -244,6 +252,28 @@ export function JournalForm({
     [journal],
   );
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "lines" });
+  const [mode, setMode] = useState(initialMode);
+  const currentLines = useWatch({ control: form.control, name: "lines" });
+  const canQuick =
+    currentLines.length === 2 &&
+    currentLines[0]?.side === "debit" &&
+    currentLines[1]?.side === "credit" &&
+    currentLines[0]?.amount === currentLines[1]?.amount &&
+    currentLines.every((line) => !line.subAccountId && !line.description) &&
+    JSON.stringify(currentLines[0]?.tagIds ?? []) === JSON.stringify(currentLines[1]?.tagIds ?? []);
+
+  // 最後の空欄だけを補う。自動で入れた値も、その後は入力済みとして保護する。
+  const fillRemainder = () => {
+    if (!autoBalance) return;
+    const lines = form.getValues("lines");
+    const last = lines.at(-1);
+    if (!last || last.amount !== undefined) return;
+    const diff = lines.slice(0, -1).reduce((sum, line) => {
+      const amount = Number.isFinite(line.amount) ? (line.amount ?? 0) : 0;
+      return sum + (line.side === last.side ? -amount : amount);
+    }, 0);
+    if (diff > 0) form.setValue(`lines.${lines.length - 1}.amount`, diff, { shouldDirty: true });
+  };
   const [generalErrors, setGeneralErrors] = useState<string[]>([]);
   const [unexpected, setUnexpected] = useState<unknown>();
   const [suggestPeriod, setSuggestPeriod] = useState(false);
@@ -297,74 +327,113 @@ export function JournalForm({
     <form noValidate aria-label={formLabel} onSubmit={submit}>
       <fieldset disabled={pending} className="grid gap-4">
         {leading}
-        <div className={cn("grid gap-4", hideDate ? undefined : "sm:grid-cols-[12rem_1fr]")}>
-          {!hideDate && (
-            <div className="grid content-start gap-1">
-              <label htmlFor="journal-date" className="text-sm font-medium">
-                日付
-              </label>
-              <Input
-                id="journal-date"
-                type="date"
-                aria-invalid={errors.date ? true : undefined}
-                aria-describedby="journal-date-error"
-                {...form.register("date")}
-              />
-              <FieldError id="journal-date-error" message={errors.date?.message} />
-              {suggestPeriod && (
-                <Link
-                  to="/e/$entityId/periods"
-                  params={{ entityId }}
-                  className="text-sm text-primary underline underline-offset-4"
-                >
-                  会計期間を作成する
-                </Link>
-              )}
-            </div>
-          )}
-          <div className="grid content-start gap-1">
-            <label htmlFor="journal-memo" className="text-sm font-medium">
-              メモ
-            </label>
-            <Input
-              id="journal-memo"
-              autoComplete="off"
-              aria-invalid={errors.memo ? true : undefined}
-              aria-describedby="journal-memo-error"
-              {...form.register("memo", { setValueAs: blankToUndefined })}
-            />
-            <FieldError
-              id="journal-memo-error"
-              message={messageOf(errors.memo, "メモは 1,000 文字以内で入力してください")}
-            />
+        {initialMode === "quick" && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              aria-pressed={mode === "quick"}
+              disabled={!canQuick}
+              onClick={() => setMode("quick")}
+            >
+              かんたん入力
+            </Button>
+            <Button
+              variant="outline"
+              aria-pressed={mode === "detailed"}
+              onClick={() => setMode("detailed")}
+            >
+              詳細
+            </Button>
+            {!canQuick && (
+              <p className="text-sm text-muted-foreground">
+                行ごとの情報を失わないよう、詳細の入力を保持しています。
+              </p>
+            )}
           </div>
-        </div>
+        )}
+        {mode === "quick" ? (
+          <QuickEntryForm
+            form={form}
+            accounts={accounts}
+            partners={partners}
+            tags={tags}
+            taxSettings={taxSettings}
+            taxCategories={taxCategories}
+            focusAfterSave={focusAfterSave}
+          />
+        ) : (
+          <div className="grid gap-4">
+            <div className={cn("grid gap-4", hideDate ? undefined : "sm:grid-cols-[12rem_1fr]")}>
+              {!hideDate && (
+                <div className="grid content-start gap-1">
+                  <label htmlFor="journal-date" className="text-sm font-medium">
+                    日付
+                  </label>
+                  <Input
+                    id="journal-date"
+                    type="date"
+                    aria-invalid={errors.date ? true : undefined}
+                    aria-describedby="journal-date-error"
+                    {...form.register("date")}
+                  />
+                  <FieldError id="journal-date-error" message={errors.date?.message} />
+                  {suggestPeriod && (
+                    <Link
+                      to="/e/$entityId/periods"
+                      params={{ entityId }}
+                      className="text-sm text-primary underline underline-offset-4"
+                    >
+                      会計期間を作成する
+                    </Link>
+                  )}
+                </div>
+              )}
+              <div className="grid content-start gap-1">
+                <label htmlFor="journal-memo" className="text-sm font-medium">
+                  メモ
+                </label>
+                <Input
+                  id="journal-memo"
+                  autoComplete="off"
+                  aria-invalid={errors.memo ? true : undefined}
+                  aria-describedby="journal-memo-error"
+                  {...form.register("memo", { setValueAs: blankToUndefined })}
+                />
+                <FieldError
+                  id="journal-memo-error"
+                  message={messageOf(errors.memo, "メモは 1,000 文字以内で入力してください")}
+                />
+              </div>
+            </div>
 
-        <ol aria-label="仕訳の行" className="grid gap-3">
-          {fields.map((field, index) => (
-            <JournalLineRow
-              key={field.id}
-              index={index}
-              form={form}
-              entityId={entityId}
-              accounts={accounts}
-              partners={partners}
-              tags={tags}
-              taxSettings={taxSettings}
-              taxCategories={taxCategories}
-              keep={keep}
-              canRemove={fields.length > 2}
-              onRemove={() => remove(index)}
-            />
-          ))}
-        </ol>
+            <ol aria-label="仕訳の行" className="grid gap-3">
+              {fields.map((field, index) => (
+                <JournalLineRow
+                  key={field.id}
+                  index={index}
+                  form={form}
+                  entityId={entityId}
+                  accounts={accounts}
+                  partners={partners}
+                  tags={tags}
+                  taxSettings={taxSettings}
+                  taxCategories={taxCategories}
+                  keep={keep}
+                  canRemove={fields.length > 2}
+                  onRemove={() => remove(index)}
+                  onAmountBlur={fillRemainder}
+                />
+              ))}
+            </ol>
 
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <Button variant="outline" onClick={() => append(emptyLine("debit"))}>
-            行を追加
-          </Button>
-          <Totals control={form.control} />
-        </div>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <Button variant="outline" onClick={() => append(emptyLine("debit"))}>
+                行を追加
+              </Button>
+              <Totals control={form.control} />
+            </div>
+          </div>
+        )}
 
         <div aria-live="assertive">
           {(generalErrors.length > 0 || linesError) && (
@@ -424,6 +493,7 @@ function JournalLineRow({
   keep,
   canRemove,
   onRemove,
+  onAmountBlur,
 }: {
   index: number;
   form: Form;
@@ -437,6 +507,7 @@ function JournalLineRow({
   keep: ReadonlySet<string>;
   canRemove: boolean;
   onRemove: () => void;
+  onAmountBlur: () => void;
 }) {
   const date = useWatch({ control: form.control, name: "date" });
   const accountId = useWatch({ control: form.control, name: `lines.${index}.accountId` });
@@ -533,6 +604,9 @@ function JournalLineRow({
           {...described("amount")}
           {...form.register(`lines.${index}.amount`, {
             setValueAs: (v: unknown) => (typeof v === "string" ? parseYenInput(v) : v),
+            // register の設定は切替後も残るため、簡易入力の左右同期を解除する。
+            onChange: () => {},
+            onBlur: onAmountBlur,
           })}
         />
         <FieldError
@@ -602,7 +676,8 @@ function JournalLineRow({
           className="h-auto py-1"
           aria-invalid={invalid(lineErrors?.tagIds)}
           {...described("tags")}
-          {...form.register(`lines.${index}.tagIds`)}
+          // 簡易入力で登録した左右同期ハンドラを、詳細では使わない。
+          {...form.register(`lines.${index}.tagIds`, { onChange: () => {} })}
         >
           {tags.map((t) => (
             <option key={t.id} value={t.id}>
