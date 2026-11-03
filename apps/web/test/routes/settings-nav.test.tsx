@@ -51,9 +51,6 @@ describe("設定のメニュー（contracts/ui-shell.md §6）", () => {
       ["AI", "/settings/ai"],
       ["リモート", "/settings/remote"],
     ]);
-    expect(within(nav).getByRole("link", { name: "AI" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(within(nav).getByRole("link", { name: "AI" })).toHaveAttribute("aria-current", "page");
   });
 });

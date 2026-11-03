@@ -672,9 +672,7 @@ describe("下書き・複製・履歴（011/T016）", () => {
     const calls = mockJournalApi(undefined, {
       [`GET ${ENTITY}/journal-draft`]: () => ok({ draft: null, updatedAt: null }),
       [`PUT ${ENTITY}/journal-draft`]: () =>
-        ++attempt === 1
-          ? apiError(500, "INTERNAL", "下書きを保存できません")
-          : ok({ updatedAt: "now" }),
+        ++attempt === 1 ? ok(undefined, 500) : ok({ updatedAt: "now" }),
     });
     const u = user();
     renderQuick();
@@ -698,9 +696,7 @@ describe("下書き・複製・履歴（011/T016）", () => {
         [`GET ${ENTITY}/journal-draft`]: () => ok({ draft: null, updatedAt: null }),
         [`PUT ${ENTITY}/journal-draft`]: () => write.promise,
         [`DELETE ${ENTITY}/journal-draft`]: () =>
-          ++deletes === 1
-            ? apiError(500, "INTERNAL", "下書きを削除できません")
-            : ok(undefined, 204),
+          ++deletes === 1 ? ok(undefined, 500) : ok(undefined, 204),
       },
     );
     const u = user();
@@ -861,9 +857,7 @@ describe("下書き・複製・履歴（011/T016）", () => {
     let reads = 0;
     const calls = mockJournalApi(undefined, {
       [`GET ${ENTITY}/journal-draft`]: () =>
-        ++reads === 1
-          ? apiError(500, "INTERNAL", "下書きを読めません")
-          : ok({ draft: null, updatedAt: null }),
+        ++reads === 1 ? ok(undefined, 500) : ok({ draft: null, updatedAt: null }),
     });
     const u = user();
     renderQuick();

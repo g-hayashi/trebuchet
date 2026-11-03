@@ -68,7 +68,9 @@ test("freee の仕訳帳の取込から、元帳による期首残高、照合�
 
     await openNav(page, "仕訳", "一覧");
     const list = page.getByRole("table", { name: "仕訳の一覧" });
-    await expect(list.getByRole("link", { name: /^仕訳 No\.\d+ の詳細$/ })).toHaveCount(14);
+    await expect(
+      list.getByRole("button", { name: /^仕訳 No\.\d+ の詳細$/, exact: true }),
+    ).toHaveCount(14);
   });
 
   await test.step("元帳から期首残高を読み込んで保存する", async () => {

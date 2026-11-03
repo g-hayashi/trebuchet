@@ -138,7 +138,9 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
 
     await openNav(page, "仕訳", "一覧");
     const list = page.getByRole("table", { name: "仕訳の一覧" });
-    await expect(list.getByRole("link", { name: /^仕訳 No\.\d+ の詳細$/ })).toHaveCount(2);
+    await expect(
+      list.getByRole("button", { name: /^仕訳 No\.\d+ の詳細$/, exact: true }),
+    ).toHaveCount(2);
   });
 
   await test.step("試算表の借方合計と貸方合計が一致する", async () => {

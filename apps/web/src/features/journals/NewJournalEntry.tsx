@@ -187,12 +187,12 @@ export function NewJournalEntry({ from, onSubmit, ...props }: Props) {
   return (
     <div className="grid gap-3">
       <ApiErrorMessage error={deleteError ?? saveError} />
-      {deleteError && (
+      {Boolean(deleteError) && (
         <Button variant="outline" disabled={deleting} onClick={() => void erase()}>
           下書き削除を再試行
         </Button>
       )}
-      {saveError && !deleteError && (
+      {Boolean(saveError) && !deleteError && (
         <Button
           variant="outline"
           onClick={() => {

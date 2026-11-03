@@ -82,6 +82,7 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   "PUT /journal-draft": () => ok({ updatedAt: "2026-10-31T01:00:00.000Z" }),
   "DELETE /journal-draft": () => ok(undefined, 204),
   "GET /journals/suggestions": () => ok({ suggestions: [] }),
+  "GET /fiscal-periods": () => ok({ fiscalPeriods: [] }),
   // ホーム（011 US1）。作業は 0 件、今日を含む会計期間なし、仕訳・取込なし
   "GET /home": () =>
     ok({

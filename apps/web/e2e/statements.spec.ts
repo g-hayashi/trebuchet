@@ -198,7 +198,7 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     await openNav(page, "仕訳", "一覧");
     const list = page.getByRole("table", { name: "仕訳の一覧" });
     const row = list.getByRole("row").filter({
-      has: page.getByRole("link", { name: `仕訳 No.${journalNo} の詳細`, exact: true }),
+      has: list.getByRole("button", { name: `仕訳 No.${journalNo} の詳細`, exact: true }),
     });
     await expect(row).toContainText("地代家賃");
     await expect(row).toContainText("普通預金");
