@@ -1,0 +1,60 @@
+# 画面の骨組みの契約（011）
+
+web のテストと E2E（`e2e/helpers/nav.ts`）が参照する名前。変えるときはこの文書とテストを同時に直す。
+
+## 1. ヘッダー（`components/layout/AppHeader.tsx`）
+
+- `header` の中: リンク「Trebuchet」（ロゴ）、今の事業体の名前のリンク、事業体の切替（`#entity-switcher`、2 件以上のとき）。
+- 右: リンク「設定」、ボタン「施錠してサインアウト」。押すと確認のダイアログ（見出し「施錠してサインアウト」、本文は research R17 の文、ボタン「施錠してサインアウト」「やめる」）。
+- スマホの幅: ロゴ・事業体の名前・ボタン「メニュー」（`aria-expanded`）。メニューは `Sheet`（`role="dialog"`、名前「メニュー」）。
+- 施錠中・未サインイン: 右の 2 つとメニューを出さない。
+
+## 2. 事業体のメニュー（`components/layout/EntityNav.tsx`）
+
+- 1 段目: `nav aria-label="事業体のメニュー"`。項目の名前は research R1 の表の 1 段目（ホーム、仕訳、明細、証憑、請求、帳票、決算・申告、事業体の設定）。今の画面の項目に `aria-current="page"`。
+- 2 段目: `nav aria-label="事業体のサブメニュー"`、2 項目以上のグループだけ。名前は R1 の表の 2 段目。
+
+## 3. ホーム（`features/home/`）
+
+- 見出し: 「今日やること」「今期の数字」「最近の仕訳」「近道」。
+- 今日やることの項目（0 件は出さない）と押し先:
+
+| 名前 | 押し先 |
+|---|---|
+| 未処理の明細 N 件 | `/e/<id>/statements?status=unprocessed` |
+| 仕訳のない証憑 N 件 | `/e/<id>/receipts?link=none` |
+| 未入金の請求書 N 件（うち期限切れ M 件） | `/e/<id>/invoices?status=unpaid`（期限切れは `status=overdue`） |
+| 登録できなかった定期仕訳 N 件 | `/e/<id>/recurring` |
+| 決算書の警告 N 件 | `/e/<id>/blue-return/<年>` |
+
+- すべて 0: 「残っている作業はありません」。項目の失敗: その項目の場所に「読み込めませんでした」と「再読み込み」。
+- 近道: 「仕訳を入力」「証憑を追加」「明細を取り込む」。日時: 「前回のバックアップ」「最後の明細の取込」（なければ「まだありません」）。
+
+## 4. スマホ（`components/layout/MobileNav.tsx`、`PcRecommended.tsx`）
+
+- スマホの幅: `(max-width: 767px)`。
+- `MOBILE_ROUTES`（スマホのメニューに出し、PC の推奨を出さない）: 事業体のホーム、`receipts`・`receipts/new`・`receipts/$receiptId`、`journals`・`journals/$journalId`、`reports/*`、`/settings/*`、`/`。
+- 対象の外: `role="note"` で「PC での操作を推奨」。
+
+## 5. 知らせ（`components/ui/toast.tsx`）
+
+- 成功: `role="status"`、失敗: `role="alert"`。画面の上に固定。5 秒で消える。`SaveNotice` は内部で使う。
+
+## 6. 設定（`routes/settings/route.tsx`）
+
+- `nav aria-label="設定のメニュー"`: セキュリティ、バックアップ、AI、リモート。各ページの `h1` は同じ名前。
+- 記録・履歴: 最近の 5 件と「CSV に書き出す」（0 件なら無効）。
+
+## 7. 主な操作（FR-004）
+
+各画面で `variant="default"` のボタンは 1 つ。主な画面の主な操作の名前:
+
+| 画面 | 主な操作 |
+|---|---|
+| 仕訳の入力 | 登録 |
+| 明細の取込 ①〜③ | 次へ／取り込む |
+| 明細の確認 | 承認して次へ |
+| 証憑の追加 | 追加する |
+| 請求の流れ | 請求書を作る |
+| 請求書の詳細 | 印刷・PDF に保存（発行済み）／発行（下書きの確認） |
+| 決算書 | （なし。CSV と印刷は副） |
