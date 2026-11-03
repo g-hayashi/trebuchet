@@ -87,7 +87,7 @@ describe("EntitySwitcher（US6, T113）", () => {
       within(select)
         .getAllByRole("option")
         .map((o) => o.textContent),
-    ).toEqual(["個人事業A", "株式会社B"]);
+    ).toEqual(["個人事業A", "株式会社B", "一覧・作成"]);
 
     await userEvent.selectOptions(select, "株式会社B");
 

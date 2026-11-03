@@ -204,6 +204,13 @@ describe("証憑の検索", () => {
     expect(router.state.location.search).toMatchObject({ partner: "合成", amountMin: 1000 });
   });
 
+  it("URL の link（ホームの押し先。011 T009）がそのまま API に渡る", async () => {
+    const calls = mockApi({ [`GET ${LIST}`]: () => ok({ receipts: [], nextCursor: null }) });
+    renderList("/e/e1/receipts?link=none");
+    await screen.findByRole("search", { name: "証憑の検索" });
+    await waitFor(() => expect(listCalls(calls).at(-1)?.query).toMatchObject({ link: "none" }));
+  });
+
   it("URL の条件が入力欄に入り、そのまま API に渡る", async () => {
     const calls = mockApi({ [`GET ${LIST}`]: () => ok({ receipts: [], nextCursor: null }) });
     renderList("/e/e1/receipts?partner=合成&missing=true&amountMin=1000&category=electronic");

@@ -191,6 +191,25 @@ describe("DrizzleLedgerRepository（US2）", () => {
     expect(b.journalNo).toBe(2);
   });
 
+  it("recentRegistered（011 ホーム）は取消を除き、登録日時（同じなら仕訳番号）の新しい順に limit 件", () => {
+    const at = (journalNo: number, createdAt: string, date: string) => ({
+      ...newJournal(sale(journalNo, date), journalNo),
+      createdAt,
+    });
+    // 日付の順と登録の順が逆になるように作る
+    ledger.insertJournal(at(1, "2026-10-01T00:00:00.000Z", "2026-12-31"));
+    const b = ledger.insertJournal(at(2, "2026-10-02T00:00:00.000Z", "2026-01-01"));
+    const c = ledger.insertJournal(at(3, "2026-10-03T00:00:00.000Z", "2026-06-01"));
+    const d = ledger.insertJournal(at(4, "2026-10-03T00:00:00.000Z", "2026-06-02"));
+    const e = ledger.insertJournal(at(5, "2026-10-04T00:00:00.000Z", "2026-03-01"));
+    ledger.voidJournal(e.id, 1, NOW);
+    expect(ledger.recentRegistered(3).map((j) => j.journalNo)).toEqual([4, 3, 2]);
+    expect(ledger.recentRegistered(3)[0]).toEqual(d);
+    expect(ledger.recentRegistered(10).map((j) => j.journalNo)).toEqual([4, 3, 2, 1]);
+    expect(b.journalNo).toBe(2);
+    expect(c.journalNo).toBe(3);
+  });
+
   it("任意の仕訳を 1,000 件登録しても v_unbalanced_journals は空（INV-1, INV-2）", () => {
     const ctx = context();
     const journalArb = fc.record({

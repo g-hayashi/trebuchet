@@ -35,6 +35,7 @@ import {
   type CommitAdjustmentDeps,
   domainError,
   err,
+  type HomeDeps,
   type IdGenerator,
   type ImportStore,
   type ImportUnitOfWork,
@@ -206,6 +207,21 @@ export function invoicingDeps(
     invoicing: new DrizzleInvoicingStore(db),
     ids,
     clock,
+  };
+}
+
+/**
+ * ホーム（011 US1）の依存。項目ごとに既存のユースケースの UnitOfWork・ストアを読み取りに使う
+ * （要約は保存しない。書き込みはない）
+ */
+export function homeDeps(db: TenantDb): HomeDeps {
+  return {
+    statements: { uow: createStatementUnitOfWork(db) },
+    receipts: { uow: createReceiptUnitOfWork(db) },
+    invoicing: { uow: createInvoicingUnitOfWork(db) },
+    recurring: { uow: createRecurringUnitOfWork(db) },
+    blueReturn: blueReturnDeps(db),
+    ledger: new DrizzleLedgerRepository(db),
   };
 }
 

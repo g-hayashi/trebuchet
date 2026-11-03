@@ -161,6 +161,8 @@ export interface LedgerRepository extends JournalRepository {
   correctingJournalsOf(id: string): Journal[];
   /** 日付の降順・同じ日付は仕訳番号の降順。limit の既定は 50 */
   findJournals(query: JournalQuery): Page<Journal>;
+  /** 取消を除き、登録日時（`created_at`）の新しい順（同じなら仕訳番号の降順）に `limit` 件（011 のホーム） */
+  recentRegistered(limit: number): Journal[];
 }
 
 /** 帳票の集計（US4 で実装する） */
@@ -513,6 +515,8 @@ export interface ReceiptStore {
   findFileBySha(sha256: string): ReceiptFileRow | undefined;
   /** `received_at DESC, id DESC`。結びつきと仕訳の状態を含む。`limit` 件まで */
   search(query: ReceiptQuery): { rows: ReceiptSearchRow[]; nextCursor: string | null };
+  /** `search` と同じ条件に合う件数（`cursor`・`limit` は見ない。011 のホーム） */
+  count(query: ReceiptQuery): number;
   getActiveLink(receiptId: string): ReceiptLinkRow | undefined;
   insertLink(row: ReceiptLinkRow): void;
   /** 有効な結びつきを閉じる（`unlinked_at`・`unlink_reason`）。ない・閉じ済みなら例外 */

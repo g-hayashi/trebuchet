@@ -111,6 +111,12 @@ describe("請求書の一覧（US1。FR-020 の基本形）", () => {
     });
   });
 
+  it("URL の status（ホームの押し先。011 T009）を読み込みのクエリに使う", async () => {
+    const calls = setup("/e/e1/invoices?status=overdue");
+    await screen.findByRole("table", { name: "請求書の一覧" });
+    expect(calls.find((c) => c.path === `${BASE}/invoices`)?.query).toEqual({ status: "overdue" });
+  });
+
   it("設定・工数・請求書の作成への導線を置く", async () => {
     setup();
     await screen.findByRole("table", { name: "請求書の一覧" });

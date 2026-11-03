@@ -4,6 +4,7 @@ export * from "./backup.ts";
 export * from "./blue-return.ts";
 export * from "./entities.ts";
 export * from "./errors.ts";
+export * from "./home.ts";
 export * from "./import.ts";
 export * from "./invoicing.ts";
 export * from "./journals.ts";

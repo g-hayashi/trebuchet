@@ -36,6 +36,7 @@ import { blueReturnRoutes } from "./routes/blue-return.ts";
 import { deferredAssetRoutes } from "./routes/deferred-assets.ts";
 import { entitiesRoutes, entityRoutes } from "./routes/entities.ts";
 import { fixedAssetRoutes } from "./routes/fixed-assets.ts";
+import { homeRoutes } from "./routes/home.ts";
 import { importRoutes } from "./routes/imports.ts";
 import { invoicingRoutes } from "./routes/invoicing.ts";
 import { journalRoutes } from "./routes/journals.ts";
@@ -69,6 +70,7 @@ function tenantRoutes(
     .route("/", periodRoutes(options))
     .route("/", journalRoutes(options))
     .route("/", reportRoutes)
+    .route("/", homeRoutes(options))
     .route("/", importRoutes(options))
     .route("/", blueReturnRoutes(options))
     .route("/", fixedAssetRoutes(options))

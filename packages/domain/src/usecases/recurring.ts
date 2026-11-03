@@ -450,7 +450,7 @@ function toBlockedRuns(def: Recurring, plan: RecurringPlan): BlockedRun[] {
  * 登録できない回（`blocked`。判定のたびに計算する）
  */
 export function recurringStatus(
-  deps: RecurringDeps,
+  deps: Pick<RecurringDeps, "uow">,
   today: string,
 ): Result<RecurringStatusResponse> {
   return deps.uow.run(({ ledger, masters, recurring }) => {

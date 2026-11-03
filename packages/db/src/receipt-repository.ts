@@ -164,8 +164,8 @@ export class DrizzleReceiptStore implements ReceiptStore {
     return row === undefined ? undefined : toFile(row);
   }
 
-  /** `received_at DESC, id DESC`（カーソルは直前のページの終わり `<受領日時>|<ID>`）。`limit + 1` 件を読んで次の有無を知る */
-  search(query: ReceiptQuery): { rows: ReceiptSearchRow[]; nextCursor: string | null } {
+  /** `search` と `count` が共有する絞り込み（`cursor`・`limit` は含まない）。`receipt_links`・`journals` を外部結合した問い合わせで使う */
+  private conditionsOf(query: ReceiptQuery): SQL[] {
     const conditions: SQL[] = [];
     if (!query.includeDeleted) conditions.push(isNull(receipts.deletedAt));
     if (query.dateFrom !== undefined)
@@ -193,6 +193,28 @@ export class DrizzleReceiptStore implements ReceiptStore {
     if (query.link === "journal_voided") {
       conditions.push(sql`(${receiptLinks.id} IS NOT NULL AND ${journals.status} = 'voided')`);
     }
+    return conditions;
+  }
+
+  /** `search` と同じ絞り込みに合う件数（`cursor`・`limit` は見ない。011 のホーム） */
+  count(query: ReceiptQuery): number {
+    const row = this.db
+      .select({ n: count() })
+      .from(receipts)
+      .innerJoin(receiptFiles, eq(receiptFiles.sha256, receipts.currentSha256))
+      .leftJoin(
+        receiptLinks,
+        and(eq(receiptLinks.receiptId, receipts.id), isNull(receiptLinks.unlinkedAt)),
+      )
+      .leftJoin(journals, eq(journals.id, receiptLinks.journalId))
+      .where(and(...this.conditionsOf(query)))
+      .get();
+    return row?.n ?? 0;
+  }
+
+  /** `received_at DESC, id DESC`（カーソルは直前のページの終わり `<受領日時>|<ID>`）。`limit + 1` 件を読んで次の有無を知る */
+  search(query: ReceiptQuery): { rows: ReceiptSearchRow[]; nextCursor: string | null } {
+    const conditions = this.conditionsOf(query);
     if (query.cursor !== undefined) {
       const cursor = splitCursor(query.cursor);
       if (cursor === undefined) return { rows: [], nextCursor: null };

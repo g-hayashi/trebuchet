@@ -141,6 +141,15 @@ export class InMemoryLedgerRepository implements LedgerRepository {
     };
   }
 
+  recentRegistered(limit: number): Journal[] {
+    return structuredClone(
+      this.state.journals
+        .filter((j) => j.status === "active")
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.journalNo - a.journalNo)
+        .slice(0, limit),
+    );
+  }
+
   private lockForUpdate(id: string, expectedVersion: number): Journal {
     const current = this.state.journals.find((j) => j.id === id);
     if (current === undefined) throw new Error(`journal not found: ${id}`);

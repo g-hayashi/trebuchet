@@ -121,6 +121,11 @@ describe("INV-29 全ルートの保護", () => {
     expect(existsSync(registryFile())).toBe(false);
   });
 
+  it("ホームの要約（011 T008）は列挙に入り、保護されている", () => {
+    const protectedKeys = new Set(protectedRoutes().map((r) => `${r.method} ${r.path}`));
+    expect(protectedKeys.has("GET /api/entities/:entityId/home")).toBe(true);
+  });
+
   it("明細の取込（007）の layout・preview・確定は列挙に入り、保護されている。multipart でも未サインインは 401", async () => {
     const protectedKeys = new Set(protectedRoutes().map((r) => `${r.method} ${r.path}`));
     for (const path of ["layout", "preview"]) {

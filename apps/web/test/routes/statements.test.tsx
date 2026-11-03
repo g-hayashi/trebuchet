@@ -208,6 +208,14 @@ describe("明細の一覧（H:§4.1）", () => {
     expect(calls(all, "GET", "/statements")[0]?.query).toEqual({ status: "unprocessed" });
   });
 
+  it("URL の status（ホームの押し先。011 T009）で絞り込んで開く。省略は未処理", async () => {
+    const { all } = openApi([statement(1)]);
+    renderStatements("?status=changed");
+    await table();
+    expect(calls(all, "GET", "/statements")[0]?.query).toEqual({ status: "changed" });
+    expect(screen.getByLabelText("状態")).toHaveValue("changed");
+  });
+
   it("状態と口座で絞り込む（status・accountId を付けて読み直す）", async () => {
     const { all } = openApi([statement(1)]);
     const u = user();

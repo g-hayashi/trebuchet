@@ -37,14 +37,17 @@ type ReasonTarget = { kind: "unexclude" | "unlink"; statement: StatementView };
 export function StatementsWorkspace({
   entityId,
   highlightId,
+  initialStatus,
 }: {
   entityId: string;
   /** 仕訳の詳細の「元の明細」から開いた明細（状態を「すべて」にして印を付ける） */
   highlightId: string | undefined;
+  /** URL の `status`（ホームの「未処理の明細」など）。省略は未処理（`highlightId` があれば「すべて」） */
+  initialStatus?: StatementStatusFilter | undefined;
 }) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<StatementStatusFilter | "">(
-    highlightId === undefined ? "unprocessed" : "",
+    initialStatus ?? (highlightId === undefined ? "unprocessed" : ""),
   );
   const [accountId, setAccountId] = useState("");
   const [reviewingId, setReviewingId] = useState<string>();

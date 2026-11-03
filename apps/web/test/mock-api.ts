@@ -78,6 +78,24 @@ const DEFAULT_ROUTES: Record<string, Handler> = {
  * 取引先の画面など既存の画面が読むので、既存のテストが落ちないよう空の応答を置く
  */
 const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
+  // ホーム（011 US1）。作業は 0 件、今日を含む会計期間なし、仕訳・取込なし
+  "GET /home": () =>
+    ok({
+      tasks: {
+        status: "ok",
+        value: {
+          unprocessedStatements: 0,
+          unlinkedReceipts: 0,
+          unpaidInvoices: 0,
+          overdueInvoices: 0,
+          blockedRecurring: 0,
+          blueReturnWarnings: 0,
+        },
+      },
+      figures: { status: "ok", value: null },
+      recentJournals: { status: "ok", value: [] },
+      lastStatementImportAt: { status: "ok", value: null },
+    }),
   "GET /invoice-settings": () => ok({ settings: null, minimumNextSeq: 1 }),
   "GET /billing-terms": () => ok({ terms: [] }),
   // 工数・請求書の一覧（US1）。仕訳の詳細は出所を読む（`:id` は 1 つのパスの区切り）

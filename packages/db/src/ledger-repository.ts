@@ -180,6 +180,17 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
     return this.withLines(rows);
   }
 
+  recentRegistered(limit: number): Journal[] {
+    const rows = this.db
+      .select()
+      .from(journals)
+      .where(eq(journals.status, "active"))
+      .orderBy(desc(journals.createdAt), desc(journals.journalNo))
+      .limit(limit)
+      .all();
+    return this.withLines(rows);
+  }
+
   private mustGet(id: string): Journal {
     const journal = this.getJournal(id);
     if (journal === undefined) throw new Error(`journal not found: ${id}`);
