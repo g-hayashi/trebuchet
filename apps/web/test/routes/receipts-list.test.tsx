@@ -171,6 +171,70 @@ describe("証憑の一覧", () => {
 });
 
 describe("証憑の検索", () => {
+  it("未入力と仕訳なしをワンクリックで切り替え、日付・金額・取引先など他の条件を保持する", async () => {
+    const calls = mockApi({ [`GET ${LIST}`]: () => ok({ receipts: [], nextCursor: null }) });
+    const { router } = renderList(
+      "/e/e1/receipts?dateFrom=2026-10-01&dateTo=2026-10-31&amountMin=1000&amountMax=5000&partner=合成&category=electronic&includeDeleted=true",
+    );
+    const missing = await screen.findByRole("button", { name: "未入力" });
+    const unlinked = screen.getByRole("button", { name: "仕訳なし" });
+    expect(missing).toHaveAttribute("aria-pressed", "false");
+    expect(unlinked).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(missing);
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ missing: true }));
+    expect(missing).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(unlinked);
+    const retained = {
+      dateFrom: "2026-10-01",
+      dateTo: "2026-10-31",
+      amountMin: 1000,
+      amountMax: 5000,
+      partner: "合成",
+      category: "electronic",
+      includeDeleted: true,
+    };
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ ...retained, missing: true, link: "none" }),
+    );
+    const form = screen.getByRole("search", { name: "証憑の検索" });
+    expect(within(form).getByLabelText("結びつき")).toHaveValue("none");
+    expect(within(form).getByLabelText("未入力があるものだけ")).toBeChecked();
+    await userEvent.click(missing);
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ ...retained, link: "none" }),
+    );
+    await userEvent.click(unlinked);
+    await waitFor(() => expect(router.state.location.search).toEqual(retained));
+    expect(unlinked).toHaveAttribute("aria-pressed", "false");
+    expect(within(form).getByLabelText("取引年月日（から）")).toHaveValue("2026-10-01");
+    expect(within(form).getByLabelText("金額（以下）")).toHaveValue("5000");
+    await waitFor(() =>
+      expect(listCalls(calls).at(-1)?.query).toEqual({
+        ...retained,
+        amountMin: "1000",
+        amountMax: "5000",
+        includeDeleted: "true",
+      }),
+    );
+  });
+
+  it.each(["linked", "journal_voided"])(
+    "既存の結びつき条件%sを未入力の切替で消さず、仕訳なしの操作時だけ置き換える",
+    async (link) => {
+      mockApi({ [`GET ${LIST}`]: () => ok({ receipts: [], nextCursor: null }) });
+      const { router } = renderList(`/e/e1/receipts?link=${link}&missing=true`);
+      const missing = await screen.findByRole("button", { name: "未入力" });
+      const unlinked = screen.getByRole("button", { name: "仕訳なし" });
+      expect(missing).toHaveAttribute("aria-pressed", "true");
+      expect(unlinked).toHaveAttribute("aria-pressed", "false");
+      await userEvent.click(missing);
+      await waitFor(() => expect(router.state.location.search).toEqual({ link }));
+      await userEvent.click(unlinked);
+      await waitFor(() => expect(router.state.location.search).toEqual({ link: "none" }));
+      expect(unlinked).toHaveAttribute("aria-pressed", "true");
+    },
+  );
+
   it("条件を入れて検索すると、API に条件を渡し、URL にも入る", async () => {
     const calls = mockApi({ [`GET ${LIST}`]: () => ok({ receipts: [], nextCursor: null }) });
     const { router } = renderList();

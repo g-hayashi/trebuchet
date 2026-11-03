@@ -88,13 +88,38 @@ function ReceiptBody({ entityId, receipt }: { entityId: string; receipt: Receipt
           </Card>
           <ReceiptReadingNote entityId={entityId} receipt={receipt} />
           <ReceiptLinkSection entityId={entityId} receipt={receipt} />
-          {!receipt.deleted && <ReceiptReplaceSection entityId={entityId} receipt={receipt} />}
-          <ReceiptInfo entityId={entityId} receipt={receipt} />
-          <ReceiptHistory entityId={entityId} receiptId={receipt.id} />
-          {!receipt.deleted && <ReceiptDeleteSection entityId={entityId} receipt={receipt} />}
         </div>
       </div>
+      <div className="grid gap-4">
+        <ReceiptAuxiliary title="証憑の情報">
+          <ReceiptInfo entityId={entityId} receipt={receipt} />
+        </ReceiptAuxiliary>
+        <ReceiptAuxiliary title="履歴">
+          <ReceiptHistory entityId={entityId} receiptId={receipt.id} />
+        </ReceiptAuxiliary>
+        {!receipt.deleted && (
+          <>
+            <ReceiptAuxiliary title="ファイルの差し替え">
+              <ReceiptReplaceSection entityId={entityId} receipt={receipt} />
+            </ReceiptAuxiliary>
+            <ReceiptAuxiliary title="削除">
+              <ReceiptDeleteSection entityId={entityId} receipt={receipt} />
+            </ReceiptAuxiliary>
+          </>
+        )}
+      </div>
     </>
+  );
+}
+
+function ReceiptAuxiliary({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <details className="min-w-0 border-t pt-4">
+      <summary className="cursor-pointer rounded-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        {title}
+      </summary>
+      <div className="mt-4">{children}</div>
+    </details>
   );
 }
 

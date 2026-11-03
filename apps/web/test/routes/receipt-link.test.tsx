@@ -103,7 +103,15 @@ describe("証憑の仕訳との結びつき（結びつける）", () => {
     const { queryClient } = renderReceipt();
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     const u = userEvent.setup();
-
+    const section = await screen.findByRole("region", { name: "仕訳との結びつき" });
+    expect(section.closest("details")).toBeNull();
+    const information = screen
+      .getByText("証憑の情報", { selector: "summary" })
+      .closest("details") as HTMLDetailsElement;
+    expect(information).not.toHaveAttribute("open");
+    expect(
+      section.compareDocumentPosition(information) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     await u.click(await screen.findByRole("button", { name: "仕訳に結びつける" }));
     const dialog = await screen.findByRole("dialog", { name: "仕訳に結びつける" });
     const items = await within(dialog).findAllByRole("listitem");

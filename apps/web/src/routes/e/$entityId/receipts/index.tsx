@@ -41,6 +41,30 @@ function ReceiptsPage() {
       >
         追加する
       </Link>
+      <div role="group" aria-label="証憑の絞り込み" className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant={search.missing ? "secondary" : "outline"}
+          aria-pressed={search.missing === true}
+          onClick={() => {
+            const { missing, ...rest } = search;
+            void navigate({ search: missing ? rest : { ...rest, missing: true } });
+          }}
+        >
+          未入力
+        </Button>
+        <Button
+          type="button"
+          variant={search.link === "none" ? "secondary" : "outline"}
+          aria-pressed={search.link === "none"}
+          onClick={() => {
+            const { link, ...rest } = search;
+            void navigate({ search: link === "none" ? rest : { ...rest, link: "none" } });
+          }}
+        >
+          仕訳なし
+        </Button>
+      </div>
       <ReceiptSearchForm
         search={search}
         onSearch={(next) => navigate({ search: next })}

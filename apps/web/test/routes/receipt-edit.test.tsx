@@ -21,6 +21,14 @@ const renderDetail = () =>
 const callsOf = (calls: ApiCall[], method: string, suffix = "") =>
   calls.filter((c) => c.method === method && c.path === `${DETAIL}${suffix}`);
 
+async function expand(name: string) {
+  const summary = await screen.findByText(name, { selector: "summary" });
+  const details = summary.closest("details");
+  expect(details).not.toHaveAttribute("open");
+  await userEvent.click(summary);
+  expect(details).toHaveAttribute("open");
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -97,6 +105,7 @@ describe("ファイルの差し替え（撮り直し）", () => {
       },
     });
     renderDetail();
+    await expand("ファイルの差し替え");
     const section = await screen.findByRole("region", { name: "ファイルの差し替え" });
     const user = userEvent.setup();
     expect(within(section).getByRole("button", { name: "差し替える" })).toBeDisabled();
@@ -125,6 +134,7 @@ describe("ファイルの差し替え（撮り直し）", () => {
         apiError(409, "RECEIPT_DUPLICATE", "同じ内容のファイルがすでにあります"),
     });
     renderDetail();
+    await expand("ファイルの差し替え");
     const section = await screen.findByRole("region", { name: "ファイルの差し替え" });
     const user = userEvent.setup();
     await user.upload(
@@ -158,6 +168,7 @@ describe("削除", () => {
     });
     renderDetail();
     const user = userEvent.setup();
+    await expand("削除");
     await user.click(await screen.findByRole("button", { name: "この証憑を削除" }));
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByLabelText("理由"), "重複して取り込んだ");
@@ -190,6 +201,7 @@ describe("削除", () => {
     });
     renderDetail();
     const user = userEvent.setup();
+    await expand("削除");
     await user.click(await screen.findByRole("button", { name: "この証憑を削除" }));
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByLabelText("理由"), "不要");
@@ -241,6 +253,7 @@ describe("履歴", () => {
       [`GET ${DETAIL}/history`]: () => ok({ history }),
     });
     renderDetail();
+    await expand("履歴");
     const section = await screen.findByRole("region", { name: "履歴" });
     const items = await within(section).findAllByRole("listitem");
     expect(items.map((li) => li.textContent)).toEqual([
@@ -262,6 +275,7 @@ describe("履歴", () => {
       [`GET ${DETAIL}/history`]: () => ok({ history }),
     });
     renderDetail();
+    await expand("履歴");
     const section = await screen.findByRole("region", { name: "履歴" });
     const old = await within(section).findByRole("link", { name: "版 1 を開く" });
     expect(old).toHaveAttribute(
@@ -297,6 +311,7 @@ describe("履歴", () => {
         }),
     });
     renderDetail();
+    await expand("履歴");
     const section = await screen.findByRole("region", { name: "履歴" });
     const items = await within(section).findAllByRole("listitem");
     expect(items[1]).toHaveTextContent("削除");
