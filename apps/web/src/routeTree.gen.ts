@@ -20,10 +20,12 @@ import { Route as EEntityIdIndexRouteImport } from './routes/e/$entityId/index'
 import { Route as EEntityIdAccountsRouteImport } from './routes/e/$entityId/accounts'
 import { Route as EEntityIdInvoiceSettingsRouteImport } from './routes/e/$entityId/invoice-settings'
 import { Route as EEntityIdPartnersRouteImport } from './routes/e/$entityId/partners'
+import { Route as EEntityIdSettingsRouteImport } from './routes/e/$entityId/settings'
 import { Route as EEntityIdTagsRouteImport } from './routes/e/$entityId/tags'
 import { Route as EEntityIdTaxSettingsRouteImport } from './routes/e/$entityId/tax-settings'
 import { Route as EEntityIdWorkHoursRouteImport } from './routes/e/$entityId/work-hours'
 import { Route as EEntityIdBlueReturnIndexRouteImport } from './routes/e/$entityId/blue-return/index'
+import { Route as EEntityIdDeferredAssetsIndexRouteImport } from './routes/e/$entityId/deferred-assets/index'
 import { Route as EEntityIdFixedAssetsIndexRouteImport } from './routes/e/$entityId/fixed-assets/index'
 import { Route as EEntityIdImportsIndexRouteImport } from './routes/e/$entityId/imports/index'
 import { Route as EEntityIdImportsBatchIdRouteImport } from './routes/e/$entityId/imports/$batchId'
@@ -39,6 +41,7 @@ import { Route as EEntityIdPeriodsIndexRouteImport } from './routes/e/$entityId/
 import { Route as EEntityIdReceiptsIndexRouteImport } from './routes/e/$entityId/receipts/index'
 import { Route as EEntityIdReceiptsReceiptIdRouteImport } from './routes/e/$entityId/receipts/$receiptId'
 import { Route as EEntityIdReceiptsCaptureRouteImport } from './routes/e/$entityId/receipts/capture'
+import { Route as EEntityIdReceiptsNewRouteImport } from './routes/e/$entityId/receipts/new'
 import { Route as EEntityIdRecurringIndexRouteImport } from './routes/e/$entityId/recurring/index'
 import { Route as EEntityIdRecurringRecurringIdRouteImport } from './routes/e/$entityId/recurring/$recurringId'
 import { Route as EEntityIdRecurringNewRouteImport } from './routes/e/$entityId/recurring/new'
@@ -116,6 +119,11 @@ const EEntityIdPartnersRoute = EEntityIdPartnersRouteImport.update({
   path: '/partners',
   getParentRoute: () => EEntityIdRouteRoute,
 } as any)
+const EEntityIdSettingsRoute = EEntityIdSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
 const EEntityIdTagsRoute = EEntityIdTagsRouteImport.update({
   id: '/tags',
   path: '/tags',
@@ -135,6 +143,12 @@ const EEntityIdBlueReturnIndexRoute =
   EEntityIdBlueReturnIndexRouteImport.update({
     id: '/blue-return/',
     path: '/blue-return/',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
+const EEntityIdDeferredAssetsIndexRoute =
+  EEntityIdDeferredAssetsIndexRouteImport.update({
+    id: '/deferred-assets/',
+    path: '/deferred-assets/',
     getParentRoute: () => EEntityIdRouteRoute,
   } as any)
 const EEntityIdFixedAssetsIndexRoute =
@@ -218,6 +232,11 @@ const EEntityIdReceiptsCaptureRoute =
     path: '/receipts/capture',
     getParentRoute: () => EEntityIdRouteRoute,
   } as any)
+const EEntityIdReceiptsNewRoute = EEntityIdReceiptsNewRouteImport.update({
+  id: '/receipts/new',
+  path: '/receipts/new',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
 const EEntityIdRecurringIndexRoute = EEntityIdRecurringIndexRouteImport.update({
   id: '/recurring/',
   path: '/recurring/',
@@ -346,6 +365,7 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
+  '/e/$entityId/settings': typeof EEntityIdSettingsRoute
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
   '/e/$entityId/work-hours': typeof EEntityIdWorkHoursRoute
@@ -359,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
   '/e/$entityId/receipts/capture': typeof EEntityIdReceiptsCaptureRoute
+  '/e/$entityId/receipts/new': typeof EEntityIdReceiptsNewRoute
   '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
   '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -372,6 +393,7 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/statements/settings': typeof EEntityIdStatementsSettingsRoute
   '/e/$entityId/tax-return/$year': typeof EEntityIdTaxReturnYearRoute
   '/e/$entityId/blue-return/': typeof EEntityIdBlueReturnIndexRoute
+  '/e/$entityId/deferred-assets/': typeof EEntityIdDeferredAssetsIndexRoute
   '/e/$entityId/fixed-assets/': typeof EEntityIdFixedAssetsIndexRoute
   '/e/$entityId/imports/': typeof EEntityIdImportsIndexRoute
   '/e/$entityId/invoices/': typeof EEntityIdInvoicesIndexRoute
@@ -397,6 +419,7 @@ export interface FileRoutesByTo {
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
+  '/e/$entityId/settings': typeof EEntityIdSettingsRoute
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
   '/e/$entityId/work-hours': typeof EEntityIdWorkHoursRoute
@@ -410,6 +433,7 @@ export interface FileRoutesByTo {
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
   '/e/$entityId/receipts/capture': typeof EEntityIdReceiptsCaptureRoute
+  '/e/$entityId/receipts/new': typeof EEntityIdReceiptsNewRoute
   '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
   '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -423,6 +447,7 @@ export interface FileRoutesByTo {
   '/e/$entityId/statements/settings': typeof EEntityIdStatementsSettingsRoute
   '/e/$entityId/tax-return/$year': typeof EEntityIdTaxReturnYearRoute
   '/e/$entityId/blue-return': typeof EEntityIdBlueReturnIndexRoute
+  '/e/$entityId/deferred-assets': typeof EEntityIdDeferredAssetsIndexRoute
   '/e/$entityId/fixed-assets': typeof EEntityIdFixedAssetsIndexRoute
   '/e/$entityId/imports': typeof EEntityIdImportsIndexRoute
   '/e/$entityId/invoices': typeof EEntityIdInvoicesIndexRoute
@@ -450,6 +475,7 @@ export interface FileRoutesById {
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
   '/e/$entityId/partners': typeof EEntityIdPartnersRoute
+  '/e/$entityId/settings': typeof EEntityIdSettingsRoute
   '/e/$entityId/tags': typeof EEntityIdTagsRoute
   '/e/$entityId/tax-settings': typeof EEntityIdTaxSettingsRoute
   '/e/$entityId/work-hours': typeof EEntityIdWorkHoursRoute
@@ -463,6 +489,7 @@ export interface FileRoutesById {
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
   '/e/$entityId/receipts/capture': typeof EEntityIdReceiptsCaptureRoute
+  '/e/$entityId/receipts/new': typeof EEntityIdReceiptsNewRoute
   '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
   '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -476,6 +503,7 @@ export interface FileRoutesById {
   '/e/$entityId/statements/settings': typeof EEntityIdStatementsSettingsRoute
   '/e/$entityId/tax-return/$year': typeof EEntityIdTaxReturnYearRoute
   '/e/$entityId/blue-return/': typeof EEntityIdBlueReturnIndexRoute
+  '/e/$entityId/deferred-assets/': typeof EEntityIdDeferredAssetsIndexRoute
   '/e/$entityId/fixed-assets/': typeof EEntityIdFixedAssetsIndexRoute
   '/e/$entityId/imports/': typeof EEntityIdImportsIndexRoute
   '/e/$entityId/invoices/': typeof EEntityIdInvoicesIndexRoute
@@ -504,6 +532,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/accounts'
     | '/e/$entityId/invoice-settings'
     | '/e/$entityId/partners'
+    | '/e/$entityId/settings'
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
     | '/e/$entityId/work-hours'
@@ -517,6 +546,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/journals/new'
     | '/e/$entityId/receipts/$receiptId'
     | '/e/$entityId/receipts/capture'
+    | '/e/$entityId/receipts/new'
     | '/e/$entityId/recurring/$recurringId'
     | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -530,6 +560,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/statements/settings'
     | '/e/$entityId/tax-return/$year'
     | '/e/$entityId/blue-return/'
+    | '/e/$entityId/deferred-assets/'
     | '/e/$entityId/fixed-assets/'
     | '/e/$entityId/imports/'
     | '/e/$entityId/invoices/'
@@ -555,6 +586,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/accounts'
     | '/e/$entityId/invoice-settings'
     | '/e/$entityId/partners'
+    | '/e/$entityId/settings'
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
     | '/e/$entityId/work-hours'
@@ -568,6 +600,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/journals/new'
     | '/e/$entityId/receipts/$receiptId'
     | '/e/$entityId/receipts/capture'
+    | '/e/$entityId/receipts/new'
     | '/e/$entityId/recurring/$recurringId'
     | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -581,6 +614,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/statements/settings'
     | '/e/$entityId/tax-return/$year'
     | '/e/$entityId/blue-return'
+    | '/e/$entityId/deferred-assets'
     | '/e/$entityId/fixed-assets'
     | '/e/$entityId/imports'
     | '/e/$entityId/invoices'
@@ -607,6 +641,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/accounts'
     | '/e/$entityId/invoice-settings'
     | '/e/$entityId/partners'
+    | '/e/$entityId/settings'
     | '/e/$entityId/tags'
     | '/e/$entityId/tax-settings'
     | '/e/$entityId/work-hours'
@@ -620,6 +655,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/journals/new'
     | '/e/$entityId/receipts/$receiptId'
     | '/e/$entityId/receipts/capture'
+    | '/e/$entityId/receipts/new'
     | '/e/$entityId/recurring/$recurringId'
     | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -633,6 +669,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/statements/settings'
     | '/e/$entityId/tax-return/$year'
     | '/e/$entityId/blue-return/'
+    | '/e/$entityId/deferred-assets/'
     | '/e/$entityId/fixed-assets/'
     | '/e/$entityId/imports/'
     | '/e/$entityId/invoices/'
@@ -738,6 +775,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EEntityIdPartnersRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
+    '/e/$entityId/settings': {
+      id: '/e/$entityId/settings'
+      path: '/settings'
+      fullPath: '/e/$entityId/settings'
+      preLoaderRoute: typeof EEntityIdSettingsRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
     '/e/$entityId/tags': {
       id: '/e/$entityId/tags'
       path: '/tags'
@@ -764,6 +808,13 @@ declare module '@tanstack/react-router' {
       path: '/blue-return'
       fullPath: '/e/$entityId/blue-return/'
       preLoaderRoute: typeof EEntityIdBlueReturnIndexRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/deferred-assets/': {
+      id: '/e/$entityId/deferred-assets/'
+      path: '/deferred-assets'
+      fullPath: '/e/$entityId/deferred-assets/'
+      preLoaderRoute: typeof EEntityIdDeferredAssetsIndexRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
     '/e/$entityId/fixed-assets/': {
@@ -869,6 +920,13 @@ declare module '@tanstack/react-router' {
       path: '/receipts/capture'
       fullPath: '/e/$entityId/receipts/capture'
       preLoaderRoute: typeof EEntityIdReceiptsCaptureRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/receipts/new': {
+      id: '/e/$entityId/receipts/new'
+      path: '/receipts/new'
+      fullPath: '/e/$entityId/receipts/new'
+      preLoaderRoute: typeof EEntityIdReceiptsNewRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
     '/e/$entityId/recurring/': {
@@ -1018,6 +1076,7 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdAccountsRoute: typeof EEntityIdAccountsRoute
   EEntityIdInvoiceSettingsRoute: typeof EEntityIdInvoiceSettingsRoute
   EEntityIdPartnersRoute: typeof EEntityIdPartnersRoute
+  EEntityIdSettingsRoute: typeof EEntityIdSettingsRoute
   EEntityIdTagsRoute: typeof EEntityIdTagsRoute
   EEntityIdTaxSettingsRoute: typeof EEntityIdTaxSettingsRoute
   EEntityIdWorkHoursRoute: typeof EEntityIdWorkHoursRoute
@@ -1031,6 +1090,7 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdJournalsNewRoute: typeof EEntityIdJournalsNewRoute
   EEntityIdReceiptsReceiptIdRoute: typeof EEntityIdReceiptsReceiptIdRoute
   EEntityIdReceiptsCaptureRoute: typeof EEntityIdReceiptsCaptureRoute
+  EEntityIdReceiptsNewRoute: typeof EEntityIdReceiptsNewRoute
   EEntityIdRecurringRecurringIdRoute: typeof EEntityIdRecurringRecurringIdRoute
   EEntityIdRecurringNewRoute: typeof EEntityIdRecurringNewRoute
   EEntityIdReportsBalanceSheetRoute: typeof EEntityIdReportsBalanceSheetRoute
@@ -1044,6 +1104,7 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdStatementsSettingsRoute: typeof EEntityIdStatementsSettingsRoute
   EEntityIdTaxReturnYearRoute: typeof EEntityIdTaxReturnYearRoute
   EEntityIdBlueReturnIndexRoute: typeof EEntityIdBlueReturnIndexRoute
+  EEntityIdDeferredAssetsIndexRoute: typeof EEntityIdDeferredAssetsIndexRoute
   EEntityIdFixedAssetsIndexRoute: typeof EEntityIdFixedAssetsIndexRoute
   EEntityIdImportsIndexRoute: typeof EEntityIdImportsIndexRoute
   EEntityIdInvoicesIndexRoute: typeof EEntityIdInvoicesIndexRoute
@@ -1064,6 +1125,7 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdAccountsRoute: EEntityIdAccountsRoute,
   EEntityIdInvoiceSettingsRoute: EEntityIdInvoiceSettingsRoute,
   EEntityIdPartnersRoute: EEntityIdPartnersRoute,
+  EEntityIdSettingsRoute: EEntityIdSettingsRoute,
   EEntityIdTagsRoute: EEntityIdTagsRoute,
   EEntityIdTaxSettingsRoute: EEntityIdTaxSettingsRoute,
   EEntityIdWorkHoursRoute: EEntityIdWorkHoursRoute,
@@ -1077,6 +1139,7 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdJournalsNewRoute: EEntityIdJournalsNewRoute,
   EEntityIdReceiptsReceiptIdRoute: EEntityIdReceiptsReceiptIdRoute,
   EEntityIdReceiptsCaptureRoute: EEntityIdReceiptsCaptureRoute,
+  EEntityIdReceiptsNewRoute: EEntityIdReceiptsNewRoute,
   EEntityIdRecurringRecurringIdRoute: EEntityIdRecurringRecurringIdRoute,
   EEntityIdRecurringNewRoute: EEntityIdRecurringNewRoute,
   EEntityIdReportsBalanceSheetRoute: EEntityIdReportsBalanceSheetRoute,
@@ -1090,6 +1153,7 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdStatementsSettingsRoute: EEntityIdStatementsSettingsRoute,
   EEntityIdTaxReturnYearRoute: EEntityIdTaxReturnYearRoute,
   EEntityIdBlueReturnIndexRoute: EEntityIdBlueReturnIndexRoute,
+  EEntityIdDeferredAssetsIndexRoute: EEntityIdDeferredAssetsIndexRoute,
   EEntityIdFixedAssetsIndexRoute: EEntityIdFixedAssetsIndexRoute,
   EEntityIdImportsIndexRoute: EEntityIdImportsIndexRoute,
   EEntityIdInvoicesIndexRoute: EEntityIdInvoicesIndexRoute,

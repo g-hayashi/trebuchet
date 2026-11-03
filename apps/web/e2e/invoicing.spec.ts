@@ -64,7 +64,7 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
   });
 
   await test.step("対象月の工数を入力する", async () => {
-    await openNav(page, "請求", "請求書");
+    await openNav(page, "請求", "請求の流れ");
     await page.getByRole("link", { name: "工数の入力" }).click();
     await expect(page.getByRole("heading", { name: "工数の入力" })).toBeVisible();
 
@@ -141,7 +141,7 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
   });
 
   await test.step("一覧でも入金済みと残額 0 が見える", async () => {
-    await openNav(page, "請求", "請求書");
+    await openNav(page, "請求", "請求の流れ");
     const list = page.getByRole("table", { name: "請求書の一覧" });
     const row = list.getByRole("row", { name: new RegExp(invoiceNo) });
     await expect(row).toContainText("入金済み");

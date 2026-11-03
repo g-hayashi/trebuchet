@@ -5,27 +5,35 @@ import { NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { entitiesQuery, entityKeys } from "./api";
 
+/** 最後に開いた事業体の ID を覚えるブラウザの鍵（011 R4） */
 const LAST_ENTITY_KEY = "trebuchet:lastEntityId";
-/** このタブで復元の機会を使ったか（トップ画面を表示した、または事業体の画面を開いた）。以降のトップ画面は一覧を見せる */
-const RESTORED_KEY = "trebuchet:lastEntityRestored";
 
-/** トップ画面の beforeLoad から呼ぶ。タブの最初の表示なら、前回の事業体（一覧に残っているもの）の ID を返す */
-export async function entityToRestore(queryClient: QueryClient): Promise<string | undefined> {
-  if (sessionStorage.getItem(RESTORED_KEY) !== null) return undefined;
-  sessionStorage.setItem(RESTORED_KEY, "1");
+/**
+ * 最後に開いた事業体の ID。一覧に残っているものだけ返す（消えた事業体の ID・一覧を読む前は undefined）。
+ * ロゴ・トップ画面の一覧が使う
+ */
+export function lastEntityIdOf(
+  entities: readonly { id: string }[] | undefined,
+): string | undefined {
   const last = localStorage.getItem(LAST_ENTITY_KEY);
-  if (last === null) return undefined;
+  return last !== null && entities?.some((e) => e.id === last) ? last : undefined;
+}
+
+/**
+ * トップ画面（`/`）の beforeLoad から呼ぶ（011 FR-010）。事業体が 1 件ならその ID を返し（そのホームを開く）、
+ * 0 件・2 件以上なら undefined（トップ画面が作成の案内・一覧を出す）
+ */
+export async function entityToRestore(queryClient: QueryClient): Promise<string | undefined> {
   try {
     const entities = await queryClient.ensureQueryData(entitiesQuery());
-    if (entities.some((e) => e.id === last)) return last;
-    localStorage.removeItem(LAST_ENTITY_KEY);
+    if (entities.length === 1) return entities[0]?.id;
   } catch {
-    // 一覧を読めなければ復元しない（トップ画面がエラーを表示する）
+    // 一覧を読めなければ移動しない（トップ画面がエラーを表示する）
   }
   return undefined;
 }
 
-/** ヘッダーの事業体の切り替え（US6）。開いている事業体を「最後に選んだ事業体」として保存する */
+/** ヘッダーの事業体の切り替え（`#entity-switcher`）。開いている事業体を「最後に開いた事業体」として保存する */
 export function EntitySwitcher() {
   const { entityId } = useParams({ strict: false });
   const navigate = useNavigate();
@@ -36,7 +44,6 @@ export function EntitySwitcher() {
   useEffect(() => {
     if (current === undefined) return;
     localStorage.setItem(LAST_ENTITY_KEY, current);
-    sessionStorage.setItem(RESTORED_KEY, "1");
     // 他の事業体のキャッシュを破棄する（キーは事業体ごとに分かれているが、古いデータを持ち越さない）
     queryClient.removeQueries({
       predicate: ({ queryKey }) =>
@@ -44,7 +51,8 @@ export function EntitySwitcher() {
     });
   }, [current, queryClient]);
 
-  if (entities === undefined || entities.length === 0) return null;
+  // 切り替える先があるとき（2 件以上）だけ出す
+  if (entities === undefined || entities.length < 2) return null;
 
   return (
     <div className="ml-auto flex items-center gap-2">

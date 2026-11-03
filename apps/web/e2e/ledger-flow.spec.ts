@@ -40,7 +40,7 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
   });
 
   await test.step("期首残高を登録する（貸借が合うまで保存できない）", async () => {
-    await openNav(page, "事業体の設定", "会計期間");
+    await openNav(page, "事業体の設定", "会計期間と移行");
     await page
       .getByRole("row", { name: /2026年度/ })
       .getByRole("link", { name: "期首残高" })
@@ -75,8 +75,7 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
   const result = page.getByRole("status", { name: "登録の結果" });
 
   await test.step("単一の仕訳を登録する", async () => {
-    await openNav(page, "記帳", "仕訳");
-    await page.getByRole("link", { name: "仕訳を入力" }).click();
+    await openNav(page, "仕訳", "入力する");
     await expect(page.getByRole("heading", { name: "仕訳の入力" })).toBeVisible();
 
     await page.getByLabel("日付").fill("2026-10-31");
@@ -137,13 +136,18 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
       error: { code: "UNBALANCED", details: { diff: 5000 } },
     });
 
-    await openNav(page, "記帳", "仕訳");
+    await openNav(page, "仕訳", "一覧");
     const list = page.getByRole("table", { name: "仕訳の一覧" });
     await expect(list.getByRole("link", { name: /^仕訳 No\.\d+ の詳細$/ })).toHaveCount(2);
   });
 
   await test.step("試算表の借方合計と貸方合計が一致する", async () => {
+    // 「帳票」は損益計算書へ進む。帳票のタブで試算表へ移る
     await openNav(page, "帳票");
+    await page
+      .getByRole("navigation", { name: "帳票", exact: true })
+      .getByRole("link", { name: "残高試算表", exact: true })
+      .click();
     await expect(page.getByRole("heading", { name: "残高試算表" })).toBeVisible();
     const table = page.getByRole("table", { name: "残高試算表" });
     const cells = (name: string) => table.getByRole("row", { name }).getByRole("cell");

@@ -1507,7 +1507,7 @@ describe("AI の案（US4。FR-016〜019）", () => {
 });
 
 describe("メニュー", () => {
-  it("取込の画面から明細の一覧へ戻れる（事業体のメニューの「明細」は一覧へ進む。statements.test.tsx）", async () => {
+  it("取込の画面から明細の一覧へ戻れる（事業体のサブメニューの「一覧と確認」でも戻れる。entity-nav.test.tsx）", async () => {
     mockApi(baseRoutes);
     renderImport();
     expect(await screen.findByRole("link", { name: "明細の一覧へ" })).toHaveAttribute(

@@ -66,8 +66,8 @@ function renderEntity(url: string) {
   return { router };
 }
 
-describe("事業体のメニューの「freee から移行」（T017）", () => {
-  it("「設定」の 2 段目に「freee から移行」があり、取込の画面でそれが強調される", async () => {
+describe("事業体のメニューの「会計期間と移行」（T017、011/T005）", () => {
+  it("「事業体の設定」の 2 段目の「会計期間と移行」が、取込の画面で強調される（freee の取込はその画面から）", async () => {
     renderEntity("/e/e1/imports");
     const nav = await screen.findByRole("navigation", { name: "事業体のメニュー" });
     expect(await screen.findByRole("heading", { level: 1, name: "取込" })).toBeInTheDocument();
@@ -80,8 +80,8 @@ describe("事業体のメニューの「freee から移行」（T017）", () => 
       "page",
     );
     const sub = screen.getByRole("navigation", { name: "事業体のサブメニュー" });
-    const link = within(sub).getByRole("link", { name: "freee から移行" });
-    expect(link).toHaveAttribute("href", "/e/e1/imports");
+    const link = within(sub).getByRole("link", { name: "会計期間と移行" });
+    expect(link).toHaveAttribute("href", "/e/e1/periods");
     expect(link).toHaveAttribute("aria-current", "page");
   });
 });

@@ -18,11 +18,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createEntity, entitiesQuery, entityKeys } from "@/features/entities/api";
-import { entityToRestore } from "@/features/entities/EntitySwitcher";
+import { entityToRestore, lastEntityIdOf } from "@/features/entities/EntitySwitcher";
 import { thisYear } from "@/lib/dates";
 
 export const Route = createFileRoute("/")({
-  // タブの最初の表示なら、前回の事業体の画面を開く（US6）
+  // 事業体が 1 件ならそのホームを開く。2 件以上は一覧、0 件は作成の案内（011 FR-010）
   beforeLoad: async ({ context }) => {
     const entityId = await entityToRestore(context.queryClient);
     if (entityId !== undefined) {
@@ -44,7 +44,13 @@ function HomePage() {
 }
 
 function EntityList() {
-  const { data: entities, isPending, error } = useQuery(entitiesQuery());
+  const { data: loaded, isPending, error } = useQuery(entitiesQuery());
+  // 最後に開いた事業体を上に置き、印をつける（FR-010）
+  const lastId = lastEntityIdOf(loaded);
+  const entities = loaded && [
+    ...loaded.filter((e) => e.id === lastId),
+    ...loaded.filter((e) => e.id !== lastId),
+  ];
   return (
     <Card>
       <CardHeader>
@@ -67,7 +73,7 @@ function EntityList() {
             </TableHeader>
             <TableBody>
               {entities.map((e) => (
-                <TableRow key={e.id}>
+                <TableRow key={e.id} className={e.id === lastId ? "bg-accent/50" : undefined}>
                   <TableCell>
                     <Link
                       to="/e/$entityId"
@@ -76,6 +82,11 @@ function EntityList() {
                     >
                       {e.name}
                     </Link>
+                    {e.id === lastId && (
+                      <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
+                        最後に開いた
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>{KIND_LABELS[e.kind]}</TableCell>
                   <TableCell className="text-muted-foreground">
