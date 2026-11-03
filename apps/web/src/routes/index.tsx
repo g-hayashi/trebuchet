@@ -94,7 +94,7 @@ function EntityList() {
                   </TableCell>
                   <TableCell>
                     <Link
-                      to="/e/$entityId/receipts"
+                      to="/e/$entityId/receipts/new"
                       params={{ entityId: e.id }}
                       className="underline-offset-4 hover:underline"
                     >

@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { createFileRoute, stripSearchParams, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, stripSearchParams, useNavigate } from "@tanstack/react-router";
 import { ReceiptQuery } from "@trebuchet/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,6 @@ import { ApiErrorMessage } from "@/components/ui/form-error";
 import { type ReceiptSearch, receiptSearchQuery } from "@/features/receipts/api";
 import { ReceiptList } from "@/features/receipts/ReceiptList";
 import { ReceiptSearchForm } from "@/features/receipts/ReceiptSearchForm";
-import { ReceiptUpload } from "@/features/receipts/ReceiptUpload";
 
 /** URL の検索パラメーター（FR-008）。ページの指定（cursor・limit）は URL に残さない */
 const ReceiptSearchParams = ReceiptQuery.omit({ cursor: true, limit: true });
@@ -35,7 +34,13 @@ function ReceiptsPage() {
         領収書・請求書などの画像や PDF
         を、暗号化して保存します。取引年月日・金額・取引先で探せます。
       </p>
-      <ReceiptUpload entityId={entityId} />
+      <Link
+        to="/e/$entityId/receipts/new"
+        params={{ entityId }}
+        className="justify-self-start text-sm underline"
+      >
+        追加する
+      </Link>
       <ReceiptSearchForm
         search={search}
         onSearch={(next) => navigate({ search: next })}
@@ -54,7 +59,7 @@ function ReceiptsPage() {
             <p className="text-sm text-muted-foreground">
               {hasFilter(search)
                 ? "条件に合う証憑がありません。"
-                : "証憑がありません。上の「証憑を追加」から保存してください。"}
+                : "証憑がありません。「追加する」から保存してください。"}
             </p>
           )}
           {items && items.length > 0 && <ReceiptList entityId={entityId} receipts={items} />}

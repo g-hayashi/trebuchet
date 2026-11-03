@@ -105,7 +105,7 @@ description: "Task list for 011-ui-overhaul"
 
 **Independent Test**: spec US4 の Independent Test
 
-- [ ] T023 [US4] テスト先行で証憑の追加（R11・R4、FR-026〜028）: `apps/web/src/routes/e/$entityId/receipts/new.tsx` を作り直し `receipts/capture.tsx` を消す（`routeTree.gen.ts` を再生成）。`<input type="file" multiple>` で選んだファイルを既存の `POST /receipts` に 1 件ずつ順に送り、結果（追加・重複・エラー）を 1 件ずつ出す。区分の既定は `localStorage` の `trebuchet.receiptCategory.<entityId>`（理由の文は今のまま）。追加の後、未入力の証憑の値の入力（取引年月日・金額・取引先、AI の読み取りが有効なら「読み取る」）を同じ画面で開き、「次の未入力の証憑へ」で進む。主な操作は「追加する」。テスト: `receipts-upload.test.tsx`・`receipts-capture.test.tsx`・`receipt-fill.test.tsx` を `receipts-new.test.tsx` にまとめて直す（3 件、重複 1 件、区分の既定、次へ）
+- [X] T023 [US4] テスト先行で証憑の追加（R11・R4、FR-026〜028）: `apps/web/src/routes/e/$entityId/receipts/new.tsx` を作り直し `receipts/capture.tsx` を消す（`routeTree.gen.ts` を再生成）。`<input type="file" multiple>` で選んだファイルを既存の `POST /receipts` に 1 件ずつ順に送り、結果（追加・重複・エラー）を 1 件ずつ出す。区分の既定は `localStorage` の `trebuchet.receiptCategory.<entityId>`（理由の文は今のまま）。追加の後、未入力の証憑の値の入力（取引年月日・金額・取引先、AI の読み取りが有効なら「読み取る」）を同じ画面で開き、「次の未入力の証憑へ」で進む。主な操作は「追加する」。テスト: `receipts-upload.test.tsx`・`receipts-capture.test.tsx`・`receipt-fill.test.tsx` を `receipts-new.test.tsx` にまとめて直す（3 件、重複 1 件、区分の既定、次へ）
 - [ ] T024 [US4] テスト先行で一覧と詳細（R11、FR-029・030）: `receipts/index.tsx` の上に「未入力」（`missing=true`）・「仕訳なし」（`link=none`）の切替（引数の読み取りは T009 で済み。ここは切替の見た目）、今の検索の欄（取引年月日・金額・取引先。憲法 II）は残してテストで確かめる、`receipts/$receiptId.tsx` を上に原本・値・結びつき、下に `<details>` で情報・履歴・差し替え・削除。テスト `receipts-list.test.tsx`・`receipt-detail.test.tsx`・`receipt-edit.test.tsx`・`receipt-link.test.tsx` を直す
 
 **Checkpoint**: 3 件をまとめて追加し、一覧に戻らずに値を入れ終える

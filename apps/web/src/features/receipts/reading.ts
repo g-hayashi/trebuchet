@@ -28,7 +28,8 @@ export function useReceiptReading(receipt: ReceiptDetail | undefined): {
 } {
   const settings = useQuery(aiSettingsQuery());
   const ready = !settings.isPending;
-  const enabled = settings.data?.receiptImagesEnabled === true;
+  const enabled =
+    settings.data?.externalEnabled === true && settings.data.receiptImagesEnabled === true;
   if (!enabled || receipt === undefined) {
     return { ready, enabled, latest: undefined, usable: undefined };
   }
@@ -48,7 +49,8 @@ export function useReceiptReading(receipt: ReceiptDetail | undefined): {
 export function useAutoReceiptReading(entityId: string): (receiptId: string) => void {
   const queryClient = useQueryClient();
   const settings = useQuery(aiSettingsQuery());
-  const enabled = settings.data?.receiptImagesEnabled === true;
+  const enabled =
+    settings.data?.externalEnabled === true && settings.data.receiptImagesEnabled === true;
   return (receiptId) => {
     if (!enabled) return;
     void postReceiptReading(entityId, receiptId)
