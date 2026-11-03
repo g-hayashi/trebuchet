@@ -32,7 +32,7 @@ description: "Task list for 011-ui-overhaul"
 
 ## Phase 1: Setup
 
-- [ ] T001 （メイン）`.gitignore` に `bak/` を足し（R16、FR-056）、`specs/INVARIANTS.md` に INV-69〜72 の行を data-model §4 の文で足す
+- [X] T001 （メイン）`.gitignore` に `bak/` を足し（R16、FR-056）、`specs/INVARIANTS.md` に INV-69〜72 の行を data-model §4 の文で足す
 
 ---
 
