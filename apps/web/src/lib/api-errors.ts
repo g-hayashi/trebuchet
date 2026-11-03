@@ -162,6 +162,18 @@ export function describeError(error: unknown): ErrorDescription {
           "リモートが有効で、ts.net の名前が登録されているときだけ発行できます。設定の「リモート」で登録してください。",
         details: [],
       };
+    case "TAILSCALE_NOT_FOUND":
+      return {
+        message:
+          "tailscale が見つかりません。Tailscale を入れて、アプリを起動してからもう一度お試しください。",
+        details: [],
+      };
+    case "TAILSCALE_COMMAND_FAILED":
+      return {
+        message:
+          "tailscale のコマンドが失敗しました。Tailscale にサインインして接続中か確認してください。",
+        details: [],
+      };
     case "PAIRING_TOKEN_INVALID":
       return {
         message: "ペアリングの URL が無効か期限切れです。Mac でもう一度発行してください",

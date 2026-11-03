@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import type { PasskeyView } from "@trebuchet/schema";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
-import { PairingSection } from "../remote/PairingSection";
 import { addPasskey, authKeys, deletePasskey, passkeysQuery, renamePasskey } from "./api";
 
 /** パスキーの一覧（FR-005）。名前の変更・削除・追加。削除できるかどうかはサーバーが決める（LAST_PASSKEY） */
@@ -175,7 +175,13 @@ export function PasskeyList() {
           </Button>
         </form>
         <ApiErrorMessage error={add.error} />
-        {passkeys && <PairingSection passkeyRpIds={passkeys.map((p) => p.rpId)} />}
+        <p className="text-sm text-muted-foreground">
+          ts.net の名前で使うパスキーは、
+          <Link to="/settings/remote" className="underline">
+            リモートの画面
+          </Link>
+          でペアリングします。
+        </p>
       </CardContent>
     </Card>
   );

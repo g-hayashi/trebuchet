@@ -12,6 +12,7 @@ import {
   openRecurringUnitOfWork,
   vault,
 } from "./deps.ts";
+import { SERVER_PORT } from "./lib/origin.ts";
 import { startBackgroundServices } from "./lib/startup.ts";
 import { resolveWebDist, withWebDist } from "./static.ts";
 
@@ -21,7 +22,7 @@ await authStore().deleteAllSessions();
 
 // R13: 認証を入れるまではループバックだけで待ち受ける
 const hostname = "127.0.0.1";
-const port = 8787;
+const port = SERVER_PORT;
 
 // ビルド済みの web があれば /api の外に配信する（004 R3。TREBUCHET_WEB_DIST、既定 apps/web/dist）。
 // Host の検査のリモートの設定は、API と同じく要求ごとに auth.sqlite から読む

@@ -12,6 +12,9 @@ export type GetRemoteSettings = () => Promise<RemoteSettings>;
 const REMOTE_DISABLED: RemoteSettings = { enabled: false, host: null };
 export const getRemoteSettingsDisabled: GetRemoteSettings = async () => REMOTE_DISABLED;
 
+/** server が待ち受けるポート（`main.ts` の待ち受けと、tailscale serve の転送先で共有する） */
+export const SERVER_PORT = 8787;
+
 /** 開発の画面（Vite の proxy 経由）の Host とオリジン。テストと bench が要求に付ける値もこれ */
 export const DEV_WEB_HOST = "localhost:5173";
 export const DEV_WEB_ORIGIN = `http://${DEV_WEB_HOST}`;
@@ -20,8 +23,8 @@ export const DEV_WEB_ORIGIN = `http://${DEV_WEB_HOST}`;
  * ローカルの Host（Vite の proxy 経由と server への直接）。
  * `127.0.0.1:8787` はヘルスチェックと E2E の server の起動確認だけに使う（RP ID は持たない）
  */
-const LOCAL_RP_HOSTS: readonly string[] = [DEV_WEB_HOST, "localhost:8787"];
-const LOCAL_HOSTS: readonly string[] = [...LOCAL_RP_HOSTS, "127.0.0.1:8787"];
+const LOCAL_RP_HOSTS: readonly string[] = [DEV_WEB_HOST, `localhost:${SERVER_PORT}`];
+const LOCAL_HOSTS: readonly string[] = [...LOCAL_RP_HOSTS, `127.0.0.1:${SERVER_PORT}`];
 
 /**
  * 要求の接続先の名前を取り出す、唯一の場所。今は `Host` ヘッダーだけを見る。

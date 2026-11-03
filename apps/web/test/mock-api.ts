@@ -63,6 +63,11 @@ const DEFAULT_ROUTES: Record<string, Handler> = {
   "GET /api/backup/status": () => ok(DEFAULT_BACKUP_STATUS),
   // リモート（004 US4）。無効・名前なし
   "GET /api/settings/remote": () => ok({ enabled: false, host: null }),
+  // tailscale の CLI の状態（004 US4）。未インストール
+  "GET /api/settings/remote/tailscale": () =>
+    ok({ installed: false, running: false, dnsName: null, serving: false }),
+  // ペアリングの案内が数える、パスキーの一覧
+  "GET /api/auth/passkeys": () => ok({ passkeys: [] }),
   // AI の設定（006 US5）。端末内だけを使い、外部は未設定
   "GET /api/settings/ai": () => ok(DEFAULT_AI_SETTINGS),
 };

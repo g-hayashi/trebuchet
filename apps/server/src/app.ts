@@ -21,7 +21,8 @@ import type { BackupRunner } from "./lib/backup-run.ts";
 import { ChallengeStore } from "./lib/challenges.ts";
 import type { FmServer } from "./lib/fm-server.ts";
 import { createJobStore, type JobStore } from "./lib/jobs.ts";
-import type { GetRemoteSettings } from "./lib/origin.ts";
+import { type GetRemoteSettings, SERVER_PORT } from "./lib/origin.ts";
+import { createTailscaleCli, type TailscaleCli } from "./lib/tailscale.ts";
 import type { Vault } from "./lib/vault.ts";
 import type { WebAuthnVerifier } from "./lib/webauthn.ts";
 import { simpleWebAuthnVerifier } from "./lib/webauthn-simplewebauthn.ts";
@@ -83,6 +84,8 @@ export type AppOptions = {
   /** リモート（ts.net）の設定の読み込み。既定は `AuthStore.getRemoteSettings`（auth.sqlite。施錠中も読める）。テストは差し替える */
   getRemoteSettings?: GetRemoteSettings;
   store?: () => AuthStore;
+  /** tailscale の CLI（serve の状態・開始・停止）。既定は実物（`createTailscaleCli({ port: SERVER_PORT })`）。テストは偽物を渡す */
+  tailscale?: TailscaleCli;
   clock?: Clock;
   /** AI の推定の差し替え（006）。省略すると `ai` の設定から作った端末内・外部の実物を使う */
   suggestion?: SuggestionProviders;
@@ -171,7 +174,14 @@ export function createApp(options: AppOptions = {}) {
       }),
     )
     .route("/settings", aiSettingsRoutes({ clock, ai }))
-    .route("/settings", remoteSettingsRoutes({ store, clock }))
+    .route(
+      "/settings",
+      remoteSettingsRoutes({
+        store,
+        clock,
+        tailscale: options.tailscale ?? createTailscaleCli({ port: SERVER_PORT }),
+      }),
+    )
     .route("/entities", entitiesRoutes({ clock }))
     .route(
       "/entities/:entityId",

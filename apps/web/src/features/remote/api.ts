@@ -9,7 +9,19 @@ const pairing = api.api.auth.pairing;
 
 export const remoteKeys = {
   settings: ["settings", "remote"] as const,
+  tailscale: ["settings", "remote", "tailscale"] as const,
 };
+
+/** tailscale の CLI から読んだ状態（Mac のローカルの Host だけ。それ以外は 421） */
+export const tailscaleStatusQuery = () =>
+  queryOptions({
+    queryKey: remoteKeys.tailscale,
+    queryFn: async () => unwrap(await remote.tailscale.$get()),
+  });
+
+/** serve の開始・停止。実行後の状態を返す（見つからなければ 503、コマンドの失敗は 502） */
+export const setTailscaleServe = async (enabled: boolean) =>
+  unwrap(await remote.tailscale.serve.$put({ json: { enabled } }));
 
 export const remoteSettingsQuery = () =>
   queryOptions({

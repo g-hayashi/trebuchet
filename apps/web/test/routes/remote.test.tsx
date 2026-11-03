@@ -1,7 +1,7 @@
 import { startAuthentication } from "@simplewebauthn/browser";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { AuthStatus } from "@trebuchet/schema";
+import type { AuthStatus, TailscaleStatus } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route as RemoteRoute } from "@/routes/settings/remote";
 import { Route as SecurityRoute } from "@/routes/settings/security";
@@ -15,7 +15,7 @@ import {
 } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-// 004 US4（T018）: リモート（Tailscale）の設定と、パスキーの一覧からのペアリングの発行
+// 004 US4（T018）: リモート（Tailscale）の画面。tailscale の状態と serve、設定、ペアリング
 
 vi.mock("@simplewebauthn/browser", () => ({
   startRegistration: vi.fn(),
@@ -34,31 +34,46 @@ const HOST = "mac.tail1234.ts.net";
 const callsTo = (calls: ApiCall[], method: string, path: string) =>
   calls.filter((c) => c.method === method && c.path === path);
 
-describe("設定 → リモート", () => {
-  function open(
-    settings: { enabled: boolean; host: string | null } = { enabled: false, host: null },
-    extra: Parameters<typeof mockApi>[0] = {},
-  ) {
-    const calls = mockApi({
-      "GET /api/settings/remote": () => ok(settings),
-      ...extra,
-    });
-    renderRoute(RemoteRoute, { path: "/settings/remote", url: "/settings/remote" });
-    return calls;
-  }
+const TS_PATH = "/api/settings/remote/tailscale";
+const SERVE_PATH = "/api/settings/remote/tailscale/serve";
+const tsStatus = (s: Partial<TailscaleStatus> = {}): TailscaleStatus => ({
+  installed: true,
+  running: true,
+  dnsName: HOST,
+  serving: false,
+  ...s,
+});
 
-  it("tailscale serve の手順と、Funnel は使わない・tailnet の中だけの注意を出す", async () => {
-    open();
+function openRemote(
+  settings: { enabled: boolean; host: string | null } = { enabled: false, host: null },
+  extra: Parameters<typeof mockApi>[0] = {},
+) {
+  const calls = mockApi({
+    "GET /api/settings/remote": () => ok(settings),
+    ...extra,
+  });
+  renderRoute(RemoteRoute, { path: "/settings/remote", url: "/settings/remote" });
+  return calls;
+}
+
+describe("設定 → リモート", () => {
+  it("手動の手順は「手動で行う場合」に畳み、Funnel は使わない・tailnet の中だけの注意を出す", async () => {
+    openRemote();
     expect(await screen.findByRole("heading", { name: "リモート" })).toBeInTheDocument();
+    const details = screen.getByText("手動で行う場合").closest("details");
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveAttribute("open");
     expect(
-      screen.getByText("tailscale serve --bg --https=443 http://127.0.0.1:8787"),
-    ).toBeVisible();
+      within(details as HTMLElement).getByText(
+        "tailscale serve --bg --https=443 http://127.0.0.1:8787",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Funnel は使わない/)).toBeInTheDocument();
     expect(screen.getByText(/tailnet の中だけ/)).toBeInTheDocument();
   });
 
   it("名前を入れて有効にして保存すると、{ enabled, host } を PUT する", async () => {
-    const calls = open(
+    const calls = openRemote(
       { enabled: false, host: null },
       { "PUT /api/settings/remote": (call) => ok(call.body) },
     );
@@ -76,7 +91,7 @@ describe("設定 → リモート", () => {
   });
 
   it("保存済みの設定を表示し、無効化しても名前は残して送る", async () => {
-    const calls = open(
+    const calls = openRemote(
       { enabled: true, host: HOST },
       { "PUT /api/settings/remote": (call) => ok(call.body) },
     );
@@ -94,7 +109,7 @@ describe("設定 → リモート", () => {
   });
 
   it("名前が空のときは null を送る", async () => {
-    const calls = open(
+    const calls = openRemote(
       { enabled: false, host: null },
       { "PUT /api/settings/remote": (call) => ok(call.body) },
     );
@@ -108,7 +123,7 @@ describe("設定 → リモート", () => {
   });
 
   it("不正な名前（422 REMOTE_HOST_INVALID）は文言を出し、保存したとは出さない", async () => {
-    open(
+    openRemote(
       { enabled: false, host: null },
       {
         "PUT /api/settings/remote": () =>
@@ -122,9 +137,122 @@ describe("設定 → リモート", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("*.ts.net");
     expect(screen.queryByText("保存しました。")).not.toBeInTheDocument();
   });
+
+  it("Tailscale・リモートの設定・ペアリングの 3 つのカードが並ぶ", async () => {
+    openRemote();
+    expect(await screen.findByRole("region", { name: "Tailscale" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "リモートの設定" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "ペアリング" })).toBeInTheDocument();
+  });
 });
 
-describe("パスキーの一覧: この名前で使うパスキーの追加（ペアリング）", () => {
+describe("リモート: Tailscale の状態と serve", () => {
+  const card = async () => screen.findByRole("region", { name: "Tailscale" });
+
+  it("未インストール: 案内を出し、開始・停止のボタンは出さない", async () => {
+    openRemote(undefined, { [`GET ${TS_PATH}`]: () => ok(tsStatus({ installed: false })) });
+    const c = await card();
+    expect(await within(c).findByText(/インストールされていません/)).toBeInTheDocument();
+    expect(within(c).queryByRole("button", { name: "開始" })).not.toBeInTheDocument();
+    expect(within(c).queryByRole("button", { name: "停止" })).not.toBeInTheDocument();
+  });
+
+  it("停止中: 案内を出し、開始は出さない", async () => {
+    openRemote(undefined, {
+      [`GET ${TS_PATH}`]: () => ok(tsStatus({ running: false, dnsName: null })),
+    });
+    const c = await card();
+    expect(await within(c).findByText(/停止中/)).toBeInTheDocument();
+    expect(within(c).queryByRole("button", { name: "開始" })).not.toBeInTheDocument();
+  });
+
+  it("接続中・公開していない: 名前を出し、「開始」で serve を有効にする", async () => {
+    let current = tsStatus();
+    const calls = openRemote(undefined, {
+      [`GET ${TS_PATH}`]: () => ok(current),
+      [`PUT ${SERVE_PATH}`]: () => {
+        current = tsStatus({ serving: true });
+        return ok(current);
+      },
+    });
+    const c = await card();
+    expect(await within(c).findByText(HOST)).toBeInTheDocument();
+    expect(within(c).getByText(/公開していません/)).toBeInTheDocument();
+    expect(within(c).queryByRole("button", { name: "停止" })).not.toBeInTheDocument();
+
+    await userEvent.click(within(c).getByRole("button", { name: "開始" }));
+    expect(await within(c).findByText(`https://${HOST}`)).toBeInTheDocument();
+    expect(callsTo(calls, "PUT", SERVE_PATH)[0]?.body).toEqual({ enabled: true });
+    expect(within(c).getByRole("button", { name: "停止" })).toBeInTheDocument();
+  });
+
+  it("公開中: URL を出し、「停止」で serve を止める", async () => {
+    let current = tsStatus({ serving: true });
+    const calls = openRemote(undefined, {
+      [`GET ${TS_PATH}`]: () => ok(current),
+      [`PUT ${SERVE_PATH}`]: () => {
+        current = tsStatus({ serving: false });
+        return ok(current);
+      },
+    });
+    const c = await card();
+    expect(await within(c).findByText(`https://${HOST}`)).toBeInTheDocument();
+    await userEvent.click(within(c).getByRole("button", { name: "停止" }));
+    await waitFor(() => expect(within(c).queryByText(`https://${HOST}`)).not.toBeInTheDocument());
+    expect(callsTo(calls, "PUT", SERVE_PATH)[0]?.body).toEqual({ enabled: false });
+  });
+
+  it("tailscale のコマンドの失敗（502）は文言を出す", async () => {
+    openRemote(undefined, {
+      [`GET ${TS_PATH}`]: () => ok(tsStatus()),
+      [`PUT ${SERVE_PATH}`]: () => apiError(502, "TAILSCALE_COMMAND_FAILED", "failed"),
+    });
+    const c = await card();
+    await userEvent.click(await within(c).findByRole("button", { name: "開始" }));
+    expect(await within(c).findByRole("alert")).toHaveTextContent("tailscale");
+  });
+});
+
+describe("リモート: この Mac の名前を入れる", () => {
+  const FILL = "この Mac の名前を入れる";
+
+  it("名前が空なら、ボタンで tailscale の名前を入力欄に入れる（保存はしない）", async () => {
+    const calls = openRemote(
+      { enabled: false, host: null },
+      { [`GET ${TS_PATH}`]: () => ok(tsStatus()) },
+    );
+    await userEvent.click(await screen.findByRole("button", { name: FILL }));
+    expect(screen.getByLabelText("ts.net の名前")).toHaveValue(HOST);
+    expect(callsTo(calls, "PUT", "/api/settings/remote")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: FILL })).not.toBeInTheDocument();
+  });
+
+  it("名前が違っても出る。同じなら出ない", async () => {
+    openRemote(
+      { enabled: true, host: "other.tail1234.ts.net" },
+      { [`GET ${TS_PATH}`]: () => ok(tsStatus()) },
+    );
+    expect(await screen.findByRole("button", { name: FILL })).toBeInTheDocument();
+  });
+
+  it("tailscale の名前と同じなら出ない", async () => {
+    openRemote({ enabled: true, host: HOST }, { [`GET ${TS_PATH}`]: () => ok(tsStatus()) });
+    await screen.findByText(HOST);
+    await waitFor(() => expect(screen.getByLabelText("ts.net の名前")).toHaveValue(HOST));
+    expect(screen.queryByRole("button", { name: FILL })).not.toBeInTheDocument();
+  });
+
+  it("tailscale の名前が取れないときは出ない", async () => {
+    openRemote(
+      { enabled: false, host: null },
+      { [`GET ${TS_PATH}`]: () => ok(tsStatus({ running: false, dnsName: null })) },
+    );
+    await screen.findByText(/停止中/);
+    expect(screen.queryByRole("button", { name: FILL })).not.toBeInTheDocument();
+  });
+});
+
+describe("リモート: ペアリング", () => {
   const PAIR_BUTTON = "この名前で使うパスキーを追加（ペアリング）";
   const mac = {
     id: "pk1",
@@ -134,38 +262,44 @@ describe("パスキーの一覧: この名前で使うパスキーの追加（�
     lastUsedAt: null,
   };
   const phone = { ...mac, id: "pk2", name: "iPhone", rpId: HOST };
+  const enabled = { remote: { enabled: true, host: HOST } };
 
   function open(
     status: Partial<AuthStatus>,
     passkeys: (typeof mac)[],
     extra: Parameters<typeof mockApi>[0] = {},
   ) {
-    const calls = mockApi({
+    return openRemote(status.remote ?? { enabled: false, host: null }, {
       "GET /api/auth/status": () => ok({ ...DEFAULT_AUTH_STATUS, ...status }),
       "GET /api/auth/passkeys": () => ok({ passkeys }),
-      "GET /api/auth/sessions": () => ok({ sessions: [] }),
       "GET /api/auth/events": () => ok({ events: [] }),
       ...extra,
     });
-    renderRoute(SecurityRoute, { path: "/settings/security", url: "/settings/security" });
-    return calls;
   }
-  const enabled = { remote: { enabled: true, host: HOST } };
 
-  it("localhost でサインイン中・リモートが有効・名前が登録済み・その名前のパスキーが無いときだけ出る", async () => {
+  it("localhost でサインイン中・リモートが有効・名前が登録済みなら、リモートの画面に出る", async () => {
     open(enabled, [mac]);
-    expect(await screen.findByRole("button", { name: PAIR_BUTTON })).toBeInTheDocument();
+    const section = await screen.findByRole("region", { name: "ペアリング" });
+    expect(await within(section).findByRole("button", { name: PAIR_BUTTON })).toBeInTheDocument();
+    expect(section).not.toHaveTextContent("登録済み");
+  });
+
+  it("その名前のパスキーがすでにあっても隠さず、本数を示して追加もできる", async () => {
+    open(enabled, [mac, phone]);
+    const section = await screen.findByRole("region", { name: "ペアリング" });
+    expect(await within(section).findByText("登録済み（1 本）")).toBeInTheDocument();
+    expect(within(section).getByRole("button", { name: PAIR_BUTTON })).toBeInTheDocument();
   });
 
   it.each([
     ["リモートが無効", { remote: { enabled: false, host: HOST } }, [mac]],
     ["名前が未登録", { remote: { enabled: true, host: null } }, [mac]],
-    ["その名前のパスキーがすでにある", enabled, [mac, phone]],
     ["ts.net の名前で開いている", { ...enabled, rpId: HOST }, [mac]],
-  ])("出ない: %s", async (_name, status, passkeys) => {
+  ])("発行のボタンは出ない: %s", async (_name, status, passkeys) => {
     open(status, passkeys);
-    await screen.findByRole("table", { name: "パスキーの一覧" });
-    expect(screen.queryByRole("button", { name: PAIR_BUTTON })).not.toBeInTheDocument();
+    const section = await screen.findByRole("region", { name: "ペアリング" });
+    await screen.findByRole("region", { name: "リモートの設定" });
+    expect(within(section).queryByRole("button", { name: PAIR_BUTTON })).not.toBeInTheDocument();
   });
 
   /** 再認証（reauth/verify）の前は 403 REAUTH_REQUIRED、後は発行の応答 */
@@ -190,7 +324,7 @@ describe("パスキーの一覧: この名前で使うパスキーの追加（�
     };
   }
 
-  it("再認証が要るときはパスキーで確認してから発行し、URL・10分・一度だけを表示する", async () => {
+  it("再認証が要るときはパスキーで確認してから発行し、URL・QR・10分・一度だけを表示する", async () => {
     vi.mocked(startAuthentication).mockResolvedValue({ id: "pk1" } as never);
     const gate = reauthGate();
     const calls = open(enabled, [mac], gate.routes);
@@ -200,8 +334,11 @@ describe("パスキーの一覧: この名前で使うパスキーの追加（�
     expect(within(panel).getByRole("textbox", { name: "ペアリングの URL" })).toHaveValue(
       gate.issued.url,
     );
+    const qr = within(panel).getByRole("img", { name: "ペアリングの QR コード" });
+    expect(qr.querySelector("svg")).not.toBeNull();
     expect(panel).toHaveTextContent("10 分");
     expect(panel).toHaveTextContent("一度だけ");
+    expect(panel).toHaveTextContent("iCloud キーチェーン");
     expect(calls.filter((c) => c.method === "POST").map((c) => c.path)).toEqual([
       "/api/auth/pairing",
       "/api/auth/reauth/options",
@@ -228,5 +365,35 @@ describe("パスキーの一覧: この名前で使うパスキーの追加（�
     await userEvent.click(await screen.findByRole("button", { name: PAIR_BUTTON }));
     expect(await screen.findByRole("alert")).toHaveTextContent("リモート");
     expect(screen.queryByRole("region", { name: "ペアリングの URL" })).not.toBeInTheDocument();
+  });
+});
+
+describe("設定 → セキュリティ: パスキーの一覧", () => {
+  it("ペアリングはここでは行わず、リモートの画面へのリンクを 1 行出す", async () => {
+    mockApi({
+      "GET /api/auth/status": () =>
+        ok({ ...DEFAULT_AUTH_STATUS, remote: { enabled: true, host: HOST } }),
+      "GET /api/auth/passkeys": () =>
+        ok({
+          passkeys: [
+            {
+              id: "pk1",
+              name: "MacBook",
+              rpId: "localhost",
+              createdAt: "2026-10-01T00:00:00.000Z",
+              lastUsedAt: null,
+            },
+          ],
+        }),
+      "GET /api/auth/sessions": () => ok({ sessions: [] }),
+      "GET /api/auth/events": () => ok({ events: [] }),
+    });
+    renderRoute(SecurityRoute, { path: "/settings/security", url: "/settings/security" });
+    await screen.findByRole("table", { name: "パスキーの一覧" });
+    expect(
+      screen.queryByRole("button", { name: "この名前で使うパスキーを追加（ペアリング）" }),
+    ).not.toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /リモート/ });
+    expect(link).toHaveAttribute("href", "/settings/remote");
   });
 });

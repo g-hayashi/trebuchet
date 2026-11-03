@@ -34,6 +34,21 @@ export type RemoteSettings = z.infer<typeof RemoteSettings>;
  */
 export const RemoteSettingsInput = z.object({ enabled: z.boolean(), host: z.string().nullable() });
 
+/** `GET /settings/remote/tailscale` の応答（tailscale の CLI から読んだ状態） */
+export const TailscaleStatus = z.object({
+  installed: z.boolean(),
+  running: z.boolean(),
+  /** 小文字・末尾の `.` なし。取れなければ null */
+  dnsName: z.string().nullable(),
+  /** `https://<dnsName>` が `http://127.0.0.1:<port>` へ serve されているか */
+  serving: z.boolean(),
+});
+export type TailscaleStatus = z.infer<typeof TailscaleStatus>;
+
+/** `PUT /settings/remote/tailscale/serve` の本文 */
+export const TailscaleServeInput = z.object({ enabled: z.boolean() });
+export type TailscaleServeInput = z.infer<typeof TailscaleServeInput>;
+
 export const AuthStatus = z.object({
   registered: z.boolean(),
   signedIn: z.boolean(),
