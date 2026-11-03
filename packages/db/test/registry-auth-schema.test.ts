@@ -16,14 +16,15 @@ afterEach(() => {
 });
 
 /** 008 の D2: 認証の表は auth.sqlite、端末の設定とバックアップの記録は registry */
-const AUTH_TABLES = ["passkeys", "key_wraps", "sessions", "auth_events"];
-const REGISTRY_TABLES = [
-  "entities",
-  "app_settings",
-  "backup_runs",
+const AUTH_TABLES = [
+  "passkeys",
+  "key_wraps",
+  "sessions",
+  "auth_events",
+  "remote_settings",
   "pairing_tokens",
-  "ai_settings",
 ];
+const REGISTRY_TABLES = ["entities", "app_settings", "backup_runs", "ai_settings"];
 
 const NOW = "2026-10-20T09:00:00.000Z";
 const runOn =
@@ -99,7 +100,7 @@ const insertRun = (id: string, trigger: string, status: string) =>
     status,
   );
 const insertPairing = (id: string, tokenHash: string) =>
-  runRegistry(
+  runAuth(
     "INSERT INTO pairing_tokens (id, token_hash, rp_id, created_at, expires_at, used_at) VALUES (?, ?, 'a.b.ts.net', ?, ?, NULL)",
     id,
     tokenHash,
@@ -108,7 +109,7 @@ const insertPairing = (id: string, tokenHash: string) =>
   );
 
 describe("表の置き場所（008 の D2）", () => {
-  it("auth.sqlite は認証の 4 表だけ、registry は認証の表を持たない。すべて STRICT", () => {
+  it("auth.sqlite は認証の 4 表とリモートの 2 表だけ、registry は認証・リモートの表を持たない。すべて STRICT", () => {
     const authTables = tables(auth);
     expect(authTables.map((t) => t.name).sort()).toEqual([...AUTH_TABLES].sort());
     const registryTables = tables(registry);
@@ -232,17 +233,12 @@ describe("auth.sqlite の CHECK・トリガー", () => {
 });
 
 describe("registry の CHECK・UNIQUE", () => {
-  it("app_settings.key は 6 種だけ（backup_passphrase_set は 008 で廃止）", () => {
-    for (const k of [
-      "mac_id",
-      "remote_enabled",
-      "remote_host",
-      "backup_folder",
-      "backup_force_write",
-      "recovery_code_acknowledged",
-    ])
+  it("app_settings.key は 4 種だけ（backup_passphrase_set は 008 で、remote_* は 004/T016 で廃止）", () => {
+    for (const k of ["mac_id", "backup_folder", "backup_force_write", "recovery_code_acknowledged"])
       insertSetting(k);
     expect(() => insertSetting("backup_passphrase_set")).toThrow(/CHECK/);
+    expect(() => insertSetting("remote_enabled")).toThrow(/CHECK/);
+    expect(() => insertSetting("remote_host")).toThrow(/CHECK/);
     expect(() => insertSetting("other")).toThrow(/CHECK/);
   });
 
@@ -253,9 +249,38 @@ describe("registry の CHECK・UNIQUE", () => {
     expect(() => insertRun("r4", "pre_restore", "succeeded")).toThrow(/CHECK/);
     expect(() => insertRun("r5", "manual", "running")).toThrow(/CHECK/);
   });
+});
+
+describe("auth.sqlite のリモートの 2 表（004/T016）", () => {
+  const insertRemote = (id: number, enabled: number, host: string | null) =>
+    runAuth(
+      "INSERT INTO remote_settings (id, enabled, host, updated_at) VALUES (?, ?, ?, ?)",
+      id,
+      enabled,
+      host,
+      NOW,
+    );
+
+  it("remote_settings は 1 行だけ、enabled は 0/1、host は null か *.ts.net、有効なら host が必要", () => {
+    insertRemote(1, 0, null);
+    expect(() => insertRemote(2, 0, null)).toThrow(/CHECK/);
+    runAuth("DELETE FROM remote_settings");
+    insertRemote(1, 1, "mac.tail1234.ts.net");
+    runAuth("DELETE FROM remote_settings");
+    expect(() => insertRemote(1, 2, null)).toThrow(/CHECK/);
+    expect(() => insertRemote(1, 0, "example.com")).toThrow(/CHECK/);
+    expect(() => insertRemote(1, 0, "ts.net")).toThrow(/CHECK/);
+    expect(() => insertRemote(1, 1, null)).toThrow(/CHECK/);
+  });
 
   it("pairing_tokens.token_hash の重複は失敗", () => {
     insertPairing("p1", "dup");
     expect(() => insertPairing("p2", "dup")).toThrow(/UNIQUE/);
+  });
+
+  it("registry に remote_settings・pairing_tokens は無い", () => {
+    const names = tables(registry).map((t) => t.name);
+    expect(names).not.toContain("remote_settings");
+    expect(names).not.toContain("pairing_tokens");
   });
 });

@@ -24,6 +24,7 @@ type NavTo =
   | "/e/$entityId/invoices"
   | "/e/$entityId/recurring"
   | "/e/$entityId/statements"
+  | "/e/$entityId/receipts"
   | "/e/$entityId/work-hours"
   | "/e/$entityId/invoice-settings";
 
@@ -43,6 +44,8 @@ const NAV: NavGroup[] = [
       { label: "仕訳", to: "/e/$entityId/journals" },
       // 銀行・カードの明細（006・007）。一覧から、取込・候補の確認と承認・しきい値の設定へ進む
       { label: "明細", to: "/e/$entityId/statements" },
+      // 領収書・請求書などの画像と PDF（010）。保存・検索・仕訳との結びつき
+      { label: "証憑", to: "/e/$entityId/receipts" },
       { label: "定期仕訳", to: "/e/$entityId/recurring" },
     ],
   },

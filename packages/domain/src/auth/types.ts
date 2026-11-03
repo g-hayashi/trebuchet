@@ -6,8 +6,6 @@ export type { AuthEvent, AuthEventKind, BackupRun };
 
 export type AppSettingKey =
   | "mac_id"
-  | "remote_enabled"
-  | "remote_host"
   | "backup_folder"
   | "backup_force_write"
   | "recovery_code_acknowledged";

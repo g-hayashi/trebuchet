@@ -17,19 +17,12 @@ export const entities = sqliteTable(
   (t) => [check("entities_kind", sql`${t.kind} IN ('individual', 'corporation')`)],
 );
 
-/** 端末に結びつく設定（バックアップに含めない）。data-model §1.5 */
+/** 端末に結びつく設定（バックアップに含めない）。data-model §1.5。リモートの設定は 004/T016 で auth.sqlite（`remote_settings`）へ移した */
 export const appSettings = sqliteTable(
   "app_settings",
   {
     key: text("key", {
-      enum: [
-        "mac_id",
-        "remote_enabled",
-        "remote_host",
-        "backup_folder",
-        "backup_force_write",
-        "recovery_code_acknowledged",
-      ],
+      enum: ["mac_id", "backup_folder", "backup_force_write", "recovery_code_acknowledged"],
     }).primaryKey(),
     value: text("value").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -37,7 +30,7 @@ export const appSettings = sqliteTable(
   (t) => [
     check(
       "app_settings_key",
-      sql`${t.key} IN ('mac_id', 'remote_enabled', 'remote_host', 'backup_folder', 'backup_force_write', 'recovery_code_acknowledged')`,
+      sql`${t.key} IN ('mac_id', 'backup_folder', 'backup_force_write', 'recovery_code_acknowledged')`,
     ),
   ],
 );
@@ -63,16 +56,6 @@ export const backupRuns = sqliteTable(
   ],
 );
 
-/** ペアリングのトークン（ハッシュのみ、単回・期限つき）。data-model §1.7 */
-export const pairingTokens = sqliteTable("pairing_tokens", {
-  id: text("id").primaryKey(),
-  tokenHash: text("token_hash").notNull().unique(),
-  rpId: text("rp_id").notNull(),
-  createdAt: text("created_at").notNull(),
-  expiresAt: text("expires_at").notNull(),
-  usedAt: text("used_at"),
-});
-
 /**
  * AI の接続の設定（1 行。端末に結びつくのでバックアップに含めない）。006 の data-model §2.1・R12。
  * API キーはキーチェーン（`trebuchet-ai-api-key`）に置き、この表に持たない
@@ -85,12 +68,19 @@ export const aiSettings = sqliteTable(
     externalEnabled: integer("external_enabled").notNull().default(0),
     externalBaseUrl: text("external_base_url"),
     externalModel: text("external_model"),
+    /** 010 R15: 証憑の画像を外部の AI へ送ってよいか。1 にできるのは external_enabled = 1 のときだけ */
+    receiptImagesEnabled: integer("receipt_images_enabled").notNull().default(0),
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [
     check("ai_settings_single", sql`${t.id} = 1`),
     check("ai_settings_local_enabled", sql`${t.localEnabled} IN (0, 1)`),
     check("ai_settings_external_enabled", sql`${t.externalEnabled} IN (0, 1)`),
+    check("ai_settings_receipt_images_enabled", sql`${t.receiptImagesEnabled} IN (0, 1)`),
+    check(
+      "ai_settings_receipt_images_external",
+      sql`${t.receiptImagesEnabled} = 0 OR ${t.externalEnabled} = 1`,
+    ),
     check(
       "ai_settings_external",
       sql`${t.externalEnabled} = 0 OR (${t.externalBaseUrl} IS NOT NULL AND ${t.externalModel} IS NOT NULL)`,

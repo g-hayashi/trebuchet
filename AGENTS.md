@@ -30,17 +30,19 @@ apps/server ──→ packages/schema
 | 目的 | コマンド |
 |---|---|
 | 開発サーバー（server 8787 と web 5173） | `pnpm dev` |
+| web をビルドして server を起動（web と API を `http://localhost:8787` から配信。004 US4。Tailscale の手順は README） | `pnpm start` |
 | 全テスト（Vitest の全プロジェクト） | `pnpm test` |
 | 1 プロジェクトのテスト | `pnpm vitest run --project <domain\|db\|server\|web\|schema>` |
 | 型チェック（全パッケージ + scripts） | `pnpm typecheck` |
 | Lint（Biome） | `pnpm lint` |
 | 整形（Biome で書き換え） | `pnpm format` |
-| 性能計測（SC-004 の仕訳 2,000 件、003 の SC-006 の決算書、009 の SC-005 の資産の画面。認証つき） | `pnpm bench:reports` |
+| 性能計測（SC-004 の仕訳 2,000 件、003 の SC-006 の決算書、009 の SC-005 の資産の画面、010 の SC-002 の証憑 5,000 件の検索。認証つき） | `pnpm bench:reports` |
 | 性能計測（freee 取込の 500 仕訳、002 の SC-002） | `pnpm bench:import` |
 | 性能計測（バックアップ、004 の SC-005） | `pnpm bench:backup`（環境変数でしきい値と件数を変えられる。使い方は `scripts/bench-backup.ts` の先頭のコメント） |
 | 性能計測（明細 500 件の CSV の読み取り・確認・候補、007 の SC-006。AI は呼ばない） | `pnpm bench:statements`（環境変数でしきい値・回数・件数を変えられる。使い方は `scripts/bench-statements.ts` の先頭のコメント） |
 | 列の案の評価（端末内の AI `fm serve` を呼ぶ。合成の例。CI に含まれない） | `pnpm eval:columns`（結果を `.tmp/eval-columns/` に残し前回と比べる。使い方は `scripts/eval-column-suggestions.ts` の先頭のコメント） |
-| バックアップ（`.tbk`）の復元（server を止めて行う） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--yes]`（回復キーを標準入力から読む。`scripts/restore-backup.ts` の先頭のコメント） |
+| 証憑の読み取りの評価（外部の AI を呼ぶ。合成の画像。CI に含まれない） | `pnpm eval:receipts`（接続先は環境変数。結果を `.tmp/eval-receipts/` に残し前回と比べる。使い方は `scripts/eval-receipts.ts` の先頭のコメント） |
+| バックアップ（`.tbk`）の復元（server を止めて行う） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--receipts-dir <dir>] [--allow-missing-receipts] [--yes]`（回復キーを標準入力から読む。証憑のフラグは下の 010 の節。`scripts/restore-backup.ts` の先頭のコメント） |
 | freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。`scripts/verify-freee-import.ts` の先頭のコメント。`--continue` は 008 以降使えない: 実行ごとに乱数の DK で作るため） |
 | 青色申告決算書の照合（実データ、ローカル専用） | `pnpm verify:tax-return`（`work/` を読む。`scripts/verify-tax-return.ts` の先頭のコメント） |
 | E2E（Playwright、Chromium） | `pnpm --filter @trebuchet/web e2e` |
@@ -59,7 +61,7 @@ apps/server ──→ packages/schema
 - **月・日付（`YYYY-MM`、`YYYY-MM-DD`）の計算は `packages/domain/src/dates.ts` に集める**（`addDays`、`monthEnd`、`dateInMonth`、`addMonths`、`monthIndex`、`monthOfDate` など）。ユースケース・各機能で月の計算・`pad`・月の正規表現を書き直さない。
 - **db のリポジトリの共通部品は `packages/db/src/internal.ts`**（`TenantConn`、`insertionOrder`・`rowidOf`、`asTaxCategory`）。リポジトリごとに型や `rowid` の並びを書き直さない（外へは export しない）。
 - **server のルートは `respond(c, result, (v) => c.json(..., status))`**（`apps/server/src/errors.ts`）で結果を返す（失敗は `fail`）。パスの `:year` は `validate("param", FiscalYearParam)`（`validator.ts` が 4 桁でない年を「会計期間が見つかりません」にする）。時刻を使うルートは `routes(options: RouteOptions)` で clock を受け取り、`createApp({ clock })` が全ルートに渡す。Zod の issue は `validationError`（`errors.ts`）で `details.issues` にする。
-- **不変条件**は `specs/INVARIANTS.md`（INV-1〜60 の索引。正本は各 `data-model.md` §4）。対応するテストは fast-check の性質テストで書く。`fc.assert(fc.property(...))` を直接呼ぶ（`@fast-check/vitest` は使わない。001/R6）。
+- **不変条件**は `specs/INVARIANTS.md`（INV-1〜68 の索引。正本は各 `data-model.md` §4）。対応するテストは fast-check の性質テストで書く。`fc.assert(fc.property(...))` を直接呼ぶ（`@fast-check/vitest` は使わない。001/R6）。
 - **テストの共通部品を使う**（同じ準備を各ファイルに書かない）。db: `packages/db/src/testing.ts` の `createTestEntity`・`accountIdOf`・`useTempDataDir`・`NOW`/`TODAY`。domain: `packages/domain/test/fakes/`（ストアごとのフェイク。`fakes.ts` は再エクスポート）、`test-dates.ts`（`NOW`/`TODAY` の正本）、`ledger-setup.ts`（`setupBase`・`accountIdOf`）。server: `apps/server/test/helpers.ts`（`createTestEntity`・`accountLookup`・`errorOf`・`json`・`okBody`・`makeClock`。`backup-helpers.ts`・`invoicing-helpers.ts` はこれを拡張する）。bench: `scripts/lib/bench-common.ts`。
 - **web のテストはコンポーネントテスト**（Testing Library + jsdom。`apps/web/test/render-route.tsx`、`mock-api.ts`、置き場所は `apps/web/test/routes/`）。テストのためだけに node 専用のロジックを別ファイルに切り出さない。新しい API を呼ぶ画面を足したら `mock-api.ts` に既定の応答を足し、既存の web のテストが落ちないことを確かめる。ルートを足したら `pnpm --filter @trebuchet/web build` で `routeTree.gen.ts` を再生成してから typecheck する。
 - **web の API 呼び出しと query key は `features/<機能>/api.ts`**。画面・ルートのファイルで `api.api...` や `unwrap(...)` を直接呼ばない。`lib/queries.ts` には機能をまたぐ `invalidateLedger` だけを置く。
@@ -161,7 +163,10 @@ apps/server ──→ packages/schema
 - **キーチェーン（`SecretStore`）は 006 の外部の AI の API キーだけに使う**。`/usr/bin/security -i` の標準入力に 1 行を流す（引数は `ps` に出る。004/R12）。テストはキーチェーンに触れず、`SecretStore` の偽物を使う。
 - **平文の写しは `.tmp/` の下に作り、`finally` で必ず消す**。server の起動時に、前回の異常終了で残った `.tmp/backup-snapshot-*/` を消す。
 - バックアップには、端末に結びつく設定（`app_settings`）と認証の表（`auth.sqlite`）を含めない。復元した帳簿は、次の起動で回復キーで解錠し、パスキーを登録するところから始まる。
-- **US4（Tailscale によるリモートの利用: `pnpm start`、server の静的配信、ペアリング）は保留**（2026-10-24）。未実装なので、これらのコマンドや場所を前提にしない。
+- **US4（Tailscale によるリモートの利用）は 2026-11-02 に 008 の形で再開した**。リモートの設定とペアリングのトークンは `auth.sqlite`（施錠中も読める）。手順は README の「スマホから使う」。Funnel は使わない。
+  - server: `apps/server/src/static.ts`（`TREBUCHET_WEB_DIST`、既定 `apps/web/dist` の静的配信。`pnpm start`）、`routes/settings.ts`（`GET/PUT /settings/remote`、422 `REMOTE_HOST_INVALID`）、`routes/pairing.ts`（`POST /auth/pairing`: 再認証つき・ローカルの Host だけ。`pairing/register/*`: 公開、解錠中だけ、トークンは包みを作ってから消費）、`lib/auth-support.ts`（`routes/auth.ts` と共有の登録・セッション・再認証の部品）
+  - web: `features/remote/`（`api.ts`、`RemoteSettingsForm.tsx`、`PairingSection.tsx`）、`routes/settings/remote.tsx`、`routes/pair.tsx`・`features/auth/Pair.tsx`（`/pair` は `routes/__root.tsx` の `PUBLIC_PATHS` で AuthGate の例外）
+  - ペアリングのトークン・URL をログ・`auth_events.detail` に出さない。`/pair` の画面は帳簿の API を呼ばない
 
 ## 請求と定期仕訳（005）
 
@@ -200,7 +205,7 @@ apps/server ──→ packages/schema
 | 画面 | `apps/web/src/features/statements/`、`features/ai-settings/`、`apps/web/src/routes/e/$entityId/statements/`、`apps/web/src/routes/settings/ai.tsx` |
 | E2E・性能 | `apps/web/e2e/statements.spec.ts`、`scripts/bench-statements.ts` |
 
-- **AI へ送る情報は `buildAiPayload`（`mask.ts`）を通したものだけ**（006/R11、INV-45）。端末内も外部も、評価も同じ `createAiSuggester`（`usecases/inference.ts`）を共有する。口座の名前・メモ・取引先の一覧は送らない。AI の出力は `AiSuggestion`（Zod）で検証し、形に合わない・一覧にないコードは「候補なし」にする（INV-46）。
+- **AI へ送る情報は `buildAiPayload`（`mask.ts`）を通したものだけ**（006/R11、INV-45。010 の証憑の画像は例外。専用の `ReceiptReader` を通す。下の 010 の節）。端末内も外部も、評価も同じ `createAiSuggester`（`usecases/inference.ts`）を共有する。口座の名前・メモ・取引先の一覧は送らない。AI の出力は `AiSuggestion`（Zod）で検証し、形に合わない・一覧にないコードは「候補なし」にする（INV-46）。
 - **`inferWithAi` は 読む → AI を呼ぶ（UnitOfWork の外）→ 書く の 3 段**（006/R8）。AI の呼び出し（遅い、外部に出る）をトランザクションの中に入れない。取込と承認は 1 つの `StatementUnitOfWork` の中で書く（INV-47）。
 - **端末内のモデルは `fm serve`**（モデル名 `system`。`stream` は送らない（`stream: false` には応答しない。省くと SSE で返り、`ai-client.ts` が読み分ける）。ポート `TREBUCHET_FM_PORT`、既定 18790）。最初の推定で起動し、server の終了で止める（006/R10）。外部の AI の API キーはキーチェーン（004 と同じ `SecretStore`）に置く。`ai_settings` は registry の表で、バックアップに含めない（006/R12）。
 - **AI の設定の必須項目の検査**（外部を有効にするのに URL・モデル・API キーがそろっていなければ 422 `AI_NOT_CONFIGURED`）は `apps/server/src/routes/ai-settings.ts` にある。帳簿の業務ルールではなく、端末の設定値の検査なので server に置く。
@@ -260,6 +265,32 @@ apps/server ──→ packages/schema
 - **E2E の仮想の認証器は `hasPrf: true`**。パスキーを書き出して戻すと PRF を失うので使わない。テストの間は回復キーを引き継ぎ、`enterVault` で回復キーで解錠して新しいパスキーを登録してから始める。E2E は利用者の端末で実行する。
 - **`pnpm verify:freee --continue` は使えない**（実行ごとに乱数の DK で作るため。利用者の判断で使えないままにする）。
 - **registry のマイグレーションは 008 で作り直した**（認証の表を `auth.sqlite` に分けたため）。以前の `data/` の DB は読めない。
+
+## 証憑（010）
+
+仕様: `specs/010-receipts/`。暗号化と名前、バックアップの別置き、INV-45 の例外、紙の原本を残す理由: [ADR 0014](docs/adr/0014-receipt-storage.md)。領収書・レシートの画像と PDF を保存・検索し、仕訳と結びつけ、外部の AI で値の候補を読む。
+
+| 層 | 場所 |
+|---|---|
+| 入出力の型（証憑、検索の条件、警告、AI の出力 `AiReceiptReading`、`RECEIPT_MAX_BYTES`・`RECEIPT_MAX_PIXELS`） | `packages/schema/src/receipts.ts`、`ai.ts`、`errors.ts` |
+| 業務ルール（形式の判定、入力期限・解像度の警告、検索の正規化、候補の順位、履歴からの復元、JPEG のメタデータの除去、指示文と送る中身、出力の検証、評価の集計） | `packages/domain/src/receipts/`（`format.ts`、`warnings.ts`、`search.ts`、`candidates.ts`、`history.ts`、`jpeg-metadata.ts`、`reading-prompt.ts`、`reading.ts`、`evals.ts`） |
+| ユースケース | `packages/domain/src/usecases/receipts.ts`（追加・更新・差し替え・削除・検索）、`receipt-links.ts`（結びつき・仕訳の登録）、`receipt-reading.ts`（`readReceipt`） |
+| 永続化（5 表、ファイルの暗号化、バックアップの写しと復元） | `packages/db/src/receipt-repository.ts`（`ReceiptStore`、`ReceiptUnitOfWork`）、`receipt-files.ts`（`encryptReceipt`・`decryptReceipt`、`ReceiptFileStore`）、`backup/receipts.ts`（置き場所への写しと復元） |
+| HTTP | `apps/server/src/routes/receipts.ts`（`journals.ts` は仕訳の一覧・詳細の合成だけを足す）、`ai-settings.ts`（`receiptImagesEnabled`） |
+| server の部品 | `apps/server/src/lib/image-tool.ts`（`sips`）、`ai-client.ts`（`createReceiptReader`）、`ai-runtime.ts`、`backup-run.ts`、`startup.ts`、`vault.ts` |
+| 画面 | `apps/web/src/features/receipts/`（`api.ts`、`labels.ts`、`ReceiptReadingNote.tsx` など）、`apps/web/src/routes/e/$entityId/receipts/`（`index.tsx`、`$receiptId.tsx`、`capture.tsx`）、`routes/settings/ai.tsx` |
+| 評価・性能・文書 | `scripts/eval-receipts.ts`、`scripts/bench-reports.ts`（SC-002）、`packages/domain/test/fixtures/receipts/`（`README.md`、`expected.ts`）、`docs/receipts/`（`processing-rules.md`、`system-overview.md`） |
+
+- **証憑のファイルは `TRC1` で暗号化し、名前は平文の SHA-256 + `.trc`**（`receipt-files.ts`）。鍵は `HKDF(DK, salt, "trebuchet/receipt:<entityId>/v1")` で、`withDataKey` の中でだけ作り `fill(0)` する。置き場所は `<データ場所>/receipts/<entityId>/`（`tenants/` と分ける）。DK・鍵をディスク・ログ・応答に出さない（INV-51・61）。施錠中は読み書きできない（`VaultLockedError`、401 `LOCKED`）。応答は `Cache-Control: no-store`。初回の設定で以前の事業体を `discarded-<時刻>/` に移すときは `receipts/` も移す。
+- **証憑の行・ファイル・履歴を物理削除しない**（トリガーで止める。INV-63）。追加・差し替えは全部か無か、同じ内容は `RECEIPT_DUPLICATE`（INV-62）。形式は中身で判定する（拡張子・`Content-Type` は見ない）。経路（Mac／スマホ・リモート）は要求の Host で決める。
+- **INV-45 の例外は、`ReceiptReader`（domain のポート）と `createReceiptReader`（`ai-client.ts`）の 1 つの経路だけ**（憲法 III、ADR 0014）。利用者が外部への画像の送信を明示的に選んだ（2026-11-02）。外部の endpoint だけで、`external_enabled` と `receipt_images_enabled` がともに真のときだけ呼ぶ（無効なら 1 回も呼ばず 422 `AI_NOT_CONFIGURED`。INV-66）。送るのは `buildReceiptReadingRequest` の固定の指示文・科目と税区分の一覧・メタデータを除いた JPEG 1 枚だけ（取引先の一覧・仕訳・口座・メモ・元のファイル名・入力済みの値は送らない）。006 の `createAiSuggester`・`buildAiPayload` に画像の口を作らない。出力は `AiReceiptReading` で検証し、証憑の値を変えない（INV-67）。`readReceipt` は 読む → AI を呼ぶ（UnitOfWork の外）→ 書く の 3 段。
+- **画像の変換は macOS の `sips`**（`lib/image-tool.ts`。新しい依存を足さない）。HEIC → JPEG、PDF の 1 ページ目、AI 用の JPEG を作る。平文の作業ファイルは `.tmp/receipt-convert-<乱数>/` に書き、`finally` で消す。server の起動時に残りを消す（`startup.ts`）。テストは `sips` を呼ばず、偽の `ReceiptImageTool` を使う。
+- **バックアップは、`.tbk` に証憑のファイルを入れず、置き場所の `trebuchet-receipts/<entityId>/` に増分で写す**（`backup/receipts.ts`、`backup-run.ts`）。名前は `HMAC-SHA256(K, sha256)`（同期フォルダに平文のハッシュを見せない）で、中身はデータ場所の `.trc` と同じバイト列。写しの失敗は `.tbk` を書かずに失敗にする（INV-68）。世代の整理は `.tbk` だけで、証憑の写しは消さない。復元は `--receipts-dir`（既定は `.tbk` と同じフォルダの `trebuchet-receipts/`）から全件を検証して戻し、1 件でも欠ければ何も変えずに失敗する（`RECEIPTS_MISSING`）。`--allow-missing-receipts` で帳簿だけを戻せる（欠けた証憑は画面で「ファイルがありません」）。復元前の今の証憑は `.before-restore-<日時>/receipts/` に残る。INV-54（`.tbk` の形式）は変わらない。
+- **`eval:receipts` の規則**: 指示文・`RECEIPT_AI_MAX_PX`・`RECEIPT_READ_TIMEOUT_MS` を変えるときは、変更の前と後で `pnpm eval:receipts` を実行して結果を比べる（Constitution IV、010/R17）。外部の AI に合成の画像を送るので CI に含まれない。結果は `.tmp/eval-receipts/` に件数と割合だけを残し、ファイル名・取引先・値を書かない。CI のテストは偽の `ReceiptReader` で集計だけを確かめる。フィクスチャの画像は合成（実データの写真・実在の店名・番号を入れない。作り方は同じ場所の `README.md`）。
+- **税制の値の 4 つの key**: `RECEIPT_INPUT_CYCLE_MONTHS`（2）、`RECEIPT_INPUT_GRACE_BUSINESS_DAYS`（7）、`RECEIPT_SCAN_MIN_LONG_PX`（2,338）、`RECEIPT_SCAN_MIN_SHORT_PX`（1,654）。足し方は 003 の「税制の値の足し方」（`seed/tax-parameters.ts` とマイグレーションの両方）に従う。値は取引年月日（未入力なら受領日）で解決し、解決できなければ警告を出さない（保存を止めない）。入力期間・解像度の警告は保存を拒まない目安。
+- **紙を撮影した証憑（区分 `paper_scan`）は、紙の原本も保存する運用**（010/R1、plan Q1 = (A)。自作のアプリはタイムスタンプの代わりにならない）。電子取引（`electronic`）は事務処理規程で要件を満たす（`docs/receipts/`）。タイムスタンプを足すときは新しい ADR を書く。
+- **区分などの表示名は `features/receipts/labels.ts` の 1 か所だけ**に置く（`paper_scan` は「紙を撮影（原本は保存）」、`electronic` は「電子取引」）。識別子は schema の値のまま使い、画面・テストで表示名を書き直さない。
+- **web の証憑の操作の後の読み直し**: 仕訳が変わる操作（証憑と仕訳の結びつけ・解除、証憑からの仕訳の登録）は `invalidateLedger`（証憑の query も読み直す）、証憑だけが変わる操作は `receiptKeys.all(entityId)` を読み直す。API 呼び出しと query key は `features/receipts/api.ts`（「開発の進め方」のとおり）。
 
 ## データと一時ファイル
 

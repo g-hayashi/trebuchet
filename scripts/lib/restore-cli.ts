@@ -6,7 +6,9 @@
  */
 import { existsSync } from "node:fs";
 import { connect } from "node:net";
+import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { RECEIPT_STORE_DIRNAME } from "../../packages/db/src/backup/receipts.ts";
 import {
   type RestoreErrorCode,
   type RestoreOptions,
@@ -52,7 +54,8 @@ export function isServerRunning(port: number = SERVER_PORT, timeoutMs = 1000): P
   });
 }
 
-const USAGE = "使い方: pnpm restore -- --file <backup.tbk> [--data-dir <dir>] [--yes]";
+const USAGE =
+  "使い方: pnpm restore -- --file <backup.tbk> [--data-dir <dir>] [--receipts-dir <dir>] [--allow-missing-receipts] [--yes]";
 
 const MESSAGES: Record<RestoreErrorCode, string> = {
   INVALID: "回復キーが違うか、ファイルが壊れています",
@@ -62,6 +65,8 @@ const MESSAGES: Record<RestoreErrorCode, string> = {
   BEFORE_BACKUP_FAILED:
     "復元の前の帳簿のバックアップを書けなかったため、中止しました。帳簿は変わっていません",
   RESTORE_FAILED: "復元に失敗しました。帳簿は変わっていません",
+  RECEIPTS_MISSING:
+    "証憑のファイルが置き場所にそろっていません。帳簿は変わっていません。--receipts-dir で置き場所を指定するか、帳簿だけを戻すなら --allow-missing-receipts を付けてください",
 };
 
 function formatSummary(summary: RestoreSummary): string[] {
@@ -94,6 +99,8 @@ export async function runRestoreCli(argv: string[], deps: RestoreCliDeps): Promi
     file?: string | undefined;
     "data-dir"?: string | undefined;
     yes?: boolean | undefined;
+    "receipts-dir"?: string | undefined;
+    "allow-missing-receipts"?: boolean | undefined;
   };
   try {
     ({ values } = parseArgs({
@@ -102,6 +109,8 @@ export async function runRestoreCli(argv: string[], deps: RestoreCliDeps): Promi
         file: { type: "string" },
         "data-dir": { type: "string" },
         yes: { type: "boolean" },
+        "receipts-dir": { type: "string" },
+        "allow-missing-receipts": { type: "boolean" },
       },
       strict: true,
       allowPositionals: false,
@@ -135,12 +144,20 @@ export async function runRestoreCli(argv: string[], deps: RestoreCliDeps): Promi
     return EXIT_USAGE;
   }
 
+  // 証憑の写しの置き場所の既定は、.tbk と同じフォルダの trebuchet-receipts/（010 R11）
+  const receiptsDir = values["receipts-dir"] ?? join(dirname(resolve(file)), RECEIPT_STORE_DIRNAME);
+  let missingReceipts = 0;
   const restore = deps.restore ?? restoreBackup;
   const result = await restore({
     file,
     recoveryKey,
     dataDir,
     tmpRoot: deps.tmpRoot,
+    receiptsDir,
+    allowMissingReceipts: values["allow-missing-receipts"] === true,
+    onReceiptsMissing: (count) => {
+      missingReceipts = count;
+    },
     confirm: async (summary) => {
       for (const line of formatSummary(summary)) deps.stdout(line);
       if (values.yes === true) return true;
@@ -149,6 +166,9 @@ export async function runRestoreCli(argv: string[], deps: RestoreCliDeps): Promi
   });
   if (!result.ok) {
     deps.stderr(MESSAGES[result.error]);
+    if (result.error === "RECEIPTS_MISSING") {
+      deps.stderr(`見つからない、または壊れている証憑のファイル: ${missingReceipts} 件`);
+    }
     return result.error === "CANCELLED" ? EXIT_CANCELLED : EXIT_INVALID;
   }
   if (result.value.beforeRestoreBackup !== null) {
@@ -156,6 +176,11 @@ export async function runRestoreCli(argv: string[], deps: RestoreCliDeps): Promi
   }
   if (result.value.previousDataDir !== null) {
     deps.stdout(`元のデータ場所: ${result.value.previousDataDir}`);
+  }
+  if (result.value.missingReceipts > 0) {
+    deps.stdout(
+      `戻せなかった証憑のファイル: ${result.value.missingReceipts} 件（画面では「ファイルがありません」と表示されます）`,
+    );
   }
   deps.stdout("復元しました。アプリを起動し、回復キーで解錠して、新しいパスキーを登録してください");
   return EXIT_OK;

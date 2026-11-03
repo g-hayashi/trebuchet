@@ -11,8 +11,12 @@ import {
   isUnlocked,
   listBackupFiles,
   packArchive,
+  type ReceiptRefs,
+  receiptRefsFromSnapshotFiles,
+  receiptStoreDir,
   sha256Hex,
   snapshotDataDir,
+  syncReceiptsToStore,
   unpackArchive,
   withDataKey,
   writeBackupFile,
@@ -60,8 +64,16 @@ export type BackupRunner = {
   idle(): Promise<void>;
 };
 
-/** `backup_runs.error_code`（`FOLDER_NOT_FOUND`・`WRITE_FAILED`・`VERIFY_FAILED` は db の `BackupFileError` と同じ） */
-type FailureCode = "FOLDER_NOT_FOUND" | "WRITE_FAILED" | "VERIFY_FAILED" | "SNAPSHOT_FAILED";
+/**
+ * `backup_runs.error_code`（`FOLDER_NOT_FOUND`・`WRITE_FAILED`・`VERIFY_FAILED` は db の `BackupFileError` と同じ。
+ * `RECEIPTS_SYNC_FAILED` = 証憑のファイルを置き場所に写せなかった。010）
+ */
+type FailureCode =
+  | "FOLDER_NOT_FOUND"
+  | "WRITE_FAILED"
+  | "VERIFY_FAILED"
+  | "SNAPSHOT_FAILED"
+  | "RECEIPTS_SYNC_FAILED";
 
 class RunFailure extends Error {
   readonly code: FailureCode;
@@ -104,9 +116,12 @@ export function createBackupRunner(deps: BackupRunnerDeps): BackupRunner {
       let tmpDir: string | undefined;
       let archive: Buffer;
       let entities: BackupRun["summary"];
+      let receiptRefs: ReceiptRefs[];
       try {
         tmpDir = createSnapshotDir(deps.tmpRoot);
         const snapshot = snapshotDataDir(deps.dataDir(), tmpDir);
+        // 写した各事業体の DB の receipt_files.sha256（この `.tbk` が参照する証憑。X5）。平文の写しを消す前に読む
+        receiptRefs = receiptRefsFromSnapshotFiles(snapshot.files);
         await yieldToEventLoop();
         archive = packArchive(snapshot);
         entities = snapshot.manifest.entities;
@@ -120,6 +135,12 @@ export function createBackupRunner(deps: BackupRunnerDeps): BackupRunner {
 
       // 置き場所の一覧（置き場所がなければここで FOLDER_NOT_FOUND）
       const existing = listBackupFiles(folder);
+
+      // 証憑のファイルを置き場所に増分で写す（.tbk の外。R11）。`.tbk` を書かない（skipped を含む）ときも
+      // 写しは確かめる。どの `.tbk` も、書いた時点で参照する証憑が置き場所にそろっている（INV-68）。
+      // 写せなければ `.tbk` を書かずに失敗する
+      await syncReceipts(folder, receiptRefs);
+
       const forceWrite = (await auth.getSetting("backup_force_write")) === "1";
       const lastSuccess = await backups.getLastSuccess();
       if (
@@ -221,6 +242,24 @@ export function createBackupRunner(deps: BackupRunnerDeps): BackupRunner {
       }
     },
   };
+
+  /** 証憑の写し。DK は写しを作って使い、終わりに 0 で埋める（長い処理の間に施錠されても読めるように） */
+  async function syncReceipts(folder: string, refs: ReceiptRefs[]): Promise<void> {
+    if (!refs.some((r) => r.sha256s.length > 0)) return;
+    const dk = withDataKey((key) => Buffer.from(key));
+    try {
+      await syncReceiptsToStore({
+        dk,
+        storeDir: receiptStoreDir(folder),
+        refs,
+        yieldControl: yieldToEventLoop,
+      });
+    } catch {
+      throw new RunFailure("RECEIPTS_SYNC_FAILED");
+    } finally {
+      dk.fill(0);
+    }
+  }
 
   /** 世代の整理。失敗しても成功の記録は変えない */
   function prune(folder: string, macId: string, now: string): void {

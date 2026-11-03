@@ -3,6 +3,8 @@ import type { TaxParameter } from "../types.ts";
 const NTA_2100 = "https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/2100.htm";
 const NTA_2072 = "https://www.nta.go.jp/taxes/shiraberu/taxanswer/shotoku/2072.htm";
 const NTA_SHITSUGI_OPENING_COST = "https://www.nta.go.jp/law/shitsugi/shotoku/04/08.htm";
+const NTA_SCANNER_QA =
+  "https://www.nta.go.jp/law/joho-zeikaishaku/sonota/jirei/pdf/0026007-006_03.pdf";
 const MOF_FY2026 = "https://www.mof.go.jp/tax_policy/tax_reform/outline/fy2026/08taikou_03.htm";
 
 /**
@@ -84,5 +86,35 @@ export const TAX_PARAMETERS: readonly TaxParameter[] = [
     effectiveTo: null,
     value: 60,
     sourceUrl: NTA_SHITSUGI_OPENING_COST,
+  },
+  // 010: 証憑の電子保存（スキャナ保存）の期間と画素数（specs/010-receipts/data-model §1.6、research R2・R3）。
+  // 出典はスキャナ一問一答（令和8年7月）。問23（最長 2 か月）・問22・23（おおむね 7 営業日）・問26（A4 相当の画素数）
+  {
+    key: "RECEIPT_INPUT_CYCLE_MONTHS",
+    effectiveFrom: "2024-01-01",
+    effectiveTo: null,
+    value: 2,
+    sourceUrl: NTA_SCANNER_QA,
+  },
+  {
+    key: "RECEIPT_INPUT_GRACE_BUSINESS_DAYS",
+    effectiveFrom: "2024-01-01",
+    effectiveTo: null,
+    value: 7,
+    sourceUrl: NTA_SCANNER_QA,
+  },
+  {
+    key: "RECEIPT_SCAN_MIN_LONG_PX",
+    effectiveFrom: "2024-01-01",
+    effectiveTo: null,
+    value: 2338,
+    sourceUrl: NTA_SCANNER_QA,
+  },
+  {
+    key: "RECEIPT_SCAN_MIN_SHORT_PX",
+    effectiveFrom: "2024-01-01",
+    effectiveTo: null,
+    value: 1654,
+    sourceUrl: NTA_SCANNER_QA,
   },
 ];

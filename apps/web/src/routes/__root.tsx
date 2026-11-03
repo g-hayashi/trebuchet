@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
+import { createRootRouteWithContext, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { AuthGate } from "@/features/auth/AuthGate";
 import { BackupStatusBanner } from "@/features/backup/BackupStatusBanner";
 import { EntitySwitcher } from "@/features/entities/EntitySwitcher";
@@ -8,7 +8,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   component: RootLayout,
 });
 
+/**
+ * サインインなしで開く画面（AuthGate の例外）。ペアリングの URL を開いたスマホは、まだパスキーがない。
+ * 帳簿のデータは読まない（API はペアリングの手続きだけを呼び、server が検査する）
+ */
+const PUBLIC_PATHS: readonly string[] = ["/pair"];
+
 function RootLayout() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  if (PUBLIC_PATHS.includes(pathname)) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <Outlet />
+      </div>
+    );
+  }
   // 画面は、解錠しているときだけ描画する（FR-001・003）。帳簿のデータを含まない静的ファイルは常に配信される
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -27,6 +41,9 @@ function RootLayout() {
             </Link>
             <Link to="/settings/ai" className="text-sm underline-offset-4 hover:underline">
               AI の設定
+            </Link>
+            <Link to="/settings/remote" className="text-sm underline-offset-4 hover:underline">
+              リモート
             </Link>
             <Link to="/settings/security" className="text-sm underline-offset-4 hover:underline">
               設定

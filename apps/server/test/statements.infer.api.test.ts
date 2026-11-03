@@ -94,7 +94,7 @@ async function setup(options: { fmAvailable?: boolean; reply?: (code: string) =>
   const statementId = statements[0]?.id ?? "";
 
   const putAi = (json: Record<string, unknown>) =>
-    client.api.settings.ai.$put({ json: json as never });
+    client.api.settings.ai.$put({ json: { receiptImagesEnabled: false, ...json } as never });
   const infer = (statementIds: string[]) =>
     e.statements.infer.$post({ param, json: { statementIds } });
   const candidate = async () =>

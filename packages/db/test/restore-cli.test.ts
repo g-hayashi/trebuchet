@@ -222,6 +222,80 @@ describe("restore-backup（使い方と終了コード）", () => {
     expect(siblings()).toEqual([]);
   });
 
+  describe("証憑（010 T025）", () => {
+    type RestoreFn = NonNullable<RestoreCliDeps["restore"]>;
+    // 偽の復元は中身を読まない。ファイルがあることだけを CLI が確かめる
+    beforeEach(() => writeFileSync(backupFile(), "not-a-real-backup"));
+    /** 渡された options を控え、決めた結果を返す偽の復元 */
+    function fakeRestore(
+      outcome: "ok" | "missing",
+      count = 0,
+    ): { restore: RestoreFn; seen: Parameters<RestoreFn>[0][] } {
+      const seen: Parameters<RestoreFn>[0][] = [];
+      const restore: RestoreFn = async (options) => {
+        seen.push(options);
+        if (outcome === "missing") {
+          options.onReceiptsMissing?.(count);
+          return { ok: false, error: "RECEIPTS_MISSING" };
+        }
+        return {
+          ok: true,
+          value: {
+            summary: {
+              createdAt: "x",
+              macId: "m",
+              appVersion: { registry: 1, tenant: 1 },
+              entities: [],
+              hasExistingLedger: false,
+              differences: [],
+            },
+            beforeRestoreBackup: null,
+            previousDataDir: null,
+            missingReceipts: count,
+          },
+        };
+      };
+      return { restore, seen };
+    }
+
+    it("--receipts-dir の既定は .tbk と同じフォルダの trebuchet-receipts/。フラグがなければ欠けを許さない", async () => {
+      const f = fakeRestore("ok");
+      const h = harness({ restore: f.restore });
+      expect(await runRestoreCli(args("--yes"), h.deps)).toBe(0);
+      expect(f.seen[0]?.receiptsDir).toBe(join(tmp.dir, "trebuchet-receipts"));
+      expect(f.seen[0]?.allowMissingReceipts).toBe(false);
+    });
+
+    it("--receipts-dir と --allow-missing-receipts を復元に渡す", async () => {
+      const f = fakeRestore("ok");
+      const h = harness({ restore: f.restore });
+      const code = await runRestoreCli(
+        args("--yes", "--receipts-dir", join(tmp.dir, "elsewhere"), "--allow-missing-receipts"),
+        h.deps,
+      );
+      expect(code).toBe(0);
+      expect(f.seen[0]?.receiptsDir).toBe(join(tmp.dir, "elsewhere"));
+      expect(f.seen[0]?.allowMissingReceipts).toBe(true);
+    });
+
+    it("RECEIPTS_MISSING は 1 で、件数と対処（--allow-missing-receipts）を出し、帳簿は変わらないと伝える", async () => {
+      const f = fakeRestore("missing", 3);
+      const h = harness({ restore: f.restore });
+      expect(await runRestoreCli(args("--yes"), h.deps)).toBe(1);
+      const text = h.err.join("\n");
+      expect(text).toContain("3 件");
+      expect(text).toContain("--allow-missing-receipts");
+      expect(text).toContain("帳簿は変わっていません");
+    });
+
+    it("欠けを許して成功したときは、戻せなかった件数を知らせる", async () => {
+      const f = fakeRestore("ok", 2);
+      const h = harness({ restore: f.restore });
+      expect(await runRestoreCli(args("--yes", "--allow-missing-receipts"), h.deps)).toBe(0);
+      expect(h.out.join("\n")).toContain("2 件");
+    });
+  });
+
   it("存在しない --file は 2", async () => {
     const h = harness();
     expect(await runRestoreCli(args("--yes"), h.deps)).toBe(2);

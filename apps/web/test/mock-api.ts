@@ -1,5 +1,6 @@
 import type { ErrorCode } from "@trebuchet/schema";
 import { vi } from "vitest";
+import { receiptDetail, receiptReading } from "./receipts-fixtures";
 
 /** query はクエリ文字列（キーと値）。body は JSON のボディ、form は multipart/form-data のボディ */
 export type ApiCall = {
@@ -49,6 +50,7 @@ const DEFAULT_AI_SETTINGS = {
   externalEnabled: false,
   externalBaseUrl: null,
   externalModel: null,
+  receiptImagesEnabled: false,
   apiKeySet: false,
 };
 
@@ -59,6 +61,13 @@ const DEFAULT_ROUTES: Record<string, Handler> = {
   "POST /api/auth/reauth/verify": () => ({ status: 204, body: undefined }),
   // 全画面の上部の知らせ（004）が読む。設定済みで、知らせなし
   "GET /api/backup/status": () => ok(DEFAULT_BACKUP_STATUS),
+  // リモート（004 US4）。無効・名前なし
+  "GET /api/settings/remote": () => ok({ enabled: false, host: null }),
+  // tailscale の CLI の状態（004 US4）。未インストール
+  "GET /api/settings/remote/tailscale": () =>
+    ok({ installed: false, running: false, dnsName: null, serving: false }),
+  // ペアリングの案内が数える、パスキーの一覧
+  "GET /api/auth/passkeys": () => ok({ passkeys: [] }),
   // AI の設定（006 US5）。端末内だけを使い、外部は未設定
   "GET /api/settings/ai": () => ok(DEFAULT_AI_SETTINGS),
 };
@@ -120,6 +129,32 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   "GET /inference-rules": () => ok({ rules: [] }),
   // 評価の履歴（US5）。実行はまだない
   "GET /statements/evals": () => ok({ runs: [] }),
+  // 証憑（010 US1）。一覧は空。詳細は電子取引の 1 件で、PATCH は送られた値を当てて version を進める
+  "GET /receipts": () => ok({ receipts: [], nextCursor: null }),
+  "GET /receipts/:receiptId": () => ok({ receipt: receiptDetail() }),
+  // 仕訳に結びつける候補（010 US3）。候補なし。仕訳の一覧・詳細の既定の応答は各テストが持つので、
+  // 証憑の項目（一覧の `receiptCount`、詳細の `receipts`）は画面が省略を 0・空として扱う
+  "GET /receipts/:receiptId/journal-candidates": () => ok({ candidates: [] }),
+  // 証憑の履歴（010 US5）。追加の 1 件だけ
+  "GET /receipts/:receiptId/history": () =>
+    ok({
+      history: [
+        {
+          occurredAt: "2026-10-20T09:00:00.000Z",
+          targetType: "receipt",
+          action: "create",
+          reason: null,
+          before: null,
+          after: null,
+        },
+      ],
+    }),
+  // 外部の AI の読み取り（010 US4）。設定が無効なら画面は呼ばない。呼ばれたら候補なしの成功を返す
+  "POST /receipts/:receiptId/readings": () => ok({ reading: receiptReading() }, 201),
+  "PATCH /receipts/:receiptId": ({ body }) => {
+    const { version, ...values } = body as { version: number } & Record<string, unknown>;
+    return ok({ receipt: { ...receiptDetail(), ...values, version: version + 1 } });
+  },
   "GET /statement-settings": () =>
     ok({
       settings: { bulkThreshold: 80, externalThreshold: 60, updatedAt: "2026-10-26T00:00:00.000Z" },

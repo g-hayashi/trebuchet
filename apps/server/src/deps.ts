@@ -3,6 +3,8 @@ import {
   createClosingUnitOfWork,
   createImportUnitOfWork,
   createInvoicingUnitOfWork,
+  createReceiptFileStore,
+  createReceiptUnitOfWork,
   createRecurringUnitOfWork,
   createStatementUnitOfWork,
   DrizzleAiSettingsStore,
@@ -40,6 +42,11 @@ import {
   type InvoicingUnitOfWork,
   type LedgerDeps,
   type MasterDeps,
+  type ReceiptDeps,
+  type ReceiptFileStore,
+  type ReceiptImageTool,
+  type ReceiptReader,
+  type ReceiptReadingDeps,
   type RecurringStore,
   type RecurringUnitOfWork,
   type ReportDeps,
@@ -50,7 +57,9 @@ import {
 } from "@trebuchet/domain";
 import { type BackupRunner, createBackupRunner } from "./lib/backup-run.ts";
 import { createFmServer } from "./lib/fm-server.ts";
+import { createImageTool } from "./lib/image-tool.ts";
 import { createKeychainSecretStore, createMemorySecretStore } from "./lib/keychain.ts";
+import { todayOf } from "./lib/today.ts";
 import { createVault, type Vault } from "./lib/vault.ts";
 
 /** R8: 主キーは UUIDv7 */
@@ -69,7 +78,8 @@ export const registryRepository = () => new DrizzleRegistryRepository(openRegist
 
 /**
  * 認証の情報（auth.sqlite。暗号化しないので施錠中も使える。008 の D2）。要求のたびに今のデータの置き場所を開く。
- * 設定（app_settings）とペアリングだけは registry から読むので、施錠中は VaultLockedError
+ * リモートの設定とペアリングのトークンも auth.sqlite なので施錠中も使える（004/T016）。
+ * app_settings だけは registry から読むので、施錠中は VaultLockedError
  */
 export const authStore = (): AuthStore => new DrizzleAuthStore(openAuth(), openRegistry);
 
@@ -248,6 +258,69 @@ export function statementDeps(
       local: providers.local ?? unavailableSuggestionProvider,
       external: providers.external ?? unavailableSuggestionProvider,
     },
+  };
+}
+
+/** 証憑（010）の日付は `Asia/Tokyo` の暦日で決める（R2、I2。実行環境のタイムゾーンによらない） */
+export const RECEIPT_TIME_ZONE = "Asia/Tokyo";
+
+/** ISO 8601（UTC）の日時を `Asia/Tokyo` の `YYYY-MM-DD` にする（`ReceiptDeps.dateOf`） */
+export const receiptDateOf = (iso: string): string =>
+  todayOf({ now: () => iso }, RECEIPT_TIME_ZONE);
+
+/** 証憑の画像の変換器（sips。010/R12）。作業ファイルは `.tmp/` の下 */
+export const receiptImageTool: ReceiptImageTool = createImageTool({ tmpRoot: TMP_ROOT });
+
+/**
+ * 証憑のルートが使う、差し替えられる部品（`createApp({ receipts })`。010/X3）。
+ * `files` は事業体ごとの暗号化したファイルの置き場（既定は db の `createReceiptFileStore`。施錠中は VaultLockedError）
+ */
+export type ReceiptRuntime = {
+  imageTool: ReceiptImageTool;
+  files: (entityId: string) => ReceiptFileStore;
+  /**
+   * 外部の AI による読み取り（010 R13。`createApp` が `ai-runtime.ts` の `receipts` を差す）。
+   * undefined（または `model()` が undefined）なら設定が無効で、`readReceipt` は呼ばずに AI_NOT_CONFIGURED
+   */
+  reader: ReceiptReader | undefined;
+};
+
+export const defaultReceiptRuntime: ReceiptRuntime = {
+  imageTool: receiptImageTool,
+  files: createReceiptFileStore,
+  reader: undefined,
+};
+
+/**
+ * 証憑（010）のユースケースの依存。証憑の記録・仕訳を 1 つのトランザクションで扱い（INV-62・64）、
+ * ファイルは事業体ごとの `ReceiptFileStore` に書く。`dateOf` は `Asia/Tokyo` 固定
+ */
+export function receiptDeps(
+  db: TenantDb,
+  clock: Clock,
+  entityId: string,
+  runtime: Pick<ReceiptRuntime, "files"> = defaultReceiptRuntime,
+): ReceiptDeps {
+  return {
+    uow: createReceiptUnitOfWork(db),
+    files: runtime.files(entityId),
+    clock,
+    ids,
+    dateOf: receiptDateOf,
+  };
+}
+
+/** 証憑の読み取り（010 US4）の依存。`reader` と `imageTool` は `ReceiptRuntime`（`createApp` が差す） */
+export function receiptReadingDeps(
+  db: TenantDb,
+  clock: Clock,
+  entityId: string,
+  runtime: ReceiptRuntime = defaultReceiptRuntime,
+): ReceiptReadingDeps {
+  return {
+    ...receiptDeps(db, clock, entityId, runtime),
+    images: runtime.imageTool,
+    reader: runtime.reader,
   };
 }
 

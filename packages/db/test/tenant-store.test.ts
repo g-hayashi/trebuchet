@@ -49,6 +49,19 @@ describe("openTenant", () => {
         name,
       ).toContain(name);
     }
+    // 010: 新しい 5 表（data-model §1）も存在する（STRICT は上の全表の検査）
+    for (const name of [
+      "receipts",
+      "receipt_files",
+      "receipt_links",
+      "receipt_readings",
+      "receipt_audit_log",
+    ]) {
+      expect(
+        tables.map((t) => t.name),
+        name,
+      ).toContain(name);
+    }
     const rates = db.$client.prepare("SELECT COUNT(*) AS n FROM tax_rates").get() as { n: number };
     expect(rates.n).toBe(4);
   });

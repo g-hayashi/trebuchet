@@ -3,9 +3,14 @@
  * データ場所を置き換える操作。元のデータ場所は `<dataDir>.before-restore-<日時>/` に残り、
  * 今の帳簿は復元の前に `<dataDir>/../trebuchet-before-restore-<日時>.tbk` にバックアップされる。
  *
- *   pnpm restore -- --file <path/to/backup.tbk> [--data-dir <dir>] [--yes]
+ *   pnpm restore -- --file <path/to/backup.tbk> [--data-dir <dir>] [--receipts-dir <dir>]
+ *                   [--allow-missing-receipts] [--yes]
  *
  * - `--data-dir` の既定は TREBUCHET_DATA_DIR、なければリポジトリ直下の `data/`
+ * - 証憑のファイル（010）は `.tbk` の外の置き場所にある。`--receipts-dir` の既定は `.tbk` と同じフォルダの
+ *   `trebuchet-receipts/`。`receipt_files` の全件をここから読み、バックアップの DK で検証して戻す。1 件でも
+ *   欠ける・壊れていれば、何も変えずに失敗する（`RECEIPTS_MISSING`）。`--allow-missing-receipts` は帳簿だけを戻す
+ *   （欠けた証憑は画面で「ファイルがありません」）。今の証憑は、改名で残る `<dataDir>.before-restore-<日時>/receipts/` にある
  * - 回復キー（初回の設定・再発行で表示した 4 文字区切りのキー）を標準入力から受け取る。端末ならエコーなしで入力し、
  *   パイプでも 1 行目を読む（そのときは確認も標準入力を使えないので `--yes` が要る）。引数・環境変数では受け取らない（`ps` に出るため）。バックアップのヘッダーの包み →
  *   今のデータ場所の `auth.sqlite` の recovery の包みの順に試す。復元した後の `auth.sqlite` は、DK を開けた

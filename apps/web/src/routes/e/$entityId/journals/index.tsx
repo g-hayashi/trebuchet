@@ -17,6 +17,7 @@ import {
 import { type Account, accountsQuery } from "@/features/accounts/api";
 import { type Journal, type JournalSearch, journalSearchQuery } from "@/features/journals/api";
 import { type Partner, partnersQuery, type Tag, tagsQuery } from "@/features/masters/api";
+import { ReceiptMark } from "@/features/receipts/JournalReceipts";
 import { groupAccountsBySection } from "@/lib/accounts";
 import { formatYen, parseWholeYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -337,7 +338,8 @@ function JournalRow({
   accountNames,
 }: {
   entityId: string;
-  journal: Journal;
+  /** 一覧の項目。`receiptCount` は有効な結びつきの証憑の数（010 H: §4） */
+  journal: Journal & { receiptCount?: number | undefined };
   accountNames: Map<string, string>;
 }) {
   const voided = journal.status === "voided";
@@ -377,7 +379,10 @@ function JournalRow({
           <div key={n.key}>{n.text}</div>
         ))}
       </TableCell>
-      <TableCell>{voided ? "取消済み" : ""}</TableCell>
+      <TableCell>
+        {voided ? "取消済み" : ""}
+        <ReceiptMark count={journal.receiptCount ?? 0} />
+      </TableCell>
     </TableRow>
   );
 }

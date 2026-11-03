@@ -15,6 +15,10 @@ import type {
   JournalSource,
   PaymentView,
   Purpose,
+  ReceiptCategory,
+  ReceiptChannel,
+  ReceiptMediaType,
+  ReceiptReadingStatus,
   ReportSection,
   RuleHistoryAction,
   RuleOrigin,
@@ -345,7 +349,12 @@ export type TaxParameterKey =
   | "LUMP_SUM_COST_MIN"
   | "LUMP_SUM_COST_MAX"
   | "LUMP_SUM_YEARS"
-  | "OPENING_COST_AMORTIZATION_MONTHS";
+  | "OPENING_COST_AMORTIZATION_MONTHS"
+  // 010: 電子帳簿保存法の入力期間と解像度の目安（data-model §1.6）
+  | "RECEIPT_INPUT_CYCLE_MONTHS"
+  | "RECEIPT_INPUT_GRACE_BUSINESS_DAYS"
+  | "RECEIPT_SCAN_MIN_LONG_PX"
+  | "RECEIPT_SCAN_MIN_SHORT_PX";
 
 /** 税制の値（R3、§1.1）。effectiveTo が null なら期限なし */
 export type TaxParameter = {
@@ -731,3 +740,108 @@ export type InvoiceItemRecord = {
 
 /** 入金の消し込み（`invoice_payments` の 1 行）。取消は `voidedAt` で持つ */
 export type PaymentRecord = PaymentView & { invoiceId: string; createdAt: string };
+
+// ---- 証憑（010-receipts。data-model §1 の各表に対応する） ----
+
+/** 証憑（`receipts` の 1 行。data-model §1.1）。`partnerKey` は `normalizeReceiptText(partnerName)`（R4） */
+export type ReceiptRow = {
+  id: string;
+  /** アプリが最初のファイルを受け取った日時。変えない */
+  receivedAt: string;
+  channel: ReceiptChannel;
+  category: ReceiptCategory;
+  /** 今の版のファイルの SHA-256（R7） */
+  currentSha256: string;
+  transactionDate: string | null;
+  amount: number | null;
+  partnerName: string | null;
+  partnerKey: string | null;
+  memo: string | null;
+  deletedAt: string | null;
+  deletedReason: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** 証憑のファイルの版（`receipt_files` の 1 行。不変。data-model §1.2） */
+export type ReceiptFileRow = {
+  sha256: string;
+  receiptId: string;
+  fileVersion: number;
+  mediaType: ReceiptMediaType;
+  sizeBytes: number;
+  originalName: string;
+  width: number | null;
+  height: number | null;
+  fullColor: boolean | null;
+  addedAt: string;
+  channel: ReceiptChannel;
+};
+
+/** 証憑と仕訳の結びつき（`receipt_links` の 1 行。有効 = `unlinkedAt` が null。data-model §1.3） */
+export type ReceiptLinkRow = {
+  id: string;
+  receiptId: string;
+  journalId: string;
+  linkedAt: string;
+  unlinkedAt: string | null;
+  unlinkReason: string | null;
+};
+
+/**
+ * 外部の AI の読み取りの記録（`receipt_readings` の 1 行。data-model §1.4）。
+ * 画像・応答の本文・`reason` は持たない。値の比べ（`*Match`・`comparedAt`）は列ごとに NULL から 1 回だけ書く
+ */
+export type ReceiptReadingRow = {
+  id: string;
+  receiptId: string;
+  fileSha256: string;
+  readAt: string;
+  model: string;
+  status: ReceiptReadingStatus;
+  errorCode: string | null;
+  candDate: string | null;
+  candAmount: number | null;
+  candPartner: string | null;
+  candAccountCode: string | null;
+  candTaxCategory: TaxCategoryCode | null;
+  confidence: number | null;
+  comparedAt: string | null;
+  dateMatch: boolean | null;
+  amountMatch: boolean | null;
+  partnerMatch: boolean | null;
+  accountMatch: boolean | null;
+  taxMatch: boolean | null;
+};
+
+/** `setReadingOutcome` が書く値の比べ。渡した列のうち NULL のものだけに書く（L2）。`comparedAt` は引数 `at` */
+export type ReadingOutcome = {
+  dateMatch: boolean;
+  amountMatch: boolean;
+  partnerMatch: boolean;
+  accountMatch: boolean;
+  taxMatch: boolean;
+};
+
+/** `ReceiptStore.search` の 1 行。今の版のファイルと、有効な結びつき・その仕訳（状態の導出に使う） */
+export type ReceiptSearchRow = {
+  receipt: ReceiptRow;
+  currentFile: ReceiptFileRow;
+  link: ReceiptLinkRow | undefined;
+  journal: JournalRef | undefined;
+};
+
+export type ReceiptAuditTargetType = "receipt" | "receipt_link" | "receipt_reading";
+
+export type ReceiptAuditAction =
+  | "create"
+  | "update"
+  | "replace_file"
+  | "delete"
+  | "link"
+  | "unlink"
+  | "read";
+
+/** 証憑の履歴の 1 行（`receipt_audit_log`。追記のみ。data-model §1.5）。作るときは `auditEntry` を使う */
+export type ReceiptAuditEntry = AuditEntry<ReceiptAuditTargetType, ReceiptAuditAction>;

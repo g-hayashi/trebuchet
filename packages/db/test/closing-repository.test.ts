@@ -362,6 +362,21 @@ describe("DrizzleClosingStore（009 T007）", () => {
     }
   });
 
+  it("listTaxParameters は 010 の 4 行（証憑の電子保存。出典の URL つき）を返す。4 key が入ることの確認はここだけ", () => {
+    const rows = store.listTaxParameters().filter((r) => r.key.startsWith("RECEIPT_"));
+    expect(rows.map((r) => [r.key, r.value, r.effectiveFrom, r.effectiveTo]).sort()).toEqual([
+      ["RECEIPT_INPUT_CYCLE_MONTHS", 2, "2024-01-01", null],
+      ["RECEIPT_INPUT_GRACE_BUSINESS_DAYS", 7, "2024-01-01", null],
+      ["RECEIPT_SCAN_MIN_LONG_PX", 2338, "2024-01-01", null],
+      ["RECEIPT_SCAN_MIN_SHORT_PX", 1654, "2024-01-01", null],
+    ]);
+    for (const r of rows) {
+      expect(r.sourceUrl).toBe(
+        "https://www.nta.go.jp/law/joho-zeikaishaku/sonota/jirei/pdf/0026007-006_03.pdf",
+      );
+    }
+  });
+
   it("固定資産: 定額法・一括償却の新しい列（供用日・前年までの累計・除却の種類）が往復する", () => {
     const straight = assetOf({
       name: "定額法",

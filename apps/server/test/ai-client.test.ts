@@ -1,6 +1,7 @@
 import {
   COLUMN_TIMEOUT_DETAIL,
   type ColumnPrompt,
+  type ReceiptReadingRequest,
   type SuggestionContext,
   type SuggestionPayload,
 } from "@trebuchet/domain";
@@ -12,8 +13,10 @@ import {
   chatCompletion,
   createColumnProvider,
   createOpenAiProvider,
+  createReceiptReader,
   EXTERNAL_TIMEOUT_MS,
   LOCAL_TIMEOUT_MS,
+  RECEIPT_READ_TIMEOUT_MS,
 } from "../src/lib/ai-client.ts";
 
 // 006 R10: OpenAI 互換の Chat Completions を fetch で呼ぶ。実際のネットワークには出ない（偽の fetch）
@@ -89,6 +92,20 @@ const provider = (
     available: async () => endpoint !== null,
     endpoint: async () => endpoint ?? undefined,
   });
+
+describe("chatCompletion: 接続先の URL", () => {
+  it.each(["https://api.example.com/openai/v1", "https://api.example.com/openai/v1/"])(
+    "末尾が /v1 の URL（%s）には /v1 を重ねない",
+    async (baseUrl) => {
+      const { fn, calls } = fakeFetch(completion(SUGGESTION_TEXT));
+      await provider(fn, { baseUrl, model: "model-a", apiKey: "sk-secret-123" }).suggest(
+        PAYLOAD,
+        CONTEXT,
+      );
+      expect(calls[0]?.url).toBe("https://api.example.com/openai/v1/chat/completions");
+    },
+  );
+});
 
 describe("createOpenAiProvider: 要求", () => {
   it("POST {baseUrl}/v1/chat/completions に、model・system と user のメッセージ・response_format を送る。API キーは Authorization だけ", async () => {
@@ -358,5 +375,79 @@ describe("chatCompletion", () => {
       { messages: [{ role: "user", content: "hi" }] },
     );
     expect(result).toEqual({ ok: true, value: "hello" });
+  });
+});
+
+describe("createReceiptReader（010 R13。外部の endpoint だけ）", () => {
+  const REQUEST: ReceiptReadingRequest = {
+    system: "指示文",
+    choices: "勘定科目（コード 名前）:\n5100 消耗品費",
+    image: { mediaType: "image/jpeg", bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]) },
+    schema: { type: "object", properties: {} },
+  };
+  const ENDPOINT: AiEndpoint = {
+    baseUrl: "https://api.example.com",
+    model: "model-a",
+    apiKey: "sk-secret-123",
+  };
+  const reader = (f: typeof fetch, endpoint: AiEndpoint | null = ENDPOINT, timeoutMs?: number) =>
+    createReceiptReader({
+      fetch: f,
+      endpoint: async () => endpoint ?? undefined,
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    });
+
+  it("時間切れは 90 秒（外部の 60 秒より長い）", () => {
+    expect(RECEIPT_READ_TIMEOUT_MS).toBe(90_000);
+  });
+
+  it("model() は endpoint のモデル名。endpoint がなければ undefined", async () => {
+    const { fn } = fakeFetch();
+    expect(await reader(fn).model()).toBe("model-a");
+    expect(await reader(fn, null).model()).toBeUndefined();
+  });
+
+  it("system は文字列、user は text と image_url（data URL、detail: high）の配列。response_format は json_schema（strict）", async () => {
+    const { fn, calls } = fakeFetch(completion("{}"));
+    const result = await reader(fn).read(REQUEST);
+    expect(result).toEqual({ ok: true, value: "{}" });
+    const call = calls[0] as Call;
+    expect(call.url).toBe("https://api.example.com/v1/chat/completions");
+    expect(new Headers(call.init.headers).get("authorization")).toBe("Bearer sk-secret-123");
+    const messages = call.body.messages as { role: string; content: unknown }[];
+    expect(messages[0]).toEqual({ role: "system", content: "指示文" });
+    expect(messages[1]?.role).toBe("user");
+    expect(messages[1]?.content).toEqual([
+      { type: "text", text: REQUEST.choices },
+      {
+        type: "image_url",
+        image_url: { url: "data:image/jpeg;base64,/9j/2Q==", detail: "high" },
+      },
+    ]);
+    expect(call.body.response_format).toMatchObject({
+      type: "json_schema",
+      json_schema: { strict: true, schema: REQUEST.schema },
+    });
+    expect(JSON.stringify(call.body)).not.toContain("sk-secret-123");
+  });
+
+  it("時間切れは COLUMN_TIMEOUT_DETAIL つきの err（例外を投げない）。ほかの失敗には付かない", async () => {
+    const timeout = fakeFetch(new DOMException("timed out", "TimeoutError"));
+    const t = await reader(timeout.fn).read(REQUEST);
+    expect(t.ok).toBe(false);
+    if (!t.ok) expect(t.error.details).toEqual(COLUMN_TIMEOUT_DETAIL);
+
+    const refused = fakeFetch(new TypeError("fetch failed"));
+    const r = await reader(refused.fn).read(REQUEST);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.details?.timeout).toBeUndefined();
+  });
+
+  it("endpoint がなければ fetch せず AI_NOT_CONFIGURED", async () => {
+    const { fn, calls } = fakeFetch();
+    const result = await reader(fn, null).read(REQUEST);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("AI_NOT_CONFIGURED");
+    expect(calls).toHaveLength(0);
   });
 });

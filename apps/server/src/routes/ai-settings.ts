@@ -21,6 +21,7 @@ export function aiSettingsRoutes({ clock, ai }: RouteOptions & { ai: AiRuntime }
       externalEnabled: s.externalEnabled,
       externalBaseUrl: s.externalBaseUrl,
       externalModel: s.externalModel,
+      receiptImagesEnabled: s.receiptImagesEnabled,
       apiKeySet: (await readApiKey(ai.secrets)) !== undefined,
     };
   };
@@ -36,6 +37,16 @@ export function aiSettingsRoutes({ clock, ai }: RouteOptions & { ai: AiRuntime }
         input.apiKey === undefined
           ? (await readApiKey(ai.secrets)) !== undefined
           : input.apiKey !== "";
+
+      // 証憑の画像の送信は外部の AI が有効なときだけ真にできる（010 R15。DB の CHECK も同じ）
+      if (input.receiptImagesEnabled && !input.externalEnabled) {
+        return fail(
+          c,
+          domainError("AI_NOT_CONFIGURED", "証憑の画像を送るには、外部の AI を有効にしてください", {
+            fields: ["externalEnabled"],
+          }),
+        );
+      }
 
       if (input.externalEnabled) {
         const fields = [
@@ -66,6 +77,8 @@ export function aiSettingsRoutes({ clock, ai }: RouteOptions & { ai: AiRuntime }
           externalEnabled: input.externalEnabled,
           externalBaseUrl,
           externalModel,
+          // 外部が有効のときだけ true（上の検査）。外部を無効にする保存では偽（入力も偽）
+          receiptImagesEnabled: input.receiptImagesEnabled,
         },
         clock.now(),
       );

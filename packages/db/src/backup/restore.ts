@@ -29,6 +29,11 @@ import {
   encryptBackup,
 } from "./crypto.ts";
 import { beforeRestoreFileName, compactStamp, writeBackupFile } from "./file.ts";
+import {
+  receiptRefsFromSnapshotFiles,
+  receiptStoreDir,
+  restoreReceiptsFromStore,
+} from "./receipts.ts";
 import { createSnapshotDir, currentAppVersion, snapshotDataDir } from "./snapshot.ts";
 import type { ManifestEntity, UnpackedArchive } from "./types.ts";
 
@@ -39,13 +44,16 @@ import type { ManifestEntity, UnpackedArchive } from "./types.ts";
  * - CANCELLED: 確認で拒否された
  * - BEFORE_BACKUP_FAILED: 復元前のバックアップを書けなかった（何も変えていない）
  * - RESTORE_FAILED: 展開、integrity_check、改名のどれかの失敗（元のデータ場所は無傷）
+ * - RECEIPTS_MISSING: `receipt_files` の証憑のファイルが置き場所に欠ける・壊れている（010 の INV-68。
+ *   `allowMissingReceipts` がなければ、何も作らず何も変えない。件数は `onReceiptsMissing` で受け取る）
  */
 export type RestoreErrorCode =
   | "INVALID"
   | "VERSION_MISMATCH"
   | "CANCELLED"
   | "BEFORE_BACKUP_FAILED"
-  | "RESTORE_FAILED";
+  | "RESTORE_FAILED"
+  | "RECEIPTS_MISSING";
 
 /** 事業体 1 件の、仕訳の件数と最後の更新（仕訳の updated_at の最大。仕訳がなければ null） */
 export type RestoreEntitySide = { journals: number; lastUpdatedAt: string | null };
@@ -74,6 +82,8 @@ export type RestoreResult = {
   beforeRestoreBackup: string | null;
   /** 元のデータ場所の改名先。元のデータ場所がなかった（または空だった）なら null */
   previousDataDir: string | null;
+  /** 置き場所に欠けて（壊れて）いたため戻せなかった証憑の数（`allowMissingReceipts` のときだけ 0 以外） */
+  missingReceipts: number;
 };
 
 /** テストが失敗を注入するための差し替え。本番は node:fs */
@@ -93,6 +103,12 @@ export type RestoreOptions = {
   tmpRoot: string;
   /** 要約を見せて続けてよいかを返す。false なら CANCELLED（何も作らない） */
   confirm: (summary: RestoreSummary) => boolean | Promise<boolean>;
+  /** 証憑の写しのフォルダ（`trebuchet-receipts/`）。既定は `.tbk` と同じフォルダの `trebuchet-receipts/` */
+  receiptsDir?: string;
+  /** true なら、欠けた証憑があっても帳簿だけを戻す（既定は `RECEIPTS_MISSING` で失敗） */
+  allowMissingReceipts?: boolean;
+  /** `RECEIPTS_MISSING` で失敗するとき、欠けた・壊れた証憑の数を受け取る */
+  onReceiptsMissing?: (count: number) => void;
   now?: () => Date;
   io?: RestoreIo;
 };
@@ -187,6 +203,7 @@ type AiSettingsRow = {
   external_enabled: number;
   external_base_url: string | null;
   external_model: string | null;
+  receipt_images_enabled: number;
   updated_at: string;
 };
 
@@ -202,7 +219,7 @@ function readAiSettings(dataDir: string): AiSettingsRow | undefined {
     if (table === undefined) return undefined;
     return db
       .prepare(
-        "SELECT id, local_enabled, external_enabled, external_base_url, external_model, updated_at FROM ai_settings WHERE id = 1",
+        "SELECT id, local_enabled, external_enabled, external_base_url, external_model, receipt_images_enabled, updated_at FROM ai_settings WHERE id = 1",
       )
       .get() as AiSettingsRow | undefined;
   } finally {
@@ -394,6 +411,37 @@ async function applyRestore(
   const restoreDir = `${dataDir}.restore-${stamp}`;
   const beforeDir = `${dataDir}.before-restore-${stamp}`;
 
+  // 3b. 証憑のファイル（010/R11、INV-68）: 今の帳簿に触れる前に、展開先へ全件を戻す。1 件でも欠ける・壊れていれば
+  // （`allowMissingReceipts` でなければ）展開先を消して失敗する。復元前のバックアップも作らず、何も変えない
+  let refs: ReturnType<typeof receiptRefsFromSnapshotFiles>;
+  try {
+    refs = receiptRefsFromSnapshotFiles(archive.files);
+  } catch {
+    // 事業体の DB が読めない（壊れている）。何も作らない
+    return fail("RESTORE_FAILED");
+  }
+  let missingReceipts = 0;
+  if (refs.some((r) => r.sha256s.length > 0)) {
+    try {
+      mkdirSync(dirname(dataDir), { recursive: true });
+      const restored = restoreReceiptsFromStore({
+        dk: decrypted.dk,
+        storeDir: options.receiptsDir ?? receiptStoreDir(dirname(resolve(options.file))),
+        refs,
+        targetDir: join(restoreDir, "receipts"),
+      });
+      missingReceipts = restored.missing;
+    } catch {
+      rmSync(restoreDir, { recursive: true, force: true });
+      return fail("RESTORE_FAILED");
+    }
+    if (missingReceipts > 0 && options.allowMissingReceipts !== true) {
+      rmSync(restoreDir, { recursive: true, force: true });
+      options.onReceiptsMissing?.(missingReceipts);
+      return fail("RECEIPTS_MISSING");
+    }
+  }
+
   // 4. 今の帳簿を同じ形式でバックアップ（db の関数だけ。backup_runs には記録しない）。今の帳簿を読める
   // DK がないとき（別の系列の帳簿）は作らない。元のデータ場所は `.before-restore-<日時>` にそのまま残る
   let beforeRestoreBackup: string | null = null;
@@ -434,6 +482,7 @@ async function applyRestore(
       }
       beforeRestoreBackup = join(dirname(dataDir), name);
     } catch {
+      rmSync(restoreDir, { recursive: true, force: true });
       return fail("BEFORE_BACKUP_FAILED");
     }
   }
@@ -464,7 +513,7 @@ async function applyRestore(
         if (aiSettings !== undefined) {
           registry
             .prepare(
-              "INSERT OR REPLACE INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+              "INSERT OR REPLACE INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, receipt_images_enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .run(
               aiSettings.id,
@@ -472,6 +521,7 @@ async function applyRestore(
               aiSettings.external_enabled,
               aiSettings.external_base_url,
               aiSettings.external_model,
+              aiSettings.receipt_images_enabled,
               aiSettings.updated_at,
             );
         }
@@ -523,5 +573,5 @@ async function applyRestore(
     if (!swapped) rmSync(restoreDir, { recursive: true, force: true });
   }
 
-  return { ok: true, value: { summary, beforeRestoreBackup, previousDataDir } };
+  return { ok: true, value: { summary, beforeRestoreBackup, previousDataDir, missingReceipts } };
 }

@@ -1,16 +1,25 @@
 import {
   type Clock,
   correctJournal,
+  countReceiptsByJournal,
   createJournal,
   type DomainError,
   getJournalDetail,
   getJournalHistory,
+  listJournalReceipts,
   listJournalStatements,
   voidJournal,
 } from "@trebuchet/domain";
 import { JournalCorrection, JournalInput, JournalQuery, VoidInput } from "@trebuchet/schema";
 import { type Context, Hono } from "hono";
-import { invoicingDeps, journalDeps, type RouteOptions, statementDeps } from "../deps.ts";
+import {
+  invoicingDeps,
+  journalDeps,
+  type ReceiptRuntime,
+  type RouteOptions,
+  receiptDeps,
+  statementDeps,
+} from "../deps.ts";
 import { fail, respond } from "../errors.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
@@ -34,11 +43,27 @@ function failJournal(c: Context<TenantEnv>, clock: Clock, error: DomainError) {
 }
 
 /** `/api/entities/:entityId` の下の仕訳（FR-013〜023） */
-export function journalRoutes({ clock }: RouteOptions) {
+export function journalRoutes({ clock, receipts }: RouteOptions & { receipts: ReceiptRuntime }) {
+  const receiptsOf = (c: { var: TenantEnv["Variables"] }) =>
+    receiptDeps(c.var.db, clock, c.var.entityId, receipts);
+
   return new Hono<TenantEnv>()
     .get("/journals", validate("query", JournalQuery), (c) => {
       const page = journalDeps(c.var.db, clock).ledger.findJournals(c.req.valid("query"));
-      return c.json({ journals: page.items, nextCursor: page.nextCursor }, 200);
+      // 証憑の数は一覧の項目に合成する（010/R6。001 の型は変えない）。結びつきのない仕訳は 0
+      const counts = countReceiptsByJournal(
+        receiptsOf(c),
+        page.items.map((j) => j.id),
+      );
+      return respond(c, counts, (byJournal) =>
+        c.json(
+          {
+            journals: page.items.map((j) => ({ ...j, receiptCount: byJournal.get(j.id) ?? 0 })),
+            nextCursor: page.nextCursor,
+          },
+          200,
+        ),
+      );
     })
     .post("/journals", validate("json", JournalInput), (c) => {
       const result = createJournal(journalDeps(c.var.db, clock), c.req.valid("json"));
@@ -51,8 +76,11 @@ export function journalRoutes({ clock }: RouteOptions) {
       if (!result.ok) return fail(c, result.error);
       // 元の明細（006 FR-020。失効していない結びつきだけ）
       const statements = listJournalStatements(statementDeps(c.var.db, clock), journalId);
-      return respond(c, statements, (linked) =>
-        c.json({ ...result.value, statements: linked }, 200),
+      if (!statements.ok) return fail(c, statements.error);
+      // 結びついた証憑（010/R6。有効な結びつきだけ）
+      const linkedReceipts = listJournalReceipts(receiptsOf(c), journalId);
+      return respond(c, linkedReceipts, (receiptList) =>
+        c.json({ ...result.value, statements: statements.value, receipts: receiptList }, 200),
       );
     })
     .put("/journals/:journalId", validate("json", JournalCorrection), (c) => {

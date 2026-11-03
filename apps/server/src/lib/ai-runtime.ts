@@ -1,9 +1,15 @@
 import type { AiSettingsRecord } from "@trebuchet/db";
-import type { ColumnSuggestionProvider, SecretStore, SuggestionProvider } from "@trebuchet/domain";
+import type {
+  ColumnSuggestionProvider,
+  ReceiptReader,
+  SecretStore,
+  SuggestionProvider,
+} from "@trebuchet/domain";
 import {
   AI_API_KEY_SECRET,
   createColumnProvider,
   createOpenAiProvider,
+  createReceiptReader,
   EXTERNAL_TIMEOUT_MS,
   LOCAL_TIMEOUT_MS,
 } from "./ai-client.ts";
@@ -33,6 +39,8 @@ export type AiRuntime = {
   providers: { local: SuggestionProvider; external: SuggestionProvider };
   /** 列の対応の案（007）。端末内の AI だけ。設定で無効なら route が使わない */
   columns: ColumnSuggestionProvider;
+  /** 証憑の画像の読み取り（010）。外部の endpoint だけ。設定が無効なら `model()` が undefined */
+  receipts: ReceiptReader;
 };
 
 /** API キーを引く。キーチェーンの失敗は「ない」と同じに扱う（理由は出さない） */
@@ -68,6 +76,14 @@ export function createAiRuntime(options: AiRuntimeOptions): AiRuntime {
     return { baseUrl: s.externalBaseUrl, model: s.externalModel, apiKey };
   }
 
+  // 証憑の読み取り（010 R13）: 外部の AI と証憑の画像の送信がともに有効で、URL・モデル・キーがそろうときだけ。
+  // 無効なら endpoint が undefined になり、`model()` も undefined（domain の `readReceipt` が AI_NOT_CONFIGURED にする）
+  const receipts = createReceiptReader({
+    fetch: options.fetch,
+    endpoint: async () =>
+      options.settings().get().receiptImagesEnabled ? externalEndpoint() : undefined,
+  });
+
   const localAvailable = async () =>
     options.settings().get().localEnabled && (await options.fm.available());
   const localEndpoint = async () => {
@@ -95,5 +111,6 @@ export function createAiRuntime(options: AiRuntimeOptions): AiRuntime {
     fm: options.fm,
     providers: { local, external },
     columns,
+    receipts,
   };
 }

@@ -55,6 +55,7 @@ const FULL = {
   externalEnabled: true,
   externalBaseUrl: "https://api.example.com",
   externalModel: "model-a",
+  receiptImagesEnabled: false,
   apiKey: KEY,
 };
 
@@ -80,6 +81,7 @@ describe("GET /settings/ai", () => {
       externalEnabled: false,
       externalBaseUrl: null,
       externalModel: null,
+      receiptImagesEnabled: false,
       apiKeySet: false,
     });
     const on = await setup({ fmAvailable: true });
@@ -99,6 +101,7 @@ describe("PUT /settings/ai", () => {
       externalEnabled: true,
       externalBaseUrl: "https://api.example.com",
       externalModel: "model-a",
+      receiptImagesEnabled: false,
       apiKeySet: true,
     });
     expect(text).not.toContain(KEY);
@@ -121,7 +124,12 @@ describe("PUT /settings/ai", () => {
     await t.put(FULL);
     await t.get();
     await t.put({ ...FULL, externalBaseUrl: "http://example.com" }); // 失敗（VALIDATION）
-    await t.put({ localEnabled: true, externalEnabled: true, apiKey: KEY }); // 失敗（AI_NOT_CONFIGURED）
+    await t.put({
+      localEnabled: true,
+      externalEnabled: true,
+      receiptImagesEnabled: false,
+      apiKey: KEY,
+    }); // 失敗（AI_NOT_CONFIGURED）
     for (const spy of spies) {
       expect(JSON.stringify(spy.mock.calls)).not.toContain(KEY);
     }
@@ -129,7 +137,11 @@ describe("PUT /settings/ai", () => {
 
   it("外部を有効にして接続先・モデル・API キーが欠ければ 422 AI_NOT_CONFIGURED（details.fields）。何も保存しない", async () => {
     const t = await setup();
-    const res = await t.put({ localEnabled: false, externalEnabled: true });
+    const res = await t.put({
+      localEnabled: false,
+      externalEnabled: true,
+      receiptImagesEnabled: false,
+    });
     expect(res.status).toBe(422);
     const error = await errorOf(res);
     expect(error.code).toBe("AI_NOT_CONFIGURED");
@@ -141,6 +153,7 @@ describe("PUT /settings/ai", () => {
       externalEnabled: true,
       externalBaseUrl: "https://api.example.com",
       externalModel: "model-a",
+      receiptImagesEnabled: false,
     });
     expect(noKey.status).toBe(422);
     expect((await errorOf(noKey)).details).toEqual({ fields: ["apiKey"] });
@@ -152,6 +165,54 @@ describe("PUT /settings/ai", () => {
     expect(await t.secrets.get(AI_API_KEY_SECRET)).toBeUndefined();
   });
 
+  it("receiptImagesEnabled（010 R15）は保存され、GET・PUT の応答に出る。省略は 400 VALIDATION", async () => {
+    const t = await setup();
+    const res = await t.put({ ...FULL, receiptImagesEnabled: true });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ externalEnabled: true, receiptImagesEnabled: true });
+    expect((await (await t.get()).json()).receiptImagesEnabled).toBe(true);
+    expect(dumpRegistry()).toContain('"receipt_images_enabled":1');
+
+    const { receiptImagesEnabled: _omit, ...withoutField } = FULL;
+    const missing = await t.put(withoutField);
+    expect(missing.status).toBe(400);
+    expect((await errorOf(missing)).code).toBe("VALIDATION");
+    expect((await (await t.get()).json()).receiptImagesEnabled).toBe(true);
+  });
+
+  it("外部が無効のまま receiptImagesEnabled を真にすると 422 AI_NOT_CONFIGURED（details.fields）。何も保存しない（010 R15）", async () => {
+    const t = await setup();
+    const res = await t.put({
+      localEnabled: true,
+      externalEnabled: false,
+      receiptImagesEnabled: true,
+    });
+    expect(res.status).toBe(422);
+    const error = await errorOf(res);
+    expect(error.code).toBe("AI_NOT_CONFIGURED");
+    expect(error.details).toEqual({ fields: ["externalEnabled"] });
+    const after = await (await t.get()).json();
+    expect(after.receiptImagesEnabled).toBe(false);
+
+    // 外部の必須項目が欠けていれば、外部を有効にする検査で 422（receiptImagesEnabled を真にしても同じ）
+    const missing = await t.put({
+      localEnabled: true,
+      externalEnabled: true,
+      receiptImagesEnabled: true,
+    });
+    expect(missing.status).toBe(422);
+    expect((await errorOf(missing)).code).toBe("AI_NOT_CONFIGURED");
+  });
+
+  it("外部を無効にする保存では receiptImagesEnabled が偽になる（有効だった後も連動する）", async () => {
+    const t = await setup();
+    await t.put({ ...FULL, receiptImagesEnabled: true });
+    const res = await t.put({ ...FULL, externalEnabled: false, receiptImagesEnabled: false });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ externalEnabled: false, receiptImagesEnabled: false });
+    expect((await (await t.get()).json()).receiptImagesEnabled).toBe(false);
+  });
+
   it("保存済みの API キーがあれば、apiKey を省略して外部を有効にできる（キーは変わらない）", async () => {
     const t = await setup();
     await t.put({ ...FULL, externalEnabled: false });
@@ -160,6 +221,7 @@ describe("PUT /settings/ai", () => {
       externalEnabled: true,
       externalBaseUrl: "https://api.example.com",
       externalModel: "model-b",
+      receiptImagesEnabled: false,
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ externalModel: "model-b" });
@@ -181,7 +243,11 @@ describe("PUT /settings/ai", () => {
 
   it("外部が無効なら、接続先・モデルが欠けていてもよい（端末内だけの利用）", async () => {
     const t = await setup();
-    const res = await t.put({ localEnabled: false, externalEnabled: false });
+    const res = await t.put({
+      localEnabled: false,
+      externalEnabled: false,
+      receiptImagesEnabled: false,
+    });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       localEnabled: false,

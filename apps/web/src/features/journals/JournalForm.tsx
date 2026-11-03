@@ -80,15 +80,17 @@ function defaultTaxCategory(
  * フォームの初期値になる仕訳の形。訂正する仕訳（`Journal`）のほか、定期仕訳の定義
  * （005。税区分が null = 自動、タグなし、訂正元なし）も同じ形で渡せる
  */
-type JournalFormSource = {
+export type JournalFormSource = {
   date: string;
   memo: string | null;
   correctsJournalId?: string | null | undefined;
   lines: readonly {
     side: Side;
+    /** 空文字は未選択（証憑から仕訳を作るとき。010） */
     accountId: string;
     subAccountId: string | null;
-    amount: number;
+    /** undefined は未入力（金額が未入力の証憑から仕訳を作るとき。010） */
+    amount: number | undefined;
     taxCategory: TaxCategoryCode | null;
     partnerId: string | null;
     description: string | null;

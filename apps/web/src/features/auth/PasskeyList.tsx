@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import type { PasskeyView } from "@trebuchet/schema";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -174,6 +175,13 @@ export function PasskeyList() {
           </Button>
         </form>
         <ApiErrorMessage error={add.error} />
+        <p className="text-sm text-muted-foreground">
+          ts.net の名前で使うパスキーは、
+          <Link to="/settings/remote" className="underline">
+            リモートの画面
+          </Link>
+          でペアリングします。
+        </p>
       </CardContent>
     </Card>
   );

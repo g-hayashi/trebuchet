@@ -10,9 +10,11 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PairRouteImport } from './routes/pair'
 import { Route as EEntityIdRouteRouteImport } from './routes/e/$entityId/route'
 import { Route as SettingsAiRouteImport } from './routes/settings/ai'
 import { Route as SettingsBackupRouteImport } from './routes/settings/backup'
+import { Route as SettingsRemoteRouteImport } from './routes/settings/remote'
 import { Route as SettingsSecurityRouteImport } from './routes/settings/security'
 import { Route as EEntityIdIndexRouteImport } from './routes/e/$entityId/index'
 import { Route as EEntityIdAccountsRouteImport } from './routes/e/$entityId/accounts'
@@ -34,6 +36,9 @@ import { Route as EEntityIdJournalsIndexRouteImport } from './routes/e/$entityId
 import { Route as EEntityIdJournalsJournalIdRouteImport } from './routes/e/$entityId/journals/$journalId'
 import { Route as EEntityIdJournalsNewRouteImport } from './routes/e/$entityId/journals/new'
 import { Route as EEntityIdPeriodsIndexRouteImport } from './routes/e/$entityId/periods/index'
+import { Route as EEntityIdReceiptsIndexRouteImport } from './routes/e/$entityId/receipts/index'
+import { Route as EEntityIdReceiptsReceiptIdRouteImport } from './routes/e/$entityId/receipts/$receiptId'
+import { Route as EEntityIdReceiptsCaptureRouteImport } from './routes/e/$entityId/receipts/capture'
 import { Route as EEntityIdRecurringIndexRouteImport } from './routes/e/$entityId/recurring/index'
 import { Route as EEntityIdRecurringRecurringIdRouteImport } from './routes/e/$entityId/recurring/$recurringId'
 import { Route as EEntityIdRecurringNewRouteImport } from './routes/e/$entityId/recurring/new'
@@ -60,6 +65,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PairRoute = PairRouteImport.update({
+  id: '/pair',
+  path: '/pair',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EEntityIdRouteRoute = EEntityIdRouteRouteImport.update({
   id: '/e/$entityId',
   path: '/e/$entityId',
@@ -73,6 +83,11 @@ const SettingsAiRoute = SettingsAiRouteImport.update({
 const SettingsBackupRoute = SettingsBackupRouteImport.update({
   id: '/settings/backup',
   path: '/settings/backup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRemoteRoute = SettingsRemoteRouteImport.update({
+  id: '/settings/remote',
+  path: '/settings/remote',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsSecurityRoute = SettingsSecurityRouteImport.update({
@@ -186,6 +201,23 @@ const EEntityIdPeriodsIndexRoute = EEntityIdPeriodsIndexRouteImport.update({
   path: '/periods/',
   getParentRoute: () => EEntityIdRouteRoute,
 } as any)
+const EEntityIdReceiptsIndexRoute = EEntityIdReceiptsIndexRouteImport.update({
+  id: '/receipts/',
+  path: '/receipts/',
+  getParentRoute: () => EEntityIdRouteRoute,
+} as any)
+const EEntityIdReceiptsReceiptIdRoute =
+  EEntityIdReceiptsReceiptIdRouteImport.update({
+    id: '/receipts/$receiptId',
+    path: '/receipts/$receiptId',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
+const EEntityIdReceiptsCaptureRoute =
+  EEntityIdReceiptsCaptureRouteImport.update({
+    id: '/receipts/capture',
+    path: '/receipts/capture',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
 const EEntityIdRecurringIndexRoute = EEntityIdRecurringIndexRouteImport.update({
   id: '/recurring/',
   path: '/recurring/',
@@ -305,9 +337,11 @@ const EEntityIdPeriodsYearOpeningBalancesRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/pair': typeof PairRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
   '/settings/ai': typeof SettingsAiRoute
   '/settings/backup': typeof SettingsBackupRoute
+  '/settings/remote': typeof SettingsRemoteRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
@@ -323,6 +357,8 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
+  '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
+  '/e/$entityId/receipts/capture': typeof EEntityIdReceiptsCaptureRoute
   '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
   '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -341,6 +377,7 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/invoices/': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals/': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/receipts/': typeof EEntityIdReceiptsIndexRoute
   '/e/$entityId/recurring/': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/statements/': typeof EEntityIdStatementsIndexRoute
@@ -352,8 +389,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/pair': typeof PairRoute
   '/settings/ai': typeof SettingsAiRoute
   '/settings/backup': typeof SettingsBackupRoute
+  '/settings/remote': typeof SettingsRemoteRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
@@ -369,6 +408,8 @@ export interface FileRoutesByTo {
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
+  '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
+  '/e/$entityId/receipts/capture': typeof EEntityIdReceiptsCaptureRoute
   '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
   '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -387,6 +428,7 @@ export interface FileRoutesByTo {
   '/e/$entityId/invoices': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/receipts': typeof EEntityIdReceiptsIndexRoute
   '/e/$entityId/recurring': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/statements': typeof EEntityIdStatementsIndexRoute
@@ -399,9 +441,11 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/pair': typeof PairRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
   '/settings/ai': typeof SettingsAiRoute
   '/settings/backup': typeof SettingsBackupRoute
+  '/settings/remote': typeof SettingsRemoteRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/e/$entityId/accounts': typeof EEntityIdAccountsRoute
   '/e/$entityId/invoice-settings': typeof EEntityIdInvoiceSettingsRoute
@@ -417,6 +461,8 @@ export interface FileRoutesById {
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
+  '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
+  '/e/$entityId/receipts/capture': typeof EEntityIdReceiptsCaptureRoute
   '/e/$entityId/recurring/$recurringId': typeof EEntityIdRecurringRecurringIdRoute
   '/e/$entityId/recurring/new': typeof EEntityIdRecurringNewRoute
   '/e/$entityId/reports/balance-sheet': typeof EEntityIdReportsBalanceSheetRoute
@@ -435,6 +481,7 @@ export interface FileRoutesById {
   '/e/$entityId/invoices/': typeof EEntityIdInvoicesIndexRoute
   '/e/$entityId/journals/': typeof EEntityIdJournalsIndexRoute
   '/e/$entityId/periods/': typeof EEntityIdPeriodsIndexRoute
+  '/e/$entityId/receipts/': typeof EEntityIdReceiptsIndexRoute
   '/e/$entityId/recurring/': typeof EEntityIdRecurringIndexRoute
   '/e/$entityId/reports/': typeof EEntityIdReportsIndexRoute
   '/e/$entityId/statements/': typeof EEntityIdStatementsIndexRoute
@@ -448,9 +495,11 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/pair'
     | '/e/$entityId'
     | '/settings/ai'
     | '/settings/backup'
+    | '/settings/remote'
     | '/settings/security'
     | '/e/$entityId/accounts'
     | '/e/$entityId/invoice-settings'
@@ -466,6 +515,8 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
+    | '/e/$entityId/receipts/$receiptId'
+    | '/e/$entityId/receipts/capture'
     | '/e/$entityId/recurring/$recurringId'
     | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -484,6 +535,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/'
     | '/e/$entityId/journals/'
     | '/e/$entityId/periods/'
+    | '/e/$entityId/receipts/'
     | '/e/$entityId/recurring/'
     | '/e/$entityId/reports/'
     | '/e/$entityId/statements/'
@@ -495,8 +547,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/pair'
     | '/settings/ai'
     | '/settings/backup'
+    | '/settings/remote'
     | '/settings/security'
     | '/e/$entityId/accounts'
     | '/e/$entityId/invoice-settings'
@@ -512,6 +566,8 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
+    | '/e/$entityId/receipts/$receiptId'
+    | '/e/$entityId/receipts/capture'
     | '/e/$entityId/recurring/$recurringId'
     | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -530,6 +586,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices'
     | '/e/$entityId/journals'
     | '/e/$entityId/periods'
+    | '/e/$entityId/receipts'
     | '/e/$entityId/recurring'
     | '/e/$entityId/reports'
     | '/e/$entityId/statements'
@@ -541,9 +598,11 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/pair'
     | '/e/$entityId'
     | '/settings/ai'
     | '/settings/backup'
+    | '/settings/remote'
     | '/settings/security'
     | '/e/$entityId/accounts'
     | '/e/$entityId/invoice-settings'
@@ -559,6 +618,8 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/new'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
+    | '/e/$entityId/receipts/$receiptId'
+    | '/e/$entityId/receipts/capture'
     | '/e/$entityId/recurring/$recurringId'
     | '/e/$entityId/recurring/new'
     | '/e/$entityId/reports/balance-sheet'
@@ -577,6 +638,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/invoices/'
     | '/e/$entityId/journals/'
     | '/e/$entityId/periods/'
+    | '/e/$entityId/receipts/'
     | '/e/$entityId/recurring/'
     | '/e/$entityId/reports/'
     | '/e/$entityId/statements/'
@@ -589,9 +651,11 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  PairRoute: typeof PairRoute
   EEntityIdRouteRoute: typeof EEntityIdRouteRouteWithChildren
   SettingsAiRoute: typeof SettingsAiRoute
   SettingsBackupRoute: typeof SettingsBackupRoute
+  SettingsRemoteRoute: typeof SettingsRemoteRoute
   SettingsSecurityRoute: typeof SettingsSecurityRoute
 }
 
@@ -602,6 +666,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pair': {
+      id: '/pair'
+      path: '/pair'
+      fullPath: '/pair'
+      preLoaderRoute: typeof PairRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/e/$entityId': {
@@ -623,6 +694,13 @@ declare module '@tanstack/react-router' {
       path: '/settings/backup'
       fullPath: '/settings/backup'
       preLoaderRoute: typeof SettingsBackupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/remote': {
+      id: '/settings/remote'
+      path: '/settings/remote'
+      fullPath: '/settings/remote'
+      preLoaderRoute: typeof SettingsRemoteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/security': {
@@ -770,6 +848,27 @@ declare module '@tanstack/react-router' {
       path: '/periods'
       fullPath: '/e/$entityId/periods/'
       preLoaderRoute: typeof EEntityIdPeriodsIndexRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/receipts/': {
+      id: '/e/$entityId/receipts/'
+      path: '/receipts'
+      fullPath: '/e/$entityId/receipts/'
+      preLoaderRoute: typeof EEntityIdReceiptsIndexRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/receipts/$receiptId': {
+      id: '/e/$entityId/receipts/$receiptId'
+      path: '/receipts/$receiptId'
+      fullPath: '/e/$entityId/receipts/$receiptId'
+      preLoaderRoute: typeof EEntityIdReceiptsReceiptIdRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
+    '/e/$entityId/receipts/capture': {
+      id: '/e/$entityId/receipts/capture'
+      path: '/receipts/capture'
+      fullPath: '/e/$entityId/receipts/capture'
+      preLoaderRoute: typeof EEntityIdReceiptsCaptureRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
     '/e/$entityId/recurring/': {
@@ -930,6 +1029,8 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdInvoicesNewRoute: typeof EEntityIdInvoicesNewRoute
   EEntityIdJournalsJournalIdRoute: typeof EEntityIdJournalsJournalIdRoute
   EEntityIdJournalsNewRoute: typeof EEntityIdJournalsNewRoute
+  EEntityIdReceiptsReceiptIdRoute: typeof EEntityIdReceiptsReceiptIdRoute
+  EEntityIdReceiptsCaptureRoute: typeof EEntityIdReceiptsCaptureRoute
   EEntityIdRecurringRecurringIdRoute: typeof EEntityIdRecurringRecurringIdRoute
   EEntityIdRecurringNewRoute: typeof EEntityIdRecurringNewRoute
   EEntityIdReportsBalanceSheetRoute: typeof EEntityIdReportsBalanceSheetRoute
@@ -948,6 +1049,7 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdInvoicesIndexRoute: typeof EEntityIdInvoicesIndexRoute
   EEntityIdJournalsIndexRoute: typeof EEntityIdJournalsIndexRoute
   EEntityIdPeriodsIndexRoute: typeof EEntityIdPeriodsIndexRoute
+  EEntityIdReceiptsIndexRoute: typeof EEntityIdReceiptsIndexRoute
   EEntityIdRecurringIndexRoute: typeof EEntityIdRecurringIndexRoute
   EEntityIdReportsIndexRoute: typeof EEntityIdReportsIndexRoute
   EEntityIdStatementsIndexRoute: typeof EEntityIdStatementsIndexRoute
@@ -973,6 +1075,8 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdInvoicesNewRoute: EEntityIdInvoicesNewRoute,
   EEntityIdJournalsJournalIdRoute: EEntityIdJournalsJournalIdRoute,
   EEntityIdJournalsNewRoute: EEntityIdJournalsNewRoute,
+  EEntityIdReceiptsReceiptIdRoute: EEntityIdReceiptsReceiptIdRoute,
+  EEntityIdReceiptsCaptureRoute: EEntityIdReceiptsCaptureRoute,
   EEntityIdRecurringRecurringIdRoute: EEntityIdRecurringRecurringIdRoute,
   EEntityIdRecurringNewRoute: EEntityIdRecurringNewRoute,
   EEntityIdReportsBalanceSheetRoute: EEntityIdReportsBalanceSheetRoute,
@@ -991,6 +1095,7 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdInvoicesIndexRoute: EEntityIdInvoicesIndexRoute,
   EEntityIdJournalsIndexRoute: EEntityIdJournalsIndexRoute,
   EEntityIdPeriodsIndexRoute: EEntityIdPeriodsIndexRoute,
+  EEntityIdReceiptsIndexRoute: EEntityIdReceiptsIndexRoute,
   EEntityIdRecurringIndexRoute: EEntityIdRecurringIndexRoute,
   EEntityIdReportsIndexRoute: EEntityIdReportsIndexRoute,
   EEntityIdStatementsIndexRoute: EEntityIdStatementsIndexRoute,
@@ -1008,9 +1113,11 @@ const EEntityIdRouteRouteWithChildren = EEntityIdRouteRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  PairRoute: PairRoute,
   EEntityIdRouteRoute: EEntityIdRouteRouteWithChildren,
   SettingsAiRoute: SettingsAiRoute,
   SettingsBackupRoute: SettingsBackupRoute,
+  SettingsRemoteRoute: SettingsRemoteRoute,
   SettingsSecurityRoute: SettingsSecurityRoute,
 }
 export const routeTree = rootRouteImport

@@ -5,6 +5,7 @@ import {
   domainError,
   err,
   ok,
+  type ReceiptReader,
   type Result,
   type SuggestionContext,
   type SuggestionProvider,
@@ -86,9 +87,14 @@ function contentOf(text: string): unknown {
   return joined;
 }
 
+/** `content` の部品（画像つきの要求。010 の証憑の読み取りだけが使う。006・007 は文字列のまま） */
+export type ChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string; detail: "high" | "low" | "auto" } };
+
 /** Chat Completions の要求（呼び出しごとの部分）。`responseFormat` は `response_format` の値（受けない接続先には付けずに再試行する） */
 export type ChatRequest = {
-  messages: { role: "system" | "user"; content: string }[];
+  messages: { role: "system" | "user"; content: string | ChatContentPart[] }[];
   responseFormat?: object | undefined;
 };
 
@@ -118,7 +124,8 @@ export async function chatCompletion(
     };
     try {
       const response = await options.fetch(
-        `${endpoint.baseUrl.replace(/\/+$/, "")}/v1/chat/completions`,
+        // 末尾の /v1 は付けても付けなくてもよい（画面の例は /v1 つき。fm serve は /v1 なし）
+        `${endpoint.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/v1/chat/completions`,
         {
           method: "POST",
           headers,
@@ -171,6 +178,64 @@ export function createOpenAiProvider(options: AiProviderOptions): SuggestionProv
         ],
         responseFormat: responseFormat(context),
       });
+    },
+  };
+}
+
+/** 証憑の読み取りの時間切れ（010/R13）: 画像は文字より遅い。外部の 60 秒より長く 90 秒 */
+export const RECEIPT_READ_TIMEOUT_MS = 90_000;
+
+export type ReceiptReaderOptions = {
+  fetch: typeof fetch;
+  /**
+   * 外部の接続先。呼ぶたびに引く（設定の変更がすぐ効く）。外部の AI と証憑の画像の送信がともに有効で、
+   * URL・モデル・API キーがそろうときだけ返す。そうでなければ undefined。端末内（`fm`）の接続先は受け取らない（FR-014）
+   */
+  endpoint(): Promise<AiEndpoint | undefined>;
+  /** 既定は `RECEIPT_READ_TIMEOUT_MS`（テストが短くする） */
+  timeoutMs?: number | undefined;
+};
+
+/**
+ * 外部の endpoint だけを呼ぶ `ReceiptReader`（010/R13、INV-66 の例外を閉じ込める 1 か所）。
+ * 006 の `createOpenAiProvider`・`buildAiPayload` は通らない。`read` は例外を投げず `Result` で返し、
+ * 時間切れは `COLUMN_TIMEOUT_DETAIL` つきの失敗（domain の `readReceipt` が `timeout`・`AI_TIMEOUT` にする）
+ */
+export function createReceiptReader(options: ReceiptReaderOptions): ReceiptReader {
+  return {
+    async model() {
+      return (await options.endpoint())?.model;
+    },
+    async read(request) {
+      const endpoint = await options.endpoint();
+      if (endpoint === undefined) return unavailable();
+      const base64 = Buffer.from(request.image.bytes).toString("base64");
+      return chatCompletion(
+        { fetch: options.fetch, timeoutMs: options.timeoutMs ?? RECEIPT_READ_TIMEOUT_MS },
+        endpoint,
+        {
+          messages: [
+            { role: "system", content: request.system },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: request.choices },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:${request.image.mediaType};base64,${base64}`,
+                    detail: "high",
+                  },
+                },
+              ],
+            },
+          ],
+          responseFormat: {
+            type: "json_schema",
+            json_schema: { name: "receipt_reading", strict: true, schema: request.schema },
+          },
+        },
+      );
     },
   };
 }

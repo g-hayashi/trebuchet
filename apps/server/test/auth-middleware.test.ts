@@ -334,16 +334,9 @@ describe("認証（FR-003・004、INV-28）", () => {
 });
 
 describe("公開の手続きの前提（FR-001・006、INV-29）", () => {
-  /**
-   * 公開の完全一致の一覧のうち、まだ本物のルートがないもの（pairing/register/*、T017 で足す）に
-   * ダミーのハンドラーを足したアプリ。ほかは T008 の本物のルート
-   */
+  /** 公開の完全一致の一覧の手続きを呼ぶアプリ（pairing/register/* は T017b の本物のルート） */
   function publicApp(options: Parameters<typeof createApp>[0] = {}) {
-    const a = createApp(options);
-    for (const p of ["/auth/pairing/register/options", "/auth/pairing/register/verify"]) {
-      a.post(p, (c) => c.json({ ok: true }));
-    }
-    return a;
+    return createApp(options);
   }
 
   /** 前提の検査（401・409・421）を通ったか。本物のルートは、空の本文で 200 か 400 VALIDATION になる */
@@ -457,16 +450,23 @@ describe("公開の手続きの前提（FR-001・006、INV-29）", () => {
     expect(res.status).toBe(401);
   });
 
-  it.each([
-    "/api/auth/sign-in/options",
-    "/api/auth/sign-in/verify",
-    "/api/auth/recovery/verify",
-    "/api/auth/pairing/register/options",
-    "/api/auth/pairing/register/verify",
-  ])("%s は未サインイン・施錠中で通る", async (path) => {
-    clearDataKey();
-    expect(passes(await post(publicApp(), path, {}))).toBe(true);
-  });
+  it.each(["/api/auth/sign-in/options", "/api/auth/sign-in/verify", "/api/auth/recovery/verify"])(
+    "%s は未サインイン・施錠中で通る",
+    async (path) => {
+      clearDataKey();
+      expect(passes(await post(publicApp(), path, {}))).toBe(true);
+    },
+  );
+
+  it.each(["/api/auth/pairing/register/options", "/api/auth/pairing/register/verify"])(
+    "%s は未サインインで認証の検査を通る（トークン・施錠・Host はルートが検査する）",
+    async (path) => {
+      // 認証の検査では止まらず、本物のルートの検査（本文の形）まで進む
+      const res = await post(publicApp(), path, {});
+      expect(res.status).toBe(400);
+      expect((await errorOf(res)).code).toBe("VALIDATION");
+    },
+  );
 
   it("status・health は未サインイン・施錠中で通る", async () => {
     await initialize();

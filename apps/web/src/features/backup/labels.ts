@@ -20,6 +20,7 @@ const FAILURE_REASONS: Record<string, string> = {
   WRITE_FAILED: "書き込みに失敗しました",
   VERIFY_FAILED: "書いたファイルを読み戻せませんでした",
   SNAPSHOT_FAILED: "帳簿の写しを作れませんでした",
+  RECEIPTS_SYNC_FAILED: "証憑のファイルを置き場所に写せませんでした",
 };
 
 export const describeFailure = (code: string): string => FAILURE_REASONS[code] ?? code;

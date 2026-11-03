@@ -62,6 +62,7 @@ describe("INV-29 全ルートの保護", () => {
       "DELETE /api/auth/passkeys/:id",
       "POST /api/auth/recovery/regenerate",
       "POST /api/auth/recovery/acknowledge",
+      "POST /api/auth/pairing",
       "GET /api/auth/sessions",
       "DELETE /api/auth/sessions/:id",
       "GET /api/auth/events",
@@ -78,6 +79,8 @@ describe("INV-29 全ルートの保護", () => {
       "POST /api/auth/recovery/verify",
       "POST /api/auth/recovery/register/options",
       "POST /api/auth/recovery/register/verify",
+      "POST /api/auth/pairing/register/options",
+      "POST /api/auth/pairing/register/verify",
     ]) {
       expect(keys.has(key), `${key} が app.routes にある`).toBe(true);
       expect(protectedKeys.has(key), `${key} は公開の名簿`).toBe(false);

@@ -151,6 +151,34 @@ export function describeError(error: unknown): ErrorDescription {
         message: "この操作の前に、パスキーでもう一度確認してください。",
         details: [],
       };
+    case "REMOTE_HOST_INVALID":
+      return {
+        message: "名前は *.ts.net の形で入力してください（例: mac.tail1234.ts.net）。",
+        details: [],
+      };
+    case "REMOTE_NOT_CONFIGURED":
+      return {
+        message:
+          "リモートが有効で、ts.net の名前が登録されているときだけ発行できます。設定の「リモート」で登録してください。",
+        details: [],
+      };
+    case "TAILSCALE_NOT_FOUND":
+      return {
+        message:
+          "tailscale が見つかりません。Tailscale を入れて、アプリを起動してからもう一度お試しください。",
+        details: [],
+      };
+    case "TAILSCALE_COMMAND_FAILED":
+      return {
+        message:
+          "tailscale のコマンドが失敗しました。Tailscale にサインインして接続中か確認してください。",
+        details: [],
+      };
+    case "PAIRING_TOKEN_INVALID":
+      return {
+        message: "ペアリングの URL が無効か期限切れです。Mac でもう一度発行してください",
+        details: [],
+      };
     case "CSRF_REJECTED":
       return {
         message: "要求の送信元を確認できませんでした。画面を開き直してください。",
@@ -241,6 +269,42 @@ export function describeError(error: unknown): ErrorDescription {
     case "STATEMENT_SOURCE_NOT_FOUND":
       return {
         message: "取込元が見つかりません。削除された可能性があります。一覧を読み直してください。",
+        details: [],
+      };
+    case "RECEIPT_NOT_FOUND":
+      return { message: "証憑が見つかりません。一覧を読み直してください。", details: [] };
+    case "RECEIPT_FORMAT_UNSUPPORTED":
+      return {
+        message: "このファイルは扱えません。JPEG・PNG・HEIC・PDF のファイルを選んでください。",
+        details: [],
+      };
+    case "RECEIPT_DUPLICATE":
+      return {
+        message: "同じファイルがすでにあります。",
+        details: error.details?.deleted === true ? ["削除済みの証憑です"] : [],
+      };
+    case "RECEIPT_DELETED":
+      return { message: "削除済みの証憑は変更できません。", details: [] };
+    case "RECEIPT_LINKED":
+      return {
+        message:
+          "仕訳に結びついている証憑は削除できません。先に仕訳との結びつきを解除してください。",
+        details: [],
+      };
+    case "RECEIPT_ALREADY_LINKED":
+      return {
+        message:
+          "この証憑はすでに別の仕訳に結びついています。付け替えるときは理由を添えてください。",
+        details: [],
+      };
+    case "RECEIPT_FILE_UNREADABLE":
+      return {
+        message: "証憑のファイルを読み出せません。バックアップから復元できるか確認してください。",
+        details: [],
+      };
+    case "RECEIPT_CONVERSION_FAILED":
+      return {
+        message: "表示用の画像に変換できません。元のファイルを取り出して確認してください。",
         details: [],
       };
     case "INTERNAL":

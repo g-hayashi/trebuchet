@@ -5,6 +5,8 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -15,12 +17,16 @@ import {
   decryptBackup,
   decryptBackupWithRecoveryKey,
   generateRecoveryKey,
+  RECEIPT_STORE_DIRNAME,
+  receiptBackupName,
+  receiptFile,
+  receiptRefsFromSnapshotFiles,
   unpackArchive,
   wrapDataKey,
 } from "@trebuchet/db";
 import { TEST_DATA_KEY, type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type BackupEnv, configure, makeBackupEnv } from "./backup-helpers.ts";
+import { addReceiptFile, type BackupEnv, configure, makeBackupEnv } from "./backup-helpers.ts";
 import { createTestEntity } from "./helpers.ts";
 
 // バックアップの実行（スナップショット → 内容の SHA-256 → skip の判断 → 暗号化（DK から作った鍵） → 書き込み → 世代の整理 → 記録）
@@ -247,6 +253,92 @@ describe("失敗", () => {
     expect(run.status).toBe("failed");
     expect(run.errorCode).toBe("SNAPSHOT_FAILED");
     expect(env2.snapshotLeftovers()).toEqual([]);
+  });
+});
+
+describe("証憑の写し（010 T026、INV-68）", () => {
+  const storeDir = () => join(env.folder, RECEIPT_STORE_DIRNAME);
+  const storeFiles = (entityId: string) => {
+    try {
+      return readdirSync(join(storeDir(), entityId)).sort();
+    } catch {
+      return [];
+    }
+  };
+  const storeName = (sha: string) => `${receiptBackupName(Buffer.from(TEST_DATA_KEY), sha)}.trc`;
+
+  /** `.tbk` の写しの DB が参照する証憑 */
+  function referencedBy(fileName: string) {
+    const bytes = readFileSync(join(env.folder, fileName));
+    const dec = decryptBackup(bytes, TEST_DATA_KEY, currentAppVersion());
+    if (!dec.ok) throw new Error("decrypt");
+    const unpacked = unpackArchive(dec.value.archive);
+    if (!unpacked.ok) throw new Error("unpack");
+    return receiptRefsFromSnapshotFiles(unpacked.value.files);
+  }
+
+  it("`.tbk` が参照する全証憑が、置き場所に名前を変えて写されている（名前は平文のハッシュと違う）", async () => {
+    const entityId = await createTestEntity("事業 B");
+    const shas = [addReceiptFile(entityId, "a"), addReceiptFile(entityId, "b")];
+
+    const run = await runOnce("manual");
+
+    expect(run.status).toBe("succeeded");
+    const refs = referencedBy(run.fileName ?? "");
+    const ref = refs.find((r) => r.entityId === entityId);
+    expect([...(ref?.sha256s ?? [])].sort()).toEqual([...shas].sort());
+    expect(storeFiles(entityId)).toEqual(shas.map(storeName).sort());
+    for (const sha of shas) expect(storeFiles(entityId).join()).not.toContain(sha);
+    // 置き場所のファイルは `.tbk` のフォルダの直下ではなく trebuchet-receipts/ の下。`.tbk` の一覧に混ざらない
+    expect(env.files().filter((n) => n.endsWith(".tbk"))).toEqual([run.fileName]);
+    expect(env.snapshotLeftovers()).toEqual([]);
+  });
+
+  it("2 回目は増えた分だけ写す。変更なし（skipped）のときも、置き場所の欠けを写し直す", async () => {
+    const entityId = await createTestEntity("事業 B");
+    const first = addReceiptFile(entityId, "a");
+    expect((await runOnce("auto")).status).toBe("succeeded");
+    const past = new Date("2020-01-01T00:00:00.000Z");
+    utimesSync(join(storeDir(), entityId, storeName(first)), past, past);
+    expect((await runOnce("auto")).status).toBe("skipped");
+    // 既にあるものは写し直さない
+    expect(statSync(join(storeDir(), entityId, storeName(first))).mtime.getTime()).toBe(
+      past.getTime(),
+    );
+
+    rmSync(join(storeDir(), entityId, storeName(first)));
+    const skipped = await runOnce("auto");
+    expect(skipped.status).toBe("skipped");
+    expect(storeFiles(entityId)).toEqual([storeName(first)]);
+  });
+
+  it("写せなければ failed と RECEIPTS_SYNC_FAILED。`.tbk` を書かず、平文の写しも残さない", async () => {
+    const entityId = await createTestEntity("事業 B");
+    const sha = addReceiptFile(entityId, "a");
+    rmSync(receiptFile(entityId, sha)); // データ場所のファイルが欠けた
+
+    const run = await runOnce("manual");
+
+    expect(run.status).toBe("failed");
+    expect(run.errorCode).toBe("RECEIPTS_SYNC_FAILED");
+    expect(run.fileName).toBeNull();
+    expect(env.files().filter((n) => n.endsWith(".tbk"))).toEqual([]);
+    expect(storeFiles(entityId)).toEqual([]);
+    expect(env.snapshotLeftovers()).toEqual([]);
+    expect(await env.backups().getLastSuccess()).toBeUndefined();
+  });
+
+  it("証憑が 0 件なら今までどおり（置き場所に trebuchet-receipts/ を作らない）", async () => {
+    const run = await runOnce("manual");
+    expect(run.status).toBe("succeeded");
+    expect(env.files()).toEqual([run.fileName]);
+  });
+
+  it("世代の整理は `.tbk` だけ。証憑の写しは消さない", async () => {
+    const entityId = await createTestEntity("事業 B");
+    const sha = addReceiptFile(entityId, "a");
+    for (let i = 0; i < 4; i += 1) await runOnce("manual", 40 * DAY);
+    expect(storeFiles(entityId)).toEqual([storeName(sha)]);
   });
 });
 

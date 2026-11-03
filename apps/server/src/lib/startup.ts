@@ -1,3 +1,5 @@
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { removeStaleSnapshots } from "@trebuchet/db";
 import {
   type BackupScheduler,
@@ -5,6 +7,7 @@ import {
   startBackupScheduler,
 } from "./backup-scheduler.ts";
 import type { FmServer } from "./fm-server.ts";
+import { RECEIPT_CONVERT_DIR_PREFIX } from "./image-tool.ts";
 import {
   type RecurringScheduler,
   type RecurringSchedulerDeps,
@@ -16,8 +19,25 @@ import type { Vault } from "./vault.ts";
 export type BackgroundServices = {
   /** 起動時に消した、前回の異常終了で残った平文の写しの数 */
   removedSnapshots: number;
+  /** 起動時に消した、前回の異常終了で残った証憑の変換の作業ディレクトリ（平文の写し）の数 */
+  removedReceiptConversions: number;
   stop(): void;
 };
+
+/**
+ * 前回の異常終了で残った証憑の変換の作業ディレクトリ（`<tmpRoot>/receipt-convert-*`。平文の写し。
+ * 010/R9）を消す。消した数を返す。`removeStaleSnapshots`（004）と同じ
+ */
+export function removeStaleReceiptConversions(tmpRoot: string): number {
+  if (!existsSync(tmpRoot)) return 0;
+  let removed = 0;
+  for (const entry of readdirSync(tmpRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith(RECEIPT_CONVERT_DIR_PREFIX)) continue;
+    rmSync(join(tmpRoot, entry.name), { recursive: true, force: true });
+    removed += 1;
+  }
+  return removed;
+}
 
 /**
  * server の起動の処理（`main.ts` から呼ぶ）。
@@ -36,6 +56,7 @@ export function startBackgroundServices(
   },
 ): BackgroundServices {
   const removedSnapshots = removeStaleSnapshots(deps.tmpRoot);
+  const removedReceiptConversions = removeStaleReceiptConversions(deps.tmpRoot);
   let running: { backup: BackupScheduler; recurring: RecurringScheduler } | null = null;
 
   function start(): void {
@@ -59,6 +80,7 @@ export function startBackgroundServices(
 
   return {
     removedSnapshots,
+    removedReceiptConversions,
     stop: () => {
       unsubscribe();
       sweeper.stop();

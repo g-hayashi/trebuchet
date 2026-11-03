@@ -248,7 +248,7 @@ function seedDestLedger(): { id: string; name: string } {
     // 006: AI の接続の設定も端末の値（バックアップの元の値ではない）
     db.prepare("DELETE FROM ai_settings").run();
     db.prepare(
-      "INSERT INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, updated_at) VALUES (1, 0, 1, ?, ?, ?)",
+      "INSERT INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, receipt_images_enabled, updated_at) VALUES (1, 0, 1, ?, ?, 1, ?)",
     ).run(
       "https://ai-of-this-machine.example.com",
       "model-of-this-machine",
@@ -379,7 +379,7 @@ describe("restoreBackup: 既存の帳簿がある場所への復元", () => {
       expect(
         registry
           .prepare(
-            "SELECT id, local_enabled, external_enabled, external_base_url, external_model, updated_at FROM ai_settings",
+            "SELECT id, local_enabled, external_enabled, external_base_url, external_model, receipt_images_enabled, updated_at FROM ai_settings",
           )
           .all(),
       ).toEqual([
@@ -389,6 +389,7 @@ describe("restoreBackup: 既存の帳簿がある場所への復元", () => {
           external_enabled: 1,
           external_base_url: "https://ai-of-this-machine.example.com",
           external_model: "model-of-this-machine",
+          receipt_images_enabled: 1,
           updated_at: "2026-10-30T00:00:00.000Z",
         },
       ]);

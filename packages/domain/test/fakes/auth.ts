@@ -1,3 +1,4 @@
+import type { RemoteSettings } from "@trebuchet/schema";
 import { isSessionActive } from "../../src/auth/session.ts";
 import type {
   AppSettingKey,
@@ -248,11 +249,38 @@ export class FakeAuthStore implements AuthStore {
     t.usedAt = now;
     return true;
   }
+  async addPasskeyWithPairingToken(
+    passkey: NewPasskey,
+    wrap: WrappedKey,
+    tokenHash: string,
+    now: string,
+  ): Promise<boolean> {
+    if (!this.keyWraps.some((w) => w.kind === "recovery")) {
+      throw new Error("vault is not initialized");
+    }
+    const t = this.findValidPairing(tokenHash, passkey.rpId, now);
+    if (!t) return false;
+    this.insertPasskey(passkey, wrap); // 失敗すれば例外で、トークンは使用済みにならない
+    t.usedAt = now;
+    return true;
+  }
   async deleteExpiredPairingTokens(before: string): Promise<number> {
     const keep = this.pairingTokens.filter((t) => t.expiresAt >= before);
     const n = this.pairingTokens.length - keep.length;
     this.pairingTokens = keep;
     return n;
+  }
+
+  remote: RemoteSettings = { enabled: false, host: null };
+  async getRemoteSettings(): Promise<RemoteSettings> {
+    return { ...this.remote };
+  }
+  async setRemoteSettings(settings: RemoteSettings, _now: string): Promise<void> {
+    if (settings.host !== null && !/^(?:[^.]+\.)+ts\.net$/i.test(settings.host)) {
+      throw new Error("remote host must be *.ts.net");
+    }
+    if (settings.enabled && settings.host === null) throw new Error("remote host required");
+    this.remote = { ...settings };
   }
 
   async getSetting(key: AppSettingKey): Promise<string | undefined> {

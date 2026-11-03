@@ -53,9 +53,26 @@ describe("ai_settings（registry）", () => {
         "external_model",
         "id",
         "local_enabled",
+        "receipt_images_enabled",
         "updated_at",
       ].sort(),
     );
+  });
+
+  it("receipt_images_enabled（010 R15）: 既定 0、0・1 だけ、1 にできるのは external_enabled = 1 のときだけ", () => {
+    insert(row());
+    const stored = db.$client.prepare("SELECT receipt_images_enabled AS v FROM ai_settings").get();
+    expect(stored).toEqual({ v: 0 });
+    const external = {
+      external_enabled: 1,
+      external_base_url: "https://x/v1",
+      external_model: "m",
+    };
+    db.$client.prepare("DELETE FROM ai_settings").run();
+    expect(() => insert(row({ receipt_images_enabled: 2, ...external }))).toThrow(/CHECK/);
+    expect(() => insert(row({ receipt_images_enabled: -1, ...external }))).toThrow(/CHECK/);
+    expect(() => insert(row({ receipt_images_enabled: 1, external_enabled: 0 }))).toThrow(/CHECK/);
+    expect(() => insert(row({ receipt_images_enabled: 1, ...external }))).not.toThrow();
   });
 
   it("1 行だけ（id = 1）。真偽値は 0・1", () => {

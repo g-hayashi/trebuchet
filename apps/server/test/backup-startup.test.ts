@@ -107,6 +107,32 @@ describe("startBackgroundServices", () => {
     expect(existsSync(other)).toBe(true);
   });
 
+  it("前回の異常終了で残った .tmp/receipt-convert-*/（証憑の変換の平文の写し）も消し、ほかのものは消さない（010/R9）", () => {
+    const stale = join(env.tmpRoot, "receipt-convert-0191f5a0-bbbb");
+    const snapshot = join(env.tmpRoot, "backup-snapshot-0191f5a0-aaaa");
+    const other = join(env.tmpRoot, "keep-me");
+    for (const dir of [stale, snapshot, other]) mkdirSync(dir, { recursive: true });
+    writeFileSync(join(stale, "input.heic"), "plaintext");
+    writeFileSync(join(other, "x"), "x");
+
+    const services = startBackgroundServices(deps(env.runner));
+    services.stop();
+
+    expect(services.removedReceiptConversions).toBe(1);
+    expect(services.removedSnapshots).toBe(1);
+    expect(existsSync(stale)).toBe(false);
+    expect(existsSync(other)).toBe(true);
+  });
+
+  it("tmpRoot がなくても証憑の変換の掃除は 0 件で通る", () => {
+    const services = startBackgroundServices({
+      ...deps(env.runner),
+      tmpRoot: join(env.tmpRoot, "not-created"),
+    });
+    services.stop();
+    expect(services.removedReceiptConversions).toBe(0);
+  });
+
   it("起動の直後に一度判断し、設定済みで最後の確認がなければ自動で実行する", async () => {
     await configure(env);
     const start = vi.fn(async () => ({

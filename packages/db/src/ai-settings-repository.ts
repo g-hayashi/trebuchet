@@ -7,6 +7,8 @@ export type AiSettingsRecord = {
   externalEnabled: boolean;
   externalBaseUrl: string | null;
   externalModel: string | null;
+  /** 010 R15: 証憑の画像を外部の AI へ送ってよいか（`externalEnabled` のときだけ true にできる） */
+  receiptImagesEnabled: boolean;
 };
 
 export const DEFAULT_AI_SETTINGS: AiSettingsRecord = {
@@ -14,6 +16,7 @@ export const DEFAULT_AI_SETTINGS: AiSettingsRecord = {
   externalEnabled: false,
   externalBaseUrl: null,
   externalModel: null,
+  receiptImagesEnabled: false,
 };
 
 /** registry の `ai_settings`（1 行。行がなければ既定の値） */
@@ -32,6 +35,7 @@ export class DrizzleAiSettingsStore {
       externalEnabled: row.externalEnabled === 1,
       externalBaseUrl: row.externalBaseUrl,
       externalModel: row.externalModel,
+      receiptImagesEnabled: row.receiptImagesEnabled === 1,
     };
   }
 
@@ -41,6 +45,7 @@ export class DrizzleAiSettingsStore {
       externalEnabled: settings.externalEnabled ? 1 : 0,
       externalBaseUrl: settings.externalBaseUrl,
       externalModel: settings.externalModel,
+      receiptImagesEnabled: settings.receiptImagesEnabled ? 1 : 0,
       updatedAt: at,
     };
     this.db

@@ -72,7 +72,7 @@ async function setup(options: { fmAvailable?: boolean; reply?: Reply } = {}) {
     return { status: res.status, body: (await res.json()) as Record<string, unknown> };
   };
   const putAi = (json: Record<string, unknown>) =>
-    client.api.settings.ai.$put({ json: json as never });
+    client.api.settings.ai.$put({ json: { receiptImagesEnabled: false, ...json } as never });
   return { calls, fetchFn, secrets, suggest, putAi, client };
 }
 

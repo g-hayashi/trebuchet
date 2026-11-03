@@ -237,16 +237,35 @@ describe("key wraps（008 の D1・D2）", () => {
 });
 
 describe("施錠中", () => {
-  it("パスキー・包み・セッション・記録（auth.sqlite）は使え、registry の設定とペアリングは VaultLockedError", async () => {
+  it("パスキー・包み・セッション・記録・リモートの設定・ペアリング（auth.sqlite）は使え、registry の設定は VaultLockedError", async () => {
     clearDataKey();
     await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
     expect(await store.getRecoveryWrap()).toBeDefined();
     await store.createSession(session("s1", "th1"));
     await store.appendEvent({ id: "e1", occurredAt: T0, kind: "sign_in" });
     await expect(store.getSetting("mac_id")).rejects.toBeInstanceOf(VaultLockedError);
-    await expect(store.isPairingTokenValid("x", "localhost", T0)).rejects.toBeInstanceOf(
-      VaultLockedError,
+  });
+
+  it("リモートの設定とペアリングのトークンは施錠中（clearDataKey の後）も読み書きできる", async () => {
+    await store.setRemoteSettings({ enabled: true, host: "mac.ts.net" }, T0);
+    await store.createPairingToken({
+      id: "p1",
+      tokenHash: "ph1",
+      rpId: "mac.ts.net",
+      now: T0,
+      expiresAt: "2026-10-20T09:10:00.000Z",
+    });
+    clearDataKey();
+    expect(await store.getRemoteSettings()).toEqual({ enabled: true, host: "mac.ts.net" });
+    await store.setRemoteSettings({ enabled: false, host: "mac.ts.net" }, T1);
+    expect(await store.getRemoteSettings()).toEqual({ enabled: false, host: "mac.ts.net" });
+    expect(await store.isPairingTokenValid("ph1", "mac.ts.net", "2026-10-20T09:05:00.000Z")).toBe(
+      true,
     );
+    expect(await store.consumePairingToken("ph1", "mac.ts.net", "2026-10-20T09:05:00.000Z")).toBe(
+      true,
+    );
+    expect(await store.deleteExpiredPairingTokens(T2)).toBe(1);
   });
 });
 
@@ -429,6 +448,62 @@ describe("pairing tokens", () => {
     expect(await store.consumePairingToken("ph1", "mac.ts.net", MID)).toBe(true);
   });
 
+  describe("addPasskeyWithPairingToken（004/T017b。パスキー・包み・消費を 1 トランザクションで）", () => {
+    const paired = (id: string) => passkey(id, { rpId: "mac.ts.net", createdAt: MID });
+
+    it("有効なトークンなら true で、パスキーと包みが入りトークンが使用済みになる", async () => {
+      await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+      await store.createPairingToken(token());
+      expect(await store.addPasskeyWithPairingToken(paired("pk2"), wrap(3), "ph1", MID)).toBe(true);
+      expect((await store.getPasskey("pk2"))?.rpId).toBe("mac.ts.net");
+      expect(await store.getPasskeyWrap("pk2")).toBeDefined();
+      expect(await store.isPairingTokenValid("ph1", "mac.ts.net", MID)).toBe(false);
+    });
+
+    it("無効（使用済み・期限切れ・存在しない・rpId 違い）なら false で、何も書かない", async () => {
+      await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+      await store.createPairingToken(token());
+      await store.consumePairingToken("ph1", "mac.ts.net", MID);
+      expect(await store.addPasskeyWithPairingToken(paired("pk2"), wrap(3), "ph1", MID)).toBe(
+        false,
+      );
+      await store.createPairingToken(token({ id: "p2", tokenHash: "ph2" }));
+      expect(await store.addPasskeyWithPairingToken(paired("pk2"), wrap(3), "ph2", LATE)).toBe(
+        false,
+      );
+      expect(await store.addPasskeyWithPairingToken(paired("pk2"), wrap(3), "zz", MID)).toBe(false);
+      expect(
+        await store.addPasskeyWithPairingToken(
+          passkey("pk2", { rpId: "other.ts.net" }),
+          wrap(3),
+          "ph2",
+          MID,
+        ),
+      ).toBe(false);
+      expect(await store.getPasskey("pk2")).toBeUndefined();
+      expect(await store.isPairingTokenValid("ph2", "mac.ts.net", MID)).toBe(true);
+      expect(db.$client.prepare("SELECT count(*) AS n FROM key_wraps").get()).toEqual({ n: 2 });
+    });
+
+    it("パスキーの追加に失敗したら（同じ id）例外で、トークンは使用済みにならない", async () => {
+      await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
+      await store.createPairingToken(token());
+      await expect(
+        store.addPasskeyWithPairingToken(paired("pk1"), wrap(3), "ph1", MID),
+      ).rejects.toThrow();
+      expect(await store.isPairingTokenValid("ph1", "mac.ts.net", MID)).toBe(true);
+      expect(db.$client.prepare("SELECT count(*) AS n FROM key_wraps").get()).toEqual({ n: 2 });
+    });
+
+    it("設定前（recovery の包みがない）なら例外で、トークンは使用済みにならない", async () => {
+      await store.createPairingToken(token());
+      await expect(
+        store.addPasskeyWithPairingToken(paired("pk2"), wrap(3), "ph1", MID),
+      ).rejects.toThrow();
+      expect(await store.isPairingTokenValid("ph1", "mac.ts.net", MID)).toBe(true);
+    });
+  });
+
   it("期限切れの削除は expiresAt < before だけ", async () => {
     await store.createPairingToken(token({ id: "p1", tokenHash: "a", expiresAt: T0 }));
     await store.createPairingToken(token({ id: "p2", tokenHash: "b", expiresAt: T1 }));
@@ -443,13 +518,31 @@ describe("pairing tokens", () => {
   });
 });
 
+describe("remote_settings（004/T016）", () => {
+  it("未設定は { enabled: false, host: null }、往復して上書きできる", async () => {
+    expect(await store.getRemoteSettings()).toEqual({ enabled: false, host: null });
+    await store.setRemoteSettings({ enabled: true, host: "mac.ts.net" }, T0);
+    expect(await store.getRemoteSettings()).toEqual({ enabled: true, host: "mac.ts.net" });
+    await store.setRemoteSettings({ enabled: false, host: null }, T1);
+    expect(await store.getRemoteSettings()).toEqual({ enabled: false, host: null });
+  });
+
+  it("*.ts.net でない名前、名前のない有効化は拒否する（何も書かない）", async () => {
+    await expect(
+      store.setRemoteSettings({ enabled: false, host: "example.com" }, T0),
+    ).rejects.toThrow();
+    await expect(store.setRemoteSettings({ enabled: true, host: null }, T0)).rejects.toThrow();
+    expect(await store.getRemoteSettings()).toEqual({ enabled: false, host: null });
+  });
+});
+
 describe("app_settings", () => {
   it("未設定は undefined、setSetting で往復し上書きできる", async () => {
-    expect(await store.getSetting("remote_host")).toBeUndefined();
-    await store.setSetting("remote_host", "mac.ts.net", T0);
-    expect(await store.getSetting("remote_host")).toBe("mac.ts.net");
-    await store.setSetting("remote_host", "other.ts.net", T1);
-    expect(await store.getSetting("remote_host")).toBe("other.ts.net");
+    expect(await store.getSetting("backup_folder")).toBeUndefined();
+    await store.setSetting("backup_folder", "/a", T0);
+    expect(await store.getSetting("backup_folder")).toBe("/a");
+    await store.setSetting("backup_folder", "/b", T1);
+    expect(await store.getSetting("backup_folder")).toBe("/b");
   });
 
   it("getOrCreateMacId は2回目に同じ値を返し、newId を呼ばない", async () => {

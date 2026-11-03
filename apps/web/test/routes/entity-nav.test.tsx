@@ -85,7 +85,24 @@ describe("事業体の 2 段のメニュー", () => {
     expect(href("事業体の設定")).toBe("/e/e1/accounts");
   });
 
-  it("仕訳の画面では「記帳」が強調され、2 段目に仕訳・明細・定期仕訳だけが出る", async () => {
+  it("証憑の画面でも「記帳」が強調され、2 段目の「証憑」が強調される", async () => {
+    renderAt(`/e/e1/receipts/00000000-0000-4000-8000-0000000000a1`);
+    const nav = await groupNav();
+    await waitFor(() =>
+      expect(within(nav).getByRole("link", { name: "記帳" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      ),
+    );
+    const sub = await screen.findByRole("navigation", { name: "事業体のサブメニュー" });
+    expect(within(sub).getByRole("link", { name: "証憑" })).toHaveAttribute("aria-current", "page");
+    expect(within(sub).getByRole("link", { name: "証憑" })).toHaveAttribute(
+      "href",
+      "/e/e1/receipts",
+    );
+  });
+
+  it("仕訳の画面では「記帳」が強調され、2 段目に仕訳・明細・証憑・定期仕訳だけが出る", async () => {
     renderAt("/e/e1/journals");
     const nav = await groupNav();
     await waitFor(() =>
@@ -96,7 +113,7 @@ describe("事業体の 2 段のメニュー", () => {
     );
     expect(within(nav).getByRole("link", { name: "請求" })).not.toHaveAttribute("aria-current");
     const sub = await screen.findByRole("navigation", { name: "事業体のサブメニュー" });
-    expect(linkNames(sub)).toEqual(["仕訳", "明細", "定期仕訳"]);
+    expect(linkNames(sub)).toEqual(["仕訳", "明細", "証憑", "定期仕訳"]);
     expect(within(sub).getByRole("link", { name: "仕訳" })).toHaveAttribute("aria-current", "page");
     expect(within(sub).getByRole("link", { name: "明細" })).not.toHaveAttribute("aria-current");
     expect(within(sub).getByRole("link", { name: "明細" })).toHaveAttribute(

@@ -12,7 +12,9 @@ import {
   openRecurringUnitOfWork,
   vault,
 } from "./deps.ts";
+import { SERVER_PORT } from "./lib/origin.ts";
 import { startBackgroundServices } from "./lib/startup.ts";
+import { resolveWebDist, withWebDist } from "./static.ts";
 
 // 008 の D7: 起動時は auth.sqlite だけを開き、セッションを全部消す（再起動で DK が消えたので、
 // 残ったセッションは使えない）。registry と事業体の DB は解錠まで開かない
@@ -20,10 +22,18 @@ await authStore().deleteAllSessions();
 
 // R13: 認証を入れるまではループバックだけで待ち受ける
 const hostname = "127.0.0.1";
-const port = 8787;
+const port = SERVER_PORT;
 
-const server = serve({ fetch: app.fetch, hostname, port }, (info) => {
+// ビルド済みの web があれば /api の外に配信する（004 R3。TREBUCHET_WEB_DIST、既定 apps/web/dist）。
+// Host の検査のリモートの設定は、API と同じく要求ごとに auth.sqlite から読む
+const webDist = resolveWebDist();
+const handler = webDist
+  ? withWebDist(app, { dist: webDist, getRemoteSettings: () => authStore().getRemoteSettings() })
+  : app;
+
+const server = serve({ fetch: handler.fetch, hostname, port }, (info) => {
   console.log(`server listening on http://${info.address}:${info.port}`);
+  console.log(webDist ? `serving web from ${webDist}` : "web dist not found: API only");
 });
 
 // 古い平文の写しの掃除（004 R9）。自動のバックアップ（004 R10）と定期仕訳の自動登録（005 R18）は

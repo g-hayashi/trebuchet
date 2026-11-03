@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@/routes/settings/ai";
@@ -13,6 +13,7 @@ const SETTINGS = {
   externalEnabled: false,
   externalBaseUrl: null as string | null,
   externalModel: null as string | null,
+  receiptImagesEnabled: false,
   apiKeySet: false,
 };
 
@@ -35,6 +36,7 @@ function openSettings(
         externalEnabled: body.externalEnabled,
         externalBaseUrl: body.externalBaseUrl ?? null,
         externalModel: body.externalModel ?? null,
+        receiptImagesEnabled: body.receiptImagesEnabled,
         apiKeySet: body.apiKey === undefined ? (settings.apiKeySet ?? false) : body.apiKey !== "",
       });
     },
@@ -100,8 +102,35 @@ describe("AI の設定の保存（H:§7.2）", () => {
       externalEnabled: true,
       externalBaseUrl: "https://api.example.com/v1",
       externalModel: "model-a",
+      receiptImagesEnabled: false,
     });
     expect(await screen.findByText("保存しました。")).toBeInTheDocument();
+  });
+
+  it("証憑の画像の送信（receiptImagesEnabled）は今の値を保って送る。外部を無効にすると false にする（010 R15）", async () => {
+    const all = openSettings({
+      externalBaseUrl: "https://api.example.com/v1",
+      externalModel: "model-a",
+      apiKeySet: true,
+      externalEnabled: true,
+      receiptImagesEnabled: true,
+    });
+    const u = user();
+    await screen.findByLabelText("端末内の AI を使う");
+    await u.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(putCalls(all)).toHaveLength(1));
+    expect(putCalls(all)[0]?.body).toMatchObject({
+      externalEnabled: true,
+      receiptImagesEnabled: true,
+    });
+
+    await u.click(screen.getByLabelText("外部の AI を使う"));
+    await u.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(putCalls(all)).toHaveLength(2));
+    expect(putCalls(all)[1]?.body).toMatchObject({
+      externalEnabled: false,
+      receiptImagesEnabled: false,
+    });
   });
 
   it("キーを打つと apiKey を送り、保存の後は入力欄を空に戻す", async () => {
@@ -120,6 +149,7 @@ describe("AI の設定の保存（H:§7.2）", () => {
       externalEnabled: true,
       externalBaseUrl: "http://localhost:11434/v1",
       externalModel: "model-b",
+      receiptImagesEnabled: false,
       apiKey: "sk-test-123",
     });
     await waitFor(() => expect(screen.getByLabelText("API キー")).toHaveValue(""));
@@ -174,5 +204,75 @@ describe("AI の設定の保存（H:§7.2）", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "外部の AI の接続先・モデル・API キーがそろっていません",
     );
+  });
+});
+
+describe("証憑の画像を外部の AI に送る（010 FR-015・R15）", () => {
+  const EXTERNAL = {
+    externalEnabled: true,
+    externalBaseUrl: "https://api.example.com/v1",
+    externalModel: "model-a",
+    apiKeySet: true,
+  };
+  const LABEL = "証憑の画像を外部の AI に送る";
+
+  it("外部の AI を使わないときは選べない", async () => {
+    openSettings();
+    expect(await screen.findByLabelText(LABEL)).toBeDisabled();
+    expect(screen.getByLabelText(LABEL)).not.toBeChecked();
+  });
+
+  it("有効にする前に、マスクできずそのまま送られることを示して確認する。やめれば有効にならない", async () => {
+    const all = openSettings(EXTERNAL);
+    const u = user();
+    await u.click(await screen.findByLabelText(LABEL));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("マスクできず");
+    expect(dialog).toHaveTextContent("そのまま外部の AI に送られます");
+    expect(dialog).toHaveTextContent("明細の推定では送る情報を伏せていますが、画像はその例外です");
+    await u.click(within(dialog).getByRole("button", { name: "やめる" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(LABEL)).not.toBeChecked();
+
+    await u.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(putCalls(all)).toHaveLength(1));
+    expect(putCalls(all)[0]?.body).toMatchObject({ receiptImagesEnabled: false });
+  });
+
+  it("確認すると有効になり、保存で receiptImagesEnabled: true を送る", async () => {
+    const all = openSettings(EXTERNAL);
+    const u = user();
+    await u.click(await screen.findByLabelText(LABEL));
+    await u.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "理解して有効にする" }),
+    );
+    expect(screen.getByLabelText(LABEL)).toBeChecked();
+    expect(all.filter((c) => c.method === "PUT")).toHaveLength(0);
+
+    await u.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(putCalls(all)).toHaveLength(1));
+    expect(putCalls(all)[0]?.body).toMatchObject({
+      externalEnabled: true,
+      receiptImagesEnabled: true,
+    });
+  });
+
+  it("無効にするときは確認なし。外部の AI を無効にすると画像の送信も外れ、戻しても自動では有効に戻らない", async () => {
+    const all = openSettings({ ...EXTERNAL, receiptImagesEnabled: true });
+    const u = user();
+    expect(await screen.findByLabelText(LABEL)).toBeChecked();
+    await u.click(screen.getByLabelText("外部の AI を使う"));
+    expect(screen.getByLabelText(LABEL)).toBeDisabled();
+    expect(screen.getByLabelText(LABEL)).not.toBeChecked();
+    await u.click(screen.getByLabelText("外部の AI を使う"));
+    expect(screen.getByLabelText(LABEL)).not.toBeChecked();
+
+    await u.click(screen.getByLabelText(LABEL));
+    await u.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "やめる" }),
+    );
+    await u.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(putCalls(all)).toHaveLength(1));
+    expect(putCalls(all)[0]?.body).toMatchObject({ receiptImagesEnabled: false });
   });
 });

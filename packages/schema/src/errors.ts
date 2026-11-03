@@ -65,6 +65,9 @@ export const ErrorCode = z.enum([
   "REMOTE_HOST_INVALID",
   "REMOTE_NOT_CONFIGURED",
   "PAIRING_TOKEN_INVALID",
+  // 004 US4: tailscale の CLI（`GET/PUT /settings/remote/tailscale*`）
+  "TAILSCALE_NOT_FOUND",
+  "TAILSCALE_COMMAND_FAILED",
   // 005-recurring-invoicing（contracts/http-api.md §1）
   "INVOICE_NOT_FOUND",
   "PAYMENT_NOT_FOUND",
@@ -99,6 +102,16 @@ export const ErrorCode = z.enum([
   "STATEMENT_MAPPING_INVALID",
   "STATEMENT_SOURCE_NOT_FOUND",
   "STATEMENT_SOURCE_NAME_TAKEN",
+  // 010-receipts（contracts/http-api.md §1）
+  "RECEIPT_NOT_FOUND",
+  "RECEIPT_FORMAT_UNSUPPORTED",
+  "RECEIPT_DUPLICATE",
+  "RECEIPT_DELETED",
+  "RECEIPT_LINKED",
+  "RECEIPT_ALREADY_LINKED",
+  "RECEIPT_FILE_UNREADABLE",
+  "RECEIPT_CONVERSION_FAILED",
+  "RECEIPT_READ_UNSUPPORTED",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 

@@ -62,6 +62,7 @@ function EntityList() {
                 <TableHead>名称</TableHead>
                 <TableHead>種別</TableHead>
                 <TableHead>作成日</TableHead>
+                <TableHead>証憑</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -79,6 +80,15 @@ function EntityList() {
                   <TableCell>{KIND_LABELS[e.kind]}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {new Date(e.createdAt).toLocaleDateString("ja-JP")}
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      to="/e/$entityId/receipts"
+                      params={{ entityId: e.id }}
+                      className="underline-offset-4 hover:underline"
+                    >
+                      証憑を追加
+                    </Link>
                   </TableCell>
                 </TableRow>
               ))}
