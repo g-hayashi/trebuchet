@@ -6,11 +6,19 @@ import {
   type DomainError,
   getJournalDetail,
   getJournalHistory,
+  type Journal,
   listJournalReceipts,
   listJournalStatements,
+  suggestFromHistory,
   voidJournal,
 } from "@trebuchet/domain";
-import { JournalCorrection, JournalInput, JournalQuery, VoidInput } from "@trebuchet/schema";
+import {
+  JournalCorrection,
+  JournalInput,
+  JournalQuery,
+  JournalSuggestionQuery,
+  VoidInput,
+} from "@trebuchet/schema";
 import { type Context, Hono } from "hono";
 import {
   invoicingDeps,
@@ -69,6 +77,18 @@ export function journalRoutes({ clock, receipts }: RouteOptions & { receipts: Re
       const result = createJournal(journalDeps(c.var.db, clock), c.req.valid("json"));
       if (!result.ok) return failJournal(c, clock, result.error);
       return c.json(result.value, 201);
+    })
+    .get("/journals/suggestions", validate("query", JournalSuggestionQuery), (c) => {
+      const { ledger } = journalDeps(c.var.db, clock);
+      const journals: Journal[] = [];
+      let cursor: string | undefined;
+      // 摘要の正規化は domain で行う。直近の件数で打ち切らず全履歴を渡す。
+      do {
+        const page = ledger.findJournals({ limit: 200, cursor });
+        journals.push(...page.items);
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor !== undefined);
+      return c.json({ suggestions: suggestFromHistory(journals, c.req.valid("query")) }, 200);
     })
     .get("/journals/:journalId", (c) => {
       const journalId = c.req.param("journalId");

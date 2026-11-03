@@ -68,11 +68,11 @@
 ## R5. 仕訳のかんたん入力・税区分の既定・科目の読み・履歴からの候補
 
 **Decision**:
-- かんたん入力（`features/journals/QuickEntryForm.tsx`）: 日付・借方の科目・貸方の科目・金額・摘要（任意で取引先・税区分・タグ）。送るときは 2 行の `JournalInput`（借方 1 行・貸方 1 行、同じ金額）にして 001 の `POST /journals` を呼ぶ。API は変えない。「詳細」は今の `JournalForm`（複数行）を使い、最後の行の金額を差額で埋める（入力されていない最後の行だけ。利用者が入れた値は上書きしない）。
+- かんたん入力（`features/journals/QuickEntryForm.tsx`）: 日付・借方の科目・貸方の科目・金額・摘要（任意で取引先・税区分・タグ）。税区分は借方・貸方それぞれで選択する（2026-11-03 利用者の判断）。取引先も左右それぞれの値を保持する。送るときは 2 行の `JournalInput`（借方 1 行・貸方 1 行、同じ金額、各行の税区分・取引先）にして 001 の `POST /journals` を呼ぶ。API は変えない。「詳細」は今の `JournalForm`（複数行）を使い、最後の行の金額を差額で埋める（入力されていない最後の行だけ。利用者が入れた値は上書きしない）。
 - 税区分の既定: `JournalForm.tsx:62-80` の web の複製と `packages/domain/src/journal.ts:49-60` を、`packages/schema/src/tax-defaults.ts` の `defaultTaxCategory` 1 つにする。domain はそれを import する（domain → schema の向き）。web は表示の「自動（○○）」だけに使い、送るときは今どおり省いて server に決めさせる。
 - 科目の読み: `packages/schema/src/account-readings.ts` に、最初からある科目のコード → ひらがなの表 `ACCOUNT_READINGS` を置く（seed の全科目）。最初からある科目は名前を変えられなくなる（R15）ので、コードで引いてずれない。絞り込みは名前・コード・読みの NFKC の部分一致（`lib/account-search.ts`）。利用者の科目は名前とコードだけ（D3）。
 - 入力の順と Enter: 最初の欄（日付）に `autoFocus`。Enter は送信せず次の欄へ移り、最後の欄で Enter を押すと登録する（combobox の中の Enter は選択の確定）。登録の後は日付を残して他を空にし、借方の科目へ移る（FR-013）。
-- 履歴からの候補（FR-014）: `GET /api/entities/:id/journals/suggestions?memo=&partnerId=`（新設）。domain の純関数 `suggestFromHistory(journals, query)` が、取消を除く過去の仕訳のうち、摘要の正規化（`normalize.ts` の明細の内容と同じ NFKC・空白の正規化）が一致するもの、または取引先が一致するものを、新しい順に最大 3 件、借方・貸方の科目・税区分・取引先の組で重ねずに返す。2 行の仕訳だけを候補にする（3 行以上は形を表せない）。摘要の入力から 300 ms 待って呼ぶ。
+- 履歴からの候補（FR-014）: `GET /api/entities/:id/journals/suggestions?memo=&partnerId=`（新設）。domain の純関数 `suggestFromHistory(journals, query)` が全履歴の取消でない借方・貸方各 1 行の仕訳から、摘要の正規化（明細と同じ `normalizeContent`）が一致するもの、または左右いずれかの取引先が一致するものを、日付の降順・同日は仕訳番号の降順に最大 3 件返す。借方・貸方それぞれの科目・税区分・取引先の 6 値の組で重ねない。2026-11-03 の利用者の判断で税区分を左右別に選択する。候補も `debitTaxCategory`・`creditTaxCategory` と `debitPartnerId`・`creditPartnerId` を保持し、既存の異なる値を失わない（§2.2）。摘要の入力から 300 ms 待って呼ぶ。
 - 複製: 一覧の中身と詳細から「複製して入力」→ `journals/new?from=<journalId>`。日付を今日にし、行・摘要・取引先・タグを写す。2 行ならかんたん入力、3 行以上なら詳細で開く。
 
 **Rationale**: かんたん入力は画面だけの形で、帳簿の規則は 001 のまま（憲法 I）。税区分の既定を 1 か所にすることで、web に業務ルールを持たない規則（AGENTS.md）を守る。

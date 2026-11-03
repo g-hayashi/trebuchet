@@ -78,6 +78,30 @@ export const JournalOutput = z.object({
 });
 export type JournalOutput = z.infer<typeof JournalOutput>;
 
+/** GET /journals/suggestions（011/R5）。空白だけの摘要では検索しない。 */
+export const JournalSuggestionQuery = z
+  .object({
+    memo: z.string().max(200).optional(),
+    partnerId: Id.optional(),
+  })
+  .refine((query) => Boolean(query.memo?.trim() || query.partnerId), {
+    message: "摘要か取引先を指定してください",
+  });
+export type JournalSuggestionQuery = z.infer<typeof JournalSuggestionQuery>;
+
+/** 履歴からの候補。左右の税区分・取引先をそのまま保持する（011/R5）。 */
+export const JournalSuggestion = z.object({
+  debitAccountId: Id,
+  creditAccountId: Id,
+  debitTaxCategory: TaxCategoryCode,
+  creditTaxCategory: TaxCategoryCode,
+  debitPartnerId: Id.nullable(),
+  creditPartnerId: Id.nullable(),
+  sourceJournalId: Id,
+  date: DateString,
+});
+export type JournalSuggestion = z.infer<typeof JournalSuggestion>;
+
 /**
  * 訂正の理由など。空欄・空白のみ・500 文字超の判定はドメインで行い REASON_REQUIRED を返すため、
  * ここでは文字列であることだけを検証する（contracts/http-api.md）

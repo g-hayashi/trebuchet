@@ -35,6 +35,7 @@ export * from "./invoicing/number.ts";
 export * from "./invoicing/status.ts";
 export * from "./invoicing/tax.ts";
 export * from "./journal.ts";
+export * from "./journals/suggest.ts";
 export * from "./money.ts";
 export * from "./opening.ts";
 export * from "./ports.ts";

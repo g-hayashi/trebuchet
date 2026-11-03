@@ -10,7 +10,7 @@
 | `GET /entities/:id/journal-draft` | なし | 200 `{ draft: JournalDraft \| null, updatedAt: string \| null }` | — | R6 |
 | `PUT /entities/:id/journal-draft` | `JournalDraft` | 200 `{ updatedAt }` | 400 検証 | R6 |
 | `DELETE /entities/:id/journal-draft` | なし | 204（なくても 204） | — | R6 |
-| `GET /entities/:id/journals/suggestions?memo=&partnerId=` | どちらか必須。`memo` は 200 字まで | 200 `{ suggestions: JournalSuggestion[] }` | 400 検証 | R5 |
+| `GET /entities/:id/journals/suggestions?memo=&partnerId=` | 空白以外の摘要か取引先が必須。`memo` は 200 字まで | 200 `{ suggestions: JournalSuggestion[] }`。各候補に左右別の税区分・取引先を保持（data-model §2.2） | 400 検証 | R5 |
 | `POST /entities/:id/journals/ai-suggestion` | `{ date, amount, memo }`（金額は整数 `0 < amount < 1e12`、摘要は空でない） | 200 `{ suggestion: AiSuggestion \| null, reason?: string }`（null は候補なし） | 422 `AI_NOT_CONFIGURED`（外部の AI が無効） | R19 |
 | `POST /entities/:id/partners/profile` | `PartnerProfileInput = { partner: PartnerInput, billingTerms: BillingTermsInput \| null }` | 201 `{ partner, billingTerms }` | 400、409 名前の重複（今の規則） | R15 |
 | `PUT /entities/:id/partners/:partnerId/profile` | 同上 | 200 同上 | 400、404、409 | R15 |

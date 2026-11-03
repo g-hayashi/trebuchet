@@ -51,7 +51,7 @@
 
 ### 2.2 `JournalSuggestion`（R5）
 
-`{ debitAccountId, creditAccountId, taxCategory, partnerId: string | null, sourceJournalId, date }`。最大 3 件。2 行で取消でない仕訳から、摘要の正規化の一致か取引先の一致で、新しい順、`(借方, 貸方, 税区分, 取引先)` の組で重ねない。
+`{ debitAccountId, creditAccountId, debitTaxCategory, creditTaxCategory, debitPartnerId: string | null, creditPartnerId: string | null, sourceJournalId, date }`。最大 3 件。借方・貸方各 1 行で取消でない仕訳から、摘要の正規化の一致か左右いずれかの取引先の一致で、日付の降順・同日は仕訳番号の降順に返す。`(借方科目, 貸方科目, 借方税区分, 貸方税区分, 借方取引先, 貸方取引先)` の組で重ねない。2026-11-03 の利用者の判断で税区分は左右別に選択する。候補も左右の税区分・取引先を保持し、異なる値をまとめたり候補から除外したりしない。
 
 ### 2.3 一覧・帳票の応答に足す値
 
