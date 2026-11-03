@@ -1,4 +1,4 @@
-import { YEN_LIMIT } from "@trebuchet/schema";
+import { defaultTaxCategory, YEN_LIMIT } from "@trebuchet/schema";
 import { isValidDate } from "./dates.ts";
 import { computeInclusiveTax, sumYen } from "./money.ts";
 import { isTaxableCategory, resolveTaxRate } from "./tax-rates.ts";
@@ -14,10 +14,8 @@ import {
   ok,
   type Partner,
   type Result,
-  type Side,
   type SubAccount,
   type Tag,
-  type TaxCategoryCode,
   type TaxRate,
   type ValidJournal,
   type ValidLine,
@@ -41,23 +39,6 @@ const trimToNull = (value: string | undefined) => {
   const trimmed = value?.trim() ?? "";
   return trimmed.length === 0 ? null : trimmed;
 };
-
-/**
- * 税区分の既定値（FR-017）。免税の期間・設定のない日付は対象外。
- * 課税の期間は、収益の科目なら売上 10%、費用の科目なら仕入 10%、それ以外は対象外
- */
-export function defaultTaxCategory(
-  date: string,
-  _side: Side,
-  account: Pick<Account, "category">,
-  settings: readonly TaxSettingDraft[],
-): TaxCategoryCode {
-  const setting = resolveTaxSetting(date, settings);
-  if (setting === undefined || setting.taxpayerStatus === "exempt") return "OUT_OF_SCOPE";
-  if (account.category === "revenue") return "SALES_10";
-  if (account.category === "expense") return "PURCHASE_10";
-  return "OUT_OF_SCOPE";
-}
 
 /** 日付を含む会計期間。期間の外なら OUT_OF_PERIOD、締め済みなら PERIOD_CLOSED（訂正仕訳を案内する） */
 export function checkPeriod(date: string, periods: readonly FiscalPeriod[]): Result<FiscalPeriod> {
@@ -184,7 +165,7 @@ export function validateJournal(
       line.taxCategory ??
       (account === undefined || !dateOk
         ? "OUT_OF_SCOPE"
-        : defaultTaxCategory(draft.date, line.side, account, ctx.taxSettings));
+        : defaultTaxCategory(draft.date, account, ctx.taxSettings));
     let taxAmount = 0;
     if (computeTax && isTaxableCategory(taxCategory)) {
       const rate = resolveTaxRate(taxCategory, draft.date, ctx.taxRates);

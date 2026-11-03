@@ -1,5 +1,9 @@
-import type { InvoiceTaxDisplay, TaxBreakdownEntry, TaxCategoryCode } from "@trebuchet/schema";
-import { defaultTaxCategory } from "../journal.ts";
+import {
+  defaultTaxCategory,
+  type InvoiceTaxDisplay,
+  type TaxBreakdownEntry,
+  type TaxCategoryCode,
+} from "@trebuchet/schema";
 import { isTaxableCategory, resolveTaxRate } from "../tax-rates.ts";
 import { resolveTaxSetting, type TaxSettingDraft } from "../tax-settings.ts";
 import type { TaxRate } from "../types.ts";
@@ -15,7 +19,7 @@ export function defaultSalesTaxCategory(
   salesDate: string,
   taxSettings: readonly TaxSettingDraft[],
 ): TaxCategoryCode {
-  return defaultTaxCategory(salesDate, "credit", { category: "revenue" }, taxSettings);
+  return defaultTaxCategory(salesDate, { category: "revenue" }, taxSettings);
 }
 
 /** 請求税率を明示した案・入力の税区分。免税の売上は常に対象外にする。 */

@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
+  defaultTaxCategory,
   type JournalInput,
   JournalInputFields,
   JournalLineInput,
@@ -54,27 +55,6 @@ const emptyLine = (side: Side): LineValues => ({
 
 /** 空の選択・入力を「指定なし」にする */
 const blankToUndefined = (v: unknown) => (v === "" || v === null ? undefined : v);
-
-/**
- * 税区分の既定値（FR-017）。サーバー（domain の defaultTaxCategory）と同じ規則で、
- * 「自動」の表示に使う。実際の値は税区分を省略して送り、サーバーが決める
- */
-function defaultTaxCategory(
-  date: string,
-  account: Account | undefined,
-  settings: readonly TaxSetting[],
-): TaxCategoryCode {
-  let setting: TaxSetting | undefined;
-  for (const s of settings) {
-    if (s.effectiveFrom <= date && (!setting || s.effectiveFrom > setting.effectiveFrom)) {
-      setting = s;
-    }
-  }
-  if (!setting || setting.taxpayerStatus === "exempt" || !account) return "OUT_OF_SCOPE";
-  if (account.category === "revenue") return "SALES_10";
-  if (account.category === "expense") return "PURCHASE_10";
-  return "OUT_OF_SCOPE";
-}
 
 /**
  * フォームの初期値になる仕訳の形。訂正する仕訳（`Journal`）のほか、定期仕訳の定義
