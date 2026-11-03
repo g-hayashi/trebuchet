@@ -21,6 +21,7 @@ afterEach(() => {
 
 const status = (patch: Partial<BackupStatus> = {}): BackupStatus => ({
   configured: true,
+  folderSource: "configured",
   folder: "/Users/me/backup",
   lastSuccess: "2026-10-19T10:00:00.000Z",
   lastCheck: "2026-10-19T10:00:00.000Z",
@@ -66,7 +67,7 @@ const settingsForm = () => screen.findByRole("form", { name: "置き場所の設
 
 describe("バックアップの設定（008 の D9: パスフレーズ・同意はない）", () => {
   it("置き場所の欄だけがあり、パスフレーズ・同意・パスフレーズの変更はない", async () => {
-    open({}, status({ configured: false, folder: null }));
+    open({}, status({ folderSource: "default", folder: "/bak" }));
     const form = within(await settingsForm());
     expect(form.getByLabelText("置き場所")).toBeInTheDocument();
     expect(form.getByRole("button", { name: "保存" })).toBeEnabled();
@@ -77,7 +78,7 @@ describe("バックアップの設定（008 の D9: パスフレーズ・同意�
   });
 
   it("鍵は端末の鍵から作ること、新しい Mac では回復キーで復元することを案内する", async () => {
-    open({}, status({ configured: false, folder: null }));
+    open({}, status({ folderSource: "default", folder: "/bak" }));
     expect((await screen.findAllByText(/回復キー/)).length).toBeGreaterThan(0);
   });
 
@@ -86,9 +87,10 @@ describe("バックアップの設定（008 の D9: パスフレーズ・同意�
       {
         "PUT /api/backup/settings": () => ok({ runId: "r9" }),
       },
-      status({ configured: false, folder: null }),
+      status({ folderSource: "default", folder: "/bak" }),
     );
     const form = within(await settingsForm());
+    await userEvent.clear(form.getByLabelText("置き場所"));
     await userEvent.type(form.getByLabelText("置き場所"), "/Users/me/backup");
     await userEvent.click(form.getByRole("button", { name: "保存" }));
 
@@ -120,9 +122,9 @@ describe("今すぐバックアップ", () => {
     expect(await screen.findByRole("button", { name: /今すぐバックアップ/ })).toBeDisabled();
   });
 
-  it("未設定のときは押せない", async () => {
-    open({}, status({ configured: false, folder: null }));
-    expect(await screen.findByRole("button", { name: /今すぐバックアップ/ })).toBeDisabled();
+  it("未設定でも既定の置き場所があるので押せる", async () => {
+    open({}, status({ folderSource: "default", folder: "/bak" }));
+    expect(await screen.findByRole("button", { name: /今すぐバックアップ/ })).toBeEnabled();
   });
 
   it("実行中の再要求（BACKUP_RUNNING）の文言を表示する", async () => {

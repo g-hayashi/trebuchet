@@ -18,7 +18,7 @@ export type BackupSchedulerDeps = {
 };
 
 export type BackupScheduler = {
-  /** 1 回判断する（設定済みで、最後の確認から 24 時間以上なら自動で実行する）。例外は投げない */
+  /** 1 回判断する（最後の確認から 24 時間以上なら自動で実行する）。例外は投げない */
   tick(): Promise<void>;
   stop(): void;
 };
@@ -31,7 +31,6 @@ export function startBackupScheduler(deps: BackupSchedulerDeps): BackupScheduler
     if (judging) return;
     judging = true;
     try {
-      if ((await deps.auth().getSetting("backup_folder")) === undefined) return;
       const lastCheck = (await deps.backups().getLastCheck())?.finishedAt;
       if (!shouldRunAutoBackup(lastCheck, deps.clock.now())) return;
       const started = await deps.runner.start("auto");

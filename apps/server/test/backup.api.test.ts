@@ -78,8 +78,9 @@ describe("GET /backup/status", () => {
     const res = await call("GET", "/status");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      configured: false,
-      folder: null,
+      configured: true,
+      folder: env.defaultFolder,
+      folderSource: "default",
       lastSuccess: null,
       lastCheck: null,
       lastRun: null,
@@ -96,6 +97,7 @@ describe("GET /backup/status", () => {
     const s = await status();
     expect(s.configured).toBe(true);
     expect(s.folder).toBe(env.folder);
+    expect(s.folderSource).toBe("configured");
     expect(s.lastRun?.trigger).toBe("manual");
     expect(s.lastRun?.status).toBe("succeeded");
     expect(s.lastSuccess).toBe(s.lastRun?.finishedAt);
@@ -177,7 +179,7 @@ describe("PUT /backup/settings", () => {
       expect(res.status).toBe(422);
       expect((await errorOf(res)).code).toBe("BACKUP_FOLDER_NOT_FOUND");
     }
-    expect((await status()).configured).toBe(false);
+    expect((await status()).folderSource).toBe("default");
   });
 
   it("成功したら置き場所を保存し、force_write を立てる（最初の書き込みの成功で消える）", async () => {
@@ -197,10 +199,23 @@ describe("PUT /backup/passphrase（なくした）", () => {
 });
 
 describe("POST /backup/run", () => {
-  it("未設定は 409 BACKUP_NOT_CONFIGURED", async () => {
+  it("未設定でも既定の場所を作って手動で書き込む", async () => {
     const res = await call("POST", "/run");
-    expect(res.status).toBe(409);
-    expect((await errorOf(res)).code).toBe("BACKUP_NOT_CONFIGURED");
+    expect(res.status).toBe(202);
+    await idle();
+    expect((await status()).lastRun?.status).toBe("succeeded");
+    expect(readdirSync(env.defaultFolder)).toHaveLength(1);
+  });
+
+  it("既定の場所を作れなければ失敗を記録し LAST_RUN_FAILED を返す", async () => {
+    writeFileSync(env.defaultFolder, "blocked");
+    expect((await call("POST", "/run")).status).toBe(202);
+    await idle();
+    const s = await status();
+    expect(s.lastRun?.status).toBe("failed");
+    expect(s.lastRun?.errorCode).toBe("WRITE_FAILED");
+    expect(s.alert).toEqual({ reason: "LAST_RUN_FAILED" });
+    expect(readFileSync(env.defaultFolder, "utf8")).toBe("blocked");
   });
 
   it("202 で runId をすぐ返し、実行中の再要求は 409 BACKUP_RUNNING", async () => {

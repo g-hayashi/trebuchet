@@ -11,6 +11,7 @@ import {
 import { type BackupInspection, BackupSettingsInput, type BackupStatus } from "@trebuchet/schema";
 import { Hono } from "hono";
 import { DomainException } from "../errors.ts";
+import { resolveBackupFolder } from "../lib/backup-folder.ts";
 import type { BackupRunner } from "../lib/backup-run.ts";
 import { readUpload, uploadLimitFor } from "../lib/upload.ts";
 import type { GuardEnv } from "../middleware/host.ts";
@@ -62,14 +63,14 @@ export function backupRoutes(deps: BackupRouteDeps) {
     .get("/status", async (c) => {
       const a = auth();
       const b = backups();
-      const folder = (await a.getSetting("backup_folder")) ?? null;
-      const configured = folder !== null;
+      const destination = resolveBackupFolder(await a.getSetting("backup_folder"));
+      const configured = true;
       const lastSuccess = (await b.getLastSuccess())?.finishedAt ?? null;
       const lastCheck = (await b.getLastCheck())?.finishedAt ?? null;
       const lastRun = (await b.getLastRun()) ?? null;
       const status: BackupStatus = {
         configured,
-        folder,
+        ...destination,
         lastSuccess,
         lastCheck,
         lastRun,
