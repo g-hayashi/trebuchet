@@ -24,6 +24,11 @@ const tableNames = (db: ReturnType<typeof openTenant>) =>
     .all() as { name: string; sql: string }[];
 
 describe("openTenant", () => {
+  it("011 T019: 新しい DB はアプリ内評価の表を持たない", () => {
+    const db = openTenant(randomUUIDv7());
+    expect(tableNames(db).filter((table) => table.name.startsWith("eval"))).toEqual([]);
+  });
+
   it("新しい entityId で DB ファイルが作られ、マイグレーションが適用される", () => {
     const id = randomUUIDv7();
     const db = openTenant(id);

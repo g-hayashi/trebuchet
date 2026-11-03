@@ -63,7 +63,7 @@ export type AiOutcome = { suggestion: AiSuggested | null; failure: string };
 type Outcome = AiOutcome & { work: Work };
 
 /**
- * 端末内 → 外部の順で AI を呼ぶ部品（R8）。推定（`inferWithAi`）と評価（`runEvaluation`）が共有する。
+ * 端末内 → 外部の順で AI を呼ぶ部品（R8）。推定（`inferWithAi`）で使う。
  * AI に渡すのは `buildAiPayload` の結果だけ（INV-45）。端末内の結果がない・確信度が `threshold` より低く、
  * 外部が有効（`externalEnabled` かつ `available()`）なら外部へ
  */

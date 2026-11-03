@@ -337,17 +337,6 @@ export const StatementImportCommitted = z.object({
 });
 export type StatementImportCommitted = z.infer<typeof StatementImportCommitted>;
 
-export const JOB_STATUSES = ["running", "done", "failed"] as const;
-export const JobStatus = z.enum(JOB_STATUSES);
-export type JobStatus = z.infer<typeof JobStatus>;
-
-/** GET /jobs/:jobId（評価のジョブ） */
-export const JobView = z.object({
-  status: JobStatus,
-  error: z.object({ code: z.string(), message: z.string() }).optional(),
-});
-export type JobView = z.infer<typeof JobView>;
-
 // ---- 明細と候補（§4） ----
 
 export const STATEMENT_STATUSES = ["unprocessed", "registered", "excluded"] as const;
@@ -514,37 +503,6 @@ export const InferenceRuleHistoryEntry = z.object({
   at: Timestamp,
 });
 export type InferenceRuleHistoryEntry = z.infer<typeof InferenceRuleHistoryEntry>;
-
-// ---- 評価（§6.1・§6.2）と設定（§6.3） ----
-
-/** POST /statements/evals */
-export const EvalStartInput = z.object({
-  splitDate: DateString.optional(),
-  includeAi: z.boolean().optional(),
-});
-export type EvalStartInput = z.infer<typeof EvalStartInput>;
-
-/** 率は千分率の整数（0〜1000） */
-const PerMille = z.number().int().min(0).max(1000);
-
-export const EvalRun = z.object({
-  id: Id,
-  splitDate: DateString,
-  includeAi: z.boolean(),
-  sampleCount: Count,
-  result: z.object({
-    fields: z.object({
-      counterAccount: PerMille,
-      taxCategory: PerMille,
-      partner: PerMille,
-      purpose: PerMille,
-    }),
-    methods: z.array(z.object({ method: CandidateMethod, count: Count, matchRate: PerMille })),
-  }),
-  models: z.array(z.string()),
-  createdAt: Timestamp,
-});
-export type EvalRun = z.infer<typeof EvalRun>;
 
 /** PUT /statement-settings */
 export const StatementSettingsInput = z.object({

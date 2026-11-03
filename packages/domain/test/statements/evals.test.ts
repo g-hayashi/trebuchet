@@ -1,21 +1,14 @@
 import fc from "fast-check";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   type EvalFields,
   type EvalInfer,
   type EvalSample,
   evaluate,
 } from "../../src/statements/evals.ts";
-import { buildAiPayload } from "../../src/statements/mask.ts";
 import { normalizeContent } from "../../src/statements/normalize.ts";
-import { ok } from "../../src/types.ts";
-import { listEvalRuns, runEvaluation } from "../../src/usecases/evals.ts";
-import { approveCandidate, excludeStatement } from "../../src/usecases/statement-approval.ts";
-import { buildCandidates } from "../../src/usecases/statements.ts";
-import { FakeSuggestionProvider } from "../fakes.ts";
-import { type StatementsCtx, setupStatements, unwrap } from "../statements-setup.ts";
 
-// 006 T026（R17、§1.9、FR-029、SC-004）。評価の計算（純関数）と、評価の実行・保存
+// 006 T026（R17）。評価の採点の純関数
 
 const fields = (over: Partial<EvalFields> = {}): EvalFields => ({
   counterAccountId: "rent",
@@ -180,183 +173,5 @@ describe("evaluate: 基準日より前から学び、以後を推定する", () 
         }
       }),
     );
-  });
-});
-
-describe("runEvaluation", () => {
-  let ctx: StatementsCtx;
-  let local: FakeSuggestionProvider;
-  let external: FakeSuggestionProvider;
-  const evalDeps = (over: { externalEnabled?: boolean } = {}) => ({
-    ...ctx.deps,
-    local,
-    external,
-    externalEnabled: over.externalEnabled ?? true,
-    models: { local: "local-model", external: "external-model" },
-  });
-  const rentCode = () => ctx.masters.listAccounts().find((a) => a.name === "地代家賃")?.code ?? "";
-  const approveAs = (content: string, counterId: string) => {
-    const id = ctx.idOf(content);
-    unwrap(approveCandidate(ctx.deps, id, { draft: ctx.shapeDraft(id, "business", counterId) }));
-  };
-
-  beforeEach(() => {
-    ctx = setupStatements();
-    local = new FakeSuggestionProvider({ available: true });
-    external = new FakeSuggestionProvider({ available: true });
-    ctx.mapAll();
-    // 2025: 学習用。2026: 評価の対象（ルールの一致が正解、不正解、ルールなし）
-    ctx.importRows(
-      [
-        ctx.row({ content: "ショップ001", date: "2025-05-10", amount: -1200 }),
-        ctx.row({ content: "ショップ002", date: "2025-05-20", amount: -1300 }),
-      ],
-      2025,
-    );
-    ctx.importRows([
-      ctx.row({ content: "ショップ003", date: "2026-02-01", amount: -1400 }),
-      ctx.row({ content: "ショップ004", date: "2026-02-02", amount: -1500 }),
-      ctx.row({ content: "別の店", date: "2026-02-03", amount: -1600 }),
-      ctx.row({ content: "未処理の店", date: "2026-02-04", amount: -1700 }),
-      ctx.row({ content: "除外の店", date: "2026-02-05", amount: -1800 }),
-    ]);
-    approveAs("ショップ001", ctx.a.rent);
-    approveAs("ショップ002", ctx.a.rent);
-    approveAs("ショップ003", ctx.a.rent);
-    approveAs("ショップ004", ctx.a.supplies);
-    approveAs("別の店", ctx.a.rent);
-    unwrap(excludeStatement(ctx.deps, ctx.idOf("除外の店"), {}));
-    // AI の既定の応答は「別の店」の正解（科目・税区分・判定）と同じにする
-    const link = ctx.activeLinks(ctx.idOf("別の店"))[0];
-    const journal = ctx.ledger.getJournal(link?.journalId ?? "");
-    const counter = journal?.lines.find((l) => l.id !== link?.journalLineId);
-    local.respondWith(
-      ok({
-        accountCode: rentCode(),
-        taxCategory: counter?.taxCategory,
-        purpose: "business",
-        confidence: 80,
-        reason: "家賃",
-      }),
-    );
-  });
-
-  const snapshot = () => ({
-    rules: structuredClone(ctx.uow.statements.state.rules),
-    candidates: structuredClone(ctx.uow.statements.state.candidates),
-    links: structuredClone(ctx.uow.statements.state.links),
-    journals: ctx.ledger.findJournals({ dateFrom: "2000-01-01", dateTo: "2100-01-01", limit: 500 })
-      .items,
-  });
-
-  it("登録済みの明細だけを評価する（未処理・除外は対象外）。基準日の既定は今年の 1 月 1 日。AI なしは none", async () => {
-    const run = unwrap(await runEvaluation(evalDeps(), { today: "2026-10-31" }));
-    expect(run.splitDate).toBe("2026-01-01");
-    expect(run.includeAi).toBe(false);
-    expect(run.sampleCount).toBe(3);
-    expect(run.models).toEqual([]);
-    expect(run.result.methods).toEqual([
-      { method: "rule", count: 2, matchRate: 500 },
-      { method: "none", count: 1, matchRate: 0 },
-    ]);
-    // ルール 2 件のうち 1 件が科目一致
-    expect(run.result.fields.counterAccount).toBe(333);
-    expect(local.calls).toHaveLength(0);
-    expect(external.calls).toHaveLength(0);
-    expect(run.id).not.toBe("");
-    expect(run.createdAt).toBe(ctx.clock.now());
-  });
-
-  it("保存する（新しい順に並ぶ）。基準日を指定できる", async () => {
-    const first = unwrap(await runEvaluation(evalDeps(), { today: "2026-10-31" }));
-    ctx.clock.value = "2026-11-01T00:00:00.000Z";
-    const second = unwrap(
-      await runEvaluation(evalDeps(), { today: "2026-11-01", splitDate: "2026-02-03" }),
-    );
-    expect(second.splitDate).toBe("2026-02-03");
-    expect(second.sampleCount).toBe(1);
-    const runs = unwrap(listEvalRuns({ uow: ctx.uow }));
-    expect(runs.map((r) => r.id)).toEqual([second.id, first.id]);
-    expect(runs[1]).toEqual(first);
-  });
-
-  it("DB のルール・候補・結びつき・仕訳を書き換えない", async () => {
-    const before = snapshot();
-    unwrap(await runEvaluation(evalDeps(), { today: "2026-10-31", includeAi: true }));
-    expect(snapshot()).toEqual(before);
-  });
-
-  it("includeAi: ルールのない明細だけ端末内の AI を呼ぶ。渡すのは buildAiPayload の結果。モデル名を記録する", async () => {
-    const run = unwrap(
-      await runEvaluation(evalDeps({ externalEnabled: false }), {
-        today: "2026-10-31",
-        includeAi: true,
-      }),
-    );
-    expect(run.includeAi).toBe(true);
-    expect(local.calls).toHaveLength(1);
-    expect(external.calls).toHaveLength(0);
-    const target = ctx.statements().find((s) => s.content === "別の店");
-    const account = ctx.uow.statements.state.accounts.find((a) => a.name === "サンプル銀行");
-    if (target === undefined || account === undefined) throw new Error("準備の誤り");
-    expect(local.calls[0]?.payload).toEqual(buildAiPayload(target, account));
-    expect(run.models).toEqual(["local-model"]);
-    expect(run.result.methods).toEqual([
-      { method: "rule", count: 2, matchRate: 500 },
-      { method: "local_ai", count: 1, matchRate: 1000 },
-    ]);
-  });
-
-  it("外部は有効（設定と使える状態）のときだけ呼ぶ。しきい値未満の端末内の結果は外部で置き換える", async () => {
-    local.respondWith(
-      ok({
-        accountCode: rentCode(),
-        taxCategory: "PURCHASE_10",
-        purpose: "business",
-        confidence: 10,
-        reason: "弱い",
-      }),
-    );
-    external.respondWith(
-      ok({
-        accountCode: rentCode(),
-        taxCategory: "PURCHASE_10",
-        purpose: "business",
-        confidence: 90,
-        reason: "強い",
-      }),
-    );
-    unwrap(
-      await runEvaluation(evalDeps({ externalEnabled: false }), {
-        today: "2026-10-31",
-        includeAi: true,
-      }),
-    );
-    expect(external.calls).toHaveLength(0);
-
-    external.setAvailable(false);
-    unwrap(await runEvaluation(evalDeps(), { today: "2026-10-31", includeAi: true }));
-    expect(external.calls).toHaveLength(0);
-
-    external.setAvailable(true);
-    const run = unwrap(await runEvaluation(evalDeps(), { today: "2026-10-31", includeAi: true }));
-    expect(external.calls).toHaveLength(1);
-    expect(run.models).toEqual(["local-model", "external-model"]);
-    expect(run.result.methods.map((m) => m.method)).toEqual(["rule", "external_ai"]);
-  });
-
-  it("AI が使えない・使える出力がないときは none として数える", async () => {
-    local.setAvailable(false);
-    external.setAvailable(false);
-    const run = unwrap(await runEvaluation(evalDeps(), { today: "2026-10-31", includeAi: true }));
-    expect(run.models).toEqual([]);
-    expect(run.result.methods.map((m) => m.method)).toEqual(["rule", "none"]);
-  });
-
-  it("buildCandidates 済みの候補は評価で読み取らない・書かない（候補の件数が変わらない）", async () => {
-    unwrap(buildCandidates(ctx.deps));
-    const before = ctx.uow.statements.state.candidates.length;
-    unwrap(await runEvaluation(evalDeps(), { today: "2026-10-31", includeAi: true }));
-    expect(ctx.uow.statements.state.candidates).toHaveLength(before);
   });
 });

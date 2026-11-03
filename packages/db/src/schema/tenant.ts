@@ -1336,23 +1336,6 @@ export const statementSettings = sqliteTable(
   ],
 );
 
-export const evalRuns = sqliteTable(
-  "eval_runs",
-  {
-    id: text("id").primaryKey(),
-    splitDate: text("split_date").notNull(),
-    includeAi: integer("include_ai").notNull(),
-    sampleCount: integer("sample_count").notNull(),
-    resultJson: text("result_json").notNull(),
-    modelsJson: text("models_json").notNull(),
-    createdAt: text("created_at").notNull(),
-  },
-  (t) => [
-    check("eval_runs_include_ai", sql`${t.includeAi} IN (0, 1)`),
-    check("eval_runs_sample_count", sql`${t.sampleCount} >= 0`),
-  ],
-);
-
 export const statementAuditLog = sqliteTable(
   "statement_audit_log",
   {

@@ -116,9 +116,6 @@ export function StatementsWorkspace({
         >
           しきい値の設定
         </Link>
-        <Link to="/e/$entityId/statements/evals" params={{ entityId }} className={linkButtonClass}>
-          推定の評価
-        </Link>
         <Button disabled={build.isPending} onClick={() => build.mutate()}>
           候補を作る
         </Button>

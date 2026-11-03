@@ -22,7 +22,6 @@ const NEW_TABLES = [
   "inference_rules",
   "inference_rule_history",
   "statement_settings",
-  "eval_runs",
   "statement_audit_log",
   "statement_sources",
 ];
@@ -574,24 +573,6 @@ describe("statement_settings（§1.8）", () => {
     expect(() => insert("statement_settings", row({ external_threshold: -1 }))).toThrow(/CHECK/);
     expect(() => insert("statement_settings", row())).not.toThrow();
     expect(() => insert("statement_settings", row())).toThrow(/UNIQUE|PRIMARY/);
-  });
-});
-
-describe("eval_runs（§1.9）", () => {
-  it("include_ai は 0・1、sample_count は 0 以上", () => {
-    const row = (over: Row = {}): Row => ({
-      id: randomUUIDv7(),
-      split_date: "2026-01-01",
-      include_ai: 0,
-      sample_count: 3,
-      result_json: "{}",
-      models_json: "[]",
-      created_at: NOW,
-      ...over,
-    });
-    expect(() => insert("eval_runs", row({ include_ai: 2 }))).toThrow(/CHECK/);
-    expect(() => insert("eval_runs", row({ sample_count: -1 }))).toThrow(/CHECK/);
-    expect(() => insert("eval_runs", row())).not.toThrow();
   });
 });
 

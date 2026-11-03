@@ -145,13 +145,11 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 取込元（007 US2。列の対応の保存）。保存したものはまだない
   "GET /statement-sources": () => ok({ sources: [] }),
   // ジョブ（評価）の状態は完了
-  "GET /jobs/:jobId": () => ok({ status: "done" }),
   // 明細の一覧・しきい値の設定（US2）。一覧は空、設定は既定の値
   "GET /statements": () => ok({ statements: [] }),
   // 推定のルール（US3）。一覧は空
   "GET /inference-rules": () => ok({ rules: [] }),
   // 評価の履歴（US5）。実行はまだない
-  "GET /statements/evals": () => ok({ runs: [] }),
   // 証憑（010 US1）。一覧は空。詳細は電子取引の 1 件で、PATCH は送られた値を当てて version を進める
   "GET /receipts": () => ok({ receipts: [], nextCursor: null }),
   "GET /receipts/:receiptId": () => ok({ receipt: receiptDetail() }),

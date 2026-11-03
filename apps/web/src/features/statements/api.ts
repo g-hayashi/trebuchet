@@ -1,6 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
 import type {
-  EvalStartInput,
   InferenceRuleUpdateInput,
   JournalInput,
   Purpose,
@@ -37,15 +36,11 @@ export const statementKeys = {
   list: (entityId: string, filter: StatementFilter) =>
     ["entities", entityId, "statements", "list", filter] as const,
   settings: (entityId: string) => ["entities", entityId, "statements", "settings"] as const,
-  evals: (entityId: string) => ["entities", entityId, "statements", "evals"] as const,
   rules: (entityId: string, status?: RuleStatus) =>
     ["entities", entityId, "statements", "rules", status ?? "all"] as const,
   ruleHistory: (entityId: string, ruleId: string) =>
     ["entities", entityId, "statements", "rules", "history", ruleId] as const,
 };
-
-/** ジョブ（評価）の状態を取り直す間隔（ミリ秒） */
-export const JOB_POLL_MS = 1000;
 
 /** 取込元の口座の一覧（§2.1） */
 export const statementAccountsQuery = (entityId: string) =>
@@ -148,20 +143,6 @@ export const patchStatementSource = async (entityId: string, id: string, name: s
 export const deleteStatementSource = async (entityId: string, id: string) => {
   await unwrap(await entityApi["statement-sources"][":id"].$delete({ param: { entityId, id } }));
 };
-
-/** ジョブ（評価）の状態（§3.5）。終わる（done・failed）まで取り直す */
-export const jobQuery = (entityId: string, jobId: string) =>
-  queryOptions({
-    queryKey: ["entities", entityId, "jobs", jobId] as const,
-    queryFn: async () =>
-      unwrap(await entityApi.jobs[":jobId"].$get({ param: { entityId, jobId } })),
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      return status === "running" ? JOB_POLL_MS : false;
-    },
-    // 404（server の再起動で消えた）を再試行しない
-    retry: false,
-  });
 
 // ---- 明細と候補（§4） ----
 
@@ -346,19 +327,3 @@ export const statementSettingsQuery = (entityId: string) =>
 export const putStatementSettings = async (entityId: string, json: StatementSettingsInput) =>
   (await unwrap(await entityApi["statement-settings"].$put({ param: { entityId }, json })))
     .settings;
-
-// ---- 評価（§6.1・§6.2） ----
-
-/** 評価の履歴（§6.2。新しい順） */
-export const evalRunsQuery = (entityId: string) =>
-  queryOptions({
-    queryKey: statementKeys.evals(entityId),
-    queryFn: async () =>
-      (await unwrap(await entityApi.statements.evals.$get({ param: { entityId } }))).runs,
-  });
-
-export type EvalRunView = QueryItem<typeof evalRunsQuery>;
-
-/** 評価を始める（§6.1）。202 `{ jobId }`。状態は `jobQuery` で取り直す */
-export const postEvalStart = async (entityId: string, json: EvalStartInput) =>
-  unwrap(await entityApi.statements.evals.$post({ param: { entityId }, json }));

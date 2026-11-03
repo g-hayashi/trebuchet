@@ -1,5 +1,4 @@
 import type {
-  EvalRunRecord,
   InferenceRule,
   InferenceRuleHistoryRecord,
   StatementAuditEntry,
@@ -18,7 +17,6 @@ import {
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { asTaxCategory, insertionOrder, type TenantConn } from "./internal.ts";
 import {
-  evalRuns,
   inferenceRuleHistory,
   inferenceRules,
   statementAccounts,
@@ -74,7 +72,6 @@ const toSourceRow = (source: StatementSource): SourceRow => ({
 
 /**
  * StatementStore の Drizzle（better-sqlite3）による実装。メソッドはすべて同期。
- * 評価の記録（`eval_runs`）は追記のみ
  */
 export class DrizzleStatementStore implements StatementStore {
   private readonly db: TenantConn;
@@ -252,22 +249,6 @@ export class DrizzleStatementStore implements StatementStore {
       externalThreshold: row.externalThreshold,
       updatedAt: row.updatedAt,
     };
-  }
-
-  insertEvalRun(run: EvalRunRecord): void {
-    this.db
-      .insert(evalRuns)
-      .values({ ...run, includeAi: run.includeAi ? 1 : 0 })
-      .run();
-  }
-
-  listEvalRuns(): EvalRunRecord[] {
-    return this.db
-      .select()
-      .from(evalRuns)
-      .orderBy(desc(evalRuns.createdAt), desc(evalRuns.id))
-      .all()
-      .map((row) => ({ ...row, includeAi: row.includeAi === 1 }));
   }
 
   saveStatementSettings(settings: StatementSettings): void {

@@ -49,7 +49,6 @@ import type {
   DeferredAsset,
   EntityProfile,
   EntitySummary,
-  EvalRunRecord,
   FiledDocument,
   FiscalPeriod,
   FixedAsset,
@@ -473,12 +472,6 @@ export interface StatementStore {
   /** 保存がなければ undefined */
   getStatementSettings(): StatementSettings | undefined;
   saveStatementSettings(settings: StatementSettings): void;
-
-  // ---- 評価（US5。§1.9） ----
-  /** 追記のみ（評価の結果は書き換えない） */
-  insertEvalRun(run: EvalRunRecord): void;
-  /** 新しい順（作成の日時の降順、同じなら ID の降順） */
-  listEvalRuns(): EvalRunRecord[];
 }
 
 /** 明細の取込・承認で、仕訳・マスタ・明細の記録を1つのトランザクションで扱う（INV-47。data-model §6） */

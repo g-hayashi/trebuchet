@@ -6,11 +6,9 @@ import {
   commitStatementImport,
   deleteStatementSource,
   detectStatementLayout,
-  domainError,
   excludeStatement,
   getStatementSettings,
   inferWithAi,
-  listEvalRuns,
   listRules,
   listStatementAccounts,
   listStatementBatches,
@@ -21,7 +19,6 @@ import {
   renameStatementSource,
   resumeRule,
   ruleHistory,
-  runEvaluation,
   saveStatementAccount,
   saveStatementSettings,
   seedRulesFromJournals,
@@ -34,7 +31,6 @@ import {
   ApproveBulkInput,
   ApproveInput,
   BuildCandidatesInput,
-  EvalStartInput,
   ExcludeInput,
   InferenceRuleListQuery,
   InferenceRuleUpdateInput,
@@ -54,9 +50,7 @@ import { Hono } from "hono";
 import { type RouteOptions, type SuggestionProviders, statementDeps } from "../deps.ts";
 import { fail, respond } from "../errors.ts";
 import { type AiRuntime, LOCAL_AI_MODEL } from "../lib/ai-runtime.ts";
-import { createJobStore, type JobStore } from "../lib/jobs.ts";
 import { decodeStatementBytes, statementInputSha256 } from "../lib/statement-input.ts";
-import { todayOf } from "../lib/today.ts";
 import { readJsonField, readUpload, uploadLimit } from "../lib/upload.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
@@ -90,8 +84,7 @@ export function statementRoutes({
   clock,
   suggestion,
   ai,
-  jobs = createJobStore(),
-}: RouteOptions & { suggestion?: SuggestionProviders; jobs?: JobStore; ai: AiRuntime }) {
+}: RouteOptions & { suggestion?: SuggestionProviders; ai: AiRuntime }) {
   const providers = suggestion ?? ai.providers;
   const deps = (db: TenantEnv["Variables"]["db"]) => statementDeps(db, clock, providers);
 
@@ -178,15 +171,6 @@ export function statementRoutes({
       .delete("/statement-sources/:id", (c) => {
         const result = deleteStatementSource(deps(c.var.db), c.req.param("id"));
         return respond(c, result, () => c.body(null, 204));
-      })
-      // §3.5 ジョブの状態（評価のジョブ。メモリだけ）
-      .get("/jobs/:jobId", (c) => {
-        const jobId = c.req.param("jobId");
-        const view = jobs.view(c.var.entityId, jobId);
-        if (view === undefined) {
-          return fail(c, domainError("JOB_NOT_FOUND", "ジョブが見つかりません", { jobId }));
-        }
-        return c.json(view, 200);
       })
       // §4 明細と候補
       .get("/statements", validate("query", StatementListQuery), (c) => {
@@ -280,37 +264,6 @@ export function statementRoutes({
       .get("/inference-rules/:ruleId/history", (c) => {
         const result = ruleHistory(deps(c.var.db), c.req.param("ruleId"));
         return respond(c, result, (history) => c.json({ history }, 200));
-      })
-      // §6.1・§6.2 評価（ジョブはメモリだけ。結果は eval_runs に保存する）
-      .post("/statements/evals", validate("json", EvalStartInput), (c) => {
-        const input = c.req.valid("json");
-        const settings = ai.settings().get();
-        const base = deps(c.var.db);
-        const evalDeps = {
-          uow: base.uow,
-          ids: base.ids,
-          clock: base.clock,
-          local: providers.local,
-          external: providers.external,
-          externalEnabled: settings.externalEnabled,
-          models: { local: LOCAL_AI_MODEL, external: settings.externalModel ?? "external" },
-        };
-        const today = todayOf(clock);
-        const started = jobs.startTask(c.var.entityId, () =>
-          runEvaluation(evalDeps, {
-            splitDate: input.splitDate,
-            includeAi: input.includeAi,
-            today,
-          }),
-        );
-        if (started === undefined) {
-          return fail(c, domainError("JOB_RUNNING", "評価のジョブが動いています"));
-        }
-        return c.json({ jobId: started.jobId }, 202);
-      })
-      .get("/statements/evals", (c) => {
-        const result = listEvalRuns(deps(c.var.db));
-        return respond(c, result, (runs) => c.json({ runs }, 200));
       })
       // §6.3 設定
       .get("/statement-settings", (c) => {
