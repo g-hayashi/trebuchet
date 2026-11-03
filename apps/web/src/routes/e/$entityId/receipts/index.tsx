@@ -41,7 +41,7 @@ function ReceiptsPage() {
       >
         追加する
       </Link>
-      <div role="group" aria-label="証憑の絞り込み" className="flex flex-wrap gap-2">
+      <fieldset aria-label="証憑の絞り込み" className="flex flex-wrap gap-2">
         <Button
           type="button"
           variant={search.missing ? "secondary" : "outline"}
@@ -64,7 +64,7 @@ function ReceiptsPage() {
         >
           仕訳なし
         </Button>
-      </div>
+      </fieldset>
       <ReceiptSearchForm
         search={search}
         onSearch={(next) => navigate({ search: next })}
