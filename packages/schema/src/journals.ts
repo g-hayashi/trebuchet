@@ -190,6 +190,20 @@ export const JournalQuery = z.object({
 export type JournalQuery = z.infer<typeof JournalQuery>;
 export type JournalQueryInput = z.input<typeof JournalQuery>;
 
+/** 条件に合う全仕訳の件数と借方合計。ページの cursor・limit に影響されない（011/R7）。 */
+export const JournalSummary = z.object({
+  count: z.number().int().nonnegative(),
+  amount: z.number().int().nonnegative(),
+});
+export type JournalSummary = z.infer<typeof JournalSummary>;
+
+export const JournalListOutput = z.object({
+  journals: z.array(JournalOutput.extend({ receiptCount: z.number().int().nonnegative() })),
+  nextCursor: JournalCursor.nullable(),
+  summary: JournalSummary,
+});
+export type JournalListOutput = z.infer<typeof JournalListOutput>;
+
 /** 訂正元・訂正仕訳への参照（FR-019a） */
 export const JournalRef = z.object({
   id: Id,

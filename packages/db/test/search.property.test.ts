@@ -187,6 +187,16 @@ describe("findJournals（US3, FR-023, SC-006）", () => {
               const page = tx.findJournals({ ...query, limit: 200 });
               expect(idsOf(page.items)).toEqual(idsOf(oracle(all, query)));
               expect(page.nextCursor).toBeNull();
+              const matching = oracle(all, query);
+              expect(tx.summarizeJournals(query)).toEqual({
+                count: matching.length,
+                amount: matching.reduce(
+                  (sum, j) =>
+                    sum +
+                    j.lines.filter((l) => l.side === "debit").reduce((n, l) => n + l.amount, 0),
+                  0,
+                ),
+              });
             }
           });
         },
@@ -229,6 +239,51 @@ describe("findJournals（US3, FR-023, SC-006）", () => {
         expect(page.items).toEqual(oracle(all, { includeVoided: true }));
       },
     );
+  });
+
+  it("集計は200件を超えても全件の借方を数え、複数行・タグで重複せず、cursorとlimitを無視する", () => {
+    const seeds: Seed[] = Array.from({ length: 205 }, (_, i) => ({
+      voided: i === 204,
+      draft: {
+        date: "2026-10-01",
+        memo: "集計対象",
+        lines: [
+          {
+            side: "debit",
+            accountId: accountIds[0] ?? "",
+            amount: 100,
+            tagIds,
+            partnerId: partnerIds[0],
+          },
+          { side: "debit", accountId: accountIds[1] ?? "", amount: 200, tagIds },
+          { side: "credit", accountId: accountIds[2] ?? "", amount: 300, tagIds },
+        ],
+      },
+    }));
+    withSeeds(seeds, (tx) => {
+      const query = {
+        dateFrom: "2026-10-01",
+        dateTo: "2026-10-01",
+        amountMin: 100,
+        amountMax: 100,
+        accountId: accountIds[0],
+        partnerId: partnerIds[0],
+        tagId: tagIds[0],
+        q: "集計",
+      };
+      const first = tx.findJournals({ ...query, limit: 200 });
+      expect(first.items).toHaveLength(200);
+      expect(first.nextCursor).not.toBeNull();
+      const next = { ...query, limit: 1, cursor: first.nextCursor ?? undefined };
+      expect(tx.findJournals(next).items).toHaveLength(1);
+      expect(tx.summarizeJournals(query)).toEqual({ count: 204, amount: 61_200 });
+      expect(tx.summarizeJournals(next)).toEqual({ count: 204, amount: 61_200 });
+      expect(tx.summarizeJournals({ ...next, includeVoided: true })).toEqual({
+        count: 205,
+        amount: 61_500,
+      });
+      expect(tx.summarizeJournals({ ...query, q: "一致なし" })).toEqual({ count: 0, amount: 0 });
+    });
   });
 
   it("limit の既定は 50", () => {

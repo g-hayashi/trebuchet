@@ -57,7 +57,10 @@ export function journalRoutes({ clock, receipts }: RouteOptions & { receipts: Re
 
   return new Hono<TenantEnv>()
     .get("/journals", validate("query", JournalQuery), (c) => {
-      const page = journalDeps(c.var.db, clock).ledger.findJournals(c.req.valid("query"));
+      const { ledger } = journalDeps(c.var.db, clock);
+      const query = c.req.valid("query");
+      const page = ledger.findJournals(query);
+      const summary = ledger.summarizeJournals(query);
       // 証憑の数は一覧の項目に合成する（010/R6。001 の型は変えない）。結びつきのない仕訳は 0
       const counts = countReceiptsByJournal(
         receiptsOf(c),
@@ -68,6 +71,7 @@ export function journalRoutes({ clock, receipts }: RouteOptions & { receipts: Re
           {
             journals: page.items.map((j) => ({ ...j, receiptCount: byJournal.get(j.id) ?? 0 })),
             nextCursor: page.nextCursor,
+            summary,
           },
           200,
         ),

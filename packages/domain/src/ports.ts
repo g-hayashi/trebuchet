@@ -2,6 +2,7 @@ import type {
   BillingTerms,
   InvoiceSettings,
   JournalOrigin,
+  JournalSummary,
   ReceiptMediaType,
   ReceiptQuery,
   Recurring,
@@ -174,6 +175,8 @@ export interface LedgerRepository extends JournalRepository {
   correctingJournalsOf(id: string): Journal[];
   /** 日付の降順・同じ日付は仕訳番号の降順。limit の既定は 50 */
   findJournals(query: JournalQuery): Page<Journal>;
+  /** 全検索結果の件数と借方合計。cursor・limit は無視する */
+  summarizeJournals(query: JournalQuery): JournalSummary;
   /** 取消を除き、登録日時（`created_at`）の新しい順（同じなら仕訳番号の降順）に `limit` 件（011 のホーム） */
   recentRegistered(limit: number): Journal[];
 }
