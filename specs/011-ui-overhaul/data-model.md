@@ -25,7 +25,7 @@
 | `managed_by` | TEXT | NOT NULL DEFAULT `'auto'`、CHECK (`managed_by IN ('auto','user')`) |
 
 - `user` になるのは、ルールの一覧から利用者が科目・税区分・状態（`paused` / `active`）を変えたとき（`PATCH /inference-rules/:ruleId`）。一度 `user` になったら戻らない（戻す操作は作らない）。
-- 承認の学び（`learnRule`）と `seedRulesFromJournals` は `managed_by = 'user'` の行を変えない。`auto` の行は今の規則で作り・更新する。
+- 承認の学び（`learnRule`）と `seedRulesFromJournals` は `managed_by = 'user'` の行を変えない。承認の学びは `auto` の行を今の規則で作り・更新する。`seedRulesFromJournals` は今どおり、同じ内容のルールがない場合だけ作る（既存の行は `auto` でも更新しない）。
 - `InferenceRule`（schema）に `managedBy: "auto" | "user"` を足す。
 - 承認の入力（schema の承認の型）から `learn` を消す。
 

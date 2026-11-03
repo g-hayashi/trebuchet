@@ -21,7 +21,7 @@
 
 - ルートの増減: 足す `e/$entityId/settings.tsx`、`receipts/new.tsx`、`deferred-assets/index.tsx`。消す `invoices/$invoiceId_.print.tsx`、`tax-return/$year.tsx`、`statements/evals.tsx`、`blue-return/$year/deduction.tsx`（ダイアログに移す）、`receipts/capture.tsx`（`receipts/new` にまとめる）。旧 URL の転送は作らない（spec の Assumptions）。
 - `reports/index.tsx` の転送先を損益計算書に変える。
-- 足すルートは US1 で先に作る（メニューの型つきの `Link` が行き先のルートを要るため）: `settings.tsx` は今のホームの事業体の名前の変更を移す（FR-052）。`receipts/new.tsx` は今の `capture.tsx` の部品を描くだけ（US4 で作り直す）。`deferred-assets/index.tsx` は `fixed-assets/index.tsx:194` 以降の開業費の節を部品に切り出して描く（US7 で仕上げる）。
+- 足すルートは US1 で先に作る（メニューの型つきの `Link` が行き先のルートを要るため）: `settings.tsx` は今のホームの事業体の名前の変更を移す（FR-052）。`receipts/new.tsx` は今の `capture.tsx` の部品を描くだけ（US4 で作り直す）。`deferred-assets/index.tsx` は `fixed-assets/index.tsx:194` 以降の開業費の節を部品に切り出して描き、固定資産台帳からは消す（2 か所に出さない。US7 で見出し・主な操作を仕上げる）。
 
 **Rationale**: 毎日の作業（仕訳・明細・証憑）を 1 段目に出し、入力と一覧に 1 回で届く（SC-001）。グループの名前とメニューの `aria-label` は E2E の `openNav` が参照するので、contracts/ui-shell.md に名前を固定する。
 
@@ -109,7 +109,7 @@
 - 取込の画面に `Steps`（①入力 → ②列と口座 → ③取込 → ④確認・承認）。今の `ImportWorkspace` の段階（取込元・列の対応・プレビュー）を ①〜③ に当てる。
 - 取込の確定（`POST /statements/imports`）が成功したら、web が続けて `POST /inference-rules/seed`（過去の仕訳からのルール。自動で作るルールだけを作り・更新する）→ `POST /statements/candidates`（ルール）→ `POST /statements/infer`（AI。設定が無効なら飛ばす）を順に呼び、進みを `Steps` に出す。AI の失敗は知らせて確認へ進む（Edge Cases）。API は変えない。一覧の画面には「候補をもう一度作る」を控えめに残す（途中で画面を離れたとき用）。
 - 確認（`features/statements/ReviewQueue.tsx`）: 未処理の明細を 1 件ずつ、明細と候補の仕訳を並べて出し、「承認して次へ」（主な操作）・「飛ばす」・「除外」。最後の後は完了の知らせとホーム・一覧へのボタン。まとめての承認（`BulkApprove`）は今のしきい値の規則のまま確認の上に置く。
-- ルールの自動の作成（FR-022）: 承認の入力から `learn` をなくし、承認のたびに今の学ぶ条件（`inference-rules.ts:98-107`）で `learnRule` する。`inference_rules` に列 `managed_by`（`auto` | `user`）を足す（data-model §1.2）。ルールの一覧で利用者が科目・税区分を直すか止めた（`paused`）ルールは `user` になり、承認・`seedRulesFromJournals` の自動の作成・更新はそれを変えない（INV-71）。一覧は「自動」「利用者が直した」を区別して出す（FR-023）。`seedRulesFromJournals` は同じ鍵の `auto` のルールを更新してよく、`user` のものは飛ばす。
+- ルールの自動の作成（FR-022）: 承認の入力から `learn` をなくし、承認のたびに今の学ぶ条件（`inference-rules.ts:98-107`）で `learnRule` する。`inference_rules` に列 `managed_by`（`auto` | `user`）を足す（data-model §1.2）。ルールの一覧で利用者が科目・税区分を直すか止めた（`paused`）ルールは `user` になり、承認・`seedRulesFromJournals` の自動の作成・更新はそれを変えない（INV-71）。一覧は「自動」「利用者が直した」を区別して出す（FR-023）。`seedRulesFromJournals` は今どおり同じ内容のルールがあれば飛ばす（`auto` も更新しない。data-model §1.2）。
 - しきい値は `statements/settings`（明細の設定）にだけ置き、一覧・確認から消す（FR-024）。
 
 **Rationale**: 取込の後の連鎖は既存の 3 つの API で足りる（006 の 3 段の規則 R8 を変えない）。server で連鎖させると取込の確定が AI を待つことになる。

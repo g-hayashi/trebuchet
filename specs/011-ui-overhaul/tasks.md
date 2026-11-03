@@ -58,7 +58,7 @@ description: "Task list for 011-ui-overhaul"
 - [ ] T006 [US1] テスト先行でトップの移動を直す（R4、FR-001・010）: `apps/web/src/routes/index.tsx` と `features/entities/EntitySwitcher.tsx` の `entityToRestore` を、事業体 1 件ならそのホーム、2 件以上なら一覧（最後に開いたものを上に、目立たせる）、0 件なら作成の案内にし、ロゴ・事業体の名前は最後に開いた事業体のホーム（見つからなければ `/`）へ。テストは `apps/web/test/routes/entity-nav.test.tsx` に足す（0・1・2 件）
 - [ ] T007 [US1] テスト先行でホームの要約の下の層（R3、§2.1、INV-72）: `packages/schema/src/home.ts`（`HomeSummary`・`Section<T>`、`CASH_AND_DEPOSIT_CODES`）、`packages/domain/src/home/summary.ts`（純関数）と `usecases/home.ts` の `getHomeSummary`（求め方は R3 と §2.1 の表。項目ごとに例外・`err` を `{ status: "error", code }` にする。FR-009）、`ReceiptStore` に `count(query)`（ポート、`packages/db/src/receipt-repository.ts`、`packages/domain/test/fakes/` の偽物）。テスト: `packages/domain/test/home/summary.test.ts`（各件数・0 件・1 項目の失敗）と INV-72 の性質テスト `home/summary.property.test.ts`（`ledger-setup.ts` の任意の貸借一致の仕訳で、figures と損益計算書・貸借対照表が一致）、db の `count` のテスト
 - [ ] T008 [US1] テスト先行で `apps/server/src/routes/home.ts`（`GET /entities/:id/home`、今日は `todayOf(clock)`。H: §1）を作り `createApp` に足す。テスト `apps/server/test/home.api.test.ts`（値が `reports/profit-and-loss`・`balance-sheet` の応答と一致、404、1 項目の失敗でほかが返る）と `auth-coverage.test.ts`
-- [ ] T009 [US1] テスト先行でホームの画面（UI: §3、FR-006〜008）: `apps/web/src/features/home/`（`api.ts`、`HomePage.tsx`）と `routes/e/$entityId/index.tsx`。今日やること（0 件は出さず、すべて 0 なら「残っている作業はありません」、押し先は UI: §3 の検索の引数つき URL）、今期の数字（会計期間がなければ登録の案内）、最近の仕訳、近道、「前回のバックアップ」（既存の `GET /api/backup/status`）・「最後の明細の取込」（なければ「まだありません」）、項目の失敗は「読み込めませんでした」と「再読み込み」。押し先の画面（明細・証憑・請求の一覧）が検索の引数 `status`・`link` を読むことも確かめ、読まなければ足す。`mock-api.ts` に `home` の既定の応答。テスト `apps/web/test/routes/home.test.tsx`
+- [ ] T009 [US1] テスト先行でホームの画面（UI: §3、FR-006〜008）: `apps/web/src/features/home/`（`api.ts`、`HomePage.tsx`）と `routes/e/$entityId/index.tsx`。今日やること（0 件は出さず、すべて 0 なら「残っている作業はありません」、押し先は UI: §3 の検索の引数つき URL）、今期の数字（会計期間がなければ登録の案内）、最近の仕訳、近道、「前回のバックアップ」（既存の `GET /api/backup/status`）・「最後の明細の取込」（なければ「まだありません」）、項目の失敗は「読み込めませんでした」と「再読み込み」。押し先の画面（明細・証憑・請求の一覧）が検索の引数 `status`・`link` を読むようにする（読まなければこのタスクで足す。T024・T026 は切替の見た目だけ）。`mock-api.ts` に `home` の既定の応答。テスト `apps/web/test/routes/home.test.tsx`
 
 **Checkpoint**: メニューから各画面に 1 回で届き、ホームの数字が帳票と一致する
 
@@ -106,7 +106,7 @@ description: "Task list for 011-ui-overhaul"
 **Independent Test**: spec US4 の Independent Test
 
 - [ ] T023 [US4] テスト先行で証憑の追加（R11・R4、FR-026〜028）: `apps/web/src/routes/e/$entityId/receipts/new.tsx` を作り直し `receipts/capture.tsx` を消す（`routeTree.gen.ts` を再生成）。`<input type="file" multiple>` で選んだファイルを既存の `POST /receipts` に 1 件ずつ順に送り、結果（追加・重複・エラー）を 1 件ずつ出す。区分の既定は `localStorage` の `trebuchet.receiptCategory.<entityId>`（理由の文は今のまま）。追加の後、未入力の証憑の値の入力（取引年月日・金額・取引先、AI の読み取りが有効なら「読み取る」）を同じ画面で開き、「次の未入力の証憑へ」で進む。主な操作は「追加する」。テスト: `receipts-upload.test.tsx`・`receipts-capture.test.tsx`・`receipt-fill.test.tsx` を `receipts-new.test.tsx` にまとめて直す（3 件、重複 1 件、区分の既定、次へ）
-- [ ] T024 [US4] テスト先行で一覧と詳細（R11、FR-029・030）: `receipts/index.tsx` の上に「未入力」（`missing=true`）・「仕訳なし」（`link=none`）の切替（検索の引数。ホームの押し先と同じ）、`receipts/$receiptId.tsx` を上に原本・値・結びつき、下に `<details>` で情報・履歴・差し替え・削除。テスト `receipts-list.test.tsx`・`receipt-detail.test.tsx`・`receipt-edit.test.tsx`・`receipt-link.test.tsx` を直す
+- [ ] T024 [US4] テスト先行で一覧と詳細（R11、FR-029・030）: `receipts/index.tsx` の上に「未入力」（`missing=true`）・「仕訳なし」（`link=none`）の切替（引数の読み取りは T009 で済み。ここは切替の見た目）、今の検索の欄（取引年月日・金額・取引先。憲法 II）は残してテストで確かめる、`receipts/$receiptId.tsx` を上に原本・値・結びつき、下に `<details>` で情報・履歴・差し替え・削除。テスト `receipts-list.test.tsx`・`receipt-detail.test.tsx`・`receipt-edit.test.tsx`・`receipt-link.test.tsx` を直す
 
 **Checkpoint**: 3 件をまとめて追加し、一覧に戻らずに値を入れ終える
 
@@ -119,7 +119,7 @@ description: "Task list for 011-ui-overhaul"
 **Independent Test**: spec US5 の Independent Test
 
 - [ ] T025 [US5] テスト先行で取引先と請求の条件の一括の保存（R15、H: §1）: schema `packages/schema/src/masters.ts` の `PartnerInput` に `isActive?: boolean | undefined`、`PartnerProfileInput = { partner: PartnerInput, billingTerms: BillingTermsInput | null }`（null は条件を消す）、domain のユースケース `savePartnerProfile`（`TenantUnitOfWork<{ invoicing: InvoicingStore }>` の 1 つの `run` で `masters` と `invoicing` に書く。今の `saveBillingTerms`・`deleteBillingTerms` の検証を使う）、server の `POST /partners/profile`（201）・`PUT /partners/:partnerId/profile`（200、404、409 名前の重複）。テスト: domain（条件の検証の失敗で取引先も巻き戻る）、`apps/server/test/partners-profile.api.test.ts`、`auth-coverage.test.ts`
-- [ ] T026 [US5] テスト先行で請求の流れの画面と取引先の欄（R13、FR-031・034・035）: `routes/e/$entityId/invoices/index.tsx` に `Steps`（①工数 → ②請求書を作る → ③入金）と各段階の入口、取引先（請求先）の一覧と「取引先を登録」、請求書の一覧（既定は未入金・期限切れ、検索の引数 `status`）。取引先の欄 `features/masters/PartnerProfileForm.tsx`（名前・敬称・メモ・請求の条件・使用停止。T025 の API。US8 の取引先の画面でも使う）。一覧の行の「入金」で `Sheet` に `PaymentForm`、入金先の既定は `localStorage` の `trebuchet.depositAccount.<entityId>`（使用停止なら使わない）。入金の後は `invalidateLedger`。主な操作は「請求書を作る」。テスト `invoices-list.test.tsx`・`invoices-payments.test.tsx`・`partners-billing.test.tsx` を直す
+- [ ] T026 [US5] テスト先行で請求の流れの画面と取引先の欄（R13、FR-031・034・035）: `routes/e/$entityId/invoices/index.tsx` に `Steps`（①工数 → ②請求書を作る → ③入金）と各段階の入口、取引先（請求先）の一覧と「取引先を登録」、請求書の一覧（既定は未入金・期限切れ。引数 `status` の読み取りは T009 で済み）。請求の条件のある取引先が工数の対象になること（FR-034）をテストで確かめる。取引先の欄 `features/masters/PartnerProfileForm.tsx`（名前・敬称・メモ・請求の条件・使用停止。T025 の API。US8 の取引先の画面でも使う）。一覧の行の「入金」で `Sheet` に `PaymentForm`、入金先の既定は `localStorage` の `trebuchet.depositAccount.<entityId>`（使用停止なら使わない）。入金の後は `invalidateLedger`。主な操作は「請求書を作る」。テスト `invoices-list.test.tsx`・`invoices-payments.test.tsx`・`partners-billing.test.tsx` を直す
 - [ ] T027 [US5] テスト先行で請求書を作る画面（R13、FR-032・033、D5）: `routes/e/$entityId/invoices/new.tsx` の言葉を「請求書を作る」に統一し「ここでは保存しません。発行すると請求書と仕訳ができます」を出す。取引先と月を選ぶと、請求書の一覧（未取消）に同じ取引先・対象月があれば「発行済み（番号）」と出し、「取り消す」（詳細へ）か「追加で作る」（`confirmDuplicate: true`）を選ぶまで作るボタンを押せない。使用停止の取引先を対象に出さない。テスト `invoices-new.test.tsx` を直す
 - [ ] T028 [US5] テスト先行で詳細からの印刷（R13、FR-036・037）: `routes/e/$entityId/invoices/$invoiceId_.print.tsx` を消し（`routeTree.gen.ts` を再生成）、`$invoiceId.tsx` に `features/invoicing/InvoicePrint.tsx` を `data-print-root` の要素として置き、「印刷・PDF に保存」で `window.print()`（主な操作。UI: §7）。`apps/web/src/print.css`（全体の `@media print` で `[data-print-root]` 以外を `display: none`、`@page { margin: 0 }`、余白は要素の `padding`）。屋号と氏名が発行時の写しで同じなら 1 回だけ出す。「ブラウザの印刷の設定でヘッダーとフッターを消せます」を小さく出す。テスト `invoice-print.test.tsx`・`invoice-detail.test.tsx` を直す。`apps/web/e2e/invoicing.spec.ts` の印刷の URL を詳細に直す
 
@@ -146,7 +146,7 @@ description: "Task list for 011-ui-overhaul"
 
 - [ ] T031 [US7] テスト先行で申告の控えを消す（R14、§1.3、H: §3）: 表 `tax_return_memos`・`filed_documents` の `DROP TABLE`（マイグレーション）と、R14 の Decision の 1 項目めと追記の参照（db・domain・schema・server・web の控えの部分と関係するテスト）を消す（`routeTree.gen.ts` を再生成）。消した API が 404 になるテストを足す。控えに固有のエラーコードがあれば grep で消す。`grep -rn "tax_return_memos\|filed_documents\|filedDocuments\|TaxReturnMemo" packages apps scripts` が 0 件（マイグレーションの履歴を除く）
 - [ ] T032 [US7] テスト先行で決算書の画面（R14、FR-043〜045）: `routes/e/$entityId/blue-return/index.tsx` を今日を含む会計期間の年（なければ最新）へ転送、`$year/index.tsx` の上に年度の select。`blue-return/$year/deduction.tsx` を消し（`routeTree.gen.ts` を再生成）、回答の欄を `features/blue-return/DeductionAnswersDialog.tsx` に移して欄 44 の近くに「要件を直す」（回答がなければ「要件に回答すると控除額が出ます」）、保存の後に決算書を読み直す。使わない欄の切替をなくし常に隠す、CSV は `blankUnused=true` を常に付ける。テスト `blue-return.test.tsx`・`blue-return-page*.test.tsx`・`blue-return-home-use.test.tsx` を直す
-- [ ] T033 [US7] テスト先行で開業費の画面（R14、FR-046）: T005 で足した `routes/e/$entityId/deferred-assets/index.tsx` を仕上げ（`features/deferred-assets/` の部品、見出し、主な操作）、`fixed-assets/index.tsx` から開業費の節を消す。API・規則（009）は変えない。テスト: `fixed-assets.test.tsx` の開業費の部分を新しい `deferred-assets.test.tsx` に移す
+- [ ] T033 [US7] テスト先行で開業費の画面（R14、FR-046）: T005 で足した `routes/e/$entityId/deferred-assets/index.tsx` を仕上げる（`features/deferred-assets/` の部品、見出し、主な操作。固定資産台帳からの削除は T005 で済み）。API・規則（009）は変えない。テスト: `fixed-assets.test.tsx` の開業費の部分を新しい `deferred-assets.test.tsx` に移す
 
 ---
 
@@ -170,7 +170,7 @@ description: "Task list for 011-ui-overhaul"
 
 - [ ] T037 [US9] テスト先行でバックアップの既定の置き場所（R16、§2.3、H: §2）: registry の `backup_folder` が未設定なら `<リポジトリ直下>/bak`（リポジトリ直下は `packages/db/src/tenant-store.ts:42` の `dataDir()` の既定と同じ求め方。`TREBUCHET_DATA_DIR` があっても `bak/` はリポジトリ直下。環境変数 `TREBUCHET_DEFAULT_BACKUP_DIR` で変えられる）。`apps/server/src/lib/backup-scheduler.ts:34` の未設定で止まる分岐と手動の実行（`backup-run.ts`、`routes/backup.ts`）を既定でも動かす。`BackupStatus` に `folderSource: "configured" | "default"`、未設定でも `configured: true`。証憑の写しも同じ置き場所の下。テスト: `apps/server/test/` のバックアップのテスト（一時のディレクトリを `TREBUCHET_DEFAULT_BACKUP_DIR` で渡す。既定で自動・手動が書ける、`folderSource`）。`configured: false` を前提にするテストを grep で直す
 - [ ] T038 [US9] テスト先行で記録の CSV（R17、H: §2）: `GET /auth/events?format=csv`・`GET /backup/runs?format=csv`（全件、`limit` を無視。列は日時・種類・結果・端末の種類など表示用の列だけ、資格情報の ID・トークン・鍵を出さない。書き方は `packages/domain/src/reports/csv.ts` に合わせる）。テスト: server の認証・バックアップのテストに足す（列に秘密がない、全件）
-- [ ] T039 [US9] テスト先行で設定の画面（R17、UI: §6、FR-053〜057）: `apps/web/src/routes/settings/route.tsx`（`nav aria-label="設定のメニュー"`: セキュリティ・バックアップ・AI・リモート、各ページの `h1` は同じ名前、`max-w-4xl`。`routeTree.gen.ts` を再生成）、認証の記録とバックアップの履歴は `limit=5` と「CSV に書き出す」（0 件なら無効）、`LockCard` の文と操作をヘッダーの「施錠してサインアウト」と同じにする、`grep -rn "Mac で施錠" apps` を 0 件にして端末の語を「この Mac」「スマホ・リモート」にそろえる、バックアップの画面を 状態 → 復元 → 履歴 の順にし、`folderSource` が `default` なら R16 の注意の文。テスト `auth.test.tsx`・`backup.test.tsx`・`backup-inspect.test.tsx`・`settings-ai.test.tsx`・`remote.test.tsx` を直す
+- [ ] T039 [US9] テスト先行で設定の画面（R17、UI: §6、FR-053〜057）: `apps/web/src/routes/settings/route.tsx`（`nav aria-label="設定のメニュー"`: セキュリティ・バックアップ・AI・リモート、各ページの `h1` は同じ名前、`max-w-4xl`。`routeTree.gen.ts` を再生成）、認証の記録とバックアップの履歴は `limit=5` と「CSV に書き出す」（0 件なら無効）、`LockCard` の文と操作をヘッダーの「施錠してサインアウト」と同じにする、`grep -rn "Mac で施錠" apps` を 0 件にして端末の語を「この Mac」「スマホ・リモート」にそろえる、バックアップの画面を 状態 → 復元 → 履歴 の順にし、`folderSource` が `default` なら R16 の注意の文、書けずに失敗したら警告の近くに置き場所を変える案内（Edge Cases）。テスト `auth.test.tsx`・`backup.test.tsx`・`backup-inspect.test.tsx`・`settings-ai.test.tsx`・`remote.test.tsx` を直す
 
 ---
 
@@ -209,7 +209,7 @@ description: "Task list for 011-ui-overhaul"
 
 ## Phase 15: 利用者の端末での確認（メイン・利用者。値・取引先名は書かない）
 
-- [ ] T050 利用者の端末で `pnpm --filter @trebuchet/web e2e`（既存 5 本 + `mobile.spec.ts`）、`pnpm bench:reports`（SC-003）、`pnpm eval:statements` を T042 の前（`git stash` か前のコミット）と後で実行して比べる（憲法 IV）。結果（通った・落ちた、件数と割合だけ）をこの行の下に記録する
+- [ ] T050 利用者の端末で `pnpm --filter @trebuchet/web e2e`（既存 5 本 + `mobile.spec.ts`）、`pnpm bench:reports`（SC-003）、`pnpm eval:statements` を T018・T042 の前（T019・T020 を T018 より先に行い、T020 の直後のコミットを基準にする）と後で実行して比べる（憲法 IV。明細の場面のルール・AI の精度が下がらないこと。`journal_entry` の場面は前の版にないので、後の値を初めての基準値として記録する）。結果（通った・落ちた、件数と割合だけ）をこの行の下に記録する
 - [ ] T051 Q: §3 の手動の確認（SC-011、Mac とスマホ）。要望ごとに日付と OK／NG と理由をこの行の下に記録する
 
 ---
@@ -223,7 +223,7 @@ description: "Task list for 011-ui-overhaul"
   - T025（取引先の欄の API）→ T026 → T035（取引先の画面で `PartnerProfileForm` を使う）
   - T033 は T005 の `deferred-assets/index.tsx`
   - T036 の会計期間の状態は T014 の `summary.count`
-  - T020（`eval:statements`）は T019 の後、T045 は T020 と T042 の後
+  - US3 は T019 → T020 → T018 の順（T020 の直後のコミットを評価の基準にする。T050）。T045 は T020 と T042 の後
   - T044 は T015 と T043
   - T040 は T003（Sheet）と T005
 - Polish（T046〜T049）は全ストーリーの後、Phase 15 は最後
