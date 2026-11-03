@@ -249,6 +249,62 @@ describe("POST /backup/run", () => {
 });
 
 describe("GET /backup/runs", () => {
+  it("CSV は limit を無視して最大表示件数を超える全件を新しい順に出し、秘密の列を除く", async () => {
+    const secret = "synthetic-secret-token-key";
+    for (let i = 0; i < 201; i += 1) {
+      await env.backups().recordRun({
+        id: `run-${i}`,
+        startedAt: env.clock.clock.now(),
+        finishedAt: env.clock.clock.now(),
+        trigger: "manual",
+        status: i === 200 ? "failed" : "succeeded",
+        errorCode: secret,
+        fileName: `/synthetic/${secret}.tbk`,
+        sizeBytes: i,
+        contentSha256: secret,
+        summary: [{ id: secret, name: secret, fiscalYears: [] }],
+      });
+    }
+    for (const limit of ["1", "invalid", "0"]) {
+      const res = await call("GET", `/runs?format=csv&limit=${limit}`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
+      expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="backup-runs.csv"');
+      expect(res.headers.get("Cache-Control")).toBe("no-store");
+      const csv = Buffer.from(await res.arrayBuffer()).toString("utf8");
+      expect(csv).toMatch(/^\uFEFF開始日時,終了日時,種類,結果,サイズ（バイト）\r\n/);
+      expect(csv.split("\r\n")).toHaveLength(203);
+      expect(csv.split("\r\n")[1]).toBe(
+        `${env.clock.clock.now()},${env.clock.clock.now()},manual,failed,200`,
+      );
+      expect(csv).not.toContain(secret);
+      expect(csv).not.toMatch(/errorCode|fileName|contentSha256|summary/);
+    }
+    expect(((await (await call("GET", "/runs")).json()) as { runs: unknown[] }).runs).toHaveLength(
+      50,
+    );
+  });
+
+  it("CSV は空なら見出しだけを返す", async () => {
+    const res = await call("GET", "/runs?format=csv");
+    expect(Buffer.from(await res.arrayBuffer()).toString("utf8")).toBe(
+      "\uFEFF開始日時,終了日時,種類,結果,サイズ（バイト）\r\n",
+    );
+    const unsigned = await app.request("/api/backup/runs?format=csv", {
+      headers: { Host: TEST_HOST, Origin: TEST_ORIGIN },
+    });
+    expect(unsigned.status).toBe(401);
+    const recovery = await createTestSession({ now: env.clock.clock.now(), kind: "recovery" });
+    const recoveryCsv = await app.request("/api/backup/runs?format=csv", {
+      headers: { Host: TEST_HOST, Origin: TEST_ORIGIN, Cookie: recovery.cookie },
+    });
+    expect(recoveryCsv.status).toBe(401);
+    const wrongHost = await app.request("/api/backup/runs?format=csv", {
+      headers: { Host: "untrusted.invalid", Origin: TEST_ORIGIN, Cookie: cookie },
+    });
+    expect(wrongHost.status).toBe(421);
+  });
+
   it("新しい順に { runs } を返し、limit で切る。不正な limit は 400", async () => {
     await configured();
     for (let i = 0; i < 2; i += 1) {

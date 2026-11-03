@@ -959,6 +959,63 @@ describe("公開の手続きの前提", () => {
 });
 
 describe("auth_events", () => {
+  it("CSV は limit を無視して最大表示件数を超える全件を新しい順に出し、秘密の列を除く", async () => {
+    const t = setup();
+    const { cookie } = await createTestSession({ now: t.clock.now() });
+    const secret = "synthetic-secret-token-key";
+    for (let i = 0; i < 501; i += 1) {
+      await store().appendEvent({
+        id: `event-${i}`,
+        occurredAt: t.clock.now(),
+        kind: i === 500 ? "sign_in_failed" : "sign_in",
+        rpId: i === 500 ? "localhost" : `remote-${secret}.ts.net`,
+        passkeyId: secret,
+        sessionId: secret,
+        userAgent: secret,
+        detail: { token: secret, key: secret, path: `/synthetic/${secret}` },
+      });
+    }
+    for (const limit of ["1", "invalid", "0"]) {
+      const res = await t.call("GET", `/auth/events?format=csv&limit=${limit}`, { cookie });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
+      expect(res.headers.get("Content-Disposition")).toBe('attachment; filename="auth-events.csv"');
+      expect(res.headers.get("Cache-Control")).toBe("no-store");
+      const csv = Buffer.from(await res.arrayBuffer()).toString("utf8");
+      expect(csv).toMatch(/^\uFEFF日時,種類,端末の種類\r\n/);
+      expect(csv.split("\r\n")).toHaveLength(503);
+      expect(csv.split("\r\n")[1]).toBe(`${t.clock.now()},sign_in_failed,この Mac`);
+      expect(csv).not.toContain(secret);
+      expect(csv).not.toMatch(/passkeyId|sessionId|userAgent|detail|token/);
+    }
+    const json = await (await t.call("GET", "/auth/events", { cookie })).json();
+    expect(json.events).toHaveLength(100);
+    expect((await t.call("GET", "/auth/events?limit=invalid", { cookie })).status).toBe(400);
+  });
+
+  it("CSV は空なら見出しだけを返し、表示用の文字列を既存の CSV 規則でエスケープする", async () => {
+    const t = setup();
+    const { cookie } = await createTestSession({ now: t.clock.now() });
+    const empty = await t.call("GET", "/auth/events?format=csv", { cookie });
+    expect(Buffer.from(await empty.arrayBuffer()).toString("utf8")).toBe(
+      "\uFEFF日時,種類,端末の種類\r\n",
+    );
+    await store().appendEvent({ id: "escaped", occurredAt: '日時,"合成"\n次行', kind: "sign_in" });
+    const res = await t.call("GET", "/auth/events?format=csv", { cookie });
+    expect(Buffer.from(await res.arrayBuffer()).toString("utf8")).toBe(
+      '\uFEFF日時,種類,端末の種類\r\n"日時,""合成""\n次行",sign_in,不明\r\n',
+    );
+    expect((await t.call("GET", "/auth/events?format=csv")).status).toBe(401);
+    const recovery = await createTestSession({ now: t.clock.now(), kind: "recovery" });
+    expect(
+      (await t.call("GET", "/auth/events?format=csv", { cookie: recovery.cookie })).status,
+    ).toBe(401);
+    expect(
+      (await t.call("GET", "/auth/events?format=csv", { cookie, host: "untrusted.invalid" }))
+        .status,
+    ).toBe(421);
+  });
+
   it("要求ごとに増え、新しい順に ?limit= で取れる。更新・削除できない", async () => {
     const t = setup();
     const { cookie } = await t.registerFirst("p1");

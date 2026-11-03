@@ -661,8 +661,8 @@ export interface AuthStore {
   deleteAllSessions(): Promise<number>;
   // 認証の記録（追記のみ）
   appendEvent(event: NewAuthEvent): Promise<void>;
-  /** 新しい順 */
-  listEvents(limit: number): Promise<AuthEvent[]>;
+  /** 新しい順。limit を省略すると全件 */
+  listEvents(limit?: number): Promise<AuthEvent[]>;
   /** since 以降の、kinds の記録（新しい順） */
   listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]>;
   // ペアリングのトークン（ハッシュは hashToken）
@@ -708,6 +708,6 @@ export interface BackupStore {
   getLastCheck(): Promise<BackupRun | undefined>;
   /** 最後の succeeded */
   getLastSuccess(): Promise<BackupRun | undefined>;
-  /** 新しい順 */
-  listRuns(limit: number): Promise<BackupRun[]>;
+  /** 新しい順。limit を省略すると全件 */
+  listRuns(limit?: number): Promise<BackupRun[]>;
 }
