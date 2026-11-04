@@ -91,6 +91,18 @@ describe("明細の設定", () => {
     expect(putCalls(all)).toHaveLength(0);
   });
 
+  it("しきい値を変えるのはここだけ。一覧・確認の画面には出ないと案内し、保存が主な操作", async () => {
+    openSettings();
+    await screen.findByLabelText("まとめて承認のしきい値");
+    expect(screen.getByText(/一覧・確認の画面には出ません/)).toBeInTheDocument();
+    expect(screen.getByText(/確認の画面の「まとめて承認」/)).toBeInTheDocument();
+    const primary = screen
+      .getAllByRole("button")
+      .filter((b) => b.className.split(" ").includes("bg-primary"))
+      .map((b) => b.textContent);
+    expect(primary).toEqual(["保存"]);
+  });
+
   it("API のエラーは表示し、「保存しました。」は出さない", async () => {
     const u = user();
     openSettings({

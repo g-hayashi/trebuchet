@@ -136,6 +136,48 @@ describe("ルールの一覧（H:§5.1）", () => {
     expect(second).toHaveTextContent("停止中");
   });
 
+  it("自動で作ったルールと利用者が直したルールを区別して出す（FR-023）", async () => {
+    openApi([
+      rule(1, { managedBy: "auto" }),
+      rule(2, { normalizedContent: "別の店", managedBy: "user" }),
+    ]);
+    renderRules();
+
+    const auto = await rowOf(/ショップ#/);
+    expect(within(auto).getByText("自動")).toBeInTheDocument();
+    expect(auto).not.toHaveTextContent("利用者が直した");
+    const user = await rowOf(/別の店/);
+    expect(within(user).getByText("利用者が直した")).toBeInTheDocument();
+    expect(user).not.toHaveTextContent("自動");
+    // 一覧の見出しにも「作り方」の列がある
+    expect(within(await table()).getByRole("columnheader", { name: "管理" })).toBeInTheDocument();
+  });
+
+  it("ルールを直す・止めると利用者が直した印に変わる（サーバーが managedBy を user にする）", async () => {
+    const { state } = openApi([rule(1)], {
+      [`POST ${BASE}/inference-rules/${uuid(1)}/pause`]: () => {
+        state.rules = [rule(1, { status: "paused", managedBy: "user" })];
+        return ok({ rule: state.rules[0] });
+      },
+    });
+    const u = userEvent.setup();
+    renderRules();
+
+    expect(within(await rowOf(/ショップ#/)).getByText("自動")).toBeInTheDocument();
+    await u.click(within(await rowOf(/ショップ#/)).getByRole("button", { name: "停止" }));
+    await waitFor(async () =>
+      expect(within(await rowOf(/ショップ#/)).getByText("利用者が直した")).toBeInTheDocument(),
+    );
+  });
+
+  it("ルールは承認のたびに自動で作る・更新すると案内し、利用者が直したルールは上書きしないと伝える", async () => {
+    openApi([rule(1)]);
+    renderRules();
+    await table();
+    expect(screen.getByText(/承認のたびに自動で作る・更新します/)).toBeInTheDocument();
+    expect(screen.getByText(/直した・止めたルールは自動では変わりません/)).toBeInTheDocument();
+  });
+
   it("状態で絞り込む（status を付けて読み直す）。ルールがなければその旨を出す", async () => {
     const { all } = openApi([rule(1)]);
     const u = user();

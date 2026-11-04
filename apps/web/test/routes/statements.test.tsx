@@ -177,6 +177,12 @@ const table = async () => screen.findByRole("table", { name: "明細の一覧" }
 const rowOf = async (text: RegExp | string) =>
   within(await table()).getByRole("row", { name: text });
 const editor = async () => screen.findByRole("region", { name: "候補の確認" });
+/** 画面の主な操作（variant="default"）のボタンの名前 */
+const primaryButtons = () =>
+  screen
+    .queryAllByRole("button")
+    .filter((b) => b.className.split(" ").includes("bg-primary"))
+    .map((b) => b.textContent);
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -299,7 +305,7 @@ describe("明細の一覧（H:§4.1）", () => {
   });
 });
 
-describe("候補を作る（H:§4.2）", () => {
+describe("候補をもう一度作る（H:§4.2。011 R9: 取込の後は自動。途中で画面を離れたとき用に控えめに残す）", () => {
   it("POST して件数を知らせ、一覧を読み直す", async () => {
     const { all } = openApi([statement(1)], {
       [`POST ${BASE}/statements/candidates`]: () => ok({ built: 2, needsAi: [uuid(1)] }),
@@ -308,10 +314,18 @@ describe("候補を作る（H:§4.2）", () => {
     renderStatements();
     await table();
 
-    await u.click(screen.getByRole("button", { name: "候補を作る" }));
+    await u.click(screen.getByRole("button", { name: "候補をもう一度作る" }));
     expect(await screen.findByText("候補を 2 件作りました（候補なし 1 件）。")).toBeInTheDocument();
     expect(calls(all, "POST", "/statements/candidates")[0]?.body).toEqual({});
     await waitFor(() => expect(calls(all, "GET", "/statements").length).toBeGreaterThan(1));
+  });
+
+  it("「候補を作る」の名前のボタンはなく、控えめな見た目（variant=default ではない）", async () => {
+    openApi([statement(1)]);
+    renderStatements();
+    await table();
+    expect(screen.queryByRole("button", { name: "候補を作る" })).not.toBeInTheDocument();
+    expect(primaryButtons()).toEqual([]);
   });
 });
 
@@ -628,6 +642,16 @@ describe("承認（H:§4.4）", () => {
     ).toBeInTheDocument();
   });
 
+  it("一覧の中の確認を開いたとき、画面の主な操作（variant=default）は「承認して登録」だけ", async () => {
+    openApi([statement(1, { candidate: transferCandidate })]);
+    const u = user();
+    renderStatements();
+    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "確認する" }));
+    await editor();
+    await screen.findByRole("button", { name: "承認して登録" });
+    expect(primaryButtons()).toEqual(["承認して登録"]);
+  });
+
   it("閉じるで確認の画面を閉じる", async () => {
     openApi([statement(1, { candidate: noneCandidate })]);
     const u = user();
@@ -660,7 +684,8 @@ describe("まとめて承認（H:§4.5）", () => {
     renderStatements();
 
     const region = await screen.findByRole("region", { name: "まとめて承認" });
-    expect(await within(region).findByText("確信度 80 以上の候補: 2 件")).toBeInTheDocument();
+    // しきい値の数字は出さない（FR-024。変えるのは「明細の設定」だけ）
+    expect(await within(region).findByText("確信度の高い候補: 2 件")).toBeInTheDocument();
     await u.click(within(region).getByRole("button", { name: "まとめて承認" }));
 
     expect(await within(region).findByText("1 件を承認しました。")).toBeInTheDocument();
@@ -679,8 +704,16 @@ describe("まとめて承認（H:§4.5）", () => {
     ]);
     renderStatements();
     const region = await screen.findByRole("region", { name: "まとめて承認" });
-    expect(await within(region).findByText("確信度 80 以上の候補: 0 件")).toBeInTheDocument();
+    expect(await within(region).findByText("確信度の高い候補: 0 件")).toBeInTheDocument();
     expect(within(region).getByRole("button", { name: "まとめて承認" })).toBeDisabled();
+  });
+
+  it("一覧の画面に、しきい値の数字・設定への案内は出さない（明細の設定にだけ置く。FR-024）", async () => {
+    openApi(three());
+    renderStatements();
+    await screen.findByText("確信度の高い候補: 2 件");
+    expect(screen.queryByText(/しきい値/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /しきい値/ })).not.toBeInTheDocument();
   });
 });
 
@@ -774,17 +807,18 @@ describe("メニュー", () => {
     expect(within(nav).queryByRole("link", { name: "一覧と確認" })).toBeNull();
   });
 
-  it("一覧から取込・しきい値の設定・推定のルールへ進める（どれも事業体の下）", async () => {
+  it("一覧から取込・1 件ずつの確認・推定のルールへ進める（どれも事業体の下）。しきい値の設定への導線は置かない", async () => {
     openApi([]);
     renderStatements();
     expect(await screen.findByRole("link", { name: "明細を取り込む" })).toHaveAttribute(
       "href",
       "/e/e1/statements/import",
     );
-    expect(screen.getByRole("link", { name: "しきい値の設定" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "1 件ずつ確認する" })).toHaveAttribute(
       "href",
-      "/e/e1/statements/settings",
+      "/e/e1/statements/review",
     );
+    expect(screen.queryByRole("link", { name: "しきい値の設定" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "推定のルール" })).toHaveAttribute(
       "href",
       "/e/e1/statements/rules",

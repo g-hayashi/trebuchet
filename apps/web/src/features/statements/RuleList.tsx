@@ -148,6 +148,7 @@ export function RuleList({ entityId }: { entityId: string }) {
               <TableHead className="text-right">確信度</TableHead>
               <TableHead>回数</TableHead>
               <TableHead>状態</TableHead>
+              <TableHead>管理</TableHead>
               <TableHead>操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -169,6 +170,17 @@ export function RuleList({ entityId }: { entityId: string }) {
                   {r.overrides > 0 && <span className="block">修正 {r.overrides} 回</span>}
                 </TableCell>
                 <TableCell>{RULE_STATUS_LABELS[r.status]}</TableCell>
+                <TableCell>
+                  <span
+                    className={
+                      r.managedBy === "user"
+                        ? "rounded-md border border-primary/40 px-2 py-0.5 text-xs font-medium"
+                        : "rounded-md border px-2 py-0.5 text-xs text-muted-foreground"
+                    }
+                  >
+                    {r.managedBy === "user" ? "利用者が直した" : "自動"}
+                  </span>
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-2">
                     <Button

@@ -52,10 +52,10 @@ const inferBodies = (all: ApiCall[]) =>
     (c) => (c.body as { statementIds: string[] }).statementIds,
   );
 
-/** 「候補を作る」を押して needsAi を受け取った状態にする */
+/** 「候補をもう一度作る」を押して needsAi を受け取った状態にする */
 async function buildCandidates(needsAi: string[]) {
   const u = user();
-  await u.click(await screen.findByRole("button", { name: "候補を作る" }));
+  await u.click(await screen.findByRole("button", { name: "候補をもう一度作る" }));
   await screen.findByText(
     `候補を ${needsAi.length + 2} 件作りました（候補なし ${needsAi.length} 件）。`,
   );

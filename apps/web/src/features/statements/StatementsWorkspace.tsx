@@ -109,15 +109,12 @@ export function StatementsWorkspace({
         <Link to="/e/$entityId/statements/rules" params={{ entityId }} className={linkButtonClass}>
           推定のルール
         </Link>
-        <Link
-          to="/e/$entityId/statements/settings"
-          params={{ entityId }}
-          className={linkButtonClass}
-        >
-          しきい値の設定
+        <Link to="/e/$entityId/statements/review" params={{ entityId }} className={linkButtonClass}>
+          1 件ずつ確認する
         </Link>
-        <Button disabled={build.isPending} onClick={() => build.mutate()}>
-          候補を作る
+        {/* 取込の後は自動で作る。途中で画面を離れたときのために控えめに残す（011 R9） */}
+        <Button variant="outline" disabled={build.isPending} onClick={() => build.mutate()}>
+          候補をもう一度作る
         </Button>
         {notice && <SaveNotice message={notice} />}
       </div>

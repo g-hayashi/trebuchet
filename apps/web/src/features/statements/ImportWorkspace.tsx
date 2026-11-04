@@ -10,10 +10,11 @@ import type {
   StatementSource,
   StatementTableLayout,
 } from "@trebuchet/schema";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { SaveNotice } from "@/components/ui/save-notice";
+import { Steps } from "@/components/ui/steps";
 import {
   Table,
   TableBody,
@@ -22,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api";
 import { thisYear } from "@/lib/dates";
 import { AccountMappingForm } from "./AccountMappingForm";
@@ -39,10 +41,36 @@ import {
   ColumnMappingEditor,
   type RelayoutChoice,
 } from "./ColumnMappingEditor";
+import { type ChainProgress, runCandidateChain } from "./candidate-chain";
 import { ImportPreview } from "./ImportPreview";
 import { ORIGIN_LABELS } from "./labels";
+import { ReviewQueue } from "./ReviewQueue";
 import { AppliedSource, SourceChooser } from "./SourcePicker";
 import { StatementInput, type StatementInputValue } from "./StatementInput";
+
+/** 取込の手順（011 R9。FR-019）。確定の後の「確認・承認」は、候補の作成が終わったら確認の画面（ReviewQueue）を出す */
+const IMPORT_STEPS = ["入力", "列と口座", "取込", "確認・承認"] as const;
+
+/** 取込の後の連鎖の状態。running の間は進みを出し、done で確認の画面を出す */
+type Chain = { phase: "running" | "done"; progress: ChainProgress };
+
+/** 連鎖の進み（候補の作成の進み）。段階ごとに、わかったことを 1 行ずつ出す */
+function ChainStatus({ progress, phase }: { progress: ChainProgress; phase: Chain["phase"] }) {
+  const { seeded, built, ai, aiSkipped } = progress;
+  return (
+    <div role="status" aria-label="候補の作成の進み" className="grid gap-1 text-sm">
+      {phase === "running" && <p className="text-muted-foreground">候補を作っています…</p>}
+      {seeded !== undefined && <p>過去の仕訳からルールを {seeded} 件作りました。</p>}
+      {built !== undefined && <p>候補を {built} 件作りました。</p>}
+      {ai && (
+        <p className="tabular-nums">
+          AI で推定 {ai.done} / {ai.total} 件{ai.stopped ? "で止まりました" : ""}
+        </p>
+      )}
+      {aiSkipped && <p>AI の設定が無効なので、推定は飛ばしました。</p>}
+    </div>
+  );
+}
 
 /** 取込の履歴（H:§3.3。新しい順） */
 function BatchHistory({ entityId }: { entityId: string }) {
@@ -131,7 +159,11 @@ const requestFromSource = (
  */
 export function ImportWorkspace({ entityId }: { entityId: string }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [input, setInput] = useState<Input | undefined>();
+  const [chain, setChain] = useState<Chain | undefined>();
+  // 新しい入力を読み取ったとき、前の連鎖の進みが後から書き込まないようにする
+  const chainRun = useRef(0);
   const [inputVersion, setInputVersion] = useState(0);
   const [layout, setLayout] = useState<StatementTableLayout | undefined>();
   const [layoutVersion, setLayoutVersion] = useState(0);
@@ -213,6 +245,10 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
       setPreview(undefined);
       setAccountDrafts({});
       setInputVersion((v) => v + 1);
+      // 取込の後は、ルールの作成 → 候補の作成 → AI の推定を自動で続け、終わったら確認へ（011 R9）
+      const run = ++chainRun.current;
+      const current = () => chainRun.current === run;
+      setChain({ phase: "running", progress: {} });
       await Promise.all([
         // 口座の対応も確定で保存されたので、読み直す
         queryClient.invalidateQueries({ queryKey: statementKeys.accounts(entityId) }),
@@ -220,6 +256,13 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
         // 取込元を保存・更新したので、一覧を読み直す
         queryClient.invalidateQueries({ queryKey: statementKeys.sources(entityId) }),
       ]);
+      await runCandidateChain({
+        entityId,
+        queryClient,
+        onProgress: (progress) => current() && setChain({ phase: "running", progress }),
+        onError: (message) => current() && toast.error(message),
+      });
+      if (current()) setChain((c) => ({ phase: "done", progress: c?.progress ?? {} }));
     },
     onError: (e, { r }) => {
       // プレビューの後に内容が変わったときは、作り直して見せる
@@ -236,6 +279,9 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
 
   const startLayout = (next: Input) => {
     resetResults();
+    // 新しい入力を読み取ったら、前の連鎖の進みと確認は消す
+    chainRun.current += 1;
+    setChain(undefined);
     // 新しい入力の判定が終わるまで、前の入力の列の対応・プレビューは見せない
     setLayout(undefined);
     setRequest(undefined);
@@ -336,17 +382,29 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
       return accountInput === undefined ? [] : [{ name, input: accountInput }];
     });
 
+  const step = chain !== undefined ? 3 : preview !== undefined ? 2 : layout !== undefined ? 1 : 0;
+
   return (
     <div className="grid gap-8">
+      <Steps steps={IMPORT_STEPS} current={step} label="取込の手順" />
       <section aria-label="入力" className="grid gap-3">
         <StatementInput
           key={inputVersion}
+          primary={step === 0}
           pending={layoutMutation.isPending}
           onRead={startLayout}
         />
         <ApiErrorMessage error={layoutMutation.error} />
         {notice && <SaveNotice message={notice} />}
       </section>
+
+      {chain && (
+        <section aria-label="候補の作成" className="grid gap-3">
+          <h2 className="text-lg font-semibold">候補の作成</h2>
+          <ChainStatus progress={chain.progress} phase={chain.phase} />
+        </section>
+      )}
+      {chain?.phase === "done" && <ReviewQueue entityId={entityId} />}
 
       {layout && applied && (
         <section aria-label="取込元" className="grid gap-4">
@@ -395,6 +453,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
             sources={sources.data ?? []}
             pickedSourceId={pickedSourceId}
             initial={candidate === undefined ? undefined : { source: candidate, year }}
+            primary={preview === undefined}
             onRelayout={relayout}
             onPickSource={pickSource}
             onConfirm={startPreview}

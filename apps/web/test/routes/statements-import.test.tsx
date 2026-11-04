@@ -901,6 +901,298 @@ describe("取込の確定（FR-007）", () => {
   });
 });
 
+describe("取込の手順と、取込の後の自動の連鎖（011 US3。FR-019・020）", () => {
+  const COMMITTED = {
+    batch: {
+      id: uuid(1),
+      origin: "paste",
+      sourceName: null,
+      inputSha256: SHA,
+      periodFrom: "2026-05-10",
+      periodTo: "2026-05-11",
+      countNew: 3,
+      countExisting: 0,
+      countUnreadable: 1,
+      createdAt: "2026-10-26T01:00:00.000Z",
+    },
+    added: 3,
+    changed: 0,
+  };
+  const AI = {
+    localEnabled: true,
+    localAvailable: true,
+    externalEnabled: false,
+    externalBaseUrl: null,
+    externalModel: null,
+    receiptImagesEnabled: false,
+    apiKeySet: false,
+  };
+  /** AI の設定が無効（端末内も外部も使わない） */
+  const AI_OFF = { ...AI, localEnabled: false, localAvailable: false };
+  const AI_EXTERNAL_ONLY = { ...AI, localEnabled: false, externalEnabled: true };
+
+  const SEED_PATH = `${BASE}/inference-rules/seed`;
+  const CANDIDATES_PATH = `${BASE}/statements/candidates`;
+  const INFER_PATH = `${BASE}/statements/infer`;
+  const ids = (count: number) => Array.from({ length: count }, (_, i) => uuid(100 + i));
+  const inferred = (call: ApiCall) =>
+    ok({
+      results: (call.body as { statementIds: string[] }).statementIds.map((statementId) => ({
+        statementId,
+        method: "local_ai",
+        confidence: 80,
+      })),
+      localAvailable: true,
+      externalUsed: false,
+    });
+
+  const open = (extra: Record<string, Parameters<typeof mockApi>[0][string]> = {}) =>
+    mockApi({
+      ...baseRoutes,
+      [`POST ${PREVIEW_PATH}`]: () => ok(PREVIEW),
+      [`POST ${COMMIT_PATH}`]: () => ok(COMMITTED, 201),
+      ...extra,
+    });
+
+  /** 貼り付け → 列の対応 → 確認 → 「取り込む」 */
+  const commit = async (u: User) => {
+    await toPreview(u);
+    await u.click(await screen.findByRole("button", { name: "取り込む" }));
+  };
+
+  /** 確定の後に呼んだ連鎖の API（呼んだ順） */
+  const chain = (all: ApiCall[]) =>
+    all
+      .filter((c) => c.method === "POST")
+      .map((c) => c.path.replace(BASE, ""))
+      .filter((p) =>
+        ["/inference-rules/seed", "/statements/candidates", "/statements/infer"].includes(p),
+      );
+
+  const currentStep = () =>
+    within(screen.getByRole("list", { name: "取込の手順" }))
+      .getAllByRole("listitem")
+      .find((li) => li.getAttribute("aria-current") === "step");
+
+  const reviewRegion = () => screen.findByRole("region", { name: "明細の確認" });
+
+  it("手順は ①入力 → ②列と口座 → ③取込 → ④確認・承認。今の手順に印を付け、取り込んだら ④ に進む", async () => {
+    open();
+    const u = userEvent.setup();
+    renderImport();
+
+    const list = await screen.findByRole("list", { name: "取込の手順" });
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["① 入力", "② 列と口座", "③ 取込", "④ 確認・承認"]);
+    expect(currentStep()).toHaveTextContent("入力");
+
+    await readPaste(u);
+    expect(currentStep()).toHaveTextContent("列と口座");
+    await chooseSign(u);
+    await u.click(confirmButton());
+    await screen.findByRole("button", { name: "取り込む" });
+    expect(currentStep()).toHaveTextContent("取込");
+
+    await u.click(screen.getByRole("button", { name: "取り込む" }));
+    await reviewRegion();
+    expect(currentStep()).toHaveTextContent("確認・承認");
+    expect(await screen.findByText("3 件を取り込みました。")).toBeInTheDocument();
+  });
+
+  it("取込の確定の後、ルールの作成 → 候補の作成 → AI の推定の順に呼び、AI に回す明細の ID を送る（AI の設定が有効）", async () => {
+    const needsAi = ids(2);
+    const all = open({
+      [`POST ${CANDIDATES_PATH}`]: () => ok({ built: 3, needsAi }),
+      [`POST ${INFER_PATH}`]: inferred,
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await commit(u);
+    await reviewRegion();
+
+    // 確定が先、そのあとに連鎖
+    const posts = all.filter((c) => c.method === "POST").map((c) => c.path.replace(BASE, ""));
+    expect(posts.slice(posts.indexOf("/statements/imports") + 1)).toEqual([
+      "/inference-rules/seed",
+      "/statements/candidates",
+      "/statements/infer",
+    ]);
+    expect(calls(all, "POST", "/inference-rules/seed")[0]?.body).toEqual({});
+    expect(calls(all, "POST", "/statements/candidates")[0]?.body).toEqual({});
+    expect(calls(all, "POST", "/statements/infer")[0]?.body).toEqual({ statementIds: needsAi });
+    // 取込のたびに進みを出す
+    const progress = screen.getByRole("status", { name: "候補の作成の進み" });
+    expect(progress).toHaveTextContent("候補を 3 件作りました");
+    expect(progress).toHaveTextContent("AI で推定 2 / 2 件");
+  });
+
+  it("端末内の AI がなく、外部の AI だけが有効でも推定を呼ぶ", async () => {
+    const all = open({
+      "GET /api/settings/ai": () => ok(AI_EXTERNAL_ONLY),
+      [`POST ${CANDIDATES_PATH}`]: () => ok({ built: 1, needsAi: ids(1) }),
+      [`POST ${INFER_PATH}`]: inferred,
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await commit(u);
+    await reviewRegion();
+    expect(chain(all)).toEqual([
+      "/inference-rules/seed",
+      "/statements/candidates",
+      "/statements/infer",
+    ]);
+  });
+
+  it("AI の設定が無効なら、推定を飛ばす（AI に回す明細があっても呼ばない）。進みにもそう出す", async () => {
+    const all = open({
+      "GET /api/settings/ai": () => ok(AI_OFF),
+      [`POST ${CANDIDATES_PATH}`]: () => ok({ built: 1, needsAi: ids(2) }),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await commit(u);
+    await reviewRegion();
+
+    expect(chain(all)).toEqual(["/inference-rules/seed", "/statements/candidates"]);
+    expect(screen.getByRole("status", { name: "候補の作成の進み" })).toHaveTextContent(
+      "AI の設定が無効なので、推定は飛ばしました",
+    );
+    expect(currentStep()).toHaveTextContent("確認・承認");
+  });
+
+  it("AI に回す明細がなければ（既定の応答）、AI の設定が有効でも推定を呼ばない", async () => {
+    const all = open();
+    const u = userEvent.setup();
+    renderImport();
+    await commit(u);
+    await reviewRegion();
+    expect(chain(all)).toEqual(["/inference-rules/seed", "/statements/candidates"]);
+  });
+
+  it("AI に回す明細は 10 件ずつ送る", async () => {
+    const needsAi = ids(25);
+    const all = open({
+      [`POST ${CANDIDATES_PATH}`]: () => ok({ built: 25, needsAi }),
+      [`POST ${INFER_PATH}`]: inferred,
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await commit(u);
+    await reviewRegion();
+    expect(
+      calls(all, "POST", "/statements/infer").map(
+        (c) => (c.body as { statementIds: string[] }).statementIds,
+      ),
+    ).toEqual([needsAi.slice(0, 10), needsAi.slice(10, 20), needsAi.slice(20)]);
+    expect(screen.getByRole("status", { name: "候補の作成の進み" })).toHaveTextContent(
+      "AI で推定 25 / 25 件",
+    );
+  });
+
+  it("AI の失敗は知らせて、確認へ進む（済んだ分は残る）", async () => {
+    const needsAi = ids(15);
+    let n = 0;
+    const all = open({
+      [`POST ${CANDIDATES_PATH}`]: () => ok({ built: 15, needsAi }),
+      [`POST ${INFER_PATH}`]: (call) => {
+        n += 1;
+        return n === 1 ? inferred(call) : apiError(422, "AI_NOT_CONFIGURED", "AI に接続できません");
+      },
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await commit(u);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("AI の推定に失敗しました");
+    expect(alert).toHaveTextContent("AI に接続できません");
+    await reviewRegion();
+    expect(currentStep()).toHaveTextContent("確認・承認");
+    expect(calls(all, "POST", "/statements/infer")).toHaveLength(2);
+    expect(screen.getByRole("status", { name: "候補の作成の進み" })).toHaveTextContent(
+      "AI で推定 10 / 15 件で止まりました",
+    );
+  });
+
+  it("ルールの作成が失敗しても、知らせて候補の作成へ進む", async () => {
+    const all = open({
+      [`POST ${SEED_PATH}`]: () => apiError(422, "AI_NOT_CONFIGURED", "ルールを作れません"),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await commit(u);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("ルールを作れません");
+    await reviewRegion();
+    expect(chain(all)).toEqual(["/inference-rules/seed", "/statements/candidates"]);
+  });
+
+  it("取込の確定が失敗したときは、連鎖を始めない", async () => {
+    const all = open({
+      [`POST ${COMMIT_PATH}`]: () =>
+        apiError(409, "STATEMENT_PLAN_CHANGED", "プレビューのときと内容が違います"),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await commit(u);
+    await screen.findByRole("alert");
+    expect(chain(all)).toEqual([]);
+    expect(screen.queryByRole("region", { name: "明細の確認" })).not.toBeInTheDocument();
+    expect(currentStep()).toHaveTextContent("取込");
+  });
+
+  it("確認では、未処理の明細を 1 件ずつ出す（ReviewQueue）。主な操作は ③ までは「取り込む」、④ では「承認して次へ」", async () => {
+    open({
+      [`GET ${BASE}/statements`]: () =>
+        ok({
+          statements: [
+            {
+              id: uuid(300),
+              date: "2026-05-10",
+              amount: -1200,
+              content: "ショップ001",
+              accountName: "サンプル銀行",
+              usage: "business",
+              status: "unprocessed",
+              changed: null,
+              candidate: null,
+              links: [],
+            },
+          ],
+        }),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await commit(u);
+    const region = await reviewRegion();
+    expect(await within(region).findByText(/ショップ001/)).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "承認して次へ" })).toBeInTheDocument();
+    // 画面の中の主な操作（variant="default"）は 1 つ
+    const primary = screen
+      .getAllByRole("button")
+      .filter((b) => b.className.split(" ").includes("bg-primary"));
+    expect(primary.map((b) => b.textContent)).toEqual(["承認して次へ"]);
+  });
+
+  it("新しい入力を読み取ると、前の連鎖の進みと確認は消える", async () => {
+    open();
+    const u = userEvent.setup();
+    renderImport();
+    await commit(u);
+    await reviewRegion();
+    fireEvent.change(await screen.findByLabelText("貼り付けのテキスト"), {
+      target: { value: TEXT },
+    });
+    await u.click(screen.getByRole("button", { name: "読み取る" }));
+    await mappingRegion();
+    expect(screen.queryByRole("region", { name: "明細の確認" })).not.toBeInTheDocument();
+    expect(currentStep()).toHaveTextContent("列と口座");
+  });
+});
+
 describe("取込の履歴（§3.3）", () => {
   it("新しい順の回を、件数つきで示す", async () => {
     mockApi({

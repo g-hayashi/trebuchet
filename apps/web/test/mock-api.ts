@@ -165,6 +165,10 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   "GET /statements": () => ok({ statements: [] }),
   // 推定のルール（US3）。一覧は空
   "GET /inference-rules": () => ok({ rules: [] }),
+  // 取込の後の連鎖（011 US3。R9）。ルールの作成も候補の作成も 0 件で、AI に回す明細はなし
+  "POST /inference-rules/seed": () => ok({ created: 0, skipped: 0 }),
+  "POST /statements/candidates": () => ok({ built: 0, needsAi: [] }),
+  "POST /statements/infer": () => ok({ results: [], localAvailable: true, externalUsed: false }),
   // 評価の履歴（US5）。実行はまだない
   // 証憑（010 US1）。一覧は空。詳細は電子取引の 1 件で、PATCH は送られた値を当てて version を進める
   "GET /receipts": () => ok({ receipts: [], nextCursor: null }),

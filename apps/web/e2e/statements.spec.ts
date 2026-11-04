@@ -165,7 +165,7 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     await expect(statementRow(TARGET)).toBeVisible();
     await expect(statementRow(TARGET)).toContainText("未処理");
 
-    await page.getByRole("button", { name: "候補を作る", exact: true }).click();
+    await page.getByRole("button", { name: "候補をもう一度作る", exact: true }).click();
     await expect(
       page.getByRole("status").filter({ hasText: /^候補を \d+ 件作りました/ }),
     ).toBeVisible();

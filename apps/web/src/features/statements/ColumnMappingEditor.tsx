@@ -96,10 +96,13 @@ export function ColumnMappingEditor({
   sources,
   pickedSourceId,
   initial,
+  primary = true,
   onRelayout,
   onPickSource,
   onConfirm,
 }: {
+  /** 画面の主な操作か（variant=default）。プレビューができたら outline にする */
+  primary?: boolean;
   entityId: string;
   layout: StatementTableLayout;
   encodingOverride: StatementEncoding | undefined;
@@ -530,7 +533,12 @@ export function ColumnMappingEditor({
       )}
 
       <div>
-        <Button type="button" disabled={pending || reasons.length > 0} onClick={confirm}>
+        <Button
+          type="button"
+          variant={primary ? "default" : "outline"}
+          disabled={pending || reasons.length > 0}
+          onClick={confirm}
+        >
           確認へ
         </Button>
       </div>

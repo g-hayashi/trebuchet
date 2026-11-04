@@ -69,7 +69,12 @@ function Row({
         <div className="flex flex-wrap gap-2">
           {s.status === "unprocessed" && (
             <>
-              <Button size="sm" disabled={busy} onClick={() => actions.onReview(s)}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => actions.onReview(s)}
+              >
                 確認する
               </Button>
               <Button
