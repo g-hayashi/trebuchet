@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { FiscalPeriod } from "@/features/periods/api";
-import { RANGE_PRESETS, presetRange } from "@/lib/dates";
+import { presetRange, RANGE_PRESETS } from "@/lib/dates";
 import type { DateRange } from "./periods";
 
 type PeriodPickerProps = {
