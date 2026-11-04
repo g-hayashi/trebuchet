@@ -433,6 +433,9 @@ describe("開業費（009 US3）", () => {
     expect(within(panel).getByText("255,000")).toBeInTheDocument();
     expect(within(panel).getByText("2025-12-31")).toBeInTheDocument();
     const listReads = callsOf(calls, "GET", DEFERRED).length;
+    // 主な操作は「開業費を登録」。仕訳の案の「仕訳を登録」は名前で一意に見つかる
+    expect(screen.getByRole("button", { name: "開業費を登録" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "仕訳を登録" })).toHaveLength(1);
     await user.click(within(panel).getByRole("button", { name: "仕訳を登録" }));
 
     await waitFor(() => expect(callsOf(calls, "POST", ADJUSTMENTS)).toHaveLength(1));

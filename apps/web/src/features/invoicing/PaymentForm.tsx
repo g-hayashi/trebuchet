@@ -180,7 +180,7 @@ export function PaymentForm({
       <FieldError id={`${id}-form-error`} message={formError} />
       <ApiErrorMessage error={pay.error} />
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={pay.isPending}>
+        <Button type="submit" variant="outline" disabled={pay.isPending}>
           消し込む
         </Button>
         <SaveNotice message={notice} />

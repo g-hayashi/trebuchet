@@ -79,7 +79,11 @@ export function TailscaleCard() {
                   停止
                 </Button>
               ) : (
-                <Button disabled={serve.isPending} onClick={() => serve.mutate(true)}>
+                <Button
+                  variant="outline"
+                  disabled={serve.isPending}
+                  onClick={() => serve.mutate(true)}
+                >
                   開始
                 </Button>
               )}

@@ -168,7 +168,7 @@ export function RentDetailsTable({
             >
               行を追加
             </Button>
-            <Button type="submit" disabled={save.isPending}>
+            <Button type="submit" variant="outline" disabled={save.isPending}>
               内訳を保存
             </Button>
             <SaveNotice message={notice} />

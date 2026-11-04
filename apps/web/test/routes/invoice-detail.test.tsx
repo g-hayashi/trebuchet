@@ -57,6 +57,7 @@ describe("請求書の詳細（US1。FR-010〜014）", () => {
       "href",
       expect.stringContaining("/e/e1/journals/j1"),
     );
+    // 発行済みの請求書の主な操作
     expect(screen.getByRole("button", { name: "印刷・PDF に保存" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "印刷・PDF に保存" })).not.toBeInTheDocument();
   });

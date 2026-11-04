@@ -192,7 +192,11 @@ function Actions({
             {`今日までに登録される回が ${confirming.count} 件あります（${confirming.months.join("、")}）。再開すると、これらの仕訳をすぐに登録します。`}
           </p>
           <div>
-            <Button disabled={resume.isPending} onClick={() => resume.mutate(true)}>
+            <Button
+              variant="outline"
+              disabled={resume.isPending}
+              onClick={() => resume.mutate(true)}
+            >
               確認して再開する
             </Button>
           </div>

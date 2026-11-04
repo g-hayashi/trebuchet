@@ -130,6 +130,8 @@ describe("バックアップの設定（008 の D9: パスフレーズ・同意�
     const form = within(await settingsForm());
     expect(form.getByLabelText("置き場所")).toBeInTheDocument();
     expect(form.getByRole("button", { name: "保存" })).toBeEnabled();
+    // 主な操作は設定の「保存」（「今すぐバックアップ」は副）
+    expect(screen.getByRole("button", { name: "今すぐバックアップ" })).toBeInTheDocument();
     expect(screen.queryByLabelText(/パスフレーズ/)).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("form", { name: "パスフレーズの変更" })).not.toBeInTheDocument();

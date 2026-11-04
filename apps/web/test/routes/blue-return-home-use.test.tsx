@@ -323,6 +323,7 @@ describe("家事按分・地代家賃の内訳の画面（US2）", () => {
     await user.type(screen.getByRole("textbox", { name: "賃借物件（2行目）" }), "駐車場");
     await user.type(screen.getByRole("textbox", { name: "賃借料（2行目）" }), "240000");
     await user.type(screen.getByRole("textbox", { name: "必要経費算入額（2行目）" }), "240000");
+    expect(screen.getByRole("button", { name: "保存" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "内訳を保存" }));
 
     await waitFor(() => expect(callsOf(calls, "PUT", RENT_DETAILS)).toHaveLength(1));

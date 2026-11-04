@@ -59,6 +59,7 @@ function RecoveryCard() {
         ) : (
           <RecoveryCodePanel
             code={code}
+            secondary
             onDone={async () => {
               await queryClient.invalidateQueries({ queryKey: authKeys.status });
               setCode(undefined);

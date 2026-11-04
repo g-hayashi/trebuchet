@@ -106,7 +106,12 @@ export function PasskeyList() {
                             setRenaming({ id: p.id, name: event.currentTarget.value })
                           }
                         />
-                        <Button type="submit" size="sm" disabled={rename.isPending}>
+                        <Button
+                          type="submit"
+                          size="sm"
+                          variant="outline"
+                          disabled={rename.isPending}
+                        >
                           保存
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => setRenaming(undefined)}>

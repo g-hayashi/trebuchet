@@ -85,9 +85,7 @@ export function InvoiceDetail({
                 期限切れ
               </span>
             )}
-            <Button variant="outline" onClick={() => window.print()}>
-              印刷・PDF に保存
-            </Button>
+            <Button onClick={() => window.print()}>印刷・PDF に保存</Button>
             {!voided && (
               <Button variant="outline" onClick={() => setVoiding(true)}>
                 取り消す

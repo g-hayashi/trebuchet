@@ -234,7 +234,11 @@ export function AdjustmentPanel({
                   </TableBody>
                 </Table>
                 <div>
-                  <Button disabled={commit.isPending} onClick={() => commit.mutate(p)}>
+                  <Button
+                    variant="outline"
+                    disabled={commit.isPending}
+                    onClick={() => commit.mutate(p)}
+                  >
                     仕訳を登録
                   </Button>
                 </div>

@@ -327,7 +327,7 @@ function RenameForm({
         aria-describedby={`${id}-error`}
         {...form.register("name")}
       />
-      <Button type="submit" size="sm" disabled={pending}>
+      <Button type="submit" size="sm" variant="outline" disabled={pending}>
         保存
       </Button>
       <Button size="sm" variant="ghost" onClick={onCancel}>
@@ -390,7 +390,7 @@ function SubAccountsPanel({ entityId, account }: { entityId: string; account: Ac
           aria-describedby={`${id}-error`}
           {...form.register("name")}
         />
-        <Button type="submit" size="sm" disabled={create.isPending}>
+        <Button type="submit" size="sm" variant="outline" disabled={create.isPending}>
           追加
         </Button>
         <FieldError id={`${id}-error`} message={message} />

@@ -456,6 +456,7 @@ describe("固定資産台帳の画面（US3）", () => {
     expect(within(panel).getByText("2025-12-31")).toBeInTheDocument();
     const table = within(panel).getByRole("table", { name: "ノートパソコンの仕訳の案" });
     expect(within(table).getAllByRole("row")).toHaveLength(5);
+    expect(screen.getByRole("button", { name: "登録" })).toBeInTheDocument();
     await user.click(within(panel).getByRole("button", { name: "仕訳を登録" }));
 
     await waitFor(() => expect(callsOf(calls, "POST", ADJUSTMENTS)).toHaveLength(1));

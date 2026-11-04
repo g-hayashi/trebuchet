@@ -119,7 +119,7 @@ export function AmortizationDecision({
               />
               <FieldError id={errorId} message={error} />
             </div>
-            <Button type="submit" disabled={decide.isPending || view.registered}>
+            <Button type="submit" variant="outline" disabled={decide.isPending || view.registered}>
               {`${asset.name}の償却額を決定`}
             </Button>
             <SaveNotice message={notice} />

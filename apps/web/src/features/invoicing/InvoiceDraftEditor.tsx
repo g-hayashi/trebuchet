@@ -421,7 +421,7 @@ export function InvoiceDraftEditor({
               )}
               <Button
                 type="button"
-                variant={confirmed ? "default" : "outline"}
+                variant={confirmed ? "secondary" : "outline"}
                 size="sm"
                 aria-pressed={confirmed}
                 onClick={() => setConfirmed((prev) => !prev)}

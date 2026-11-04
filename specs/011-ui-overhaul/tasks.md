@@ -200,8 +200,8 @@ description: "Task list for 011-ui-overhaul"
 
 ## Phase 14: Polish & Cross-Cutting Concerns
 
-- [ ] T046 テスト先行で主な操作の見た目（FR-004、UI: §7）: UI: §7 の各画面で `variant="default"` のボタンが 1 つだけになるよう、ほかを `outline`・`ghost`・`link`、危ない操作を `destructive` に直す。テストは各画面のテストで主な操作の名前を `getByRole` で確かめる（class を見ない）。US1〜US9 で済んでいない画面だけを直す
-- [ ] T047 [P] `scripts/bench-reports.ts` に `GET /home`（約 500 仕訳で 2 秒以内、SC-003。R20）を足す。実行は T049
+- [X] T046 テスト先行で主な操作の見た目（FR-004、UI: §7）: UI: §7 の各画面で `variant="default"` のボタンが 1 つだけになるよう、ほかを `outline`・`ghost`・`link`、危ない操作を `destructive` に直す。テストは各画面のテストで主な操作の名前を `getByRole` で確かめる（class を見ない）。US1〜US9 で済んでいない画面だけを直す
+- [X] T047 [P] `scripts/bench-reports.ts` に `GET /home`（約 500 仕訳で 2 秒以内、SC-003。R20）を足す。実行は T049
 - [ ] T048 （メイン）文書: `AGENTS.md` に「画面の作り直し（011）」の節（層と場所の表、`components/layout/`・`components/ui/` の部品、UI 契約が正本、`bak/`、`eval:statements` のコマンドの行と規則、控え・評価の削除、`learn` の廃止と `managed_by`）、コマンドの表に `pnpm eval:statements`、`docs/requirements.md` の要望 5〜14・U1〜U29 の状態、README のバックアップの既定の置き場所
 - [ ] T049 （メイン）全体の検証: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`。`grep -rn "Mac で施錠\|eval_runs\|tax_return_memos\|filed_documents\|JOB_RUNNING" packages apps scripts` が 0 件（マイグレーションの履歴を除く）
 

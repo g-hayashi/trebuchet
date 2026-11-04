@@ -46,7 +46,11 @@ export function InspectBackup() {
           />
           <ApiErrorMessage error={inspect.error} />
           <div>
-            <Button type="submit" disabled={file === undefined || inspect.isPending}>
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={file === undefined || inspect.isPending}
+            >
               検査
             </Button>
           </div>

@@ -202,7 +202,7 @@ export function RecurringForm({
             {`今日までに登録される回が ${confirming.count} 件あります（${confirming.months.join("、")}）。保存すると、これらの仕訳をすぐに登録します。`}
           </p>
           <div>
-            <Button onClick={onConfirm}>
+            <Button variant="outline" onClick={onConfirm}>
               {recurring ? "確認して保存する" : "確認して登録する"}
             </Button>
           </div>

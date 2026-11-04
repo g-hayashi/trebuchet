@@ -3,12 +3,14 @@
  * あわせて SC-006（003）: 約 500 仕訳の帳簿で、決算書の画面が使う API が 2 秒以内に応答するかを測る。
  * さらに SC-005（009）: 資産 50 件（定額法・一括償却・少額の特例）と開業費 1 件の事業体で、同じ API が 2 秒以内かを測る。
  * さらに SC-002（010）: 証憑 5,000 件（ファイルなし）の事業体で、日付 × 金額 × 取引先の検索 10 回が各 1 秒以内かを測る。
+ * さらに SC-003（011）: SC-006 と同じ約 500 仕訳の事業体で、ホーム（GET /home）が 2 秒以内かを測る。
  * `.tmp/bench-<uuid>/` に一時的なテナントを作り、終了時に削除する。
  *
  *   pnpm bench:reports
  *   BENCH_LIMIT_MS=50 BENCH_RUNS=10 pnpm bench:reports   # しきい値・回数の変更
  *   BENCH_RECEIPT_LIMIT_MS=1000 pnpm bench:reports       # 証憑の検索（010 の SC-002）のしきい値
  *   BENCH_BLUE_LIMIT_MS=2000 pnpm bench:reports          # 決算書（SC-006）のしきい値
+ *   BENCH_HOME_LIMIT_MS=2000 pnpm bench:reports          # ホーム（011 の SC-003）のしきい値
  *   BENCH_ASSET_LIMIT_MS=2000 pnpm bench:reports         # 資産と開業費の決算書（009 の SC-005）のしきい値
  *
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む
@@ -334,6 +336,35 @@ await runBench(
       sc006Ok = true;
     }
 
+    // SC-003（011）: 同じ約 500 仕訳の事業体（SC-006 の blueBase）で、事業体のホーム
+    // （GET /home: 今日やること・今期の数字）が 2 秒以内。
+    const HOME_LIMIT_MS = positiveNumber("BENCH_HOME_LIMIT_MS", 2_000);
+    const homePath = `${blueBase}/home`;
+    await measure(homePath); // ウォームアップ
+    const homeTimes: number[] = [];
+    for (let i = 0; i < RUNS; i++) homeTimes.push(await measure(homePath));
+    homeTimes.sort((a, b) => a - b);
+    const homeMedian = homeTimes[Math.floor(homeTimes.length / 2)] ?? Number.NaN;
+    const homeMax = homeTimes[homeTimes.length - 1] ?? Number.NaN;
+    console.log(`ホーム: 仕訳 ${BLUE_JOURNALS} 件の帳簿（${FISCAL_YEAR} 年度）`);
+    console.table([
+      {
+        target: "GET /home",
+        "median (ms)": Number(homeMedian.toFixed(1)),
+        "max (ms)": Number(homeMax.toFixed(1)),
+        result: homeMax <= HOME_LIMIT_MS ? "OK" : "NG",
+      },
+    ]);
+    let sc003Ok = false;
+    if (homeMax > HOME_LIMIT_MS) {
+      console.error(
+        `SC-003（011）を満たしません: GET /home が ${HOME_LIMIT_MS} ms を超えました（最大 ${homeMax.toFixed(1)} ms）`,
+      );
+    } else {
+      console.log(`SC-003（011）OK: ホームが ${HOME_LIMIT_MS} ms 以内（${RUNS} 回の最大値）`);
+      sc003Ok = true;
+    }
+
     // SC-005（009）: 資産 50 件（定額法・一括償却・少額の特例。取得は数年分）と開業費 1 件の事業体で、
     // 決算書の画面が使う API（決算書・決算整理の案・固定資産台帳・開業費）の合計が 2 秒以内。
     // 資産の範囲は 009 R15 のジェネレーター（耐用年数 2〜50、取得価額、事業専用割合 0〜10000、
@@ -604,7 +635,7 @@ await runBench(
       );
       sc002Ok = true;
     }
-    return sc004Ok && sc006Ok && sc005Ok && sc002Ok;
+    return sc004Ok && sc006Ok && sc003Ok && sc005Ok && sc002Ok;
   },
   () => tmp.cleanup(),
 );

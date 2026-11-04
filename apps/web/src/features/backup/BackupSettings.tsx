@@ -119,7 +119,11 @@ function RunCard({ status }: { status: BackupStatus }) {
         )}
         <ApiErrorMessage error={run.error} />
         <div>
-          <Button disabled={status.running || run.isPending} onClick={() => run.mutate()}>
+          <Button
+            variant="outline"
+            disabled={status.running || run.isPending}
+            onClick={() => run.mutate()}
+          >
             今すぐバックアップ
           </Button>
         </div>

@@ -49,6 +49,12 @@ function NewInvoicesPage() {
         { id: inv.id, invoiceNo: inv.invoiceNo },
       ]),
   );
+  // 案が出ている間の主な操作は案の「発行する」。案がなければ「内容を確認する」
+  const draftsShown =
+    made !== undefined &&
+    made.month === month &&
+    partners.data !== undefined &&
+    made.result.drafts.length > 0;
 
   return (
     <main className="grid gap-6">
@@ -91,7 +97,11 @@ function NewInvoicesPage() {
             }}
           />
         </div>
-        <Button type="submit" disabled={create.isPending}>
+        <Button
+          type="submit"
+          variant={draftsShown ? "outline" : "default"}
+          disabled={create.isPending}
+        >
           内容を確認する
         </Button>
       </form>
