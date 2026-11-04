@@ -2,7 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { type ProfitAndLoss, profitAndLossQuery } from "@/features/reports/api";
-import { CompareToggle, CsvLink, PeriodPicker } from "@/features/reports/controls";
+import {
+  CompareToggle,
+  CsvLink,
+  PeriodPicker,
+  PreviousYearNotice,
+} from "@/features/reports/controls";
 import { useReportRange } from "@/features/reports/periods";
 import { ReportPage } from "@/features/reports/ReportPage";
 import { type StatementLine, StatementTable } from "@/features/reports/StatementTable";
@@ -22,7 +27,13 @@ function statementLines(report: ProfitAndLoss): StatementLine[] {
       return [
         { kind: "heading", key: s.section, name: label },
         ...s.rows.map(
-          (r): StatementLine => ({ kind: "row", key: r.accountId, name: r.name, figure: r }),
+          (r): StatementLine => ({
+            kind: "row",
+            key: r.accountId,
+            name: r.name,
+            figure: r,
+            accountId: r.accountId,
+          }),
         ),
         { kind: "total", key: `${s.section}-total`, name: `${label}計`, figure: s.total },
         ...(s.section === "PL_COGS"
@@ -68,26 +79,34 @@ function ProfitAndLossPage() {
       controls={
         periods &&
         range && (
-          <div className="flex flex-wrap items-end gap-6">
-            <PeriodPicker
-              periods={periods}
-              range={range}
-              onChange={(next) => navigate({ search: (prev) => ({ ...prev, ...next }) })}
-            />
-            <CompareToggle
-              checked={compare}
-              onChange={(checked) =>
-                navigate({
-                  search: (prev) => ({ ...prev, compare: checked ? "previous-year" : undefined }),
-                })
-              }
-            />
+          <div className="grid gap-3">
+            <div className="flex flex-wrap items-end gap-6">
+              <PeriodPicker
+                periods={periods}
+                range={range}
+                onChange={(next) => navigate({ search: (prev) => ({ ...prev, ...next }) })}
+              />
+              <CompareToggle
+                checked={compare}
+                onChange={(checked) =>
+                  navigate({
+                    search: (prev) => ({ ...prev, compare: checked ? "previous-year" : undefined }),
+                  })
+                }
+              />
+            </div>
+            {compare && data?.previousHasData === false && (
+              <PreviousYearNotice
+                entityId={entityId}
+                reason={`前年の同じ期間（${data.previous?.from} 〜 ${data.previous?.to}）に仕訳がありません。`}
+              />
+            )}
           </div>
         )
       }
       actions={params && <CsvLink entityId={entityId} kind="profit-and-loss" params={params} />}
     >
-      {data && (
+      {data && range && (
         <Card>
           <CardContent className="grid gap-2">
             {data.previous && (
@@ -99,6 +118,7 @@ function ProfitAndLossPage() {
               label="損益計算書"
               compare={data.previous !== null}
               lines={statementLines(data)}
+              ledger={{ entityId, ...range }}
             />
           </CardContent>
         </Card>

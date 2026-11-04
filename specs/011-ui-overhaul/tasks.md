@@ -133,8 +133,8 @@ description: "Task list for 011-ui-overhaul"
 
 **Independent Test**: spec US6 の Independent Test
 
-- [ ] T029 [US6] テスト先行で下の層（R12、§2.3、H: §2）: schema の `JournalBookQuery` に `sort`（`date` | `created`、既定 `date`）・`order`（`asc` | `desc`、既定 `asc`）、domain の仕訳帳の組み立て（`packages/domain/src/reports/` の仕訳帳。`date` は日付 → 仕訳番号 → 行、`created` は `created_at` → 仕訳番号 → 行、行は仕訳の中で常に今の順、CSV も同じ並び）、損益計算書・貸借対照表の `compare=previous-year` の応答に `previousHasData`（損益計算書は前年の同じ範囲に取消を除く仕訳の行があるか、貸借対照表は前年の会計期間があるか）。テスト: domain の仕訳帳の並び（4 通り）、`apps/server/test/reports.api.test.ts` に足す
-- [ ] T030 [US6] テスト先行で帳票の画面（R12、FR-038〜041）: 仕訳帳に並べ替えの選択（取引日・登録日 × 昇順・降順、CSV の URL にも渡す）、試算表・損益計算書・貸借対照表の科目名を `general-ledger?accountId=&from=&to=` のリンクに（貸借対照表は期首から `asOf`）、`features/reports/controls.tsx` の `PeriodPicker` に今月・先月・今四半期・今年・昨年（計算は `apps/web/src/lib/dates.ts`、テスト `lib/dates.test.ts`）、`previousHasData` が false なら比較の欄の近くに理由と会計期間と移行の画面への案内。帳票の画面の中のタブで 5 つの帳票を行き来する。テスト `reports.test.tsx` を直す
+- [X] T029 [US6] テスト先行で下の層（R12、§2.3、H: §2）: schema の `JournalBookQuery` に `sort`（`date` | `created`、既定 `date`）・`order`（`asc` | `desc`、既定 `asc`）、domain の仕訳帳の組み立て（`packages/domain/src/reports/` の仕訳帳。`date` は日付 → 仕訳番号 → 行、`created` は `created_at` → 仕訳番号 → 行、行は仕訳の中で常に今の順、CSV も同じ並び）、損益計算書・貸借対照表の `compare=previous-year` の応答に `previousHasData`（損益計算書は前年の同じ範囲に取消を除く仕訳の行があるか、貸借対照表は前年の会計期間があるか）。テスト: domain の仕訳帳の並び（4 通り）、`apps/server/test/reports.api.test.ts` に足す
+- [X] T030 [US6] テスト先行で帳票の画面（R12、FR-038〜041）: 仕訳帳に並べ替えの選択（取引日・登録日 × 昇順・降順、CSV の URL にも渡す）、試算表・損益計算書・貸借対照表の科目名を `general-ledger?accountId=&from=&to=` のリンクに（貸借対照表は期首から `asOf`）、`features/reports/controls.tsx` の `PeriodPicker` に今月・先月・今四半期・今年・昨年（計算は `apps/web/src/lib/dates.ts`、テスト `lib/dates.test.ts`）、`previousHasData` が false なら比較の欄の近くに理由と会計期間と移行の画面への案内。帳票の画面の中のタブで 5 つの帳票を行き来する。テスト `reports.test.tsx` を直す
 
 ---
 

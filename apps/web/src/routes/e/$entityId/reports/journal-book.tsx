@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { type JournalBook, journalBookQuery } from "@/features/reports/api";
-import { CsvLink, PeriodPicker } from "@/features/reports/controls";
+import { CsvLink, JournalBookSortControls, PeriodPicker } from "@/features/reports/controls";
 import { JournalLink } from "@/features/reports/JournalLink";
 import { useReportRange } from "@/features/reports/periods";
 import { ReportPage } from "@/features/reports/ReportPage";
@@ -14,10 +14,10 @@ import {
   type ReportColumns,
   ReportTable,
 } from "@/features/reports/ReportTable";
-import { RangeSearch } from "@/features/reports/search";
+import { JournalBookSearch } from "@/features/reports/search";
 
 export const Route = createFileRoute("/e/$entityId/reports/journal-book")({
-  validateSearch: RangeSearch,
+  validateSearch: JournalBookSearch,
   component: JournalBookPage,
 });
 
@@ -72,15 +72,18 @@ const columns: ReportColumns<Row> = [
 const toRows = (entries: readonly Entry[]): Row[] =>
   entries.flatMap((entry) => entry.lines.map((line, i) => ({ entry, line, first: i === 0 })));
 
-/** 仕訳帳（FR-026）。日付・仕訳番号の順 */
+/** 仕訳帳（FR-026, FR-038）。既定は日付・仕訳番号の昇順。取引日・登録日の昇順・降順に並べ替えられる */
 function JournalBookPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const { periods, range, error: periodsError } = useReportRange(entityId, search);
+  const sort = search.sort ?? "date";
+  const order = search.order ?? "asc";
+  const params = range && { ...range, sort, order };
   const report = useQuery({
-    ...journalBookQuery(entityId, range ?? { from: "", to: "" }),
-    enabled: range !== undefined,
+    ...journalBookQuery(entityId, params ?? { from: "", to: "", sort, order }),
+    enabled: params !== undefined,
   });
   const data = report.data;
 
@@ -94,14 +97,21 @@ function JournalBookPage() {
       controls={
         periods &&
         range && (
-          <PeriodPicker
-            periods={periods}
-            range={range}
-            onChange={(next) => navigate({ search: next })}
-          />
+          <div className="flex flex-wrap items-end gap-6">
+            <PeriodPicker
+              periods={periods}
+              range={range}
+              onChange={(next) => navigate({ search: (prev) => ({ ...prev, ...next }) })}
+            />
+            <JournalBookSortControls
+              sort={sort}
+              order={order}
+              onChange={(next) => navigate({ search: (prev) => ({ ...prev, ...range, ...next }) })}
+            />
+          </div>
         )
       }
-      actions={range && <CsvLink entityId={entityId} kind="journal-book" params={range} />}
+      actions={params && <CsvLink entityId={entityId} kind="journal-book" params={params} />}
     >
       {data && data.entries.length === 0 && (
         <p className="text-sm text-muted-foreground">この期間の仕訳はありません。</p>

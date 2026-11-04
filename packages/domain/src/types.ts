@@ -236,6 +236,8 @@ export type PostedLine = {
   journalNo: number;
   date: string;
   memo: string | null;
+  /** 仕訳の登録日時（仕訳帳の並びに使う） */
+  createdAt: string;
   status: JournalStatus;
   lineNo: number;
   side: Side;

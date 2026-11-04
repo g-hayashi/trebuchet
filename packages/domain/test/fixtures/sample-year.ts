@@ -54,13 +54,14 @@ export function journal(
   journalNo: number,
   date: string,
   specs: LineSpec[],
-  options: { voided?: boolean; memo?: string } = {},
+  options: { voided?: boolean; memo?: string; createdAt?: string } = {},
 ): PostedLine[] {
   return specs.map(([side, name, amount], i) => ({
     journalId: `journal-${journalNo}`,
     journalNo,
     date,
     memo: options.memo ?? null,
+    createdAt: options.createdAt ?? "2026-01-01T00:00:00.000Z",
     status: options.voided === true ? "voided" : "active",
     lineNo: i + 1,
     side,

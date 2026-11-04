@@ -20,6 +20,7 @@ const entry = (debit: string, credit: string, amount: number, id?: string): Post
     journalNo: seq,
     date: "2025-06-30",
     memo: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
     status: "active" as const,
     accountName: "",
     subAccountName: null,

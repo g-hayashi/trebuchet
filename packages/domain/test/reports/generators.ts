@@ -36,6 +36,7 @@ export function postedLinesArb(
             journalNo: index + 1,
             date: j.date,
             memo: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
             status: j.voided ? "voided" : "active",
             lineNo: i + 1,
             side: l.side,

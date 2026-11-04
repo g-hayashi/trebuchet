@@ -274,6 +274,7 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
         journalNo: journals.journalNo,
         date: journals.date,
         memo: journals.memo,
+        createdAt: journals.createdAt,
         status: journals.status,
         lineNo: journalLines.lineNo,
         side: journalLines.side,

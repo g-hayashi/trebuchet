@@ -2,6 +2,8 @@ import type {
   BalanceSheet,
   GeneralLedger,
   JournalBook,
+  JournalBookOrder,
+  JournalBookSort,
   ProfitAndLoss,
   ReportCompare,
   TrialBalance,
@@ -9,7 +11,7 @@ import type {
 import type { MasterRepository, ReportRepository } from "../ports.ts";
 import { buildBalanceSheet, compareBalanceSheet } from "../reports/balance-sheet.ts";
 import { computeBalances } from "../reports/balances.ts";
-import { shiftYears } from "../reports/common.ts";
+import { isActive, shiftYears } from "../reports/common.ts";
 import { buildGeneralLedger } from "../reports/general-ledger.ts";
 import { buildJournalBook } from "../reports/journal-book.ts";
 import { buildProfitAndLoss, compareProfitAndLoss } from "../reports/profit-and-loss.ts";
@@ -32,6 +34,12 @@ export type ReportDeps = { masters: MasterRepository; reports: ReportRepository 
 export type WithWarnings<R> = R & { warnings: DomainWarning[] };
 
 export type ReportRange = { from: string; to: string };
+
+/** 仕訳帳の範囲と並び（FR-038） */
+export type JournalBookParams = ReportRange & {
+  sort?: JournalBookSort | undefined;
+  order?: JournalBookOrder | undefined;
+};
 
 const periodOf = (date: string, periods: readonly FiscalPeriod[]) =>
   periods.find((p) => p.startDate <= date && date <= p.endDate);
@@ -93,12 +101,15 @@ function warningsOf(data: PeriodData, to: string): DomainWarning[] {
 /** 仕訳帳（FR-026）。会計期間をまたいでよい。警告は to を含む会計期間で判定する */
 export function getJournalBook(
   deps: ReportDeps,
-  range: ReportRange,
+  params: JournalBookParams,
 ): Result<WithWarnings<JournalBook>> {
+  const { sort, order, ...range } = params;
+  const options = { sort, order };
   const period = periodOf(range.to, deps.masters.listFiscalPeriods());
   if (period === undefined) {
     const book = buildJournalBook({
       ...range,
+      ...options,
       lines: deps.reports.linesInRange(range.from, range.to),
     });
     return ok({ ...book, warnings: [] });
@@ -107,7 +118,7 @@ export function getJournalBook(
   const start = period.startDate < range.from ? period.startDate : range.from;
   const data = loadPeriod(deps, period, range.to, start);
   return ok({
-    ...buildJournalBook({ ...range, lines: data.lines }),
+    ...buildJournalBook({ ...range, ...options, lines: data.lines }),
     warnings: warningsOf(data, range.to),
   });
 }
@@ -183,11 +194,14 @@ export function getProfitAndLoss(
   if (params.compare === "previous-year") {
     const previous = { from: shiftYears(range.from, -1), to: shiftYears(range.to, -1) };
     const lines = deps.reports.linesInRange(previous.from, previous.to);
-    report = compareProfitAndLoss(
-      report,
-      buildProfitAndLoss({ accounts: data.accounts, lines, ...previous }),
-      data.accounts,
-    );
+    report = {
+      ...compareProfitAndLoss(
+        report,
+        buildProfitAndLoss({ accounts: data.accounts, lines, ...previous }),
+        data.accounts,
+      ),
+      previousHasData: lines.some(isActive),
+    };
   }
   return ok({ ...report, warnings: warningsOf(data, range.to) });
 }
@@ -210,7 +224,10 @@ export function getBalanceSheet(
       prevPeriod === undefined
         ? { accounts: data.accounts, opening: [], lines: [], periodStart: asOf }
         : { ...loadPeriod(deps, prevPeriod, asOf), periodStart: prevPeriod.startDate };
-    report = compareBalanceSheet(report, buildBalanceSheet({ ...previous, asOf }), data.accounts);
+    report = {
+      ...compareBalanceSheet(report, buildBalanceSheet({ ...previous, asOf }), data.accounts),
+      previousHasData: prevPeriod !== undefined,
+    };
   }
   return ok({ ...report, warnings: warningsOf(data, params.asOf) });
 }

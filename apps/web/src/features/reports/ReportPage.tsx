@@ -6,6 +6,7 @@ import type { DateRange } from "./periods";
 import { WarningsBanner } from "./WarningsBanner";
 
 const tabProps = {
+  activeOptions: { exact: true },
   activeProps: { className: "font-semibold underline", "aria-current": "page" as const },
 };
 

@@ -2,7 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type BalanceSheet, balanceSheetQuery } from "@/features/reports/api";
-import { AsOfPicker, CompareToggle, CsvLink } from "@/features/reports/controls";
+import {
+  AsOfPicker,
+  CompareToggle,
+  CsvLink,
+  PreviousYearNotice,
+} from "@/features/reports/controls";
 import { periodOf, useReportAsOf } from "@/features/reports/periods";
 import { BalancedBadge, ReportPage } from "@/features/reports/ReportPage";
 import { type StatementLine, StatementTable } from "@/features/reports/StatementTable";
@@ -24,7 +29,15 @@ const sumFigures = (a: Section["total"], b: Section["total"]) => ({
 
 const sectionLines = (s: Section): StatementLine[] => [
   { kind: "heading", key: s.section, name: SECTION_LABELS[s.section] },
-  ...s.rows.map((r): StatementLine => ({ kind: "row", key: r.accountId, name: r.name, figure: r })),
+  ...s.rows.map(
+    (r): StatementLine => ({
+      kind: "row",
+      key: r.accountId,
+      name: r.name,
+      figure: r,
+      accountId: r.accountId,
+    }),
+  ),
 ];
 
 /** 資産の部と、負債・純資産の部。純資産の計は当期利益を含む */
@@ -89,6 +102,8 @@ function BalanceSheetPage() {
   const period = periods && asOf ? periodOf(periods, asOf) : undefined;
   const lines = data && statementLines(data);
   const compare = data?.previousAsOf != null;
+  // 科目名のリンクは、会計期間の期首から基準日までの元帳へ（FR-039）
+  const ledger = period && asOf ? { entityId, from: period.startDate, to: asOf } : undefined;
 
   return (
     <ReportPage
@@ -100,20 +115,25 @@ function BalanceSheetPage() {
       controls={
         periods &&
         asOf && (
-          <div className="flex flex-wrap items-end gap-6">
-            <AsOfPicker
-              periods={periods}
-              asOf={asOf}
-              onChange={(next) => navigate({ search: (prev) => ({ ...prev, asOf: next }) })}
-            />
-            <CompareToggle
-              checked={search.compare !== undefined}
-              onChange={(checked) =>
-                navigate({
-                  search: (prev) => ({ ...prev, compare: checked ? "previous-year" : undefined }),
-                })
-              }
-            />
+          <div className="grid gap-3">
+            <div className="flex flex-wrap items-end gap-6">
+              <AsOfPicker
+                periods={periods}
+                asOf={asOf}
+                onChange={(next) => navigate({ search: (prev) => ({ ...prev, asOf: next }) })}
+              />
+              <CompareToggle
+                checked={search.compare !== undefined}
+                onChange={(checked) =>
+                  navigate({
+                    search: (prev) => ({ ...prev, compare: checked ? "previous-year" : undefined }),
+                  })
+                }
+              />
+            </div>
+            {search.compare !== undefined && data?.previousHasData === false && (
+              <PreviousYearNotice entityId={entityId} reason="前年の会計期間がありません。" />
+            )}
           </div>
         )
       }
@@ -133,7 +153,12 @@ function BalanceSheetPage() {
                 <CardTitle>資産の部</CardTitle>
               </CardHeader>
               <CardContent>
-                <StatementTable label="資産の部" compare={compare} lines={lines.assets} />
+                <StatementTable
+                  label="資産の部"
+                  compare={compare}
+                  lines={lines.assets}
+                  ledger={ledger}
+                />
               </CardContent>
             </Card>
             <Card>
@@ -145,6 +170,7 @@ function BalanceSheetPage() {
                   label="負債・純資産の部"
                   compare={compare}
                   lines={lines.liabilitiesAndEquity}
+                  ledger={ledger}
                 />
               </CardContent>
             </Card>

@@ -45,6 +45,7 @@ function postedLines(planned: readonly PlannedJournal[]): PostedLine[] {
         journalNo: i + 1,
         date: p.valid.date,
         memo: p.valid.memo,
+        createdAt: "2026-01-01T00:00:00.000Z",
         status: "active",
         lineNo: k + 1,
         side: l.side,

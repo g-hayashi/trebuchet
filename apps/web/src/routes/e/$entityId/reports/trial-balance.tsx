@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { AccountLink } from "@/features/reports/AccountLink";
 import { type TrialBalance, trialBalanceQuery } from "@/features/reports/api";
 import { CsvLink, PeriodPicker } from "@/features/reports/controls";
 import { useReportRange } from "@/features/reports/periods";
@@ -22,9 +23,22 @@ export const Route = createFileRoute("/e/$entityId/reports/trial-balance")({
 
 type Row = TrialBalance["rows"][number];
 
-const columns: ReportColumns<Row> = [
+const columns = (entityId: string, range: { from: string; to: string }): ReportColumns<Row> => [
   { id: "code", header: "コード", accessorFn: (r) => r.code },
-  { id: "name", header: "勘定科目", accessorFn: (r) => r.name },
+  {
+    id: "name",
+    header: "勘定科目",
+    accessorFn: (r) => r.name,
+    cell: ({ row: { original: r } }) => (
+      <AccountLink
+        entityId={entityId}
+        accountId={r.accountId}
+        name={r.name}
+        from={range.from}
+        to={range.to}
+      />
+    ),
+  },
   {
     id: "opening",
     header: amountHeader("期首残高"),
@@ -72,13 +86,13 @@ function TrialBalancePage() {
       }
       actions={range && <CsvLink entityId={entityId} kind="trial-balance" params={range} />}
     >
-      {data && (
+      {data && range && (
         <Card>
           <CardContent className="grid gap-2">
             <BalancedBadge balanced={data.balanced} />
             <ReportTable
               label="残高試算表"
-              columns={columns}
+              columns={columns(entityId, range)}
               data={data.rows}
               getRowId={(r) => r.accountId}
               footer={
