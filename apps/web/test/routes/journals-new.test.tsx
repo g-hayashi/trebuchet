@@ -234,21 +234,99 @@ describe("かんたん入力（011/T015）", () => {
     );
   });
 
-  it("詳細で最後の空欄に差額を補い、入力済み金額を変えず、情報を落とす切替を止める", async () => {
+  it("詳細で最後の空欄に差額を補い、自動で入れた値は他の行の変更に追従し、手で直した行は追従しない", async () => {
     mockJournalApi();
     const u = user();
     await renderNewJournal();
     await fillLine(u, 1, { account: "消耗品費", amount: "1000" });
     await u.tab();
     expect(screen.getByLabelText("2行目の金額")).toHaveValue("1000");
+    // 自動で入れた行は、1行目を直すと差額に合わせ直す
     await fillLine(u, 1, { account: "消耗品費", amount: "2000" });
     await u.tab();
+    expect(screen.getByLabelText("2行目の金額")).toHaveValue("2000");
+    expect(total("差額")).toBe("0 円");
+    // 差額がなくなったら自動で入れた値を消す
+    await u.clear(screen.getByLabelText("1行目の金額"));
+    await u.tab();
+    expect(screen.getByLabelText("2行目の金額")).toHaveValue("");
+    // 手で入れた行は、その後の変更で書き換えない
+    await fillLine(u, 1, { account: "消耗品費", amount: "1000" });
+    await u.tab();
     expect(screen.getByLabelText("2行目の金額")).toHaveValue("1000");
+    await u.clear(screen.getByLabelText("2行目の金額"));
+    await u.type(screen.getByLabelText("2行目の金額"), "700");
+    await fillLine(u, 1, { account: "消耗品費", amount: "3000" });
+    await u.tab();
+    expect(screen.getByLabelText("2行目の金額")).toHaveValue("700");
+  });
+
+  it("複合仕訳では他の行が増えるたびに最後の行の差額を補い直し、手で直したら止める", async () => {
+    mockJournalApi();
+    const u = user();
+    await renderNewJournal();
+    await u.click(screen.getByRole("button", { name: "行を追加" }));
+    // 借方 1000・借方 500・貸方（最後の行、空）
+    await u.selectOptions(screen.getByLabelText("2行目の貸借"), "借方");
+    await u.selectOptions(screen.getByLabelText("3行目の貸借"), "貸方");
+    await fillLine(u, 1, { account: "消耗品費", amount: "1000" });
+    await u.tab();
+    expect(screen.getByLabelText("3行目の金額")).toHaveValue("1000");
+    await fillLine(u, 2, { account: "消耗品費", amount: "500" });
+    await u.tab();
+    expect(screen.getByLabelText("3行目の金額")).toHaveValue("1500");
+    await fillLine(u, 1, { account: "消耗品費", amount: "2000" });
+    await u.tab();
+    expect(screen.getByLabelText("3行目の金額")).toHaveValue("2500");
+    expect(total("差額")).toBe("0 円");
+    // 手で直した最後の行は、以後書き換えない
+    await u.clear(screen.getByLabelText("3行目の金額"));
+    await u.type(screen.getByLabelText("3行目の金額"), "2600");
+    await fillLine(u, 2, { account: "消耗品費", amount: "600" });
+    await u.tab();
+    expect(screen.getByLabelText("3行目の金額")).toHaveValue("2600");
+  });
+
+  it("詳細で情報を落とす切替を止める", async () => {
+    mockJournalApi();
+    const u = user();
+    await renderNewJournal();
+    await fillLine(u, 1, { account: "消耗品費", amount: "1000" });
+    await fillLine(u, 2, { account: "普通預金", amount: "900" });
     expect(screen.getByRole("button", { name: "かんたん入力" })).toBeDisabled();
-    await fillLine(u, 2, { account: "普通預金", amount: "2000" });
+    await fillLine(u, 2, { account: "普通預金", amount: "1000" });
     await u.type(screen.getByLabelText("1行目の摘要"), "行だけの摘要");
     expect(screen.getByRole("button", { name: "かんたん入力" })).toBeDisabled();
     expect(screen.getByText(/詳細の入力を保持/)).toBeInTheDocument();
+  });
+
+  it("かんたん入力のまま会計期間の外のエラーを受けたら、日付の下に会計期間を作成するリンクを出す", async () => {
+    const message = "日付が会計期間の外です。先に会計期間を作成してください";
+    mockJournalApi(() =>
+      apiError(422, "OUT_OF_PERIOD", message, {
+        date: "2027-01-05",
+        suggest: "create_fiscal_period",
+        errors: [
+          {
+            code: "OUT_OF_PERIOD",
+            message,
+            details: { date: "2027-01-05", suggest: "create_fiscal_period" },
+          },
+        ],
+      }),
+    );
+    const u = user();
+    renderRoute(Route, { path: "/e/$entityId/journals/new", url: "/e/e1/journals/new" });
+    const form = await screen.findByRole("form", { name: "仕訳" });
+    const quick = within(form);
+    await u.keyboard("{Enter}");
+    await u.keyboard("6010{Enter}1020{Enter}1100");
+    expect(quick.queryByRole("link", { name: "会計期間を作成する" })).not.toBeInTheDocument();
+    await u.click(quick.getByRole("button", { name: "登録" }));
+
+    const link = await quick.findByRole("link", { name: "会計期間を作成する" });
+    expect(link).toHaveAttribute("href", "/e/e1/periods");
+    expect(messageOf(quick.getByLabelText("日付"))).toContain("日付が会計期間の外です");
   });
 });
 

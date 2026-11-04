@@ -9,6 +9,7 @@ import type { TaxCategory, TaxSetting } from "@/features/entities/api";
 import type { Partner, Tag } from "@/features/masters/api";
 import { matchesAccount } from "@/lib/account-search";
 import { parseYenInput } from "@/lib/format";
+import { CreateFiscalPeriodLink } from "./CreateFiscalPeriodLink";
 import type { JournalFormControl } from "./JournalForm";
 
 /** 詳細入力と同じフォームの値を使うため、切替でも未完成の入力を保つ。 */
@@ -20,6 +21,8 @@ export function QuickEntryForm({
   taxSettings,
   taxCategories,
   focusAfterSave,
+  entityId,
+  suggestPeriod,
 }: {
   form: JournalFormControl;
   accounts: Account[];
@@ -28,6 +31,9 @@ export function QuickEntryForm({
   taxSettings: TaxSetting[];
   taxCategories: TaxCategory[];
   focusAfterSave: boolean;
+  entityId: string;
+  /** サーバーが会計期間の作成を提案したとき、日付の下にリンクを出す */
+  suggestPeriod: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const values = useWatch({ control: form.control });
@@ -75,6 +81,7 @@ export function QuickEntryForm({
           aria-describedby="quick-date-error"
         />
         <FieldError id="quick-date-error" message={errors.date?.message} />
+        {suggestPeriod && <CreateFiscalPeriodLink entityId={entityId} />}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {(["借方", "貸方"] as const).map((side, index) => (

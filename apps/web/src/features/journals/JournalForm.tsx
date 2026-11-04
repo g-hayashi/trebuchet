@@ -1,6 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import {
   defaultTaxCategory,
   type JournalDraft,
@@ -31,6 +30,7 @@ import { groupAccountsBySection } from "@/lib/accounts";
 import { ApiError } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { CreateFiscalPeriodLink } from "./CreateFiscalPeriodLink";
 import { JournalSuggestions } from "./JournalSuggestions";
 import { QuickEntryForm } from "./QuickEntryForm";
 
@@ -331,17 +331,34 @@ export function JournalForm({
     draftOf({ ...form.getValues(), lines: currentLines }, mode).lines,
   );
 
-  // 最後の空欄だけを補う。自動で入れた値も、その後は入力済みとして保護する。
+  // 最後の行の金額を、他の行との差額で補う。自動で入れた行（field.id を覚える）は、他の行が変わったら
+  // 差額に合わせ直す。利用者が手で触った行は覚えから外し、以後は書き換えない。
+  // 差額が 0 以下になったら、自動で入れた値は消して空に戻す（空のままなら何もしない）
+  const autoFilledId = useRef<string | undefined>(undefined);
   const fillRemainder = () => {
     if (!autoBalance) return;
     const lines = form.getValues("lines");
     const last = lines.at(-1);
-    if (!last || last.amount !== undefined) return;
+    const lastId = fields.at(-1)?.id;
+    if (!last || lastId === undefined) return;
+    const isAuto = autoFilledId.current === lastId;
+    if (last.amount !== undefined && !isAuto) return;
     const diff = lines.slice(0, -1).reduce((sum, line) => {
       const amount = Number.isFinite(line.amount) ? (line.amount ?? 0) : 0;
       return sum + (line.side === last.side ? -amount : amount);
     }, 0);
-    if (diff > 0) form.setValue(`lines.${lines.length - 1}.amount`, diff, { shouldDirty: true });
+    const name = `lines.${lines.length - 1}.amount` as const;
+    if (diff > 0) {
+      if (last.amount !== diff) form.setValue(name, diff, { shouldDirty: true });
+      autoFilledId.current = lastId;
+    } else if (isAuto) {
+      form.setValue(name, undefined, { shouldDirty: true });
+      autoFilledId.current = undefined;
+    }
+  };
+  /** 利用者が金額を直した行は、自動の補完の対象から外す */
+  const markAmountEdited = (id: string) => {
+    if (autoFilledId.current === id) autoFilledId.current = undefined;
   };
   const [generalErrors, setGeneralErrors] = useState<string[]>([]);
   const [unexpected, setUnexpected] = useState<unknown>();
@@ -429,6 +446,8 @@ export function JournalForm({
             taxSettings={taxSettings}
             taxCategories={taxCategories}
             focusAfterSave={focusAfterSave}
+            entityId={entityId}
+            suggestPeriod={suggestPeriod}
           />
         ) : (
           <div className="grid gap-4">
@@ -446,15 +465,7 @@ export function JournalForm({
                     {...form.register("date")}
                   />
                   <FieldError id="journal-date-error" message={errors.date?.message} />
-                  {suggestPeriod && (
-                    <Link
-                      to="/e/$entityId/periods"
-                      params={{ entityId }}
-                      className="text-sm text-primary underline underline-offset-4"
-                    >
-                      会計期間を作成する
-                    </Link>
-                  )}
+                  {suggestPeriod && <CreateFiscalPeriodLink entityId={entityId} />}
                 </div>
               )}
               <div className="grid content-start gap-1">
@@ -491,6 +502,7 @@ export function JournalForm({
                   canRemove={fields.length > 2}
                   onRemove={() => remove(index)}
                   onAmountBlur={fillRemainder}
+                  onAmountEdit={() => markAmountEdited(field.id)}
                 />
               ))}
             </ol>
@@ -572,6 +584,7 @@ function JournalLineRow({
   canRemove,
   onRemove,
   onAmountBlur,
+  onAmountEdit,
 }: {
   index: number;
   form: Form;
@@ -586,6 +599,7 @@ function JournalLineRow({
   canRemove: boolean;
   onRemove: () => void;
   onAmountBlur: () => void;
+  onAmountEdit: () => void;
 }) {
   const date = useWatch({ control: form.control, name: "date" });
   const accountId = useWatch({ control: form.control, name: `lines.${index}.accountId` });
@@ -683,7 +697,8 @@ function JournalLineRow({
           {...form.register(`lines.${index}.amount`, {
             setValueAs: (v: unknown) => (typeof v === "string" ? parseYenInput(v) : v),
             // register の設定は切替後も残るため、簡易入力の左右同期を解除する。
-            onChange: () => {},
+            // 手で直した行は、差額の自動補完の対象から外す。
+            onChange: onAmountEdit,
             onBlur: onAmountBlur,
           })}
         />
