@@ -20,7 +20,13 @@ const account = (
   ...a,
 });
 
-const cash = account({ id: "cash", name: "現金", reportSection: "BS_ASSET", sortOrder: 1010 });
+const cash = account({
+  id: "cash",
+  name: "現金",
+  reportSection: "BS_ASSET",
+  sortOrder: 1010,
+  isSystem: true,
+});
 const bank = account({
   id: "bank",
   name: "普通預金",
@@ -84,14 +90,29 @@ afterEach(() => {
 });
 
 describe("勘定科目の画面", () => {
-  it("決算書の順（sortOrder）に区分ごとにまとめ、使用停止の科目は薄く表示する", async () => {
+  it("決算書の順（sortOrder）に区分ごとにまとめる。使用停止の科目は既定では隠し、外すと薄く表示する", async () => {
     mockApi({ [`GET ${BASE}`]: () => ok({ accounts: initialAccounts() }) });
+    const user = userEvent.setup();
     renderAccounts();
 
     await screen.findByText("現金");
+    expect(screen.getByRole("checkbox", { name: "使用停止を隠す" })).toBeChecked();
     expect(readList()).toEqual([
       "[資産]",
-      "現金",
+      "現金最初からある科目",
+      "[負債]",
+      "借入金",
+      "[売上]",
+      "売上高",
+      "[経費]",
+      "消耗品費",
+    ]);
+    expect(screen.getByText("使用停止の科目 1 件を隠しています。")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "使用停止を隠す" }));
+    expect(readList()).toEqual([
+      "[資産]",
+      "現金最初からある科目",
       "普通預金（使用停止）",
       "[負債]",
       "借入金",
@@ -104,6 +125,53 @@ describe("勘定科目の画面", () => {
     expect(rowOf("現金")).not.toHaveClass("opacity-50");
     expect(within(rowOf("売上高")).getAllByRole("cell")[2]).toHaveTextContent("収益");
     expect(screen.getByRole("button", { name: "使用再開（普通預金）" })).toBeEnabled();
+  });
+
+  it("最初からある科目には印を出し、名前の変更・削除を出さない。使用停止は出す（outline）", async () => {
+    mockApi({ [`GET ${BASE}`]: () => ok({ accounts: initialAccounts() }) });
+    renderAccounts();
+    await screen.findByText("現金");
+
+    const system = within(rowOf("現金"));
+    expect(system.getByText("最初からある科目")).toBeInTheDocument();
+    expect(system.queryByRole("button", { name: "名称変更（現金）" })).not.toBeInTheDocument();
+    expect(system.queryByRole("button", { name: "削除（現金）" })).not.toBeInTheDocument();
+    expect(system.getByRole("button", { name: "補助科目（現金）" })).toBeInTheDocument();
+
+    const mine = within(rowOf("消耗品費"));
+    expect(mine.queryByText("最初からある科目")).not.toBeInTheDocument();
+    expect(mine.getByRole("button", { name: "名称変更（消耗品費）" })).toBeInTheDocument();
+    expect(mine.getByRole("button", { name: "削除（消耗品費）" })).toBeInTheDocument();
+
+    for (const name of ["現金", "消耗品費"]) {
+      const stop = within(rowOf(name)).getByRole("button", { name: `使用停止（${name}）` });
+      expect(stop).toHaveClass("border");
+      // 各行の右端
+      expect(stop.parentElement?.lastElementChild).toBe(stop);
+    }
+  });
+
+  it("検索で名前・コード・初期科目の読みを絞り込み、見つからなければ知らせる", async () => {
+    mockApi({ [`GET ${BASE}`]: () => ok({ accounts: initialAccounts() }) });
+    const user = userEvent.setup();
+    renderAccounts();
+    await screen.findByText("現金");
+
+    const search = screen.getByRole("searchbox", { name: "科目を検索" });
+    await user.type(search, "消耗");
+    expect(readList()).toEqual(["[経費]", "消耗品費"]);
+
+    await user.clear(search);
+    await user.type(search, "げんきん");
+    expect(readList()).toEqual(["[資産]", "現金最初からある科目"]);
+
+    await user.clear(search);
+    await user.type(search, "6010");
+    expect(readList()).toEqual(["[経費]", "消耗品費"]);
+
+    await user.clear(search);
+    await user.type(search, "存在しない科目");
+    expect(screen.getByText("条件に合う科目はありません。")).toBeInTheDocument();
   });
 
   it("区分に応じて決算書の区分を選び、科目を追加する", async () => {
@@ -168,27 +236,27 @@ describe("勘定科目の画面", () => {
     let accounts = initialAccounts();
     const calls = mockApi({
       [`GET ${BASE}`]: () => ok({ accounts }),
-      [`PATCH ${BASE}/cash`]: () => {
-        accounts = accounts.map((a) => (a.id === "cash" ? { ...a, name: "手元現金" } : a));
-        return ok({ account: accounts.find((a) => a.id === "cash") });
+      [`PATCH ${BASE}/supplies`]: () => {
+        accounts = accounts.map((a) => (a.id === "supplies" ? { ...a, name: "事務用品費" } : a));
+        return ok({ account: accounts.find((a) => a.id === "supplies") });
       },
     });
     const user = userEvent.setup();
     renderAccounts();
-    await screen.findByText("現金");
+    await screen.findByText("消耗品費");
 
-    await user.click(screen.getByRole("button", { name: "名称変更（現金）" }));
-    const input = screen.getByLabelText("「現金」の新しい名称");
+    await user.click(screen.getByRole("button", { name: "名称変更（消耗品費）" }));
+    const input = screen.getByLabelText("「消耗品費」の新しい名称");
     await user.clear(input);
-    await user.type(input, "手元現金");
+    await user.type(input, "事務用品費");
     await user.click(screen.getByRole("button", { name: "保存" }));
 
-    expect(await screen.findByText("手元現金")).toBeInTheDocument();
-    expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ name: "手元現金" });
-    expect(screen.queryByLabelText("「現金」の新しい名称")).not.toBeInTheDocument();
+    expect(await screen.findByText("事務用品費")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ name: "事務用品費" });
+    expect(screen.queryByLabelText("「消耗品費」の新しい名称")).not.toBeInTheDocument();
   });
 
-  it("科目を使用停止・使用再開する", async () => {
+  it("科目を使用停止・使用再開する（隠す表示を外すと行が残る）", async () => {
     let accounts = initialAccounts();
     const setActive = (id: string) => (call: { body: unknown }) => {
       const { isActive } = call.body as { isActive: boolean };
@@ -203,6 +271,7 @@ describe("勘定科目の画面", () => {
     const user = userEvent.setup();
     renderAccounts();
     await screen.findByText("現金");
+    await user.click(screen.getByRole("checkbox", { name: "使用停止を隠す" }));
 
     await user.click(screen.getByRole("button", { name: "使用停止（現金）" }));
     expect(await screen.findByRole("button", { name: "使用再開（現金）" })).toBeInTheDocument();
@@ -216,6 +285,23 @@ describe("勘定科目の画面", () => {
       [`${BASE}/cash`, { isActive: false }],
       [`${BASE}/bank`, { isActive: true }],
     ]);
+  });
+
+  it("使用停止にすると、隠す表示のときは一覧から消える", async () => {
+    let accounts = initialAccounts();
+    mockApi({
+      [`GET ${BASE}`]: () => ok({ accounts }),
+      [`PATCH ${BASE}/supplies`]: () => {
+        accounts = accounts.map((a) => (a.id === "supplies" ? { ...a, isActive: false } : a));
+        return ok({ account: accounts.find((a) => a.id === "supplies") });
+      },
+    });
+    const user = userEvent.setup();
+    renderAccounts();
+    await screen.findByText("消耗品費");
+
+    await user.click(screen.getByRole("button", { name: "使用停止（消耗品費）" }));
+    await waitFor(() => expect(screen.queryByText("消耗品費")).not.toBeInTheDocument());
   });
 
   it("確認してから科目を削除する", async () => {
@@ -247,19 +333,19 @@ describe("勘定科目の画面", () => {
   it("使われている科目を削除しようとすると、使用停止を促すエラーを表示する", async () => {
     mockApi({
       [`GET ${BASE}`]: () => ok({ accounts: initialAccounts() }),
-      [`DELETE ${BASE}/cash`]: () => apiError(409, "ACCOUNT_IN_USE", "account is in use"),
+      [`DELETE ${BASE}/supplies`]: () => apiError(409, "ACCOUNT_IN_USE", "account is in use"),
     });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const user = userEvent.setup();
     renderAccounts();
-    await screen.findByText("現金");
+    await screen.findByText("消耗品費");
 
-    await user.click(screen.getByRole("button", { name: "削除（現金）" }));
+    await user.click(screen.getByRole("button", { name: "削除（消耗品費）" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "この科目は仕訳や期首残高で使われているため削除できません。代わりに使用停止にしてください。",
     );
-    expect(screen.getByText("現金")).toBeInTheDocument();
+    expect(screen.getByText("消耗品費")).toBeInTheDocument();
   });
 
   it("費用の科目の決算書の欄を選んで変更する（8〜31 と「なし」）。費用以外には選択を出さない", async () => {
@@ -319,19 +405,19 @@ describe("勘定科目の画面", () => {
     let subAccounts: SubAccount[] = [];
     const calls = mockApi({
       [`GET ${BASE}`]: () => ok({ accounts: initialAccounts() }),
-      [`GET ${BASE}/bank/sub-accounts`]: () => ok({ subAccounts }),
-      [`POST ${BASE}/bank/sub-accounts`]: (call) => {
+      [`GET ${BASE}/cash/sub-accounts`]: () => ok({ subAccounts }),
+      [`POST ${BASE}/cash/sub-accounts`]: (call) => {
         const { name } = call.body as { name: string };
-        const created = { id: "s1", accountId: "bank", name, isActive: true };
+        const created = { id: "s1", accountId: "cash", name, isActive: true };
         subAccounts = [...subAccounts, created];
         return ok({ subAccount: created }, 201);
       },
     });
     const user = userEvent.setup();
     renderAccounts();
-    await screen.findByText("普通預金");
+    await screen.findByText("現金");
 
-    const toggle = screen.getByRole("button", { name: "補助科目（普通預金）" });
+    const toggle = screen.getByRole("button", { name: "補助科目（現金）" });
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(await screen.findByText("補助科目はありません。")).toBeInTheDocument();
@@ -339,7 +425,7 @@ describe("勘定科目の画面", () => {
     await user.type(screen.getByLabelText("補助科目を追加"), "○○銀行");
     await user.click(screen.getByRole("button", { name: "追加" }));
 
-    const list = await screen.findByRole("list", { name: "「普通預金」の補助科目" });
+    const list = await screen.findByRole("list", { name: "「現金」の補助科目" });
     expect(within(list).getByText("○○銀行")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "○○銀行" });
     expect(screen.getByLabelText("補助科目を追加")).toHaveValue("");

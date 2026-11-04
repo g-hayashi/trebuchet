@@ -53,6 +53,12 @@ export function describeError(error: unknown): ErrorDescription {
           "この科目は仕訳や期首残高で使われているため削除できません。代わりに使用停止にしてください。",
         details: [],
       };
+    case "ACCOUNT_SYSTEM_PROTECTED":
+      return {
+        message:
+          "最初からある科目は名前の変更も削除もできません。使わないときは使用停止にしてください。",
+        details: [],
+      };
     case "PERIOD_CLOSED":
       return { message: "締め済みの会計期間は変更できません。", details: [] };
     case "ENTITY_NOT_FOUND":

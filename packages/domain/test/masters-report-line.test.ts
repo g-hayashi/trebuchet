@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createEntity } from "../src/usecases/create-entity.ts";
-import { type MasterDeps, setAccountReportLine, updateAccount } from "../src/usecases/masters.ts";
+import {
+  addAccount,
+  type MasterDeps,
+  setAccountReportLine,
+  updateAccount,
+} from "../src/usecases/masters.ts";
 import {
   FixedClock,
   fakeClosingUnitOfWork,
@@ -32,6 +37,13 @@ const account = (name: string) => {
   const a = repo.listAccounts().find((x) => x.name === name);
   if (a === undefined) throw new Error(`科目がない: ${name}`);
   return a;
+};
+
+/** 利用者が足した費用の科目（最初からある科目は名前を変えられない。FR-047） */
+const userExpense = (name: string) => {
+  const r = addAccount(deps, { name, category: "expense", reportSection: "PL_EXPENSE" });
+  if (!r.ok) throw new Error(r.error.message);
+  return r.value;
 };
 
 describe("setAccountReportLine（R12a、FR-006）", () => {
@@ -106,7 +118,7 @@ describe("updateAccount（PATCH /accounts/:accountId）", () => {
   });
 
   it("名称・使用停止・欄を 1 回で変え、audit_log と closing_audit_log に残す", () => {
-    const supplies = account("消耗品費");
+    const supplies = userExpense("備品消耗品");
     const r = updateAccount(uowDeps(), supplies.id, {
       name: "事務用品費",
       isActive: false,
@@ -123,7 +135,7 @@ describe("updateAccount（PATCH /accounts/:accountId）", () => {
   });
 
   it("後の項目が失敗すると、先に変えた名称・使用停止も記録も残らない", () => {
-    const supplies = account("消耗品費");
+    const supplies = userExpense("備品消耗品");
     const masters = structuredClone(repo.state);
     const r = updateAccount(uowDeps(), supplies.id, {
       name: "事務用品費",

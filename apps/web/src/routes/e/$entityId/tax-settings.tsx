@@ -28,6 +28,13 @@ import {
   type TaxSetting,
   taxSettingsQuery,
 } from "@/features/entities/api";
+import {
+  ACCOUNTING_METHOD_HELP,
+  ACCOUNTING_METHOD_ORDER,
+  TAXPAYER_STATUS_HELP,
+  TAXPAYER_STATUS_ORDER,
+  type TaxHelp,
+} from "@/features/entities/tax-help";
 import { previousDay } from "@/lib/dates";
 
 export const Route = createFileRoute("/e/$entityId/tax-settings")({
@@ -202,6 +209,46 @@ function TaxSettingsPage() {
           </form>
         </CardContent>
       </Card>
+      <TaxHelpCard />
     </main>
+  );
+}
+
+function TaxHelpCard() {
+  return (
+    <section aria-label="課税区分と経理方式の説明">
+      <Card>
+        <CardHeader>
+          <CardTitle>課税区分と経理方式の説明</CardTitle>
+          <CardDescription>
+            設定が帳簿の何を変えるかです。仕訳の日付を含む期間の設定が使われます。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-4">
+            <h2 className="text-sm font-semibold">課税区分</h2>
+            {TAXPAYER_STATUS_ORDER.map((status) => (
+              <HelpItem key={status} help={TAXPAYER_STATUS_HELP[status]} />
+            ))}
+          </div>
+          <div className="grid content-start gap-4">
+            <h2 className="text-sm font-semibold">経理方式</h2>
+            {ACCOUNTING_METHOD_ORDER.map((method) => (
+              <HelpItem key={method} help={ACCOUNTING_METHOD_HELP[method]} />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function HelpItem({ help }: { help: TaxHelp }) {
+  return (
+    <div className="grid gap-1 text-sm">
+      <h3 className="font-medium">{help.label}</h3>
+      <p className="text-muted-foreground">{help.defaultCategory}</p>
+      <p className="text-muted-foreground">{help.calculation}</p>
+    </div>
   );
 }

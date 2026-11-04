@@ -86,6 +86,21 @@ export const journalSearchQuery = (entityId: string, search: JournalSearch) =>
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
 
+/** 期間の仕訳の件数（一覧の `summary.count`）。会計期間のカードが使う。取消済みは数えない */
+export const journalCountQuery = (entityId: string, dateFrom: string, dateTo: string) =>
+  queryOptions({
+    queryKey: [...journalKeys.all(entityId), "count", dateFrom, dateTo] as const,
+    queryFn: async () =>
+      (
+        await unwrap(
+          await journalApi.$get({
+            param: { entityId },
+            query: { dateFrom, dateTo, limit: "1" },
+          }),
+        )
+      ).summary.count,
+  });
+
 /** 仕訳と、訂正元・訂正仕訳への参照 */
 export const journalQuery = (entityId: string, journalId: string) =>
   queryOptions({

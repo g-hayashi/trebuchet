@@ -31,6 +31,10 @@ function mockPeriodsApi(
   options: {
     history?: HistoryItem[];
     reopen?: (call: ApiCall) => ApiReply;
+    /** 年度ごとの仕訳の件数（指定のない年度は 0 件） */
+    journalCounts?: Record<number, number>;
+    /** 期首残高を登録済みの年度（指定のない年度は未登録） */
+    openingYears?: number[];
   } = {},
 ) {
   let periods = initial;
@@ -42,6 +46,33 @@ function mockPeriodsApi(
   return mockApi({
     [`GET ${PERIODS}`]: () => ok({ fiscalPeriods: periods }),
     [`GET ${PERIODS}/history`]: () => ok({ history }),
+    [`GET ${ENTITY}/journals`]: ({ query }) => {
+      const year = Number(query.dateFrom?.slice(0, 4));
+      return ok({
+        journals: [],
+        nextCursor: null,
+        summary: { count: options.journalCounts?.[year] ?? 0, amount: 0 },
+      });
+    },
+    ...Object.fromEntries(
+      initial.map((p) => [
+        `GET ${PERIODS}/${p.fiscalYear}/opening-balances`,
+        () =>
+          ok({
+            fiscalPeriod: p,
+            openingBalances: options.openingYears?.includes(p.fiscalYear)
+              ? [
+                  {
+                    accountId: "a1",
+                    subAccountId: null,
+                    side: "debit",
+                    amount: 100000,
+                  },
+                ]
+              : [],
+          }),
+      ]),
+    ),
     [`POST ${PERIODS}/2026/close`]: () => {
       history.push({
         occurredAt: "2027-03-15T01:00:00.000Z",
@@ -68,14 +99,8 @@ function mockPeriodsApi(
 const renderPeriods = () =>
   renderRoute(Route, { path: "/e/$entityId/periods/", url: "/e/e1/periods/" });
 
-const rowOf = async (year: number) => {
-  const table = await screen.findByRole("table", { name: "年度の一覧" });
-  const row = within(table)
-    .getAllByRole("row")
-    .find((r) => r.textContent?.includes(`${year}年度`));
-  if (row === undefined) throw new Error(`${year}年度の行がない`);
-  return row;
-};
+/** 年度のカード（FR-051） */
+const rowOf = (year: number) => screen.findByRole("region", { name: `${year}年度` });
 
 const historyItems = async () =>
   within(await screen.findByRole("table", { name: "締めと解除の履歴" }))
@@ -88,6 +113,55 @@ afterEach(() => {
 });
 
 describe("会計期間の画面（US5）", () => {
+  it("FR-051: 年度ごとのカードに「期首残高 → 記帳 → 決算整理 → 締め」の状態と入口を出す", async () => {
+    mockPeriodsApi([period(2025, "2026-03-15T01:00:00.000Z"), period(2026)], {
+      journalCounts: { 2025: 48, 2026: 0 },
+      openingYears: [2025],
+    });
+    renderPeriods();
+
+    const card2025 = await rowOf(2025);
+    const stages2025 = within(card2025).getAllByRole("listitem");
+    expect(stages2025.map((s) => s.getAttribute("aria-label"))).toEqual([
+      "期首残高",
+      "記帳",
+      "決算整理",
+      "締め",
+    ]);
+    await waitFor(() => expect(stages2025[0]).toHaveTextContent("登録済み"));
+    await waitFor(() => expect(stages2025[1]).toHaveTextContent("仕訳 48 件"));
+    expect(within(stages2025[0] as HTMLElement).getByRole("link")).toHaveAttribute(
+      "href",
+      "/e/e1/periods/2025/opening-balances",
+    );
+    expect(within(stages2025[1] as HTMLElement).getByRole("link")).toHaveAttribute(
+      "href",
+      expect.stringContaining("dateFrom=2025-01-01"),
+    );
+    // 決算整理は状態を持たず、決算書へのリンクだけ
+    expect(within(stages2025[2] as HTMLElement).getByRole("link")).toHaveAttribute(
+      "href",
+      "/e/e1/blue-return/2025",
+    );
+    expect(stages2025[3]).toHaveTextContent("締め済み");
+
+    const card2026 = await rowOf(2026);
+    const stages2026 = within(card2026).getAllByRole("listitem");
+    await waitFor(() => expect(stages2026[0]).toHaveTextContent("未登録"));
+    await waitFor(() => expect(stages2026[1]).toHaveTextContent("仕訳 0 件"));
+    expect(stages2026[3]).toHaveTextContent("未締め");
+  });
+
+  it("FR-051: freee の取込への入口がある", async () => {
+    mockPeriodsApi([period(2026)]);
+    renderPeriods();
+
+    expect(await screen.findByRole("link", { name: /freee の取込/ })).toHaveAttribute(
+      "href",
+      "/e/e1/imports",
+    );
+  });
+
   it("年度ごとに状態を表示し、未締めの年度には締めるボタン、締め済みの年度には解除のボタンを出す", async () => {
     mockPeriodsApi([period(2025, "2026-03-15T01:00:00.000Z"), period(2026)]);
     renderPeriods();

@@ -84,6 +84,10 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   "DELETE /journal-draft": () => ok(undefined, 204),
   "GET /journals/suggestions": () => ok({ suggestions: [] }),
   "GET /fiscal-periods": () => ok({ fiscalPeriods: [] }),
+  // 会計期間のカード（011 US8）が、年度ごとの期首残高と仕訳の件数を読む
+  "GET /fiscal-periods/:year/opening-balances": () =>
+    ok({ fiscalPeriod: null, openingBalances: [] }),
+  "GET /journals": () => ok({ journals: [], nextCursor: null, summary: { count: 0, amount: 0 } }),
   // ホーム（011 US1）。作業は 0 件、今日を含む会計期間なし、仕訳・取込なし
   "GET /home": () =>
     ok({

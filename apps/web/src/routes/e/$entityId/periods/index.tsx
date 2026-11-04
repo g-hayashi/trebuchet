@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ReasonDialog } from "@/components/reason-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,12 +21,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { journalCountQuery } from "@/features/journals/api";
 import {
   closePeriod,
   createNextPeriod,
   type FiscalPeriod,
   fiscalPeriodHistoryQuery,
   fiscalPeriodsQuery,
+  openingBalancesQuery,
   periodKeys,
   reopenPeriod,
 } from "@/features/periods/api";
@@ -38,6 +40,125 @@ export const Route = createFileRoute("/e/$entityId/periods/")({
 
 const STATUS_LABELS = { open: "未締め", closed: "締め済み" } as const;
 const ACTION_LABELS = { close: "締め", reopen: "解除" } as const;
+
+type StageProps = { label: string; children: ReactNode };
+
+/** 年度の進め方の 1 段階。左に段階の名前、右に状態と入口 */
+function Stage({ label, children }: StageProps) {
+  return (
+    <li
+      aria-label={label}
+      className="grid content-start gap-1 rounded-md border bg-muted/30 p-3 text-sm"
+    >
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+    </li>
+  );
+}
+
+const stageLinkClass = "text-sm underline-offset-4 hover:underline";
+
+/** 年度のカード（FR-051）。期首残高 → 記帳 → 決算整理 → 締めの状態と、それぞれの入口 */
+function PeriodCard({
+  entityId,
+  period: p,
+  onClose,
+  onReopen,
+}: {
+  entityId: string;
+  period: FiscalPeriod;
+  onClose: () => void;
+  onReopen: () => void;
+}) {
+  const year = String(p.fiscalYear);
+  const opening = useQuery(openingBalancesQuery(entityId, year));
+  const journals = useQuery(journalCountQuery(entityId, p.startDate, p.endDate));
+  const openingCount = opening.data?.openingBalances.length;
+
+  return (
+    <section aria-label={`${p.fiscalYear}年度`} className="grid gap-3 rounded-lg border p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-medium tabular-nums">{p.fiscalYear}年度</h2>
+        <span className="text-sm text-muted-foreground tabular-nums">
+          {p.startDate} 〜 {p.endDate}
+        </span>
+      </div>
+      <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Stage label="期首残高">
+          <span>
+            {openingCount === undefined
+              ? "読み込み中…"
+              : openingCount > 0
+                ? `登録済み（${openingCount} 行）`
+                : "未登録"}
+          </span>
+          <Link
+            to="/e/$entityId/periods/$year/opening-balances"
+            params={{ entityId, year }}
+            className={stageLinkClass}
+          >
+            期首残高を開く
+          </Link>
+        </Stage>
+        <Stage label="記帳">
+          <span>
+            {journals.data === undefined
+              ? "読み込み中…"
+              : `仕訳 ${journals.data.toLocaleString("ja-JP")} 件`}
+          </span>
+          <Link
+            to="/e/$entityId/journals"
+            params={{ entityId }}
+            search={{ dateFrom: p.startDate, dateTo: p.endDate }}
+            className={stageLinkClass}
+          >
+            仕訳を見る
+          </Link>
+        </Stage>
+        <Stage label="決算整理">
+          <Link
+            to="/e/$entityId/blue-return/$year"
+            params={{ entityId, year }}
+            className={stageLinkClass}
+          >
+            決算書を開く
+          </Link>
+        </Stage>
+        <Stage label="締め">
+          <span>
+            {STATUS_LABELS[p.status]}
+            {p.closedAt !== null && (
+              <span className="block text-xs text-muted-foreground tabular-nums">
+                <time dateTime={p.closedAt}>{formatDateTime(p.closedAt)}</time>に締め
+              </span>
+            )}
+          </span>
+          {p.status === "open" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="justify-self-start"
+              aria-label={`${p.fiscalYear}年度を締める`}
+              onClick={onClose}
+            >
+              締める
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="justify-self-start"
+              aria-label={`${p.fiscalYear}年度の締めを解除`}
+              onClick={onReopen}
+            >
+              締めを解除
+            </Button>
+          )}
+        </Stage>
+      </ol>
+    </section>
+  );
+}
 
 function PeriodsPage() {
   const { entityId } = Route.useParams();
@@ -85,78 +206,39 @@ function PeriodsPage() {
 
   return (
     <main className="grid gap-6">
-      <h1 className="text-xl font-semibold">会計期間</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold">会計期間</h1>
+        <Link
+          to="/e/$entityId/imports"
+          params={{ entityId }}
+          className="inline-flex h-9 items-center rounded-md border bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground"
+        >
+          freee の取込
+        </Link>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>年度の一覧</CardTitle>
           <CardDescription>
-            年度ごとに期首残高を登録できます。申告が終わった年度は締めると、その年度の仕訳と期首残高を変更できなくなります。
+            年度ごとに「期首残高 → 記帳 → 決算整理 →
+            締め」の順に進めます。申告が終わった年度は締めると、その年度の仕訳と期首残高を変更できなくなります。
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <ApiErrorMessage error={error} />
           {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
           {periods && (
-            <Table aria-label="年度の一覧">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>年度</TableHead>
-                  <TableHead>期間</TableHead>
-                  <TableHead>状態</TableHead>
-                  <TableHead className="w-0">
-                    <span className="sr-only">操作</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {periods.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="font-medium tabular-nums">{p.fiscalYear}年度</TableCell>
-                    <TableCell className="tabular-nums">
-                      {p.startDate} 〜 {p.endDate}
-                    </TableCell>
-                    <TableCell>
-                      {STATUS_LABELS[p.status]}
-                      {p.closedAt !== null && (
-                        <span className="block text-xs text-muted-foreground tabular-nums">
-                          <time dateTime={p.closedAt}>{formatDateTime(p.closedAt)}</time>に締め
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Link
-                          to="/e/$entityId/periods/$year/opening-balances"
-                          params={{ entityId, year: String(p.fiscalYear) }}
-                          className="text-sm whitespace-nowrap underline-offset-4 hover:underline"
-                        >
-                          期首残高
-                        </Link>
-                        {p.status === "open" ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            aria-label={`${p.fiscalYear}年度を締める`}
-                            onClick={() => startClosing(p)}
-                          >
-                            締める
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            aria-label={`${p.fiscalYear}年度の締めを解除`}
-                            onClick={() => setReopening(p)}
-                          >
-                            締めを解除
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="grid gap-4">
+              {periods.map((p) => (
+                <PeriodCard
+                  key={p.id}
+                  entityId={entityId}
+                  period={p}
+                  onClose={() => startClosing(p)}
+                  onReopen={() => setReopening(p)}
+                />
+              ))}
+            </div>
           )}
           <div>
             <Button

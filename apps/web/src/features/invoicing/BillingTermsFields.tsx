@@ -83,7 +83,7 @@ export function toBillingInput(
 /**
  * 請求の条件の入力欄（FR-001・FR-002）。型の切り替え（時間単価型・月額定額型）、支払期限
  * （N か月後の 1〜28 日または末日）、既定の品名、宛名。親の grid の子として並ぶ（欄だけで form は持たない）。
- * 取引先の請求の条件の編集（`BillingTermsForm`）と取引先の欄（`PartnerProfileForm`）が使う
+ * 取引先の欄（`PartnerProfileForm`）が使う
  */
 export function BillingTermsFields({
   id,

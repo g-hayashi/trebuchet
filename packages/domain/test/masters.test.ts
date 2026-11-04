@@ -43,27 +43,45 @@ const expectError = (result: { ok: boolean; error?: { code: string } }, code: st
   expect(result.error?.code).toBe(code);
 };
 
+/** 利用者が足した科目（最初からある科目は名前の変更・削除ができない。FR-047） */
+const userAccount = (
+  name: string,
+  category: "asset" | "expense" = "expense",
+  reportSection: "BS_ASSET" | "PL_EXPENSE" = "PL_EXPENSE",
+) => {
+  const r = addAccount(deps, { name, category, reportSection });
+  if (!r.ok) throw new Error(r.error.message);
+  return r.value;
+};
+
 describe("勘定科目（FR-005）", () => {
   it("仕訳で使われた科目の削除は ACCOUNT_IN_USE で拒否する", () => {
-    const cash = account("現金");
-    repo.usedAccountIds.add(cash.id);
-    expectError(deleteAccount(deps, cash.id), "ACCOUNT_IN_USE");
-    expect(repo.getAccount(cash.id)).toBeDefined();
+    const seminar = userAccount("セミナー費");
+    repo.usedAccountIds.add(seminar.id);
+    expectError(deleteAccount(deps, seminar.id), "ACCOUNT_IN_USE");
+    expect(repo.getAccount(seminar.id)).toBeDefined();
   });
 
   it("期首残高で使われた科目の削除も ACCOUNT_IN_USE で拒否する", () => {
-    const cash = account("現金");
+    const bank = userAccount("別口座", "asset", "BS_ASSET");
     const capital = account("元入金");
     const r = replaceOpeningBalances(deps, 2026, [
-      { accountId: cash.id, side: "debit", amount: 1000 },
+      { accountId: bank.id, side: "debit", amount: 1000 },
       { accountId: capital.id, side: "credit", amount: 1000 },
     ]);
     expect(r.ok).toBe(true);
-    expectError(deleteAccount(deps, cash.id), "ACCOUNT_IN_USE");
+    expectError(deleteAccount(deps, bank.id), "ACCOUNT_IN_USE");
+  });
+
+  it("最初からある科目の名前の変更・削除は ACCOUNT_SYSTEM_PROTECTED で拒否する", () => {
+    const meeting = account("会議費");
+    expectError(deleteAccount(deps, meeting.id), "ACCOUNT_SYSTEM_PROTECTED");
+    expectError(renameAccount(deps, meeting.id, "打合せ費"), "ACCOUNT_SYSTEM_PROTECTED");
+    expect(repo.getAccount(meeting.id)?.name).toBe("会議費");
   });
 
   it("使われていない科目は削除でき、補助科目もあわせて消える", () => {
-    const meeting = account("会議費");
+    const meeting = userAccount("セミナー費");
     expect(addSubAccount(deps, meeting.id, "社内").ok).toBe(true);
     expect(deleteAccount(deps, meeting.id).ok).toBe(true);
     expect(repo.getAccount(meeting.id)).toBeUndefined();
@@ -111,22 +129,23 @@ describe("勘定科目（FR-005）", () => {
   });
 
   it("科目名の変更は audit_log に rename（変更前・後の名前）を残す", () => {
-    const fee = account("支払手数料");
-    const result = renameAccount(deps, fee.id, "  支払い手数料 ");
+    const fee = userAccount("振込手数料");
+    const result = renameAccount(deps, fee.id, "  振込み手数料 ");
     expect(result.ok).toBe(true);
-    expect(repo.getAccount(fee.id)?.name).toBe("支払い手数料");
+    expect(repo.getAccount(fee.id)?.name).toBe("振込み手数料");
     expect(repo.getAccount(fee.id)?.code).toBe(fee.code);
     const audit = repo.audits.at(-1);
     expect(audit).toMatchObject({ targetType: "account", targetId: fee.id, action: "rename" });
-    expect(JSON.parse(audit?.beforeJson ?? "null")).toEqual({ name: "支払手数料" });
-    expect(JSON.parse(audit?.afterJson ?? "null")).toEqual({ name: "支払い手数料" });
+    expect(JSON.parse(audit?.beforeJson ?? "null")).toEqual({ name: "振込手数料" });
+    expect(JSON.parse(audit?.afterJson ?? "null")).toEqual({ name: "振込み手数料" });
   });
 
   it("ほかの科目と同じ名前・空の名前への変更は VALIDATION", () => {
-    const fee = account("支払手数料");
+    const fee = userAccount("振込手数料");
+    const audits = repo.audits.length;
     expectError(renameAccount(deps, fee.id, "会議費"), "VALIDATION");
     expectError(renameAccount(deps, fee.id, "   "), "VALIDATION");
-    expect(repo.audits).toHaveLength(0);
+    expect(repo.audits).toHaveLength(audits);
   });
 
   it("利用者が追加した科目のコードは区分ごとに自動採番される", () => {

@@ -54,6 +54,16 @@ function validName(
 const accountNotFound = (accountId: string) =>
   err(domainError("ACCOUNT_NOT_FOUND", "勘定科目が見つかりません", { accountId }));
 
+/** 最初からある科目（isSystem）の名前の変更・削除の拒否（FR-047、INV-70） */
+const systemAccountProtected = (accountId: string, operation: string) =>
+  err(
+    domainError(
+      "ACCOUNT_SYSTEM_PROTECTED",
+      `最初からある科目は${operation}できません。使用停止にはできます`,
+      { accountId },
+    ),
+  );
+
 /** マスタの変更を audit_log に残す（理由なし、日時は今） */
 function appendAudit(
   deps: MasterDeps,
@@ -187,6 +197,7 @@ export function renameAccount(
     const account = tx.getAccount(accountId);
     if (account === undefined) return accountNotFound(accountId);
     if (account.name === name.value) return ok(account);
+    if (account.isSystem) return systemAccountProtected(accountId, "名前を変更");
     if (tx.listAccounts().some((a) => a.id !== accountId && a.name === name.value)) {
       return err(domainError("VALIDATION", "同じ名前の科目があります", { name: name.value }));
     }
@@ -323,7 +334,9 @@ export function updateAccount(
 /** 使われていない科目を削除する（補助科目もあわせて消える）。使用中なら ACCOUNT_IN_USE */
 export function deleteAccount(deps: MasterDeps, accountId: string): Result<void> {
   return deps.repo.transaction((tx) => {
-    if (tx.getAccount(accountId) === undefined) return accountNotFound(accountId);
+    const account = tx.getAccount(accountId);
+    if (account === undefined) return accountNotFound(accountId);
+    if (account.isSystem) return systemAccountProtected(accountId, "削除");
     if (tx.isAccountUsed(accountId)) {
       return err(
         domainError(
