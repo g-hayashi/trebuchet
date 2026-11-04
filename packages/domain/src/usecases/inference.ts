@@ -6,7 +6,11 @@ import type {
   SuggestionProvider,
 } from "../ports.ts";
 import { journalShape } from "../statements/journal-shape.ts";
-import { buildAiPayload } from "../statements/mask.ts";
+import {
+  buildAiPayload,
+  buildJournalEntryPayload,
+  type JournalEntryInput,
+} from "../statements/mask.ts";
 import { counterAccounts, type ParsedSuggestion, parseSuggestion } from "../statements/prompt.ts";
 import {
   type Account,
@@ -92,9 +96,11 @@ export function createAiSuggester(
     provider: SuggestionProvider,
     method: AiMethod,
     model: string,
-    item: AiWork,
+    item: AiWork | JournalEntryInput,
   ): Promise<{ suggestion: AiSuggested } | { failure: string }> => {
-    const response = await provider.suggest(buildAiPayload(item.record, item.account), env.context);
+    const payload =
+      "record" in item ? buildAiPayload(item.record, item.account) : buildJournalEntryPayload(item);
+    const response = await provider.suggest(payload, env.context);
     if (!response.ok) return { failure: response.error.message };
     const parsed = parseSuggestion(response.value, env.ledgerAccounts);
     if (!parsed.ok) return { failure: parsed.error.message };
@@ -110,8 +116,8 @@ export function createAiSuggester(
       ...(localUsed ? [deps.models.local] : []),
       ...(externalUsed ? [deps.models.external] : []),
     ],
-    /** 1 件の推定。どちらも呼ばなかったら undefined */
-    async suggest(item: AiWork): Promise<AiOutcome | undefined> {
+    /** 1 件の推定（明細、または仕訳の入力）。どちらも呼ばなかったら undefined */
+    async suggest(item: AiWork | JournalEntryInput): Promise<AiOutcome | undefined> {
       let suggestion: AiSuggested | null = null;
       let failure = "";
       let called = false;

@@ -5,6 +5,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
 import type { Account } from "@/features/accounts/api";
+import { AiSuggestionPanel } from "@/features/ai-assist/AiSuggestionPanel";
 import type { TaxCategory, TaxSetting } from "@/features/entities/api";
 import type { Partner, Tag } from "@/features/masters/api";
 import { matchesAccount } from "@/lib/account-search";
@@ -154,6 +155,13 @@ export function QuickEntryForm({
         />
         <FieldError id="quick-memo-error" message={errors.memo?.message} />
       </div>
+      <AiSuggestionPanel
+        scene="journal_entry"
+        form={form}
+        entityId={entityId}
+        accounts={accounts}
+        taxCategories={taxCategories}
+      />
       <details className="rounded-md border p-3">
         <summary className="cursor-pointer text-sm font-medium">任意項目</summary>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">

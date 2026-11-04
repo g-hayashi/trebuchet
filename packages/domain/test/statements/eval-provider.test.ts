@@ -14,6 +14,7 @@ import {
 
 const context = { accounts: [], taxCategories: [] };
 const payload = {
+  scene: "statement" as const,
   date: "2026-01-01",
   amount: 100,
   direction: "out" as const,

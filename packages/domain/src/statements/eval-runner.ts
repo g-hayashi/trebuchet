@@ -4,10 +4,21 @@ import type { Account } from "../types.ts";
 import { type AiWork, createAiSuggester, type InferenceDeps } from "../usecases/inference.ts";
 import { type EvalPrediction, type EvalResult, type EvalSample, evaluate } from "./evals.ts";
 import { journalShape } from "./journal-shape.ts";
+import type { JournalEntryInput } from "./mask.ts";
 import { counterAccounts } from "./prompt.ts";
 
 /** 合成の正解と本番と同じ推定入力。sceneは後続の場面を追加できる識別子。 */
 export type StatementEvalCase = { scene: string; sample: EvalSample; work: AiWork };
+/**
+ * 仕訳の入力の場面（011/R19）。入力は日付・金額・摘要だけで、明細・口座・仕訳の形は持たない。
+ * 同じ集計の枠で場面として数えるが、明細の場面の件数・一致率には混ざらない
+ */
+export type JournalEntryEvalCase = {
+  scene: "journal_entry";
+  sample: EvalSample;
+  work: JournalEntryInput;
+};
+export type EvalCase = StatementEvalCase | JournalEntryEvalCase;
 export type StatementSceneEvaluation = {
   scenes: { scene: string; result: EvalResult }[];
   /** 件数だけを保存する。モデル・入力・回答・失敗の本文を含めない。 */
@@ -23,7 +34,7 @@ export type StatementSceneEvaluation = {
 
 /** I/Oはproviderに限り、帳簿・registry・候補を読み書きしない評価runner。 */
 export async function evaluateStatementScenes(
-  cases: readonly StatementEvalCase[],
+  cases: readonly EvalCase[],
   deps: Pick<InferenceDeps, "local" | "external" | "externalEnabled" | "models">,
   options: { ledgerAccounts: readonly Account[]; splitDate: string; threshold: number },
 ): Promise<StatementSceneEvaluation> {
@@ -84,6 +95,18 @@ export async function evaluateStatementScenes(
         const none: EvalPrediction = { method: "none", fields: null };
         if (suggestion == null) return none;
         const s = suggestion.value;
+        // 仕訳の入力: 明細の口座・仕訳の形はないので、AI の候補の科目・税区分・私用の別をそのまま採点する
+        if (!("record" in work)) {
+          return {
+            method: suggestion.method,
+            fields: {
+              counterAccountId: s.accountId,
+              taxCategory: s.taxCategory,
+              partnerId: null,
+              purpose: s.purpose,
+            },
+          };
+        }
         const shaped = journalShape({
           statement: work.record,
           account: work.account,

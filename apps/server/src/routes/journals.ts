@@ -10,9 +10,11 @@ import {
   listJournalReceipts,
   listJournalStatements,
   suggestFromHistory,
+  suggestJournalEntry,
   voidJournal,
 } from "@trebuchet/domain";
 import {
+  JournalAiSuggestionInput,
   JournalCorrection,
   JournalInput,
   JournalQuery,
@@ -26,9 +28,11 @@ import {
   type ReceiptRuntime,
   type RouteOptions,
   receiptDeps,
+  type SuggestionProviders,
   statementDeps,
 } from "../deps.ts";
 import { fail, respond } from "../errors.ts";
+import { type AiRuntime, LOCAL_AI_MODEL } from "../lib/ai-runtime.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 
@@ -51,7 +55,13 @@ function failJournal(c: Context<TenantEnv>, clock: Clock, error: DomainError) {
 }
 
 /** `/api/entities/:entityId` の下の仕訳（FR-013〜023） */
-export function journalRoutes({ clock, receipts }: RouteOptions & { receipts: ReceiptRuntime }) {
+export function journalRoutes({
+  clock,
+  receipts,
+  suggestion,
+  ai,
+}: RouteOptions & { receipts: ReceiptRuntime; suggestion?: SuggestionProviders; ai: AiRuntime }) {
+  const providers = suggestion ?? ai.providers;
   const receiptsOf = (c: { var: TenantEnv["Variables"] }) =>
     receiptDeps(c.var.db, clock, c.var.entityId, receipts);
 
@@ -93,6 +103,21 @@ export function journalRoutes({ clock, receipts }: RouteOptions & { receipts: Re
         cursor = page.nextCursor ?? undefined;
       } while (cursor !== undefined);
       return c.json({ suggestions: suggestFromHistory(journals, c.req.valid("query")) }, 200);
+    })
+    .post("/journals/ai-suggestion", validate("json", JournalAiSuggestionInput), async (c) => {
+      // 摘要・金額・日付から科目・税区分の候補を出す（011/R19）。ルールは使わず 端末内 → 外部。候補は保存しない
+      const settings = ai.settings().get();
+      const result = await suggestJournalEntry(
+        {
+          ...statementDeps(c.var.db, clock, providers),
+          local: providers.local,
+          external: providers.external,
+          externalEnabled: settings.externalEnabled,
+          models: { local: LOCAL_AI_MODEL, external: settings.externalModel ?? "external" },
+        },
+        c.req.valid("json"),
+      );
+      return respond(c, result, (suggested) => c.json(suggested, 200));
     })
     .get("/journals/:journalId", (c) => {
       const journalId = c.req.param("journalId");

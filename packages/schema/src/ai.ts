@@ -14,6 +14,21 @@ export const AiSuggestion = z.object({
 });
 export type AiSuggestion = z.infer<typeof AiSuggestion>;
 
+/** POST /journals/ai-suggestion の入力（011/R19）。金額は整数 0 < amount < 1e12、摘要は空でない */
+export const JournalAiSuggestionInput = z.object({
+  date: DateString,
+  amount: Yen,
+  memo: z.string().trim().min(1, "摘要を入力してください").max(1000),
+});
+export type JournalAiSuggestionInput = z.infer<typeof JournalAiSuggestionInput>;
+
+/** POST /journals/ai-suggestion の出力。`suggestion: null` は候補なし（INV-46。`reason` は使える範囲の理由） */
+export const JournalAiSuggestionResult = z.object({
+  suggestion: AiSuggestion.nullable(),
+  reason: z.string().optional(),
+});
+export type JournalAiSuggestionResult = z.infer<typeof JournalAiSuggestionResult>;
+
 /**
  * 端末内の AI による列の対応の案（007/R10）。`roles` は列の順に役割を並べる（役割に当たらない列は `none`）。
  * 出力を短くするため、列の番号（index）も理由（reason）も書かせない。

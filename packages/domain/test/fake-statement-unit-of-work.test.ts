@@ -99,6 +99,7 @@ describe("fakeStatementUnitOfWork", () => {
 });
 
 const EMPTY_PAYLOAD: SuggestionPayload = {
+  scene: "statement",
   date: "2026-05-10",
   amount: 1,
   direction: "out",

@@ -131,6 +131,8 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
     return ok({ subtotal, total: subtotal, taxBreakdown: [] });
   },
   "GET /journals/:id/origin": () => ok({ origin: null }),
+  // 仕訳の入力への AI の候補（011 US11）。既定は候補なし（外部の AI は既定で無効なので普通は呼ばれない）
+  "POST /journals/ai-suggestion": () => ok({ suggestion: null }),
   // 請求書の詳細の消し込みの入力（US2）が入金先の科目・補助科目を読む
   "GET /accounts": () => ok({ accounts: [] }),
   "GET /accounts/:id/sub-accounts": () => ok({ subAccounts: [] }),

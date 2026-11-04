@@ -88,6 +88,7 @@ export * from "./usecases/import-freee.ts";
 export * from "./usecases/inference.ts";
 export * from "./usecases/inference-rules.ts";
 export * from "./usecases/invoicing.ts";
+export * from "./usecases/journal-ai-suggestion.ts";
 export * from "./usecases/journal-drafts.ts";
 export * from "./usecases/journal-edit.ts";
 export * from "./usecases/journal-queries.ts";

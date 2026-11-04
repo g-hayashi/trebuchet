@@ -6,6 +6,8 @@ import type { StatementRecord } from "../types.ts";
 
 /** AI に送る明細の内容。ここにない項目は送らない */
 export type AiPayload = {
+  /** 場面。`buildPrompt` が指示文を分ける。AI へは送らない（明細の場面の中身は 006 のまま変えない） */
+  scene: "statement";
   date: string;
   /** 金額の絶対値（向きは `direction`） */
   amount: number;
@@ -17,6 +19,21 @@ export type AiPayload = {
   accountKind: StatementAccount["kind"];
   accountUsage: StatementAccount["usage"];
 };
+
+/** 仕訳の入力（かんたん入力）の摘要・金額から科目・税区分を推定するときの入力（011/R19） */
+export type JournalEntryInput = { date: string; amount: number; memo: string };
+
+/** 仕訳の入力の場面で AI に送る内容。摘要・金額・日付だけ（取引先の一覧・口座名は送らない） */
+export type JournalEntryPayload = {
+  scene: "journal_entry";
+  date: string;
+  amount: number;
+  /** `maskContent` を通した摘要 */
+  memo: string;
+};
+
+/** AI に送る内容（場面ごとの形） */
+export type SuggestionPayload = AiPayload | JournalEntryPayload;
 
 const TRANSFER_PREFIX = /^(\s*(?:振込|ﾌﾘｺﾐ|フリコミ|振替))([\s\S]*)$/u;
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/gu;
@@ -47,6 +64,7 @@ export function buildAiPayload(
   account: Pick<StatementAccount, "kind" | "usage">,
 ): AiPayload {
   return {
+    scene: "statement",
     date: statement.date,
     amount: Math.abs(statement.amount),
     direction: statement.amount > 0 ? "in" : "out",
@@ -55,5 +73,20 @@ export function buildAiPayload(
     categoryMinor: statement.categoryMinor,
     accountKind: account.kind,
     accountUsage: account.usage,
+  };
+}
+
+/**
+ * 仕訳の入力の場面で AI に送る内容を、許可した項目（日付・金額・マスクした摘要）だけで組み立てる（R19、INV-45）。
+ * 入力に余分な項目（取引先・口座の名前など）があっても渡さない
+ */
+export function buildJournalEntryPayload(
+  entry: Pick<JournalEntryInput, "date" | "amount" | "memo">,
+): JournalEntryPayload {
+  return {
+    scene: "journal_entry",
+    date: entry.date,
+    amount: entry.amount,
+    memo: maskContent(entry.memo),
   };
 }

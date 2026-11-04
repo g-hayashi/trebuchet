@@ -36,7 +36,7 @@ import type {
   TaxMapping,
 } from "./import/types.ts";
 import type { ColumnPrompt } from "./statements/column-prompt.ts";
-import type { AiPayload } from "./statements/mask.ts";
+import type { SuggestionPayload } from "./statements/mask.ts";
 import type { PromptAccount } from "./statements/prompt.ts";
 import type {
   Account,
@@ -469,8 +469,8 @@ export interface StatementStore {
 /** 明細の取込・承認で、仕訳・マスタ・明細の記録を1つのトランザクションで扱う（INV-47。data-model §6） */
 export type StatementUnitOfWork = TenantUnitOfWork<{ statements: StatementStore }>;
 
-/** AI に渡す明細の内容（`buildAiPayload` の出力。R11） */
-export type SuggestionPayload = AiPayload;
+/** AI に渡す内容（場面ごと。明細は `buildAiPayload`、仕訳の入力は `buildJournalEntryPayload` の出力。R11・R19） */
+export type { SuggestionPayload };
 /** AI に渡す文脈（相手になりうる有効な科目のコードと名前、税区分のコード。R10。`buildPrompt` の入力） */
 export type SuggestionContext = {
   readonly accounts: readonly PromptAccount[];

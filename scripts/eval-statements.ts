@@ -32,6 +32,7 @@ import {
   type StatementSceneEvaluation,
 } from "../packages/domain/src/statements/eval-runner.ts";
 import { DEFAULT_STATEMENT_SETTINGS } from "../packages/domain/src/usecases/statements.ts";
+import { JOURNAL_ENTRY_EVAL_CASES } from "../packages/domain/test/fixtures/statements/journal-entry-evals.ts";
 import {
   STATEMENT_EVAL_ACCOUNTS,
   STATEMENT_EVAL_CASES,
@@ -152,9 +153,12 @@ try {
   const guard = createEvalProviderGuard((phase, count) => {
     console.log(phase === "started" ? `  AI推定開始: ${count} 件目` : `  AI推定完了: ${count} 件`);
   });
-  console.log("合成の明細を1件ずつ推定します（端末内AIと、有効なら外部AIに送信）");
+  console.log(
+    "合成の明細と仕訳の入力（journal_entry）を1件ずつ推定します（端末内AIと、有効なら外部AIに送信）",
+  );
   const result = await evaluateStatementScenes(
-    STATEMENT_EVAL_CASES,
+    // 明細の場面（statement）の集計は、journal_entry を足しても変わらない（場面ごとに別に数える）
+    [...STATEMENT_EVAL_CASES, ...JOURNAL_ENTRY_EVAL_CASES],
     {
       local: guard(local, "local"),
       external: guard(external, "external"),
