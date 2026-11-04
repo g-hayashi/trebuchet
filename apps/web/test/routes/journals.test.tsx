@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Account } from "@/features/accounts/api";
@@ -390,6 +390,44 @@ describe("一覧のレビューの指摘（011）", () => {
     [`GET ${ENTITY}/tax-categories`]: () =>
       ok({ taxCategories: [{ code: "OUT_OF_SCOPE", name: "対象外", kind: null }] }),
   };
+
+  it("行の日付をクリックして詳細を開き、閉じるとその行の No. ボタンへ戻る", async () => {
+    mockListApi(() => ok({ journals: [entry], nextCursor: null }), detailApi);
+    const u = userEvent.setup();
+    renderJournals();
+    const table = await screen.findByRole("table", { name: "仕訳の一覧" });
+    const open = within(table).getByRole("button", { name: "仕訳 No.3 の詳細" });
+    await u.click(within(table).getByRole("cell", { name: "2026-10-03" }));
+    const sheet = await screen.findByRole("dialog", { name: "仕訳の詳細" });
+    await u.click(within(sheet).getByRole("button", { name: "閉じる" }));
+    await waitFor(() => expect(open).toHaveFocus());
+  });
+
+  it("摘要の文字を選択したクリックでは開かず、コピー後も選択を維持する", async () => {
+    const noted = { ...entry, memo: "コピーする摘要" };
+    mockListApi(() => ok({ journals: [noted], nextCursor: null }), detailApi);
+    const u = userEvent.setup();
+    renderJournals();
+    const note = await screen.findByText("コピーする摘要");
+    const selection = window.getSelection();
+    if (!selection) throw new Error("Selection がない");
+    const range = document.createRange();
+    range.selectNodeContents(note);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    try {
+      // ドラッグ終了時の click。userEvent.click の mousedown は選択を解除する。
+      fireEvent.click(note);
+      await u.copy();
+      expect(selection.toString()).toBe("コピーする摘要");
+      expect(screen.queryByRole("dialog", { name: "仕訳の詳細" })).not.toBeInTheDocument();
+      selection.removeAllRanges();
+      await u.click(note);
+      expect(await screen.findByRole("dialog", { name: "仕訳の詳細" })).toBeInTheDocument();
+    } finally {
+      selection.removeAllRanges();
+    }
+  });
 
   it("日付を両方空にして検索すると全期間で探し、API へ日付を送らない", async () => {
     const calls = mockListApi(() => ok({ journals: [entry], nextCursor: null }), periods);

@@ -169,6 +169,43 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
     ).toHaveCount(2);
   });
 
+  await test.step("摘要を選択・コピーし、行クリックとキーボードで詳細を開閉する", async () => {
+    const list = page.getByRole("table", { name: "仕訳の一覧", exact: true });
+    const row = list.getByRole("row").filter({
+      has: page.getByRole("button", { name: "仕訳 No.1 の詳細", exact: true }),
+    });
+    const note = row.getByText("10月分 取引先A", { exact: true });
+    const box = await note.boundingBox();
+    if (!box) throw new Error("摘要が表示されていない");
+    await page.mouse.move(box.x + 1, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2, { steps: 15 });
+    await page.mouse.up();
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.toString()))
+      .toBe("10月分 取引先A");
+    const sheet = page.getByRole("dialog", { name: "仕訳の詳細", exact: true });
+    await expect(sheet).toBeHidden();
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.keyboard.press("ControlOrMeta+c");
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe("10月分 取引先A");
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await row.getByRole("cell", { name: "2026-10-31", exact: true }).click();
+    await expect(sheet).toBeVisible();
+    const open = row.getByRole("button", { name: "仕訳 No.1 の詳細", exact: true });
+    await sheet.getByRole("button", { name: "閉じる", exact: true }).click();
+    await expect(open).toBeFocused();
+    for (const key of ["Enter", "Space"]) {
+      await page.keyboard.press(key);
+      await expect(sheet).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(sheet).toBeHidden();
+      await expect(open).toBeFocused();
+    }
+  });
+
   await test.step("試算表の借方合計と貸方合計が一致する", async () => {
     // 「帳票」は損益計算書へ進む。帳票のタブで試算表へ移る
     await openNav(page, "帳票");

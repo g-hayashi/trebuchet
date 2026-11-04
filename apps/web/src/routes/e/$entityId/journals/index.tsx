@@ -503,6 +503,7 @@ function JournalRow({
   accountNames: Map<string, string>;
   onOpen: (button: HTMLButtonElement) => void;
 }) {
+  const openButton = useRef<HTMLButtonElement>(null);
   const voided = journal.status === "voided";
   const sideLines = (side: "debit" | "credit") =>
     journal.lines
@@ -521,14 +522,33 @@ function JournalRow({
   ];
 
   return (
-    <TableRow className={cn("relative align-top", voided && "text-muted-foreground")}>
+    <TableRow
+      className={cn("align-top", voided && "text-muted-foreground")}
+      onClick={(event) => {
+        // 選択・コピーと行内の操作を優先する。キーボード操作は No. ボタンが受け持つ。
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey ||
+          window.getSelection()?.isCollapsed === false ||
+          (event.target instanceof Element &&
+            event.target.closest("button, a, input, select, textarea, [contenteditable]"))
+        )
+          return;
+        if (openButton.current) onOpen(openButton.current);
+      }}
+    >
       <TableCell className="tabular-nums">{journal.date}</TableCell>
       <TableCell className="text-right tabular-nums">
         <button
+          ref={openButton}
           type="button"
           onClick={(event) => onOpen(event.currentTarget)}
           aria-label={`仕訳 No.${journal.journalNo} の詳細`}
-          className="text-primary underline-offset-4 after:absolute after:inset-0 hover:underline focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
+          className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {journal.journalNo}
         </button>
