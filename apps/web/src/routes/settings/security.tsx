@@ -4,11 +4,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { authKeys, clearLedgerData, lockVault, regenerateRecoveryKey } from "@/features/auth/api";
+import { authKeys, regenerateRecoveryKey } from "@/features/auth/api";
 import { EventList } from "@/features/auth/EventList";
 import { PasskeyList } from "@/features/auth/PasskeyList";
 import { RecoveryCodePanel } from "@/features/auth/RecoveryCodePanel";
 import { SessionList } from "@/features/auth/SessionList";
+import { SIGN_OUT_CONFIRM_TEXT, SignOutButton } from "@/features/auth/SignOutButton";
 
 export const Route = createFileRoute("/settings/security")({
   component: SecurityPage,
@@ -16,7 +17,7 @@ export const Route = createFileRoute("/settings/security")({
 
 function SecurityPage() {
   return (
-    <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6">
+    <main className="grid gap-6 px-4 py-6">
       <h1 className="text-xl font-semibold">セキュリティ</h1>
       <PasskeyList />
       <RecoveryCard />
@@ -69,35 +70,17 @@ function RecoveryCard() {
   );
 }
 
-/** 施錠（008 D4.5）。全セッションを終え、帳簿を閉じる。解錠にはパスキーか回復キーが要る */
+/** 施錠してサインアウト（FR-055）。ヘッダーの「施錠してサインアウト」と同じ文・同じ操作（確認のあと、全セッションを終えて帳簿を閉じる） */
 function LockCard() {
-  const queryClient = useQueryClient();
-  const lockMutation = useMutation({
-    mutationFn: lockVault,
-    onSuccess: async () => {
-      // 帳簿のデータを画面に残さない。認証の状態を取り直すと、AuthGate が解錠の画面にする
-      clearLedgerData(queryClient);
-      await queryClient.invalidateQueries({ queryKey: authKeys.status });
-    },
-  });
   return (
     <Card>
       <CardHeader>
-        <CardTitle>施錠</CardTitle>
-        <CardDescription>
-          帳簿を閉じ、すべてのセッションを終えます。解錠にはパスキーか回復キーが要ります。
-        </CardDescription>
+        <CardTitle>施錠してサインアウト</CardTitle>
+        <CardDescription>{SIGN_OUT_CONFIRM_TEXT}</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-4">
-        <ApiErrorMessage error={lockMutation.error} />
+      <CardContent>
         <div>
-          <Button
-            variant="outline"
-            disabled={lockMutation.isPending}
-            onClick={() => lockMutation.mutate()}
-          >
-            施錠
-          </Button>
+          <SignOutButton />
         </div>
       </CardContent>
     </Card>

@@ -53,4 +53,19 @@ describe("設定のメニュー（contracts/ui-shell.md §6）", () => {
     ]);
     expect(within(nav).getByRole("link", { name: "AI" })).toHaveAttribute("aria-current", "page");
   });
+
+  it("今の画面だけに aria-current が付く（親のパスに一致して二重にならない）", async () => {
+    renderAt("/settings/backup");
+    const nav = await screen.findByRole("navigation", { name: "設定のメニュー" });
+    const current = within(nav)
+      .getAllByRole("link")
+      .filter((l) => l.hasAttribute("aria-current"));
+    expect(current.map((l) => l.textContent)).toEqual(["バックアップ"]);
+  });
+
+  it("4 つのページは同じ最大幅 max-w-4xl の中に並ぶ（FR-053）", async () => {
+    renderAt("/settings/security");
+    const nav = await screen.findByRole("navigation", { name: "設定のメニュー" });
+    expect(nav.parentElement).toHaveClass("max-w-4xl", "mx-auto");
+  });
 });

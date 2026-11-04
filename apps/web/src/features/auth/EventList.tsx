@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { AuthEventKind } from "@trebuchet/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CsvExport } from "@/components/ui/csv-export";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import {
   Table,
@@ -11,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
-import { eventsQuery } from "./api";
+import { EVENTS_CSV_HREF, eventsQuery } from "./api";
 
 const KIND_LABELS: Record<AuthEventKind, string> = {
   register: "登録",
@@ -29,17 +30,22 @@ const KIND_LABELS: Record<AuthEventKind, string> = {
   remote_settings_changed: "リモートの設定の変更",
 };
 
-/** 認証の記録（FR-008）。サーバーが返した新しい順のまま並べる。書き換え・削除の操作はない */
+/** 認証の記録（FR-008）。最近の 5 件を、サーバーが返した新しい順のまま並べる。全件は CSV に書き出す（FR-054）。書き換え・削除の操作はない */
 export function EventList() {
   const { data: events, isPending, error } = useQuery(eventsQuery());
   return (
     <Card>
       <CardHeader>
         <CardTitle>認証の記録</CardTitle>
-        <CardDescription>登録・解錠・施錠・回復などの記録です（新しい順）。</CardDescription>
+        <CardDescription>
+          登録・解錠・施錠・回復などの最近の記録です（新しい順に 5 件）。全件は CSV に書き出せます。
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <ApiErrorMessage error={error} />
+        <div>
+          <CsvExport href={EVENTS_CSV_HREF} disabled={!events || events.length === 0} />
+        </div>
         {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
         {events && (
           <Table aria-label="認証の記録">

@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import type { AuthStatus } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthGate } from "@/features/auth/AuthGate";
+import { SIGN_OUT_CONFIRM_TEXT } from "@/features/auth/SignOutButton";
 import { entitiesQuery } from "@/features/entities/api";
 import { Route } from "@/routes/settings/security";
 import {
@@ -655,9 +656,40 @@ describe("設定 / セキュリティ", () => {
     expect(callsTo(calls, "POST", "/api/auth/recovery/regenerate")).toHaveLength(1);
   });
 
-  it("施錠のボタンで sign-out を呼ぶ", async () => {
+  it("h1 は設定のメニューの名前と同じ「セキュリティ」で、ページ自身は幅を決めない（幅は設定のレイアウト）", async () => {
+    open();
+    const h1 = await screen.findByRole("heading", { level: 1, name: "セキュリティ" });
+    expect(h1.parentElement?.className).not.toMatch(/max-w-/);
+  });
+
+  it("認証の記録は最近の 5 件だけを読む（limit=5）", async () => {
+    const calls = open();
+    await screen.findByRole("table", { name: "認証の記録" });
+    expect(callsTo(calls, "GET", "/api/auth/events").map((c) => c.query)).toEqual([{ limit: "5" }]);
+  });
+
+  it("「CSV に書き出す」は全件の CSV（format=csv）へのリンクで、0 件なら無効", async () => {
+    open();
+    const link = await screen.findByRole("link", { name: "CSV に書き出す" });
+    expect(link).toHaveAttribute("href", "/api/auth/events?format=csv");
+    expect(link).toHaveAttribute("download");
+  });
+
+  it("認証の記録が 0 件なら「CSV に書き出す」は無効（リンクではなく押せないボタン）", async () => {
+    open({ "GET /api/auth/events": () => ok({ events: [] }) });
+    expect(await screen.findByRole("button", { name: "CSV に書き出す" })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: "CSV に書き出す" })).not.toBeInTheDocument();
+  });
+
+  it("施錠のカードは、ヘッダーの「施錠してサインアウト」と同じ文で確認してから sign-out を呼ぶ", async () => {
     const calls = open({ "POST /api/auth/sign-out": () => NO_CONTENT });
-    await userEvent.click(await screen.findByRole("button", { name: "施錠" }));
+    expect(await screen.findByText(SIGN_OUT_CONFIRM_TEXT)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "施錠" })).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "施錠してサインアウト" }));
+    // 確認の前は呼ばない
+    expect(callsTo(calls, "POST", "/api/auth/sign-out")).toHaveLength(0);
+    const dialog = await screen.findByRole("dialog", { name: "施錠してサインアウト" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "施錠してサインアウト" }));
     await waitFor(() => expect(callsTo(calls, "POST", "/api/auth/sign-out")).toHaveLength(1));
   });
 });
