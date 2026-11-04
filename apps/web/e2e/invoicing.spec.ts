@@ -132,6 +132,9 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
     await expect(sheet).toContainText("ご請求金額 202,500 円");
     await expect(sheet).toContainText("テスト銀行 本店 普通 1234567");
     await expect(page.getByRole("heading", { name: `請求書 ${invoiceNo}` })).toBeHidden();
+    // ヘッダーと事業体のメニューは印刷に出ない
+    await expect(page.getByRole("banner")).toBeHidden();
+    await expect(page.getByRole("navigation", { name: "事業体のメニュー" })).toBeHidden();
     await page.emulateMedia({ media: "screen" });
     await expect(page.getByRole("heading", { name: `請求書 ${invoiceNo}` })).toBeVisible();
   });

@@ -12,7 +12,18 @@ type PeriodPickerProps = {
   periods: readonly FiscalPeriod[];
   range: DateRange;
   onChange: (range: DateRange) => void;
+  /**
+   * 期間が 1 つの会計期間の中に収まる必要があるか（既定 true。試算表・元帳・損益計算書）。
+   * true のとき、収まらないプリセットは押せない（API が OUT_OF_PERIOD・VALIDATION を返す）。仕訳帳は false
+   */
+  withinPeriod?: boolean | undefined;
 };
+
+const NO_PERIOD_REASON = "この期間を含む会計期間がありません";
+
+/** from〜to が 1 つの会計期間の中に収まるか（server の resolvePeriod と同じ条件） */
+const fitsInPeriod = (periods: readonly FiscalPeriod[], from: string, to: string) =>
+  periods.some((p) => p.startDate <= from && to <= p.endDate);
 
 /** 期間の選択。会計期間を選ぶとすぐに、開始日・終了日は「表示」で反映する */
 export function PeriodPicker(props: PeriodPickerProps) {
@@ -20,7 +31,7 @@ export function PeriodPicker(props: PeriodPickerProps) {
   return <PeriodForm key={`${props.range.from}_${props.range.to}`} {...props} />;
 }
 
-function PeriodForm({ periods, range, onChange }: PeriodPickerProps) {
+function PeriodForm({ periods, range, onChange, withinPeriod = true }: PeriodPickerProps) {
   const id = useId();
   const [from, setFrom] = useState(range.from);
   const [to, setTo] = useState(range.to);
@@ -68,17 +79,27 @@ function PeriodForm({ periods, range, onChange }: PeriodPickerProps) {
       </form>
       <fieldset className="flex min-w-0 flex-wrap gap-2 border-0 p-0">
         <legend className="sr-only">期間のプリセット</legend>
-        {RANGE_PRESETS.map((preset) => (
-          <Button
-            key={preset.id}
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onChange(presetRange(preset.id))}
-          >
-            {preset.label}
-          </Button>
-        ))}
+        <span id={`${id}-preset-reason`} hidden>
+          {NO_PERIOD_REASON}
+        </span>
+        {RANGE_PRESETS.map((preset) => {
+          const target = presetRange(preset.id);
+          const blocked = withinPeriod && !fitsInPeriod(periods, target.from, target.to);
+          return (
+            <Button
+              key={preset.id}
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={blocked}
+              title={blocked ? NO_PERIOD_REASON : undefined}
+              aria-describedby={blocked ? `${id}-preset-reason` : undefined}
+              onClick={() => onChange(target)}
+            >
+              {preset.label}
+            </Button>
+          );
+        })}
       </fieldset>
     </div>
   );

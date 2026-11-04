@@ -10,6 +10,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { SignOutButton } from "@/features/auth/SignOutButton";
+import { EntitySwitcher } from "@/features/entities/EntitySwitcher";
 import { mobileNavItems } from "./EntityNav";
 
 /**
@@ -50,6 +51,7 @@ export function isMobileRoute(pathname: string): boolean {
 
 /**
  * スマホの幅のヘッダーのメニュー（FR-059）。ボタン「メニュー」で `Sheet` を開く。
+ * 事業体の切替（`EntitySwitcher`）をメニューの先頭に置く。
  * 事業体の項目は `EntityNav` の `mobile` を持つものだけ（`entityId` がなければ出さない）。
  * 設定と「施錠してサインアウト」はいつも出す
  */
@@ -70,6 +72,7 @@ export function MobileNav({ entityId }: { entityId: string | undefined }) {
             画面を選ぶ、設定を開く、サインアウトする
           </SheetDescription>
         </SheetHeader>
+        <EntitySwitcher onSelect={close} />
         <nav aria-label="スマホのメニュー" className="flex flex-col gap-3">
           {entityId !== undefined &&
             mobileNavItems().map((item) => (

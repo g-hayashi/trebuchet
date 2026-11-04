@@ -169,6 +169,12 @@ describe("スマホの幅のヘッダーとメニュー（FR-059）", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("メニューを開かなくても、開いている事業体を「最後に開いた事業体」として覚える", async () => {
+    renderAt("/e/e1/journals");
+    await menuButton();
+    await waitFor(() => expect(localStorage.getItem("trebuchet:lastEntityId")).toBe("e1"));
+  });
+
   it("押すと Sheet が開き、対象の画面と設定・施錠してサインアウトだけが並ぶ", async () => {
     const user = userEvent.setup();
     renderAt("/e/e1/journals");
@@ -212,6 +218,28 @@ describe("スマホの幅のヘッダーとメニュー（FR-059）", () => {
     const sheet = await screen.findByRole("dialog", { name: "メニュー" });
     await user.click(within(sheet).getByRole("button", { name: "施錠してサインアウト" }));
     expect(await screen.findByRole("heading", { name: "施錠してサインアウト" })).toBeVisible();
+  });
+
+  it("メニューの先頭に事業体の切替があり、選ぶと別の事業体のホームへ移って Sheet が閉じる", async () => {
+    mockApi({
+      "GET /api/entities": () =>
+        ok({ entities: [entity, { ...entity, id: "e2", name: "法人B", kind: "corporation" }] }),
+    });
+    const user = userEvent.setup();
+    const { router } = renderAt("/e/e1/journals");
+    await user.click(await menuButton());
+    const sheet = await screen.findByRole("dialog", { name: "メニュー" });
+    const select = await within(sheet).findByLabelText("事業体");
+    expect(select).toHaveValue("e1");
+    // 先頭: 切替は、画面の一覧の nav より前にある
+    const nav = within(sheet).getByRole("navigation", { name: "スマホのメニュー" });
+    expect(select.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // PC 側の切替は描画されず、id は 1 つだけ
+    expect(document.querySelectorAll("#entity-switcher")).toHaveLength(1);
+
+    await user.selectOptions(select, "e2");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/e/e2"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("事業体の外（設定）でも、設定と施錠してサインアウトに届く", async () => {

@@ -101,6 +101,7 @@ function JournalBookPage() {
             <PeriodPicker
               periods={periods}
               range={range}
+              withinPeriod={false}
               onChange={(next) => navigate({ search: (prev) => ({ ...prev, ...next }) })}
             />
             <JournalBookSortControls

@@ -538,6 +538,28 @@ describe("請求書を作る画面（011 US5。FR-032・033）", () => {
     );
   });
 
+  /** variant="default" の「発行する」が入っている案の名前 */
+  const primaryIssueRegions = () =>
+    screen
+      .getAllByRole("button", { name: "発行する" })
+      .filter((b) => b.className.split(" ").includes("bg-primary"))
+      .map((b) => b.closest("section")?.getAttribute("aria-label"));
+
+  it("案が 2 件のとき、default の「発行する」は先頭の案の 1 つだけ（ui-shell §7）", async () => {
+    setup([hourlyDraft(), monthlyDraft]);
+    await makeDrafts(user());
+    await screen.findByRole("region", { name: "請求書の案（B 商事）" });
+    expect(screen.getAllByRole("button", { name: "発行する" })).toHaveLength(2);
+    expect(primaryIssueRegions()).toEqual(["請求書の案（株式会社A）"]);
+  });
+
+  it("先頭の案が発行済みなら、次の未発行の案の「発行する」が default になる", async () => {
+    setup([hourlyDraft(), monthlyDraft], issuedList());
+    await makeDrafts(user());
+    await screen.findByText("発行済み（2026-0001）");
+    await waitFor(() => expect(primaryIssueRegions()).toEqual(["請求書の案（B 商事）"]));
+  });
+
   it("追加で作らない（選んでいない）ときは confirmDuplicate を送らない", async () => {
     const calls = setup([monthlyDraft], {
       ...issuedList(),

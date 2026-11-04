@@ -36,10 +36,12 @@ export async function entityToRestore(queryClient: QueryClient): Promise<string 
   return undefined;
 }
 
-/** ヘッダーの事業体の切り替え（`#entity-switcher`）。開いている事業体を「最後に開いた事業体」として保存する */
-export function EntitySwitcher() {
+/**
+ * 開いている事業体を「最後に開いた事業体」として保存し、他の事業体のキャッシュを破棄する。
+ * スマホでは切替がメニューの中にしかないので、切替ではなくヘッダー（`AppHeader`）から常に呼ぶ
+ */
+export function useRememberEntity(): void {
   const { entityId } = useParams({ strict: false });
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: entities } = useQuery(entitiesQuery());
   const current = entities?.some((e) => e.id === entityId) ? entityId : undefined;
@@ -53,6 +55,18 @@ export function EntitySwitcher() {
         queryKey[0] === entityKeys.all[0] && queryKey.length > 1 && queryKey[1] !== current,
     });
   }, [current, queryClient]);
+}
+
+/**
+ * ヘッダーの事業体の切り替え（`#entity-switcher`）。
+ * スマホではメニューの Sheet の中にだけ描く（PC のヘッダーとは同時に描かないので id は重ならない）。
+ * `onSelect` は移動の直後に呼ぶ（Sheet を閉じる）
+ */
+export function EntitySwitcher({ onSelect }: { onSelect?: (() => void) | undefined } = {}) {
+  const { entityId } = useParams({ strict: false });
+  const navigate = useNavigate();
+  const { data: entities } = useQuery(entitiesQuery());
+  const current = entities?.some((e) => e.id === entityId) ? entityId : undefined;
 
   // 1 件以上のとき出す（1 件でも「一覧・作成」から 2 件目を作れるように。2026-11-04 の E2E）
   if (entities === undefined || entities.length < 1) return null;
@@ -73,6 +87,7 @@ export function EntitySwitcher() {
           } else if (next !== "" && next !== current) {
             void navigate({ to: "/e/$entityId", params: { entityId: next } });
           }
+          onSelect?.();
         }}
       >
         {current === undefined && (

@@ -104,10 +104,13 @@ export function InvoiceDraftEditor({
   draft,
   partnerName,
   existing,
+  primary = true,
 }: {
   entityId: string;
   draft: InvoiceDraftView;
   partnerName: string;
+  /** 「発行する」を主な操作（variant=default）にするか。案が複数あるときは先頭の未発行の案だけ true（ui-shell §7） */
+  primary?: boolean | undefined;
   /** 同じ取引先・対象月の発行済み（未取消）の請求書。あれば「追加で作る」を選ぶまで発行できない（011 FR-033） */
   existing?: { id: string; invoiceNo: string } | undefined;
 }) {
@@ -445,6 +448,7 @@ export function InvoiceDraftEditor({
           {issued === undefined && (
             <Button
               type="submit"
+              variant={primary ? "default" : "outline"}
               disabled={issue.isPending || !ready || hasZero || (duplicate && !confirmed)}
             >
               発行する

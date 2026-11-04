@@ -26,6 +26,10 @@ export function InvoiceDraftList({
   const active = (partnerId: string) => !inactivePartnerIds?.has(partnerId);
   const drafts = result.drafts.filter((d) => active(d.partnerId));
   const skipped = result.skipped.filter((s) => active(s.partnerId));
+  const keyOf = (d: { partnerId: string; targetMonth: string }) =>
+    `${d.partnerId}-${d.targetMonth}`;
+  // 主な操作（variant=default）の「発行する」は、先頭の未発行の案だけ。発行すると次の案に移る（ui-shell §7）
+  const primaryKey = drafts.map(keyOf).find((key) => !issuedInvoices?.has(key));
   return (
     <div className="grid gap-4">
       {drafts.length === 0 && (
@@ -33,11 +37,12 @@ export function InvoiceDraftList({
       )}
       {drafts.map((draft) => (
         <InvoiceDraftEditor
-          key={`${draft.partnerId}-${draft.targetMonth}`}
+          key={keyOf(draft)}
           entityId={entityId}
           draft={draft}
           partnerName={nameOf(draft.partnerId)}
-          existing={issuedInvoices?.get(`${draft.partnerId}-${draft.targetMonth}`)}
+          existing={issuedInvoices?.get(keyOf(draft))}
+          primary={keyOf(draft) === primaryKey}
         />
       ))}
       {skipped.length > 0 && (

@@ -6,7 +6,7 @@ web のテストと E2E（`e2e/helpers/nav.ts`）が参照する名前。変え�
 
 - `header` の中: リンク「Trebuchet」（ロゴ）、今の事業体の名前のリンク、事業体の切替（`#entity-switcher`、1 件以上のとき。最後の項目「一覧・作成」でトップ `/?list=1` の一覧と作成へ移る。`list` があるとトップは 1 件でもホームへ redirect しない。2026-11-03 利用者の判断、2026-11-04 の E2E の指摘で「2 件以上」から「1 件以上」に変更）。
 - 右: リンク「設定」、ボタン「施錠してサインアウト」。押すと確認のダイアログ（見出し「施錠してサインアウト」、本文は research R17 の文、ボタン「施錠してサインアウト」「やめる」）。
-- スマホの幅: ロゴ・事業体の名前・ボタン「メニュー」（`aria-expanded`）。メニューは `Sheet`（`role="dialog"`、名前「メニュー」）。
+- スマホの幅: ロゴ・事業体の名前・ボタン「メニュー」（`aria-expanded`）。メニューは `Sheet`（`role="dialog"`、名前「メニュー」）。メニューの先頭に事業体の切替（2026-11-04 利用者の指摘による懸念の解消）。
 - 施錠中・未サインイン: 右の 2 つとメニューを出さない。
 
 ## 2. 事業体のメニュー（`components/layout/EntityNav.tsx`）
@@ -32,7 +32,7 @@ web のテストと E2E（`e2e/helpers/nav.ts`）が参照する名前。変え�
 
 ## 4. スマホ（`components/layout/MobileNav.tsx`、`PcRecommended.tsx`）
 
-- スマホの幅: `(max-width: 767px)`。
+- スマホの幅: `(max-width: 767px)`。メニュー（`Sheet`）の先頭に事業体の切替（`EntitySwitcher` を再利用。スマホでは PC のヘッダーの切替を描かないので `#entity-switcher` は重ならない。選ぶと移動して Sheet を閉じる。2026-11-04 利用者の指摘による懸念の解消）。
 - `MOBILE_ROUTES`（スマホのメニューに出し、PC の推奨を出さない）: 事業体のホーム、`receipts`・`receipts/new`・`receipts/$receiptId`、`journals`・`journals/$journalId`、`reports/*`、`/settings/*`、`/`。
 - 対象の外: `role="note"` で「PC での操作を推奨」。
 
@@ -56,5 +56,6 @@ web のテストと E2E（`e2e/helpers/nav.ts`）が参照する名前。変え�
 | 明細の確認 | 承認して次へ |
 | 証憑の追加 | 追加する |
 | 請求の流れ | 請求書を作る |
+| 請求書を作る（案が出ているとき） | 先頭の未発行の案の「発行する」だけ（ほかの案は outline。「内容を確認する」は outline） |
 | 請求書の詳細 | 印刷・PDF に保存（発行済み）／発行（下書きの確認） |
 | 決算書 | （なし。CSV と印刷は副） |

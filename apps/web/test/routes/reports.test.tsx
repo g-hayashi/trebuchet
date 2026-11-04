@@ -638,6 +638,77 @@ describe("期間のプリセット（FR-040）", () => {
       expect(screen.getByLabelText("終了日")).toHaveValue(to);
     }
   });
+
+  it("会計期間が今年だけのとき、昨年は押せず（理由つき）、今年・今月は押せる", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-20T00:00:00+09:00"));
+    mockReports({
+      [`GET ${ENTITY}/fiscal-periods`]: () => ok({ fiscalPeriods: [period(2026)] }),
+      [`GET ${ENTITY}/reports/trial-balance`]: (c) =>
+        ok(trialBalance(c.query.from ?? "", c.query.to ?? "", [])),
+    });
+    renderRoute(TrialBalanceRoute, {
+      path: "/e/$entityId/reports/trial-balance",
+      url: "/e/e1/reports/trial-balance",
+    });
+    await screen.findByRole("row", { name: /売掛金/ });
+
+    const lastYear = screen.getByRole("button", { name: "昨年" });
+    expect(lastYear).toBeDisabled();
+    expect(lastYear).toHaveAttribute("title", "この期間を含む会計期間がありません");
+    expect(lastYear).toHaveAccessibleDescription("この期間を含む会計期間がありません");
+    for (const label of ["今月", "先月", "今四半期", "今年"]) {
+      const button = screen.getByRole("button", { name: label });
+      expect(button, label).toBeEnabled();
+      expect(button, label).not.toHaveAttribute("title");
+    }
+  });
+
+  it("会計期間が 2 つの年にまたがる範囲（年をまたぐ四半期など）は、1 つの期間に収まらないので押せない", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-20T00:00:00+09:00"));
+    mockReports({
+      [`GET ${ENTITY}/fiscal-periods`]: () =>
+        ok({
+          fiscalPeriods: [
+            { ...period(2026), startDate: "2025-10-01", endDate: "2026-03-31" },
+            { ...period(2027), startDate: "2026-04-01", endDate: "2027-03-31" },
+          ],
+        }),
+      [`GET ${ENTITY}/reports/trial-balance`]: (c) =>
+        ok(trialBalance(c.query.from ?? "", c.query.to ?? "", [])),
+    });
+    renderRoute(TrialBalanceRoute, {
+      path: "/e/$entityId/reports/trial-balance",
+      url: "/e/e1/reports/trial-balance",
+    });
+    await screen.findByRole("row", { name: /売掛金/ });
+    expect(screen.getByRole("button", { name: "今月" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "今四半期" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "今年" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "昨年" })).toBeDisabled();
+  });
+
+  it("仕訳帳は会計期間をまたいでよいので、押せないプリセットはない", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-20T00:00:00+09:00"));
+    mockReports({
+      [`GET ${ENTITY}/fiscal-periods`]: () => ok({ fiscalPeriods: [period(2026)] }),
+      [`GET ${ENTITY}/reports/journal-book`]: (c) =>
+        ok({
+          kind: "journal-book",
+          from: c.query.from ?? "",
+          to: c.query.to ?? "",
+          entries: [],
+          warnings: [],
+        }),
+    });
+    renderRoute(JournalBookRoute, {
+      path: "/e/$entityId/reports/journal-book",
+      url: "/e/e1/reports/journal-book",
+    });
+    expect(await screen.findByRole("button", { name: "昨年" })).toBeEnabled();
+  });
 });
 
 describe("科目名から総勘定元帳へ（FR-039）", () => {

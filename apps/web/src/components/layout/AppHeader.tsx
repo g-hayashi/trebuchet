@@ -2,7 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { SignOutButton } from "@/features/auth/SignOutButton";
 import { entitiesQuery } from "@/features/entities/api";
-import { EntitySwitcher, lastEntityIdOf } from "@/features/entities/EntitySwitcher";
+import {
+  EntitySwitcher,
+  lastEntityIdOf,
+  useRememberEntity,
+} from "@/features/entities/EntitySwitcher";
 import { useIsMobile } from "@/lib/use-media-query";
 import { MobileNav } from "./MobileNav";
 
@@ -19,6 +23,7 @@ export function AppHeader() {
   const entity = entities?.find((e) => e.id === entityId);
   const homeId = entity?.id ?? lastEntityIdOf(entities);
   const mobile = useIsMobile();
+  useRememberEntity();
   return (
     <header className="border-b bg-card">
       <div className="mx-auto flex min-h-12 max-w-6xl flex-wrap items-center gap-x-6 gap-y-1 px-4 py-1">
