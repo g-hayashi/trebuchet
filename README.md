@@ -121,4 +121,4 @@ Mac が施錠されている間は、`ts.net` の名前では使えない（解�
 | どの銀行の明細でも読む | [specs/007-generic-statement-import/](specs/007-generic-statement-import/) |
 | 帳簿の暗号化 | [specs/008-passkey-vault/design.md](specs/008-passkey-vault/design.md) |
 
-開発の規約は [AGENTS.md](AGENTS.md)。要件の状態は [docs/requirements.md](docs/requirements.md)。設計の判断は [docs/adr/](docs/adr/)。不変条件の索引は [specs/INVARIANTS.md](specs/INVARIANTS.md)。
+開発の規約は [AGENTS.md](AGENTS.md)、機能ごとの置き場所と規則は [docs/features/](docs/features/)。要件の状態は [docs/requirements.md](docs/requirements.md)。設計の判断は [docs/adr/](docs/adr/)。不変条件の索引は [specs/INVARIANTS.md](specs/INVARIANTS.md)。
