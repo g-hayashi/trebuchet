@@ -178,13 +178,12 @@ export const postBuildCandidates = async (entityId: string) =>
   unwrap(await entityApi.statements.candidates.$post({ param: { entityId }, json: {} }));
 
 /**
- * 承認の入力。`draft` か `match` のどちらか（省略で候補のまま）。
- * `learn: false` はルールを学ばない。`purpose`・`partnerId` は学ぶルールの判定・取引先（省略で仕訳のとおり）
+ * 承認の入力。`draft` か `match` のどちらか（省略で候補のまま）。承認のたびにルールを学ぶ（011 R9）。
+ * `purpose`・`partnerId` は学ぶルールの判定・取引先（省略で仕訳のとおり）
  */
 export type ApproveBody = {
   draft?: JournalInput | undefined;
   match?: { journalId: string; lineId: string } | undefined;
-  learn?: false | undefined;
   purpose?: Purpose | undefined;
   partnerId?: string | undefined;
 };

@@ -512,6 +512,21 @@ describe("inference_rules（§1.6）", () => {
     );
     expect(() => insert("inference_rules", ruleRow(acc, { hits: -1 }))).toThrow(/CHECK/);
     expect(() => insert("inference_rules", ruleRow(acc, { overrides: -1 }))).toThrow(/CHECK/);
+    expect(() => insert("inference_rules", ruleRow(acc, { managed_by: "x" }))).toThrow(/CHECK/);
+  });
+
+  it("managed_by は既定 auto。user も入る（T018）", () => {
+    const acc = seedAccount("4004");
+    insert("inference_rules", ruleRow(acc));
+    insert("inference_rules", ruleRow(acc, { normalized_content: "別", managed_by: "user" }));
+    expect(
+      all("SELECT normalized_content AS c, managed_by AS m FROM inference_rules ORDER BY c"),
+    ).toEqual(
+      expect.arrayContaining([
+        { c: "ランチ", m: "auto" },
+        { c: "別", m: "user" },
+      ]),
+    );
   });
 
   it("（正規化した内容, 口座 | すべて）は一意。NULL（すべて）どうしも重複できない", () => {

@@ -32,6 +32,7 @@ const ruleArb: fc.Arbitrary<InferenceRule> = fc
     overrides,
     status,
     origin: "approval" as const,
+    managedBy: "auto" as const,
     createdAt: "",
     updatedAt: "",
   }));
@@ -82,6 +83,7 @@ describe("learnRule（性質）", () => {
             id: "r",
             status: "active",
             origin: "approval",
+            managedBy: "auto",
             createdAt: "",
             updatedAt: "",
             ...learned.rule,
@@ -124,6 +126,7 @@ describe("ruleFor（性質）", () => {
             overrides: 0,
             status: s.status,
             origin: "approval",
+            managedBy: "auto",
             createdAt: "",
             updatedAt: "",
           }));

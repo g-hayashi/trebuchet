@@ -76,15 +76,40 @@ describe("承認からの学習（§4.4）", () => {
     expect(await listRules({ status: "paused" })).toEqual([]);
   });
 
-  it("learn: false なら学ばない（rule は返らず、一覧は空）", async () => {
+  it("learn を渡しても無視して常に学ぶ。ルールは managedBy auto（T018）", async () => {
     await importLines(line("05/10(日)", "ショップ001", "-1,200", BANK, "", 0));
     const res = await approve(await idOf("ショップ001"), {
       draft: draftOf("消耗品費"),
       learn: false,
     });
     expect(res.status).toBe(201);
+    expect((await okBody(res)).rule).toMatchObject({ managedBy: "auto" });
+    expect(await listRules()).toHaveLength(1);
+  });
+
+  it("PATCH で managedBy が user になり、以後の承認はそのルールを変えない（INV-71）", async () => {
+    await importLines(
+      line("05/10(日)", "ショップ001", "-1,200", BANK, "", 0),
+      line("05/11(月)", "ショップ002", "-1,200", BANK, "", 0),
+    );
+    const first = await okBody(
+      await approve(await idOf("ショップ001"), { draft: draftOf("消耗品費") }),
+    );
+    const id = first.rule?.id ?? "";
+    const patched = await rules()[":ruleId"].$patch({
+      ...ruleId(id),
+      json: { counterAccountId: ctx.accountId("地代家賃") },
+    });
+    expect((await okBody(patched)).rule).toMatchObject({ managedBy: "user" });
+    const before = await listRules();
+
+    const res = await approve(await idOf("ショップ002"), {
+      draft: draftOf("消耗品費", 1_200, "2026-05-11"),
+    });
+    expect(res.status).toBe(201);
     expect((await okBody(res)).rule).toBeUndefined();
-    expect(await listRules()).toEqual([]);
+    expect(await listRules()).toEqual(before);
+    expect(before[0]).toMatchObject({ managedBy: "user", hits: 1, overrides: 0 });
   });
 
   it("purpose・partnerId を受け取り、学習に使う。存在しない取引先は 400 VALIDATION で何も書かない", async () => {

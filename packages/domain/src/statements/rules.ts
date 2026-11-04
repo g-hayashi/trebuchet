@@ -73,18 +73,31 @@ export type LearnedRule = RuleKey & RuleBody & { hits: number; overrides: number
 /**
  * 承認から学ぶ。ルールがなければ新規（`hits` 1）、同じ内容なら `hits` を加算、違う内容なら
  * `overrides` を加算して承認の内容に置き換える（`hits` は変えない）。結果は承認の内容と一致する。
+ * `managedBy` が `user` のルールは変えない（`action` は `none`、結果は今のルールの内容。011 R9・INV-71）。
  * `rule` は承認の口座のルール（なければ null）。状態・出所・日時は呼び出し側が引き継ぐ
  */
 export function learnRule(
   rule: InferenceRule | null,
   approval: RuleApproval,
-): { action: "create" | "update"; rule: LearnedRule } {
+): { action: "create" | "update" | "none"; rule: LearnedRule } {
   const key = {
     normalizedContent: approval.normalizedContent,
     statementAccountId: approval.statementAccountId,
   };
   const body = bodyOf(approval.body);
   if (rule === null) return { action: "create", rule: { ...key, ...body, hits: 1, overrides: 0 } };
+  if (rule.managedBy === "user") {
+    return {
+      action: "none",
+      rule: {
+        normalizedContent: rule.normalizedContent,
+        statementAccountId: rule.statementAccountId,
+        ...bodyOf(rule),
+        hits: rule.hits,
+        overrides: rule.overrides,
+      },
+    };
+  }
   const same = sameBody(rule, body);
   return {
     action: "update",

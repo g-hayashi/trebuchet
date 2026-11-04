@@ -416,13 +416,12 @@ export const InferInput = z.object({
 });
 export type InferInput = z.infer<typeof InferInput>;
 
-/** POST /statements/:statementId/approve（省略で候補のまま） */
+/** POST /statements/:statementId/approve（省略で候補のまま。承認のたびにルールを学ぶ） */
 export const ApproveInput = z.object({
   draft: JournalInput.optional(),
   purpose: Purpose.optional(),
   match: z.object({ journalId: Id, lineId: Id }).optional(),
   partnerId: Id.optional(),
-  learn: z.boolean().default(true),
 });
 export type ApproveInput = z.infer<typeof ApproveInput>;
 
@@ -451,6 +450,11 @@ export const RULE_ORIGINS = ["approval", "seed"] as const;
 export const RuleOrigin = z.enum(RULE_ORIGINS);
 export type RuleOrigin = z.infer<typeof RuleOrigin>;
 
+/** ルールの管理の主体。`user` は利用者が直した・止めたルール。承認・初期作成の自動の作成・更新は変えない（011 R9・INV-71） */
+export const RULE_MANAGED_BY = ["auto", "user"] as const;
+export const RuleManagedBy = z.enum(RULE_MANAGED_BY);
+export type RuleManagedBy = z.infer<typeof RuleManagedBy>;
+
 export const InferenceRuleView = z.object({
   id: Id,
   normalizedContent: z.string(),
@@ -466,6 +470,7 @@ export const InferenceRuleView = z.object({
   confidence: Percent,
   status: RuleStatus,
   origin: RuleOrigin,
+  managedBy: RuleManagedBy,
   createdAt: Timestamp,
   updatedAt: Timestamp,
 });

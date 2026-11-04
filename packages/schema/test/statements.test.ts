@@ -4,6 +4,7 @@ import {
   AiSettings,
   AiSettingsInput,
   AiSuggestion,
+  ApproveInput,
   Candidate,
   ErrorCode,
   InferenceRuleView,
@@ -342,11 +343,20 @@ describe("Candidate・StatementView・InferenceRuleView", () => {
       confidence: 80,
       status: "active",
       origin: "approval",
+      managedBy: "auto",
       createdAt: NOW,
       updatedAt: NOW,
     };
     expect(InferenceRuleView.safeParse(rule).success).toBe(true);
     expect(InferenceRuleView.safeParse({ ...rule, status: "gone" }).success).toBe(false);
+    expect(InferenceRuleView.safeParse({ ...rule, managedBy: "user" }).success).toBe(true);
+    expect(InferenceRuleView.safeParse({ ...rule, managedBy: "other" }).success).toBe(false);
+    const { managedBy: _managedBy, ...withoutManagedBy } = rule;
+    expect(InferenceRuleView.safeParse(withoutManagedBy).success).toBe(false);
+  });
+  it("ApproveInput に learn はない（承認のたびに学ぶ。T018）", () => {
+    expect(ApproveInput.parse({ learn: false })).not.toHaveProperty("learn");
+    expect(ApproveInput.parse({})).not.toHaveProperty("learn");
   });
 });
 

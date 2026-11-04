@@ -20,6 +20,7 @@ import type {
   ReceiptReadingStatus,
   ReportSection,
   RuleHistoryAction,
+  RuleManagedBy,
   RuleOrigin,
   RuleStatus,
   Side,
@@ -617,6 +618,8 @@ export type InferenceRule = {
   overrides: number;
   status: RuleStatus;
   origin: RuleOrigin;
+  /** `user` は利用者が直した・止めたルール。承認の学びと初期作成は変えない（011 R9・INV-71） */
+  managedBy: RuleManagedBy;
   createdAt: string;
   updatedAt: string;
 };

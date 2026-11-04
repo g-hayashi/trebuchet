@@ -98,12 +98,57 @@ describe("承認からの学習", () => {
     });
   });
 
-  it("learn: false なら学ばない（ルールも履歴も増えず、結果に rule がない）", () => {
+  it("承認のたびに学ぶ。作ったルールは managedBy auto（T018・R9）", () => {
     ctx.importRows([ctx.row({ content: "ショップ001" })]);
-    const approved = approveWith("ショップ001", ctx.a.rent, { learn: false });
+    const approved = approveWith("ショップ001");
+    expect(approved.rule).toMatchObject({ managedBy: "auto" });
+    expect(rules()).toHaveLength(1);
+    expect(rules()[0]?.managedBy).toBe("auto");
+  });
+
+  it("managedBy が user のルールは承認で変えない（ルール・履歴・監査が増えず、結果に rule がない。INV-71）", () => {
+    ctx.importRows([
+      ctx.row({ content: "ショップ001" }),
+      ctx.row({ content: "ショップ002", date: "2026-05-11" }),
+    ]);
+    approveWith("ショップ001");
+    const id = rules()[0]?.id ?? "";
+    unwrap(updateRule(ctx.deps, id, { counterAccountId: ctx.a.supplies }));
+    const before = structuredClone(rules());
+    const historyBefore = history().length;
+    const ruleAudits = () =>
+      ctx.uow.statements.audits.filter((a) => a.targetType === "inference_rule").length;
+    const auditBefore = ruleAudits();
+
+    const approved = approveWith("ショップ002", ctx.a.rent);
     expect(approved.rule).toBeUndefined();
-    expect(rules()).toHaveLength(0);
-    expect(history()).toHaveLength(0);
+    expect(rules()).toEqual(before);
+    expect(history()).toHaveLength(historyBefore);
+    expect(ruleAudits()).toBe(auditBefore);
+  });
+
+  it("updateRule・pauseRule・resumeRule で managedBy が user になる（戻さない）。変更がなければ auto のまま", () => {
+    ctx.importRows([ctx.row({ content: "ショップ001" }), ctx.row({ content: "ショップ002" })]);
+    approveWith("ショップ001");
+    const id = rules()[0]?.id ?? "";
+    unwrap(updateRule(ctx.deps, id, { counterAccountId: ctx.a.rent }));
+    expect(rules()[0]?.managedBy).toBe("auto");
+
+    const paused = unwrap(pauseRule(ctx.deps, id));
+    expect(paused.managedBy).toBe("user");
+    expect(rules()[0]?.managedBy).toBe("user");
+    expect(unwrap(resumeRule(ctx.deps, id)).managedBy).toBe("user");
+    unwrap(updateRule(ctx.deps, id, { taxCategory: "PURCHASE_8R" }));
+    expect(rules()[0]?.managedBy).toBe("user");
+  });
+
+  it("科目を直すと user になる", () => {
+    ctx.importRows([ctx.row({ content: "ショップ001" })]);
+    approveWith("ショップ001");
+    const id = rules()[0]?.id ?? "";
+    expect(unwrap(updateRule(ctx.deps, id, { counterAccountId: ctx.a.supplies })).managedBy).toBe(
+      "user",
+    );
   });
 
   it("口座が違えば別のルール。判定（purpose）と取引先の入力が学習に使われる", () => {
@@ -404,6 +449,7 @@ describe("ルールの初期作成・一覧・編集・停止・再開・履歴"
       normalizedContent: "ショップ#",
       statementAccountId: null,
       origin: "seed",
+      managedBy: "auto",
       hits: 2,
       counterAccountId: ctx.a.rent,
     });
@@ -424,6 +470,21 @@ describe("ルールの初期作成・一覧・編集・停止・再開・履歴"
     const c = candidateOf(ctx.idOf("ショップ777"));
     expect(c).toMatchObject({ method: "rule", confidence: 70 });
     expect(c?.reason).toContain("2 件");
+  });
+
+  it("managedBy が user のルールは seedRulesFromJournals で変えない（同じ内容があれば飛ばす）", () => {
+    postExpense("ショップ 001");
+    postExpense("ショップ 002");
+    unwrap(seedRulesFromJournals(ctx.deps));
+    const id = rules()[0]?.id ?? "";
+    unwrap(pauseRule(ctx.deps, id));
+    unwrap(updateRule(ctx.deps, id, { counterAccountId: ctx.a.supplies }));
+    const before = structuredClone(rules());
+    for (let i = 3; i <= 10; i++) postExpense(`ショップ 00${i}`, ctx.a.supplies);
+    const again = unwrap(seedRulesFromJournals(ctx.deps));
+    expect(again).toMatchObject({ created: 0, skipped: 1 });
+    expect(rules()).toEqual(before);
+    expect(rules()[0]).toMatchObject({ managedBy: "user", status: "paused" });
   });
 
   it("listRules は status で絞り込める。確信度つき", () => {

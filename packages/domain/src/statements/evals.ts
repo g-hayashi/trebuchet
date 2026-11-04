@@ -114,6 +114,7 @@ export function learnEvalRules(samples: readonly EvalSample[]): InferenceRule[] 
       ...learned.rule,
       status: "active",
       origin: "approval",
+      managedBy: "auto",
       createdAt: s.date,
       updatedAt: s.date,
     });

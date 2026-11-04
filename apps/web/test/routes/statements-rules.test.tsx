@@ -62,6 +62,7 @@ const rule = (n: number, over: Record<string, unknown> = {}) => ({
   confidence: 60,
   status: "active",
   origin: "approval",
+  managedBy: "auto",
   createdAt: "2026-10-20T00:00:00.000Z",
   updatedAt: "2026-10-25T00:00:00.000Z",
   ...over,

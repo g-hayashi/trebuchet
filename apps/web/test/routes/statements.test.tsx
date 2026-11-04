@@ -468,15 +468,15 @@ describe("承認（H:§4.4）", () => {
       return editor();
     };
 
-    it("既定ではルールを学ぶ（チェック済み）。何も指定しなければ learn・purpose・partnerId を送らない", async () => {
+    it("承認のたびに学ぶ。チェックはなく、何も指定しなければ learn・purpose・partnerId を送らない", async () => {
       const { all } = openForApproval();
       const u = user();
       renderStatements();
       const panel = await openPanel(u);
 
       expect(
-        within(panel).getByRole("checkbox", { name: "この承認からルールを学ぶ" }),
-      ).toBeChecked();
+        within(panel).queryByRole("checkbox", { name: "この承認からルールを学ぶ" }),
+      ).not.toBeInTheDocument();
       expect(within(panel).getByLabelText("判定（ルールに記憶）")).toHaveValue("");
       expect(within(panel).getByLabelText("取引先（ルールに記憶）")).toHaveValue("");
       await u.click(within(panel).getByRole("button", { name: "承認して登録" }));
@@ -485,22 +485,6 @@ describe("承認（H:§4.4）", () => {
       expect(body).not.toHaveProperty("learn");
       expect(body).not.toHaveProperty("purpose");
       expect(body).not.toHaveProperty("partnerId");
-    });
-
-    it("チェックを外すと learn: false を送る（ルールを学ばない）", async () => {
-      const { all } = openForApproval();
-      const u = user();
-      renderStatements();
-      const panel = await openPanel(u);
-
-      await u.click(within(panel).getByRole("checkbox", { name: "この承認からルールを学ぶ" }));
-      expect(within(panel).getByLabelText("判定（ルールに記憶）")).toBeDisabled();
-      expect(within(panel).getByLabelText("取引先（ルールに記憶）")).toBeDisabled();
-      await u.click(within(panel).getByRole("button", { name: "承認して登録" }));
-      await screen.findByText("承認しました（仕訳 No.7）。");
-      const body = calls(all, "POST", `/statements/${uuid(1)}/approve`)[0]?.body;
-      expect(body).toMatchObject({ learn: false });
-      expect(body).not.toHaveProperty("purpose");
     });
 
     it("判定（事業／私用）と取引先を選ぶと、purpose・partnerId を送る", async () => {
