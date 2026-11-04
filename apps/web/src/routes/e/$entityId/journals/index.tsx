@@ -1,7 +1,8 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, stripSearchParams, useNavigate } from "@tanstack/react-router";
 import { JournalQuery } from "@trebuchet/schema";
 import { useEffect, useRef, useState } from "react";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
@@ -32,12 +33,18 @@ import { groupAccountsBySection } from "@/lib/accounts";
 import { formatYen, parseWholeYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-/** URL の検索パラメータ（FR-023）。ページの指定（cursor・limit）は URL に残さない */
-const JournalSearchParams = JournalQuery.omit({ cursor: true, limit: true });
+/**
+ * URL の検索パラメータ（FR-023）。ページの指定（cursor・limit）は URL に残さない。
+ * `allDates` は利用者が日付を両方空にして探したことを表す（URL に日付がないと既定の会計期間を補うため）。
+ * API へは送らない
+ */
+const JournalSearchParams = JournalQuery.omit({ cursor: true, limit: true }).extend({
+  allDates: z.boolean().default(false),
+});
 
 export const Route = createFileRoute("/e/$entityId/journals/")({
   validateSearch: JournalSearchParams,
-  search: { middlewares: [stripSearchParams({ includeVoided: false })] },
+  search: { middlewares: [stripSearchParams({ includeVoided: false, allDates: false })] },
   component: JournalsPage,
 });
 
@@ -49,18 +56,25 @@ function JournalsPage() {
   const search = Route.useSearch();
   const defaults = useReportRange(entityId, {});
   const effectiveSearch =
-    search.dateFrom !== undefined || search.dateTo !== undefined || !defaults.range
+    search.dateFrom !== undefined ||
+    search.dateTo !== undefined ||
+    search.allDates ||
+    !defaults.range
       ? search
       : { ...search, dateFrom: defaults.range.from, dateTo: defaults.range.to };
+  const { allDates: _allDates, ...apiSearch } = effectiveSearch;
   const clearSearch: SearchInput = defaults.range
     ? { dateFrom: defaults.range.from, dateTo: defaults.range.to }
     : {};
   const navigate = useNavigate({ from: Route.fullPath });
   const journals = useInfiniteQuery({
-    ...journalSearchQuery(entityId, effectiveSearch),
+    ...journalSearchQuery(entityId, apiSearch),
+    placeholderData: keepPreviousData,
     enabled: !defaults.isPending && !defaults.error,
   });
   const [selected, setSelected] = useState<string>();
+  /** 開いている訂正のフォームに未保存の変更があるか（Sheet を閉じる前の確認に使う） */
+  const correctionDirty = useRef(false);
   const opener = useRef<HTMLButtonElement | null>(null);
   const accounts = useQuery(accountsQuery(entityId));
   const partners = useQuery(partnersQuery(entityId));
@@ -85,6 +99,7 @@ function JournalsPage() {
         <SearchForm
           search={effectiveSearch}
           clearSearch={clearSearch}
+          hasDefaultRange={defaults.range !== undefined}
           accounts={accounts.data}
           partners={partners.data}
           tags={tags.data}
@@ -95,7 +110,7 @@ function JournalsPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {hasFilter(effectiveSearch) ? "検索の結果（新しい順）" : "仕訳（新しい順）"}
+            {hasFilter(apiSearch) ? "検索の結果（新しい順）" : "仕訳（新しい順）"}
           </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -121,13 +136,13 @@ function JournalsPage() {
           )}
           {items?.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              {hasFilter(effectiveSearch)
+              {hasFilter(apiSearch)
                 ? "条件に合う仕訳がありません。"
                 : "仕訳がありません。「仕訳を入力」から登録してください。"}
             </p>
           )}
           {items && items.length > 0 && accounts.data && (
-            <Table aria-label="仕訳の一覧">
+            <Table aria-label="仕訳の一覧" aria-busy={journals.isPlaceholderData || undefined}>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-28">日付</TableHead>
@@ -168,7 +183,10 @@ function JournalsPage() {
       <Sheet
         open={selected !== undefined}
         onOpenChange={(open) => {
-          if (!open) setSelected(undefined);
+          if (open) return;
+          if (correctionDirty.current && !window.confirm("訂正の入力を破棄して閉じますか？"))
+            return;
+          setSelected(undefined);
         }}
       >
         <SheetContent
@@ -195,6 +213,9 @@ function JournalsPage() {
               entityId={entityId}
               journalId={selected}
               embedded
+              onCorrectionDirtyChange={(dirty) => {
+                correctionDirty.current = dirty;
+              }}
             />
           )}
         </SheetContent>
@@ -243,6 +264,7 @@ const searchKeyOf = (search: SearchInput) =>
 function SearchForm({
   search,
   clearSearch,
+  hasDefaultRange,
   accounts,
   partners,
   tags,
@@ -251,6 +273,8 @@ function SearchForm({
 }: {
   search: JournalSearch;
   clearSearch: SearchInput;
+  /** 既定の会計期間があるか。日付を両方空にしたとき「全期間」を URL に明示する */
+  hasDefaultRange: boolean;
   accounts: Account[];
   partners: Partner[];
   tags: Tag[];
@@ -292,6 +316,7 @@ function SearchForm({
       tagId: next.tagId || undefined,
       q: next.q.trim() || undefined,
       includeVoided: next.includeVoided || undefined,
+      allDates: hasDefaultRange && !next.dateFrom && !next.dateTo ? true : undefined,
     };
     const filtered = Object.fromEntries(
       Object.entries(parsed).filter(([, item]) => item !== undefined),

@@ -66,10 +66,13 @@ export function JournalDetailContent({
   entityId,
   journalId,
   embedded = false,
+  onCorrectionDirtyChange,
 }: {
   entityId: string;
   journalId: string;
   embedded?: boolean | undefined;
+  /** 訂正のフォームに未保存の変更があるかが変わったとき呼ぶ（Sheet を閉じる前の確認用） */
+  onCorrectionDirtyChange?: ((dirty: boolean) => void) | undefined;
 }) {
   const Heading = embedded ? "h3" : "h1";
   const queryClient = useQueryClient();
@@ -229,6 +232,7 @@ export function JournalDetailContent({
                   taxCategories={taxCategories.data}
                   defaultDate={journal.date}
                   journal={journal}
+                  onDirtyChange={onCorrectionDirtyChange}
                   submitLabel="訂正を保存"
                   onSubmit={(input) =>
                     new Promise<void>((resolve, reject) => setPending({ input, resolve, reject }))

@@ -10,18 +10,26 @@ import type { Partner } from "@/features/masters/api";
 import { journalSuggestionsQuery } from "./api";
 import type { JournalFormControl } from "./JournalForm";
 
+/**
+ * 摘要・取引先に対する履歴の候補の状態。`pending` は入力の待ち（300ms）か読み込み中、
+ * `found` は候補が出ている、`empty` は 0 件か失敗、`idle` は探す条件がない
+ */
+export type SuggestionStatus = "idle" | "pending" | "found" | "empty";
+
 export function JournalSuggestions({
   form,
   entityId,
   accounts,
   partners,
   taxCategories,
+  onStatusChange,
 }: {
   form: JournalFormControl;
   entityId: string;
   accounts: Account[];
   partners: Partner[];
   taxCategories: TaxCategory[];
+  onStatusChange?: ((status: SuggestionStatus) => void) | undefined;
 }) {
   const memo = useWatch({ control: form.control, name: "memo" }) ?? "";
   const lines = useWatch({ control: form.control, name: "lines" });
@@ -60,6 +68,19 @@ export function JournalSuggestions({
   // 順序・重複排除・最大件数は server の契約をそのまま使う。
   const suggestions = ready ? (result.data ?? []) : [];
   const error = ready ? result.error : undefined;
+  const wanted = Boolean((memo.length <= 200 ? memo.trim() : "") || partnerId);
+  const status: SuggestionStatus = !wanted
+    ? "idle"
+    : !ready || result.isPending
+      ? "pending"
+      : suggestions.length > 0
+        ? "found"
+        : "empty";
+  const reportStatus = useRef(onStatusChange);
+  reportStatus.current = onStatusChange;
+  useEffect(() => {
+    reportStatus.current?.(status);
+  }, [status]);
   const usable = (item: JournalSuggestion) =>
     lines.length === 2 &&
     lines.filter((line) => line.side === "debit").length === 1 &&

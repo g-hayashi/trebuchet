@@ -31,7 +31,7 @@ import { ApiError } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CreateFiscalPeriodLink } from "./CreateFiscalPeriodLink";
-import { JournalSuggestions } from "./JournalSuggestions";
+import { JournalSuggestions, type SuggestionStatus } from "./JournalSuggestions";
 import { QuickEntryForm } from "./QuickEntryForm";
 
 const SIDE_LABELS: Record<Side, string> = { debit: "借方", credit: "貸方" };
@@ -249,6 +249,8 @@ export type JournalFormProps = {
   taxSettings: TaxSetting[];
   taxCategories: TaxCategory[];
   defaultDate: string;
+  /** 入力が初期値から変わったかが変わったとき呼ぶ。アンマウントで false を渡す（閉じる前の確認用） */
+  onDirtyChange?: ((dirty: boolean) => void) | undefined;
   /** 訂正する仕訳。その内容で始め、使っている使用停止の科目・補助科目・取引先も選べるようにする */
   journal?: JournalFormSource | undefined;
   /** 訂正仕訳として登録するときの訂正元（FR-019a） */
@@ -291,6 +293,7 @@ export function JournalForm({
   historySuggestions = false,
   disabled = false,
   allowModeSwitch = initialMode === "quick",
+  onDirtyChange,
 }: JournalFormProps) {
   const form: Form = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(FormSchema),
@@ -315,6 +318,15 @@ export function JournalForm({
   );
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "lines" });
   const [mode, setMode] = useState(initialMode);
+  const isDirty = form.formState.isDirty;
+  const dirtyListener = useRef(onDirtyChange);
+  dirtyListener.current = onDirtyChange;
+  useEffect(() => {
+    dirtyListener.current?.(isDirty);
+  }, [isDirty]);
+  useEffect(() => () => dirtyListener.current?.(false), []);
+  /** 摘要の履歴の候補の状態。かんたん入力の摘要で Enter を押したときの扱いを決める */
+  const [suggestionStatus, setSuggestionStatus] = useState<SuggestionStatus>("idle");
   // 値の変更を購読し、未完成の値も同じフォームから保存用に取り出す。
   useWatch({ control: form.control });
   const changeListener = useRef(onDraftChange);
@@ -448,6 +460,7 @@ export function JournalForm({
             focusAfterSave={focusAfterSave}
             entityId={entityId}
             suggestPeriod={suggestPeriod}
+            suggestionStatus={suggestionStatus}
           />
         ) : (
           <div className="grid gap-4">
@@ -523,6 +536,7 @@ export function JournalForm({
             accounts={accounts}
             partners={partners}
             taxCategories={taxCategories}
+            onStatusChange={setSuggestionStatus}
           />
         )}
         <div aria-live="assertive">

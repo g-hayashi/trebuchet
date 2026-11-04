@@ -62,6 +62,9 @@ export function NewJournalEntry({ from, onSubmit, ...props }: Props) {
   const blocked = useRef(false);
   const mounted = useRef(true);
   const afterDelete = useRef<() => void>(() => {});
+  /** デバウンス待ちで、まだ PUT していない下書き */
+  const unsavedDraft = useRef<JournalDraft | undefined>(undefined);
+  const writeRef = useRef<(draft: JournalDraft) => void>(() => {});
   useEffect(() => {
     if (
       selection === undefined &&
@@ -77,6 +80,10 @@ export function NewJournalEntry({ from, onSubmit, ...props }: Props) {
       mounted.current = false;
       clearTimeout(timer.current);
       generation.current += 1;
+      // デバウンス待ちの最後の入力は、画面を離れる前にその場で 1 回保存する（登録・削除の後は書かない）
+      const unsaved = unsavedDraft.current;
+      unsavedDraft.current = undefined;
+      if (unsaved && !blocked.current) writeRef.current(unsaved);
     };
   }, []);
 
@@ -108,15 +115,21 @@ export function NewJournalEntry({ from, onSubmit, ...props }: Props) {
       }
     });
   }
+  writeRef.current = write;
   function changed(draft: JournalDraft) {
     if (blocked.current) return;
     latest.current = draft;
+    unsavedDraft.current = draft;
     clearTimeout(timer.current);
     setStatus("下書きに未保存の変更があります。");
-    timer.current = setTimeout(() => write(draft), 1000);
+    timer.current = setTimeout(() => {
+      unsavedDraft.current = undefined;
+      write(draft);
+    }, 1000);
   }
   async function erase() {
     clearTimeout(timer.current);
+    unsavedDraft.current = undefined;
     generation.current += 1;
     blocked.current = true;
     setDeleting(true);

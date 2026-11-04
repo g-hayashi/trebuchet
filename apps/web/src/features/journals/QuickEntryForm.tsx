@@ -12,6 +12,20 @@ import { matchesAccount } from "@/lib/account-search";
 import { parseYenInput } from "@/lib/format";
 import { CreateFiscalPeriodLink } from "./CreateFiscalPeriodLink";
 import type { JournalFormControl } from "./JournalForm";
+import type { SuggestionStatus } from "./JournalSuggestions";
+
+/**
+ * 摘要の Enter の行き先。履歴の候補が出ていれば先頭の使えるボタンへ焦点を移し、なければ登録する
+ */
+function settleEnter(root: HTMLElement | null, status: SuggestionStatus) {
+  const form = root?.querySelector<HTMLElement>("#quick-memo")?.closest("form");
+  const button =
+    status === "found"
+      ? form?.querySelector<HTMLElement>('section[aria-label="履歴の候補"] button:not(:disabled)')
+      : null;
+  if (button) button.focus();
+  else form?.requestSubmit();
+}
 
 /** 詳細入力と同じフォームの値を使うため、切替でも未完成の入力を保つ。 */
 export function QuickEntryForm({
@@ -24,6 +38,7 @@ export function QuickEntryForm({
   focusAfterSave,
   entityId,
   suggestPeriod,
+  suggestionStatus = "idle",
 }: {
   form: JournalFormControl;
   accounts: Account[];
@@ -35,11 +50,20 @@ export function QuickEntryForm({
   entityId: string;
   /** サーバーが会計期間の作成を提案したとき、日付の下にリンクを出す */
   suggestPeriod: boolean;
+  /** 摘要の履歴の候補の状態。摘要の Enter で、登録の前に候補を見せるかを決める */
+  suggestionStatus?: SuggestionStatus | undefined;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const values = useWatch({ control: form.control });
   const errors = form.formState.errors;
   const focus = (id: string) => root.current?.querySelector<HTMLElement>(`#quick-${id}`)?.focus();
+  /** 履歴の候補の読み込みを待って Enter を処理する（候補が出たら焦点を移し、なければ登録する） */
+  const waitingForSuggestions = useRef(false);
+  useEffect(() => {
+    if (!waitingForSuggestions.current || suggestionStatus === "pending") return;
+    waitingForSuggestions.current = false;
+    settleEnter(root.current, suggestionStatus);
+  }, [suggestionStatus]);
   useEffect(() => {
     if (focusAfterSave) root.current?.querySelector<HTMLElement>("#quick-account-0")?.focus();
   }, [focusAfterSave]);
@@ -63,8 +87,22 @@ export function QuickEntryForm({
     if (index < 0) return;
     event.preventDefault();
     const following = fields[index + 1];
-    if (following) following.focus();
-    else target.closest("form")?.requestSubmit();
+    if (following) {
+      following.focus();
+      return;
+    }
+    // 摘要は主な欄の最後。履歴の候補が出ている（読み込み中を含む）なら、登録の前に候補を見せる。
+    if (target.id === "quick-memo" && (target as HTMLInputElement).value.trim() !== "") {
+      if (suggestionStatus === "pending") {
+        waitingForSuggestions.current = true;
+        return;
+      }
+      if (suggestionStatus === "found") {
+        settleEnter(root.current, "found");
+        return;
+      }
+    }
+    target.closest("form")?.requestSubmit();
   }
   return (
     <div ref={root} className="grid gap-4">
@@ -149,6 +187,9 @@ export function QuickEntryForm({
         <Input
           id="quick-memo"
           onKeyDown={next}
+          onInput={() => {
+            waitingForSuggestions.current = false;
+          }}
           {...form.register("memo", { setValueAs: (value) => (value === "" ? undefined : value) })}
           aria-invalid={!!errors.memo || undefined}
           aria-describedby="quick-memo-error"

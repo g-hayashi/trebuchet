@@ -1053,3 +1053,110 @@ describe("下書き・複製・履歴（011/T016）", () => {
     expect(await screen.findByLabelText("摘要", { exact: true })).toHaveValue("再取得した複製");
   });
 });
+
+describe("かんたん入力のレビューの指摘（011）", () => {
+  const suggestion: JournalSuggestion = {
+    debitAccountId: supplies.id,
+    creditAccountId: bank.id,
+    debitTaxCategory: "PURCHASE_10",
+    creditTaxCategory: "OUT_OF_SCOPE",
+    debitPartnerId: null,
+    creditPartnerId: null,
+    sourceJournalId: uuid(9001),
+    date: "2026-09-01",
+  };
+  const posts = (calls: ApiCall[]) =>
+    calls.filter((call) => call.method === "POST" && call.path === `${ENTITY}/journals`);
+  const create = (suggestions: JournalSuggestion[]) => {
+    const calls = mockJournalApi(
+      (call) => ok({ journal: savedJournal(call.body as JournalBody), warnings: [] }, 201),
+      { [`GET ${ENTITY}/journals/suggestions`]: () => ok({ suggestions }) },
+    );
+    return calls;
+  };
+  /** 日付・借方・貸方・金額を Enter で進め、摘要に焦点がある状態にする */
+  async function fillUntilMemo(u: ReturnType<typeof user>) {
+    renderQuick();
+    await screen.findByLabelText("日付");
+    await u.keyboard("{Enter}");
+    await u.keyboard("6010{Enter}");
+    await u.keyboard("1020{Enter}");
+    await u.keyboard("1100{Enter}");
+    expect(screen.getByLabelText("摘要", { exact: true })).toHaveFocus();
+  }
+
+  it("摘要でEnterを押したとき履歴の候補が出ていれば、登録せず候補の先頭のボタンへ焦点を移す", async () => {
+    const calls = create([suggestion]);
+    const u = user();
+    await fillUntilMemo(u);
+    await u.keyboard("文房具");
+    await pause(350);
+    const first = await screen.findByRole("button", { name: "候補1を入れる" });
+    await u.keyboard("{Enter}");
+    expect(first).toHaveFocus();
+    await pause(100);
+    expect(posts(calls)).toHaveLength(0);
+    // 候補を使わず、既存の登録のボタンから登録できる
+    await u.click(screen.getByRole("button", { name: "登録" }));
+    await waitFor(() => expect(posts(calls)).toHaveLength(1));
+  });
+
+  it("候補の読み込み・入力待ちの間にEnterを押しても登録せず、候補が出たら焦点を移す", async () => {
+    const calls = create([suggestion]);
+    const u = user();
+    await fillUntilMemo(u);
+    await u.keyboard("文房具{Enter}");
+    expect(posts(calls)).toHaveLength(0);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "候補1を入れる" })).toHaveFocus(),
+    );
+    expect(posts(calls)).toHaveLength(0);
+  });
+
+  it("候補が0件と分かっていれば、摘要のEnterで今までどおり登録する", async () => {
+    const calls = create([]);
+    const u = user();
+    await fillUntilMemo(u);
+    await u.keyboard("文房具");
+    await pause(350);
+    await u.keyboard("{Enter}");
+    await waitFor(() => expect(posts(calls)).toHaveLength(1));
+  });
+
+  it("摘要が空ならEnterで登録する", async () => {
+    const calls = create([suggestion]);
+    const u = user();
+    await fillUntilMemo(u);
+    await u.keyboard("{Enter}");
+    await waitFor(() => expect(posts(calls)).toHaveLength(1));
+  });
+
+  it("画面を離れたとき、デバウンス待ちの下書きの最後の入力をその場で1回保存する", async () => {
+    const calls = mockJournalApi(undefined, {
+      [`PUT ${ENTITY}/journal-draft`]: () => ok({ updatedAt: "now" }),
+    });
+    const u = user();
+    const { unmount } = renderQuick();
+    await u.type(await screen.findByLabelText("摘要", { exact: true }), "未完成の摘要");
+    const puts = () => calls.filter((call) => call.method === "PUT");
+    expect(puts()).toHaveLength(0);
+    unmount();
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(puts()[0]?.body).toMatchObject({ memo: "未完成の摘要" });
+    await pause(1100);
+    expect(puts()).toHaveLength(1);
+  });
+
+  it("下書きの保存を済ませた後に離れても、重ねて保存しない", async () => {
+    const calls = mockJournalApi(undefined, {
+      [`PUT ${ENTITY}/journal-draft`]: () => ok({ updatedAt: "now" }),
+    });
+    const u = user();
+    const { unmount } = renderQuick();
+    await u.type(await screen.findByLabelText("摘要", { exact: true }), "保存済み");
+    await pause(1100);
+    unmount();
+    await pause(100);
+    expect(calls.filter((call) => call.method === "PUT")).toHaveLength(1);
+  });
+});
