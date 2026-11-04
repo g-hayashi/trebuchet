@@ -20,7 +20,10 @@ type Props = Omit<JournalFormProps, "initialMode" | "draft" | "onDraftChange" | 
 export function NewJournalEntry({ from, onSubmit, ...props }: Props) {
   const { entityId, defaultDate } = props;
   const queryClient = useQueryClient();
-  const [selection, setSelection] = useState<{ draft: JournalDraft | undefined }>();
+  const [selection, setSelection] = useState<{
+    draft: JournalDraft | undefined;
+    mode?: JournalDraft["mode"] | undefined;
+  }>();
   // 入力を開始した後は、再取得した初期値でフォームを置き換えない。
   const stored = useQuery({ ...journalDraftQuery(entityId), enabled: selection === undefined });
   const original = useQuery({
@@ -163,10 +166,11 @@ export function NewJournalEntry({ from, onSubmit, ...props }: Props) {
     void erase();
   }
   async function submit(input: JournalInput) {
+    const submittedMode = latest.current?.mode ?? mode;
     // 登録に失敗した場合は下書きを残す。削除の失敗は登録成功を取り消さない。
     await onSubmit(input);
     afterDelete.current = () => {
-      setSelection({ draft: undefined });
+      setSelection({ draft: undefined, mode: submittedMode });
       setDate(input.date);
       setKey((value) => value + 1);
     };
@@ -196,7 +200,7 @@ export function NewJournalEntry({ from, onSubmit, ...props }: Props) {
   const mode =
     source?.mode === "detailed" || (source && !canUseQuickEntry(source.lines))
       ? "detailed"
-      : "quick";
+      : (selection?.mode ?? "quick");
   return (
     <div className="grid gap-3">
       <ApiErrorMessage error={deleteError ?? saveError} />

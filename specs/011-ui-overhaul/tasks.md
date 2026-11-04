@@ -223,6 +223,10 @@ description: "Task list for 011-ui-overhaul"
 
 ---
 
+## Phase 16: 残件の修正
+
+- [X] T052 登録後に詳細入力がかんたん入力へ戻る残件を修正: `apps/web/src/features/journals/NewJournalEntry.tsx` で登録時の入力モードを次の空フォームへ引き継ぐ。日付は残し、金額・摘要・メモは空にする。テスト: `apps/web/test/routes/journals-new.test.tsx` で既定のかんたん入力→詳細へ切替→登録→詳細の維持と入力の初期化を確認。既存のかんたん入力・下書き削除失敗の検証も維持する（UI: §2、T015〜T017の残件）。
+
 ## Dependencies & Execution Order
 
 - **Phase 1 → Phase 2 → US1** の順。US1 の T005（メニューとルート）は後のすべての画面のテストが前提にする

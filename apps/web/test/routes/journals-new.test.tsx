@@ -353,6 +353,36 @@ afterEach(() => {
 });
 
 describe("仕訳の入力画面（US2）", () => {
+  it("詳細入力で登録した後も詳細を保ち、日付を残して次の入力を空にする", async () => {
+    const calls = mockJournalApi((call) =>
+      ok({ journal: savedJournal(call.body as JournalBody), warnings: [] }, 201),
+    );
+    const u = user();
+    renderRoute(Route, { path: "/e/$entityId/journals/new", url: "/e/e1/journals/new" });
+    const quick = await screen.findByRole("button", { name: /^かんたん入力$/ });
+    expect(quick).toHaveAttribute("aria-pressed", "true");
+    await u.click(screen.getByRole("button", { name: /^詳細$/ }));
+    await fillLine(u, 1, { account: "消耗品費", amount: "1100" });
+    await fillLine(u, 2, { account: "普通預金", amount: "1100" });
+    await u.type(screen.getByLabelText("メモ", { exact: true }), "次へ残さないメモ");
+    await u.click(screen.getByRole("button", { name: /^登録$/ }));
+
+    expect(
+      await screen.findByText("仕訳 No.1 を登録しました。", { exact: true }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^詳細$/ })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+    expect(screen.getByLabelText("日付", { exact: true })).toHaveValue("2026-10-31");
+    expect(screen.getByLabelText("1行目の金額", { exact: true })).toHaveValue("");
+    expect(screen.getByLabelText("2行目の金額", { exact: true })).toHaveValue("");
+    expect(screen.getByLabelText("メモ", { exact: true })).toHaveValue("");
+  });
+
   it("借方・貸方の2行と今日の日付で始まり、行を追加・削除できる", async () => {
     mockJournalApi();
     const u = user();
@@ -479,8 +509,8 @@ describe("仕訳の入力画面（US2）", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["entities", "e1", "journals"] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["entities", "e1", "reports"] });
     // 次の仕訳のために入力を空にする（日付は残す）
-    expect(screen.getByLabelText("金額", { exact: true })).toHaveValue("");
-    expect(screen.getByLabelText("摘要", { exact: true })).toHaveValue("");
+    expect(screen.getByLabelText("1行目の金額", { exact: true })).toHaveValue("");
+    expect(screen.getByLabelText("1行目の摘要", { exact: true })).toHaveValue("");
     expect(screen.getByLabelText("日付")).toHaveValue("2026-10-31");
   });
 
