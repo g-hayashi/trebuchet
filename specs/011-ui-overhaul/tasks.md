@@ -211,8 +211,8 @@ description: "Task list for 011-ui-overhaul"
 
 - [ ] T050 利用者の端末で `pnpm --filter @trebuchet/web e2e`（既存 5 本 + `mobile.spec.ts`）、`pnpm bench:reports`（SC-003）、`pnpm eval:statements` を T018・T042 の前（T019・T020 を T018 より先に行い、T020 の直後のコミットを基準にする）と後で実行して比べる（憲法 IV。明細の場面のルール・AI の精度が下がらないこと。`journal_entry` の場面は前の版にないので、後の値を初めての基準値として記録する）。結果（通った・落ちた、件数と割合だけ）をこの行の下に記録する
   - 2026-11-04 `pnpm bench:reports`: すべて OK（SC-004 帳票 10 件、003/SC-006 決算書、011/SC-003 `GET /home` 最大 10.2 ms、009/SC-005、010/SC-002）
-  - e2e: 未実行
-  - eval:statements: 未実行
+  - e2e: 2026-11-04 初回は 6 本とも落ちた（011 の画面の変更に未追随、事業体 1 件で作成の画面へ行けない、成功の知らせが StrictMode で 2 つ出る、請求書の印刷が白紙、仕訳帳がスマホ幅で横にはみ出す）。直して 6 本すべて通過
+  - eval:statements: 未完了。端末内（`fm serve`）が `response_format` の `json_schema` つきの要求に 90〜180 秒応答せず `local timeout`（付けなければ 2 秒前後、初回 46 秒。`json_object` は 400）。011 の前から同じ経路で、`.tmp/eval-statements/` に成功の記録がない。直し方（端末内だけ形式を外す、時間切れを延ばす等）は推定の経路の変更になるので利用者の判断待ち
 - [ ] T051 Q: §3 の手動の確認（SC-011、Mac とスマホ）。要望ごとに日付と OK／NG と理由をこの行の下に記録する
 
 ---

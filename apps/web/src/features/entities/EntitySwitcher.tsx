@@ -54,8 +54,8 @@ export function EntitySwitcher() {
     });
   }, [current, queryClient]);
 
-  // 切り替える先があるとき（2 件以上）だけ出す
-  if (entities === undefined || entities.length < 2) return null;
+  // 1 件以上のとき出す（1 件でも「一覧・作成」から 2 件目を作れるように。2026-11-04 の E2E）
+  if (entities === undefined || entities.length < 1) return null;
 
   return (
     <div className="ml-auto flex items-center gap-2">
@@ -69,7 +69,7 @@ export function EntitySwitcher() {
         onChange={(event) => {
           const next = event.currentTarget.value;
           if (next === LIST_VALUE) {
-            void navigate({ to: "/" });
+            void navigate({ to: "/", search: { list: true } });
           } else if (next !== "" && next !== current) {
             void navigate({ to: "/e/$entityId", params: { entityId: next } });
           }

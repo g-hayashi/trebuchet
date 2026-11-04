@@ -128,6 +128,15 @@ describe("請求書の印刷（詳細の画面から直接。US1 FR-011・012、
     expect(roots[0]?.querySelectorAll("article")).toHaveLength(1);
   });
 
+  it("data-print-root は hidden 属性で隠さない（preflight の `[hidden]` は layer 内の !important で、print.css では上書きできず印刷が空白になる）", async () => {
+    renderDetail();
+    await findSheet();
+    const root = document.querySelector<HTMLElement>("[data-print-root]");
+    expect(root).not.toBeNull();
+    expect(root?.hasAttribute("hidden")).toBe(false);
+    expect(root?.style.display).toBe("none");
+  });
+
   it("「印刷・PDF に保存」は別のページへ移らず、押すと window.print() を呼ぶ", async () => {
     const print = vi.fn();
     vi.stubGlobal("print", print);

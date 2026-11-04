@@ -489,6 +489,36 @@ describe("仕訳帳（US4, FR-026）", () => {
     expect(credit).toHaveTextContent("取引先A");
     expect(screen.getByRole("row", { name: /合計/ })).toHaveTextContent("330,000");
   });
+
+  it("スマホで列の多い表がページを横に広げないよう、帳票の枠は列の幅を内容に合わせない（表の中だけで横に動かす）", async () => {
+    mockReports({
+      [`GET ${ENTITY}/reports/journal-book`]: () =>
+        ok({
+          kind: "journal-book",
+          from: "2026-01-01",
+          to: "2026-01-31",
+          entries: [
+            {
+              journalId: uuid(9001),
+              journalNo: 1,
+              date: "2026-01-31",
+              memo: null,
+              lines: [],
+            },
+          ],
+          totals: { debit: 0, credit: 0 },
+          warnings: [],
+        }),
+    });
+    renderRoute(JournalBookRoute, {
+      path: "/e/$entityId/reports/journal-book",
+      url: "/e/e1/reports/journal-book?from=2026-01-01&to=2026-01-31",
+    });
+
+    await screen.findByRole("table", { name: "仕訳帳" });
+    // grid の列を minmax(0,1fr) にしないと、子の表の幅（内容の幅）まで列が広がる
+    expect(screen.getByRole("main").className).toContain("grid-cols-[minmax(0,1fr)]");
+  });
 });
 
 const hrefOf = (el: HTMLElement) => {

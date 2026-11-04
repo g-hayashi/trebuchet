@@ -15,7 +15,8 @@ test("freee の仕訳帳の取込から、元帳による期首残高、照合�
   });
 
   await test.step("事業体を作成する（開始年度 2025）", async () => {
-    await page.goto("/");
+    // 事業体が 1 件だとトップはそのホームへ移るので、一覧と作成を開く
+    await page.goto("/?list=1");
     const form = page
       .locator("form")
       .filter({ has: page.getByRole("button", { name: "作成する" }) });
@@ -76,8 +77,9 @@ test("freee の仕訳帳の取込から、元帳による期首残高、照合�
   await test.step("元帳から期首残高を読み込んで保存する", async () => {
     await openNav(page, "事業体の設定", "会計期間と移行");
     await page
-      .getByRole("row", { name: /2025年度/ })
-      .getByRole("link", { name: "期首残高" })
+      .getByRole("region", { name: "2025年度", exact: true })
+      .getByRole("listitem", { name: "期首残高", exact: true })
+      .getByRole("link", { name: "期首残高を開く", exact: true })
       .click();
     await expect(page.getByRole("heading", { name: "2025年度の期首残高" })).toBeVisible();
 

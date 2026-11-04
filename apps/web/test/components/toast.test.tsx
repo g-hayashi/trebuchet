@@ -1,8 +1,8 @@
 import { act, render, screen } from "@testing-library/react";
-import { useState } from "react";
+import { StrictMode, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SaveNotice } from "@/components/ui/save-notice";
-import { ToastProvider, useToast } from "@/components/ui/toast";
+import { TOAST_DURATION_MS, ToastProvider, useToast } from "@/components/ui/toast";
 
 function Buttons() {
   const toast = useToast();
@@ -131,5 +131,69 @@ describe("SaveNotice", () => {
       vi.advanceTimersByTime(5_000);
     });
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("StrictMode（effect が 2 回走る）でも、同じ知らせは 1 つしか出ない", () => {
+    render(
+      <StrictMode>
+        <ToastProvider>
+          <SaveNotice message="保存しました。" />
+        </ToastProvider>
+      </StrictMode>,
+    );
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+  });
+
+  it("StrictMode でマウント時に出た知らせも、TOAST_DURATION_MS で消える", () => {
+    render(
+      <StrictMode>
+        <ToastProvider>
+          <SaveNotice message="保存しました。" />
+        </ToastProvider>
+      </StrictMode>,
+    );
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    act(() => {
+      vi.advanceTimersByTime(TOAST_DURATION_MS - 1);
+    });
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("文言を空にしてから同じ文言を入れ直すと、出し直せる（StrictMode でも 1 つずつ）", () => {
+    function Host() {
+      const [message, setMessage] = useState("");
+      return (
+        <>
+          <button type="button" onClick={() => setMessage("")}>
+            空にする
+          </button>
+          <button type="button" onClick={() => setMessage("登録しました。")}>
+            入れ直す
+          </button>
+          <SaveNotice message={message} />
+        </>
+      );
+    }
+    render(
+      <StrictMode>
+        <ToastProvider>
+          <Host />
+        </ToastProvider>
+      </StrictMode>,
+    );
+    act(() => screen.getByRole("button", { name: "入れ直す" }).click());
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    act(() => screen.getByRole("button", { name: "空にする" }).click());
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    act(() => screen.getByRole("button", { name: "入れ直す" }).click());
+    expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 });

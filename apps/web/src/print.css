@@ -21,8 +21,10 @@
     display: none;
   }
 
+  /* 請求書は inline の display: none で隠してある（jsdom のテストでも隠れるように）。hidden 属性にしない（preflight の [hidden] は layer 内の !important で上書きできない） */
   [data-print-root] {
-    display: block;
+    /* biome-ignore lint/complexity/noImportantStyles: inline の display: none に勝つ必要がある */
+    display: block !important;
     box-sizing: border-box;
     padding: 12mm;
     color: #000;

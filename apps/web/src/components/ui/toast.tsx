@@ -3,7 +3,6 @@ import {
   type ReactNode,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -29,24 +28,15 @@ const ToastContext = createContext<ToastApi | null>(null);
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
   const nextId = useRef(0);
-  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
 
+  // timer はアンマウントで消さない。StrictMode は開発時に effect を疑似アンマウントするため、
+  // 消すとマウント時に出た知らせが消えなくなる。アンマウント後の setItems は React 18 以降では無害
   const push = useCallback((kind: ToastKind, message: string) => {
     const id = nextId.current++;
     setItems((current) => [...current, { id, kind, message }]);
-    const timer = setTimeout(() => {
-      timers.current.delete(timer);
+    setTimeout(() => {
       setItems((current) => current.filter((item) => item.id !== id));
     }, TOAST_DURATION_MS);
-    timers.current.add(timer);
-  }, []);
-
-  useEffect(() => {
-    const active = timers.current;
-    return () => {
-      for (const timer of active) clearTimeout(timer);
-      active.clear();
-    };
   }, []);
 
   const api = useMemo<ToastApi>(

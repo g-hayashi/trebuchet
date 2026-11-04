@@ -36,7 +36,8 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
   });
 
   await test.step("事業体を作成する（開始年度 2026）", async () => {
-    await page.goto("/");
+    // 事業体が 1 件だとトップはそのホームへ移るので、一覧と作成を開く
+    await page.goto("/?list=1");
     const form = page
       .locator("form")
       .filter({ has: page.getByRole("button", { name: "作成する" }) });
@@ -198,7 +199,8 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     await openNav(page, "仕訳", "一覧");
     const list = page.getByRole("table", { name: "仕訳の一覧" });
     const row = list.getByRole("row").filter({
-      has: list.getByRole("button", { name: `仕訳 No.${journalNo} の詳細`, exact: true }),
+      // has の中は行からの相対。表から始まる探し方（list.…）だと、行の中に表を探して見つからない
+      has: page.getByRole("button", { name: `仕訳 No.${journalNo} の詳細`, exact: true }),
     });
     await expect(row).toContainText("地代家賃");
     await expect(row).toContainText("普通預金");

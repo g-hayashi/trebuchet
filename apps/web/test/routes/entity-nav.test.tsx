@@ -340,6 +340,22 @@ describe("ヘッダー（contracts/ui-shell.md §1）", () => {
       within(switcher).getByRole("option", { name: "一覧・作成" }),
     );
     await waitFor(() => expect(path(router)).toBe("/"));
+    expect(router.state.location.search).toEqual({ list: true });
+  });
+
+  it("事業体が 1 件のときも切替が出て、「一覧・作成」でトップの一覧と作成へ移る（redirect しない）", async () => {
+    const { router } = renderApp(`/e/${entityA.id}`, {
+      "GET /api/entities": () => ok({ entities: [entityA] }),
+    });
+    const banner = await header();
+    const switcher = await within(banner).findByRole("combobox", { name: "事業体" });
+    await userEvent.selectOptions(
+      switcher,
+      within(switcher).getByRole("option", { name: "一覧・作成" }),
+    );
+    expect(await screen.findByRole("button", { name: "作成する" })).toBeInTheDocument();
+    expect(path(router)).toBe("/");
+    expect(screen.getByRole("link", { name: "証憑を追加" })).toBeInTheDocument();
   });
 
   it("「施錠してサインアウト」は確認のダイアログを出し、「やめる」では何も送らない", async () => {
@@ -421,6 +437,15 @@ describe("トップ（/）の移動（FR-010、R4）", () => {
     localStorage.setItem(LAST_ENTITY_KEY, "0190a000-0000-7000-8000-00000000dead");
     const { router } = renderApp("/", { "GET /api/entities": () => ok({ entities: [entityA] }) });
     await waitFor(() => expect(path(router)).toBe(`/e/${entityA.id}`));
+  });
+
+  it("事業体が 1 件でも `?list=1`（切替の「一覧・作成」）なら、移動せず一覧と作成のフォームを出す", async () => {
+    const { router } = renderApp("/?list=1", {
+      "GET /api/entities": () => ok({ entities: [entityA] }),
+    });
+    expect(await screen.findByRole("link", { name: "個人事業A" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "作成する" })).toBeInTheDocument();
+    expect(path(router)).toBe("/");
   });
 
   it("事業体が 2 件以上なら、移動せず一覧を出し、最後に開いたものを上に目立たせる", async () => {

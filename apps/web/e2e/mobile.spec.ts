@@ -32,10 +32,8 @@ async function expectFits(page: Page, heading: string) {
 
 /** ヘッダーのボタン「メニュー」から Sheet を開き、項目（リンク）を押す。Sheet が閉じるまで待つ */
 async function openFromMenu(page: Page, item: string) {
-  const header = page.getByRole("banner");
-  const button = header.getByRole("button", { name: "メニュー", exact: true });
-  await button.click();
-  await expect(button).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("banner").getByRole("button", { name: "メニュー", exact: true }).click();
+  // 開いている間は Sheet（modal）の外が aria-hidden になり、ボタンを役割で引けないので、Sheet で確かめる
   const sheet = page.getByRole("dialog", { name: "メニュー", exact: true });
   await expect(sheet).toBeVisible();
   await sheet.getByRole("link", { name: item, exact: true }).click();
@@ -80,7 +78,8 @@ test("スマホの幅で、メニューから各画面に届き、どの画面�
       },
     });
     expect(journal.status()).toBe(201);
-    journalId = ((await journal.json()) as { id: string }).id;
+    // 登録の応答は { journal, warnings }。id は journal の中にある
+    journalId = ((await journal.json()) as { journal: { id: string } }).journal.id;
     expect(journalId).not.toBe("");
   });
 
@@ -124,6 +123,8 @@ test("スマホの幅で、メニューから各画面に届き、どの画面�
       mimeType: "image/png",
       buffer: PNG_1X1,
     });
+    // 区分は必ず選ぶ（既定はない）
+    await form.getByRole("radio", { name: "電子取引", exact: true }).check();
     await form.getByRole("button", { name: "追加する", exact: true }).click();
     const results = page.getByRole("list", { name: "追加の結果", exact: true });
     await expect(results.getByText("追加しました。", { exact: true })).toBeVisible();

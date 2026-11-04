@@ -10,7 +10,25 @@ async function fillLine(page: Page, n: number, line: Line) {
   await field("勘定科目").selectOption({ label: line.account });
   if (line.side) await field("貸借").selectOption({ label: line.side });
   await field("金額").fill(line.amount);
+  // 利用者は金額を入れたあと Tab で次へ移る。この blur で、最後の行の差額補完が先に働く
+  // （blur を待たずに次の行の金額へ fill すると、補完された値に追記される）
+  await field("金額").blur();
   if (line.description) await field("摘要").fill(line.description);
+}
+
+/** かんたん入力の科目の欄（combobox）に科目名を入れ、候補（「1030 売掛金」）から選ぶ */
+async function pickQuickAccount(page: Page, label: "借方科目" | "貸方科目", account: string) {
+  await page.getByRole("combobox", { name: label, exact: true }).fill(account);
+  await page.getByRole("option", { name: new RegExp(`^\\d+ ${account}$`) }).click();
+}
+
+/** 「かんたん入力」から「詳細」へ切り替える（登録のたびにかんたん入力へ戻る） */
+async function openDetailed(page: Page) {
+  await page.getByRole("button", { name: "詳細", exact: true }).click();
+  await expect(page.getByRole("button", { name: "詳細", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 }
 
 test("事業体の作成から期首残高・仕訳の登録・貸借不一致の拒否・試算表の確認まで", async ({
@@ -24,7 +42,8 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
   });
 
   await test.step("事業体を作成する", async () => {
-    await page.goto("/");
+    // 事業体が 1 件だとトップはそのホームへ移るので、一覧と作成を開く
+    await page.goto("/?list=1");
     const form = page
       .locator("form")
       .filter({ has: page.getByRole("button", { name: "作成する" }) });
@@ -42,8 +61,9 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
   await test.step("期首残高を登録する（貸借が合うまで保存できない）", async () => {
     await openNav(page, "事業体の設定", "会計期間と移行");
     await page
-      .getByRole("row", { name: /2026年度/ })
-      .getByRole("link", { name: "期首残高" })
+      .getByRole("region", { name: "2026年度", exact: true })
+      .getByRole("listitem", { name: "期首残高", exact: true })
+      .getByRole("link", { name: "期首残高を開く", exact: true })
       .click();
     await expect(page.getByRole("heading", { name: "2026年度の期首残高" })).toBeVisible();
 
@@ -78,19 +98,24 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
     await openNav(page, "仕訳", "入力する");
     await expect(page.getByRole("heading", { name: "仕訳の入力" })).toBeVisible();
 
-    await page.getByLabel("日付").fill("2026-10-31");
-    await fillLine(page, 1, {
-      account: "売掛金",
-      amount: "495000",
-      description: "10月分 取引先A",
-    });
-    await fillLine(page, 2, { account: "売上高", amount: "495000" });
-    await page.getByRole("button", { name: "登録する" }).click();
+    // 既定は「かんたん入力」（日付・借方科目・貸方科目・金額・摘要）
+    await expect(page.getByRole("button", { name: "かんたん入力", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await page.getByLabel("日付", { exact: true }).fill("2026-10-31");
+    await pickQuickAccount(page, "借方科目", "売掛金");
+    await pickQuickAccount(page, "貸方科目", "売上高");
+    await page.getByLabel("金額", { exact: true }).fill("495000");
+    await page.getByLabel("摘要", { exact: true }).fill("10月分 取引先A");
+    await page.getByRole("button", { name: "登録", exact: true }).click();
     await expect(result).toContainText("仕訳 No.1 を登録しました。");
   });
 
   await test.step("複合仕訳（借方2行・貸方1行）を登録する", async () => {
-    await expect(page.getByLabel("日付")).toHaveValue("2026-10-31");
+    await expect(page.getByLabel("日付", { exact: true })).toHaveValue("2026-10-31");
+    // 複数行の仕訳は「詳細」で入力する
+    await openDetailed(page);
     await page.getByRole("button", { name: "行を追加" }).click();
     await fillLine(page, 1, { side: "借方", account: "普通預金", amount: "487037" });
     await fillLine(page, 2, { side: "貸方", account: "売掛金", amount: "495000" });
@@ -101,18 +126,19 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
       description: "源泉所得税",
     });
     await expect(page.getByLabel("合計", { exact: true })).toContainText("借方合計495,000 円");
-    await page.getByRole("button", { name: "登録する" }).click();
+    await page.getByRole("button", { name: "登録", exact: true }).click();
     await expect(result).toContainText("仕訳 No.2 を登録しました。");
   });
 
   await test.step("貸借が一致しない仕訳は登録できない", async () => {
+    await openDetailed(page);
     await fillLine(page, 1, { account: "普通預金", amount: "500000" });
     await fillLine(page, 2, { account: "売上高", amount: "495000" });
     const totals = page.getByLabel("合計", { exact: true });
     await expect(totals).toContainText("借方合計500,000 円");
     await expect(totals).toContainText("貸方合計495,000 円");
     await expect(totals).toContainText("差額5,000 円");
-    await expect(page.getByRole("button", { name: "登録する" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "登録", exact: true })).toBeDisabled();
     await expect(page.getByText("差額が 0 円になると登録できます。")).toBeVisible();
 
     // 画面を通さずに送っても、サーバーが差額付きで拒否する

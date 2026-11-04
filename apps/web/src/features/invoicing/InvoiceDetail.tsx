@@ -272,8 +272,8 @@ export function InvoiceDetail({
         onCancel={() => setVoidingPayment(null)}
       />
 
-      {/* 印刷するもの。画面では隠し、印刷のときだけ出す（全体の src/print.css。011 FR-036） */}
-      <div data-print-root hidden>
+      {/* 印刷するもの。画面では inline の display: none で隠し、印刷では src/print.css の !important で出す（011 FR-036）。hidden 属性は使わない（preflight の [hidden] は layer 内の !important で上書きできず、印刷が空白になる） */}
+      <div data-print-root style={{ display: "none" }}>
         <InvoicePrint invoice={invoice} />
       </div>
     </>

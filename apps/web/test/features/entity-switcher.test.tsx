@@ -135,6 +135,25 @@ describe("EntitySwitcher（US6, T113）", () => {
     expect(entitiesFetches()).toBe(1);
   });
 
+  it("事業体が 1 件でも表示し、「一覧・作成」で移動せずに一覧と作成のフォームを出す（E2E 2026-11-04）", async () => {
+    mockApi({ "GET /api/entities": () => ok({ entities: [entityA] }) });
+    const { router } = renderApp(`/e/${entityA.id}`);
+    const select = await switcher();
+    await waitFor(() => expect(select).toHaveValue(entityA.id));
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["個人事業A", "一覧・作成"]);
+
+    await userEvent.selectOptions(select, "一覧・作成");
+
+    expect(await screen.findByRole("button", { name: "作成する" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "個人事業A" })).toBeInTheDocument();
+    expect(path(router)).toBe("/");
+    expect(router.state.location.search).toEqual({ list: true });
+  });
+
   it("事業体がなければ表示しない", async () => {
     mockApi({ "GET /api/entities": () => ok({ entities: [] }) });
     renderApp("/");
