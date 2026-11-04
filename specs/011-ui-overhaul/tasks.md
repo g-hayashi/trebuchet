@@ -180,8 +180,8 @@ description: "Task list for 011-ui-overhaul"
 
 **Independent Test**: spec US10 の Independent Test（E2E の 390 px）
 
-- [ ] T040 [US10] テスト先行でスマホのメニューと PC の推奨（R11、UI: §1・§4）: `apps/web/src/lib/use-media-query.ts`、`components/layout/MobileNav.tsx`（ボタン「メニュー」、`aria-expanded`、`Sheet` の名前「メニュー」、`MOBILE_ROUTES` の項目と設定・施錠してサインアウト）、`components/layout/PcRecommended.tsx`（対象の外で `role="note"` の「PC での操作を推奨」）を `AppHeader`・`route.tsx` に組み込み、FR-058 の画面の表を `overflow-x-auto` の枠に入れる。テスト `apps/web/test/routes/mobile-nav.test.tsx`（`matchMedia` の偽物で項目の絞り込みと PC の推奨）
-- [ ] T041 [US10] `apps/web/e2e/mobile.spec.ts`（390 × 844。FR-058 の各画面で `document.documentElement.scrollWidth <= clientWidth`、メニューから各画面に届く）を書く。実行は利用者の端末（T049）
+- [X] T040 [US10] テスト先行でスマホのメニューと PC の推奨（R11、UI: §1・§4）: `apps/web/src/lib/use-media-query.ts`、`components/layout/MobileNav.tsx`（ボタン「メニュー」、`aria-expanded`、`Sheet` の名前「メニュー」、`MOBILE_ROUTES` の項目と設定・施錠してサインアウト）、`components/layout/PcRecommended.tsx`（対象の外で `role="note"` の「PC での操作を推奨」）を `AppHeader`・`route.tsx` に組み込み、FR-058 の画面の表を `overflow-x-auto` の枠に入れる。テスト `apps/web/test/routes/mobile-nav.test.tsx`（`matchMedia` の偽物で項目の絞り込みと PC の推奨）
+- [X] T041 [US10] `apps/web/e2e/mobile.spec.ts`（390 × 844。FR-058 の各画面で `document.documentElement.scrollWidth <= clientWidth`、メニューから各画面に届く）を書く。実行は利用者の端末（T049）
 
 ---
 

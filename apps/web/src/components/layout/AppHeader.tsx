@@ -3,6 +3,8 @@ import { Link, useParams } from "@tanstack/react-router";
 import { SignOutButton } from "@/features/auth/SignOutButton";
 import { entitiesQuery } from "@/features/entities/api";
 import { EntitySwitcher, lastEntityIdOf } from "@/features/entities/EntitySwitcher";
+import { useIsMobile } from "@/lib/use-media-query";
+import { MobileNav } from "./MobileNav";
 
 const LINK_CLASS = "underline-offset-4 hover:underline";
 
@@ -16,6 +18,7 @@ export function AppHeader() {
   const { data: entities } = useQuery(entitiesQuery());
   const entity = entities?.find((e) => e.id === entityId);
   const homeId = entity?.id ?? lastEntityIdOf(entities);
+  const mobile = useIsMobile();
   return (
     <header className="border-b bg-card">
       <div className="mx-auto flex min-h-12 max-w-6xl flex-wrap items-center gap-x-6 gap-y-1 px-4 py-1">
@@ -37,13 +40,20 @@ export function AppHeader() {
             {entity.name}
           </Link>
         )}
-        <div className="flex flex-1 items-center gap-4">
-          <EntitySwitcher />
-        </div>
-        <Link to="/settings/security" className={`text-sm ${LINK_CLASS}`}>
-          設定
-        </Link>
-        <SignOutButton />
+        {mobile ? (
+          // スマホの幅: ロゴ・事業体の名前・メニューのボタンだけ（設定と施錠はメニューの中。FR-059）
+          <MobileNav entityId={homeId} />
+        ) : (
+          <>
+            <div className="flex flex-1 items-center gap-4">
+              <EntitySwitcher />
+            </div>
+            <Link to="/settings/security" className={`text-sm ${LINK_CLASS}`}>
+              設定
+            </Link>
+            <SignOutButton />
+          </>
+        )}
       </div>
     </header>
   );

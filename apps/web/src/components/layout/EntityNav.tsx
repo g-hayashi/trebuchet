@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 
-type NavTo =
+export type NavTo =
   | "/e/$entityId"
   | "/e/$entityId/journals/new"
   | "/e/$entityId/journals"
@@ -27,9 +27,10 @@ type NavTo =
 
 /**
  * `match`: この項目が「今の画面」になる、事業体の下のパス（区切りでの接頭辞）。省略時は `to` のパス。
- * `""` はホーム（完全一致だけ）
+ * `""` はホーム（完全一致だけ）。
+ * `mobile`: スマホのメニュー（`MobileNav`）に出すときの名前。ないものはスマホのメニューに出さない（FR-059）
  */
-type NavItem = { label: string; to: NavTo; match?: readonly string[] };
+type NavItem = { label: string; to: NavTo; match?: readonly string[]; mobile?: string };
 type NavGroup = { label: string; items: NavItem[] };
 
 /**
@@ -38,12 +39,15 @@ type NavGroup = { label: string; items: NavItem[] };
  * 項目が 1 つのグループは作らず、直接のリンクにする（FR-003）
  */
 const NAV: NavGroup[] = [
-  { label: "ホーム", items: [{ label: "ホーム", to: "/e/$entityId", match: [""] }] },
+  {
+    label: "ホーム",
+    items: [{ label: "ホーム", to: "/e/$entityId", match: [""], mobile: "ホーム" }],
+  },
   {
     label: "仕訳",
     items: [
       { label: "入力する", to: "/e/$entityId/journals/new" },
-      { label: "一覧", to: "/e/$entityId/journals" },
+      { label: "一覧", to: "/e/$entityId/journals", mobile: "仕訳の一覧" },
       { label: "定期仕訳", to: "/e/$entityId/recurring" },
     ],
   },
@@ -59,8 +63,8 @@ const NAV: NavGroup[] = [
   {
     label: "証憑",
     items: [
-      { label: "追加する", to: "/e/$entityId/receipts/new" },
-      { label: "一覧", to: "/e/$entityId/receipts" },
+      { label: "追加する", to: "/e/$entityId/receipts/new", mobile: "証憑を追加" },
+      { label: "一覧", to: "/e/$entityId/receipts", mobile: "証憑の一覧" },
     ],
   },
   {
@@ -74,7 +78,14 @@ const NAV: NavGroup[] = [
   // 帳票の中は、画面のタブで行き来する。1 項目なので直接のリンク
   {
     label: "帳票",
-    items: [{ label: "帳票", to: "/e/$entityId/reports/profit-and-loss", match: ["/reports"] }],
+    items: [
+      {
+        label: "帳票",
+        to: "/e/$entityId/reports/profit-and-loss",
+        match: ["/reports"],
+        mobile: "帳票",
+      },
+    ],
   },
   {
     label: "決算・申告",
@@ -97,6 +108,13 @@ const NAV: NavGroup[] = [
     ],
   },
 ];
+
+/** スマホのメニューの項目（FR-059）。ラベルとパスの正本は上の `NAV` で、ここでは絞り込むだけ */
+export function mobileNavItems(): { label: string; to: NavTo }[] {
+  return NAV.flatMap((g) => g.items).flatMap((i) =>
+    i.mobile === undefined ? [] : [{ label: i.mobile, to: i.to }],
+  );
+}
 
 const ACTIVE_CLASS = "font-semibold underline";
 
