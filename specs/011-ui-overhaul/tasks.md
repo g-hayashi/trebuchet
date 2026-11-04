@@ -216,6 +216,7 @@ description: "Task list for 011-ui-overhaul"
     - 前: statement 16 件、counterAccount 25.0%・taxCategory 31.3%・partner 31.3%・purpose 25.0%、rule 4 件（全項目一致 100.0%）・local_ai 1 件（0.0%）・none 11 件。端末内の呼び出し 12 件・接続失敗 0 件
     - 後: statement は前と同じ値（下がらない）。journal_entry 32 件（初めての基準値）: counterAccount 3.1%・taxCategory 3.1%・partner 15.6%・purpose 9.4%、local_ai 5 件（0.0%）・none 27 件。端末内の呼び出し 44 件・接続失敗 0 件
     - 端末内の AI の精度は低い（多くが「候補なし」）。外部 AI を有効にした比較は利用者の端末で行う
+    - 外部 AI 有効（利用者の端末、2026-11-04、011 の後。前の版の外部有効の記録はないので初めての基準値）: 端末内 44 件・外部 38 件・接続失敗 0 件。statement 16 件: counterAccount 87.5%・taxCategory 87.5%・partner 100.0%・purpose 93.8%、rule 4 件（100.0%）・local_ai 1 件（0.0%）・external_ai 11 件（81.8%）。journal_entry 32 件: counterAccount 62.5%・taxCategory 71.9%・partner 100.0%・purpose 90.6%、local_ai 5 件（0.0%）・external_ai 27 件（70.4%）
 - [ ] T051 Q: §3 の手動の確認（SC-011、Mac とスマホ）。要望ごとに日付と OK／NG と理由をこの行の下に記録する
 
 ---
