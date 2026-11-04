@@ -21,6 +21,19 @@ export const entitiesQuery = () =>
     queryFn: async () => (await unwrap(await entitiesApi.$get())).entities,
   });
 
+export const archivedEntitiesKey = ["archived-entities"] as const;
+export const archivedEntitiesQuery = () =>
+  queryOptions({
+    queryKey: archivedEntitiesKey,
+    queryFn: async () => (await unwrap(await entitiesApi.archived.$get())).entities,
+  });
+export const archiveEntity = async (entityId: string) =>
+  unwrap(await entityApi.archive.$post({ param: { entityId } }));
+export const restoreEntity = async (entityId: string) =>
+  unwrap(await entityApi.restore.$post({ param: { entityId } }));
+export const purgeEntity = async (entityId: string, name: string) =>
+  unwrap(await entityApi.purge.$delete({ param: { entityId }, json: { name } }));
+
 export const createEntity = async (json: Parameters<typeof entitiesApi.$post>[0]["json"]) =>
   (await unwrap(await entitiesApi.$post({ json }))).entity;
 

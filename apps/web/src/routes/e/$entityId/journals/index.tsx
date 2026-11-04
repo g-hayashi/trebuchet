@@ -110,11 +110,11 @@ function JournalsPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {hasFilter(apiSearch) ? "検索の結果（新しい順）" : "仕訳（新しい順）"} 
+            {hasFilter(apiSearch) ? "検索の結果（新しい順）" : "仕訳（新しい順）"}
           </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4">
-            項目をクリックすると詳細が表示され、内容と変更履歴を確認し、訂正・取消・複製ができます
+          項目をクリックすると詳細が表示され、内容と変更履歴を確認し、訂正・取消・複製ができます
           <ApiErrorMessage error={error} />
           {journals.data?.pages[0]?.summary && (
             <dl

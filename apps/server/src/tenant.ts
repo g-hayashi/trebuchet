@@ -9,6 +9,10 @@ export type TenantEnv = {
   };
 };
 
+const activeRequests = new Map<string, number>();
+export const hasActiveEntityRequests = (id: string): boolean =>
+  (activeRequests.get(id.toLowerCase()) ?? 0) > 0;
+
 /**
  * `/entities/:entityId/*` の前処理: registry に事業体があるかを確認し、その事業体の DB だけを開く（FR-002）。
  * 不正な形式の entityId も、存在しない事業体と同じく 404 にする。
@@ -25,5 +29,12 @@ export const tenant = createMiddleware<TenantEnv>(async (c, next) => {
   }
   c.set("entityId", entityId);
   c.set("db", openTenant(entityId));
-  await next();
+  activeRequests.set(entityId, (activeRequests.get(entityId) ?? 0) + 1);
+  try {
+    await next();
+  } finally {
+    const remaining = (activeRequests.get(entityId) ?? 1) - 1;
+    if (remaining === 0) activeRequests.delete(entityId);
+    else activeRequests.set(entityId, remaining);
+  }
 });

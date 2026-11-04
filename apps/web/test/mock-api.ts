@@ -56,6 +56,7 @@ const DEFAULT_AI_SETTINGS = {
 };
 
 const DEFAULT_ROUTES: Record<string, Handler> = {
+  "GET /api/entities/archived": () => ok({ entities: [] }),
   "GET /api/auth/status": () => ok(DEFAULT_AUTH_STATUS),
   // 再認証（008）。パスキーの追加・削除と回復キーの再発行の前に、画面が呼ぶ。成功する
   "POST /api/auth/reauth/options": () => ok({ challenge: "reauth" }),

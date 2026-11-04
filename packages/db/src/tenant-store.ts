@@ -1,9 +1,9 @@
 import { hkdfSync, randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { WrappedKey } from "@trebuchet/domain";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { Database, type DrizzleDb, drizzleOf } from "./driver.ts";
 import * as authSchema from "./schema/auth.ts";
@@ -314,13 +314,33 @@ export function closeAll(): void {
   handles.clear();
 }
 
+/** 対象のハンドルを閉じ、副ファイルと証憑を含めて消す。他の事業体や共通DBには触れない。 */
+export function removeTenantData(entityId: string): void {
+  withDataKey(() => {
+    const file = tenantFile(entityId);
+    const entry = handles.get(file);
+    if (entry) {
+      entry.client.close();
+      handles.delete(file);
+    }
+    rmSync(receiptsDir(entityId), { recursive: true, force: true });
+    for (const suffix of ["-wal", "-shm", "-journal", ""])
+      rmSync(`${file}${suffix}`, { force: true });
+  });
+}
+
 /** registry に登録済みの事業体なら正規化した ID を返す。DB ファイルは作らない */
 export function findRegisteredEntityId(entityId: string): string | undefined {
   if (!isValidEntityId(entityId)) return undefined;
   const row = openRegistry()
     .select({ id: registrySchema.entities.id })
     .from(registrySchema.entities)
-    .where(eq(registrySchema.entities.id, entityId.toLowerCase()))
+    .where(
+      and(
+        eq(registrySchema.entities.id, entityId.toLowerCase()),
+        eq(registrySchema.entities.status, "active"),
+      ),
+    )
     .get();
   return row?.id;
 }

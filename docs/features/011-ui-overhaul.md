@@ -1,5 +1,16 @@
 # 画面の作り直し（011）
 
+## 組織の一覧と削除
+
+一覧のURLは `/list`（従来の `/?list=1` でも表示）。作成フォームの「個人・法人の違い」は展開式で、期首月・個人限定の決算機能・共通の初期設定を説明する。
+
+- 非表示: `POST /api/entities/:entityId/archive`。registry の `entities.status` を `archived` にして通常の一覧・切替・自動処理から外す。帳簿・証憑は保持するが、事業体配下のAPIは404にする。
+- 復元: `POST /api/entities/:entityId/restore`。`GET /api/entities/archived` の「非表示の組織」から一覧へ戻す。
+- 完全削除: `DELETE /api/entities/:entityId/purge`（JSON `{ name }`）。非表示済みかつ名称一致が必要。対象の操作が進行中なら拒否する。`deleting` を保存し、対象のDBハンドルを閉じてDB・副ファイル・証憑だけを消し、最後に一覧の行を消す。失敗時は `deleting` のまま残し、復元を拒否して完全削除を再試行できる。
+- バックアップ: 非表示の組織は状態ごと保持し、削除処理中の組織は新しいバックアップから除外する。既存のバックアップや証憑のバックアップは消さない。過去のバックアップを復元すると削除した組織も戻る場合があることを確認画面で説明する。
+
+実装: `usecases/entity-lifecycle.ts`（domain）、`registry-repository.ts`・`tenant-store.ts`（db）、`routes/entities.ts`・`tenant.ts`（server）、`features/entities/EntityListPage.tsx`・`routes/list.tsx`（web）。
+
 仕様: `specs/011-ui-overhaul/`。画面の正本は UI の契約 `contracts/ui-shell.md`（主な操作は §7、スマホは §4）。API の変更は `contracts/http-api.md`。ホーム・ヘッダー・メニュー・主なボタン・スマホ・設定・仕訳のかんたん入力・請求・印刷などを作り直した。帳簿の不変条件（INV-1〜68）は変えず、INV-69〜72 を足した（`specs/INVARIANTS.md`）。
 
 | 層 | 場所 |

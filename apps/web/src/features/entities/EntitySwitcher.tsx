@@ -8,7 +8,7 @@ import { entitiesQuery, entityKeys } from "./api";
 /** 最後に開いた事業体の ID を覚えるブラウザの鍵（011 R4） */
 const LAST_ENTITY_KEY = "trebuchet:lastEntityId";
 
-/** 切替の最後の項目「一覧・作成」の値（トップ画面 `/` へ移る）。事業体の ID と重ならない */
+/** 切替の最後の項目「一覧・作成」の値（`/list` へ移る）。事業体の ID と重ならない */
 const LIST_VALUE = "__list__";
 
 /**
@@ -83,7 +83,7 @@ export function EntitySwitcher({ onSelect }: { onSelect?: (() => void) | undefin
         onChange={(event) => {
           const next = event.currentTarget.value;
           if (next === LIST_VALUE) {
-            void navigate({ to: "/", search: { list: true } });
+            void navigate({ to: "/list" });
           } else if (next !== "" && next !== current) {
             void navigate({ to: "/e/$entityId", params: { entityId: next } });
           }

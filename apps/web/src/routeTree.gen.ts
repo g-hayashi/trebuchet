@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ListRouteImport } from './routes/list'
 import { Route as PairRouteImport } from './routes/pair'
 import { Route as SettingsRouteRouteImport } from './routes/settings/route'
 import { Route as EEntityIdRouteRouteImport } from './routes/e/$entityId/route'
@@ -63,6 +64,11 @@ import { Route as EEntityIdPeriodsYearOpeningBalancesRouteImport } from './route
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ListRoute = ListRouteImport.update({
+  id: '/list',
+  path: '/list',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PairRoute = PairRouteImport.update({
@@ -336,6 +342,7 @@ const EEntityIdPeriodsYearOpeningBalancesRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRouteRouteWithChildren
+  '/list': typeof ListRoute
   '/pair': typeof PairRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
   '/settings/ai': typeof SettingsAiRoute
@@ -388,6 +395,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRouteRouteWithChildren
+  '/list': typeof ListRoute
   '/pair': typeof PairRoute
   '/settings/ai': typeof SettingsAiRoute
   '/settings/backup': typeof SettingsBackupRoute
@@ -440,6 +448,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/settings': typeof SettingsRouteRouteWithChildren
+  '/list': typeof ListRoute
   '/pair': typeof PairRoute
   '/e/$entityId': typeof EEntityIdRouteRouteWithChildren
   '/settings/ai': typeof SettingsAiRoute
@@ -494,6 +503,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/settings'
+    | '/list'
     | '/pair'
     | '/e/$entityId'
     | '/settings/ai'
@@ -546,6 +556,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/settings'
+    | '/list'
     | '/pair'
     | '/settings/ai'
     | '/settings/backup'
@@ -597,6 +608,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/settings'
+    | '/list'
     | '/pair'
     | '/e/$entityId'
     | '/settings/ai'
@@ -650,6 +662,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SettingsRouteRoute: typeof SettingsRouteRouteWithChildren
+  ListRoute: typeof ListRoute
   PairRoute: typeof PairRoute
   EEntityIdRouteRoute: typeof EEntityIdRouteRouteWithChildren
 }
@@ -661,6 +674,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/list': {
+      id: '/list'
+      path: '/list'
+      fullPath: '/list'
+      preLoaderRoute: typeof ListRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pair': {
@@ -1125,6 +1145,7 @@ const EEntityIdRouteRouteWithChildren = EEntityIdRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SettingsRouteRoute: SettingsRouteRouteWithChildren,
+  ListRoute: ListRoute,
   PairRoute: PairRoute,
   EEntityIdRouteRoute: EEntityIdRouteRouteWithChildren,
 }

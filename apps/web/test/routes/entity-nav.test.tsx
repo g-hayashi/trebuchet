@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route as RootRoute } from "@/routes/__root";
 import { Route as EntityRoute } from "@/routes/e/$entityId/route";
 import { Route as HomeRoute } from "@/routes/index";
+import { Route as ListRoute } from "@/routes/list";
 import { type ApiCall, DEFAULT_AUTH_STATUS, mockApi, ok } from "../mock-api";
 
 const entity = {
@@ -283,6 +284,7 @@ function renderApp(url: string, handlers: Parameters<typeof mockApi>[0] = {}) {
   // routeTree.gen.ts と同じく、ファイルルートに id・path・親を後から与える
   const routeTree = RootRoute.addChildren([
     HomeRoute.update({ id: "/", path: "/", getParentRoute: () => RootRoute } as never),
+    ListRoute.update({ id: "/list", path: "/list", getParentRoute: () => RootRoute } as never),
     EntityRoute.update({
       id: "/e/$entityId",
       path: "/e/$entityId",
@@ -331,7 +333,7 @@ describe("ヘッダー（contracts/ui-shell.md §1）", () => {
     }
   });
 
-  it("事業体の切替の「一覧・作成」でトップ（`/`）の一覧へ移る", async () => {
+  it("事業体の切替の「一覧・作成」で /list へ移る", async () => {
     const { router } = renderApp(`/e/${entityA.id}`);
     const banner = await header();
     const switcher = await within(banner).findByRole("combobox", { name: "事業体" });
@@ -339,11 +341,11 @@ describe("ヘッダー（contracts/ui-shell.md §1）", () => {
       switcher,
       within(switcher).getByRole("option", { name: "一覧・作成" }),
     );
-    await waitFor(() => expect(path(router)).toBe("/"));
-    expect(router.state.location.search).toEqual({ list: true });
+    await waitFor(() => expect(path(router)).toBe("/list"));
+    expect(router.state.location.search).toEqual({});
   });
 
-  it("事業体が 1 件のときも切替が出て、「一覧・作成」でトップの一覧と作成へ移る（redirect しない）", async () => {
+  it("事業体が 1 件のときも切替が出て、「一覧・作成」で /list の一覧と作成へ移る", async () => {
     const { router } = renderApp(`/e/${entityA.id}`, {
       "GET /api/entities": () => ok({ entities: [entityA] }),
     });
@@ -354,7 +356,7 @@ describe("ヘッダー（contracts/ui-shell.md §1）", () => {
       within(switcher).getByRole("option", { name: "一覧・作成" }),
     );
     expect(await screen.findByRole("button", { name: "作成する" })).toBeInTheDocument();
-    expect(path(router)).toBe("/");
+    expect(path(router)).toBe("/list");
     expect(screen.getByRole("link", { name: "証憑を追加" })).toBeInTheDocument();
   });
 

@@ -83,6 +83,7 @@ export * from "./usecases/correct-journal.ts";
 export * from "./usecases/create-entity.ts";
 export * from "./usecases/create-journal.ts";
 export * from "./usecases/deferred-assets.ts";
+export * from "./usecases/entity-lifecycle.ts";
 export * from "./usecases/home.ts";
 export * from "./usecases/import-freee.ts";
 export * from "./usecases/inference.ts";

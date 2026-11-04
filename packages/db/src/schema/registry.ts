@@ -13,8 +13,14 @@ export const entities = sqliteTable(
     kind: text("kind", { enum: ["individual", "corporation"] }).notNull(),
     dbFile: text("db_file").notNull().unique(),
     createdAt: text("created_at").notNull(),
+    status: text("status", { enum: ["active", "archived", "deleting"] })
+      .notNull()
+      .default("active"),
   },
-  (t) => [check("entities_kind", sql`${t.kind} IN ('individual', 'corporation')`)],
+  (t) => [
+    check("entities_kind", sql`${t.kind} IN ('individual', 'corporation')`),
+    check("entities_status", sql`${t.status} IN ('active', 'archived', 'deleting')`),
+  ],
 );
 
 /** 端末に結びつく設定（バックアップに含めない）。data-model §1.5。リモートの設定は 004/T016 で auth.sqlite（`remote_settings`）へ移した */

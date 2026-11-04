@@ -10,6 +10,7 @@ import { reportKeys } from "@/features/reports/api";
 import { Route as RootRoute } from "@/routes/__root";
 import { Route as EntityRoute } from "@/routes/e/$entityId/route";
 import { Route as HomeRoute } from "@/routes/index";
+import { Route as ListRoute } from "@/routes/list";
 import { type ApiCall, mockApi, ok } from "../mock-api";
 
 const LAST_ENTITY_KEY = "trebuchet:lastEntityId";
@@ -53,6 +54,7 @@ function renderApp(url: string) {
   // routeTree.gen.ts と同じく、ファイルルートに id・path・親を後から与える
   const routeTree = RootRoute.addChildren([
     HomeRoute.update({ id: "/", path: "/", getParentRoute: () => RootRoute } as never),
+    ListRoute.update({ id: "/list", path: "/list", getParentRoute: () => RootRoute } as never),
     EntityRoute.update({
       id: "/e/$entityId",
       path: "/e/$entityId",
@@ -150,8 +152,8 @@ describe("EntitySwitcher（US6, T113）", () => {
 
     expect(await screen.findByRole("button", { name: "作成する" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "個人事業A" })).toBeInTheDocument();
-    expect(path(router)).toBe("/");
-    expect(router.state.location.search).toEqual({ list: true });
+    expect(path(router)).toBe("/list");
+    expect(router.state.location.search).toEqual({});
   });
 
   it("事業体がなければ表示しない", async () => {

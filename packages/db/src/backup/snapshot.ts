@@ -95,9 +95,11 @@ function sanitizeRegistryCopy(file: string, hasTenant: (entityId: string) => boo
     const triggers = db
       .prepare("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND sql IS NOT NULL")
       .all() as { name: string; sql: string }[];
-    const orphans = (db.prepare("SELECT id FROM entities").all() as { id: string }[])
-      .map((r) => r.id)
-      .filter((id) => !isValidEntityId(id) || !hasTenant(id));
+    const orphans = (
+      db.prepare("SELECT id, status FROM entities").all() as { id: string; status: string }[]
+    )
+      .filter((r) => r.status === "deleting" || !isValidEntityId(r.id) || !hasTenant(r.id))
+      .map((r) => r.id);
     db.transaction(() => {
       for (const t of triggers) db.exec(`DROP TRIGGER "${t.name.replaceAll('"', '""')}"`);
       for (const table of EXCLUDED_REGISTRY_TABLES) db.exec(`DELETE FROM "${table}"`);
