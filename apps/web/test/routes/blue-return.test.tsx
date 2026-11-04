@@ -293,6 +293,9 @@ describe("決算書の画面（US1）", () => {
     const list = await screen.findByRole("region", { name: "警告" });
     expect(within(list).getByText(/任意科目が 8 個あり/)).toBeInTheDocument();
     expect(within(list).getByText("経費計が損益計算書と一致しません")).toBeInTheDocument();
+    for (const toggle of within(list).getAllByText("説明と対応を見る")) {
+      await userEvent.setup().click(toggle);
+    }
     const omitted = within(list).getByRole("list", { name: "欄に載らなかった科目" });
     expect(
       within(omitted)
@@ -501,6 +504,7 @@ describe("決算書の3ページ（減価償却費の計算）", () => {
     renderYear();
 
     const list = await screen.findByRole("region", { name: "警告" });
+    await userEvent.setup().click(within(list).getByText("説明と対応を見る"));
     expect(within(list).getByRole("link", { name: "固定資産台帳を開く" })).toHaveAttribute(
       "href",
       "/e/e1/fixed-assets?year=2025",

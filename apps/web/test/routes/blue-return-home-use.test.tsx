@@ -516,6 +516,8 @@ describe("決算書の画面からのリンク", () => {
     const links = await screen.findAllByRole("link", { name: "家事按分・地代家賃の内訳" });
     expect(links[0]).toHaveAttribute("href", "/e/e1/blue-return/2025/home-use");
     const warnings = screen.getByRole("region", { name: "警告" });
+    for (const toggle of within(warnings).getAllByText("説明と対応を見る"))
+      await userEvent.setup().click(toggle);
     const stale = within(warnings).getByRole("link", { name: "仕訳の案を見る" });
     expect(stale).toHaveAttribute("href", "/e/e1/blue-return/2025/home-use");
     // 内訳の警告は内訳の入力へ

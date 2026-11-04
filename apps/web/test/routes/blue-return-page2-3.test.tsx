@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { BlueReturn } from "@trebuchet/schema";
+import { type BlueReturn, BlueReturnWarningCode } from "@trebuchet/schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route as YearRoute } from "@/routes/e/$entityId/blue-return/$year/index";
 import { apiError, mockApi, ok } from "../mock-api";
@@ -93,6 +93,65 @@ const rowOf = (table: HTMLElement, first: string) => {
     .getAllByRole("cell")
     .map((c) => c.textContent);
 };
+
+describe("警告の説明と対応", () => {
+  it.each(BlueReturnWarningCode.options)(
+    "%s の説明と対応は開いたときだけ表示する",
+    async (code) => {
+      mockApi({
+        [`GET ${YEAR_API}`]: () =>
+          ok({ blueReturn: blueReturn({ warnings: [{ code, message: `${code}の警告` }] }) }),
+      });
+      renderYear();
+      const warning = within(await screen.findByRole("region", { name: "警告" }));
+      expect(warning.getByText(`${code}の警告`)).toBeInTheDocument();
+      const toggle = warning.getByText("説明と対応を見る");
+      const details = toggle.closest("details");
+      expect(details).not.toHaveAttribute("open");
+      await userEvent.setup().click(toggle);
+      expect(details).toHaveAttribute("open");
+      expect(warning.getByText(/^意味：.+/)).toBeVisible();
+      expect(warning.getByText(/^対応：.+/)).toBeVisible();
+      await userEvent.setup().click(toggle);
+      expect(details).not.toHaveAttribute("open");
+    },
+  );
+
+  it("取引先なし・家賃・開業費に判断に必要な説明と対応先を示す", async () => {
+    mockApi({
+      [`GET ${YEAR_API}`]: () =>
+        ok({
+          blueReturn: blueReturn({
+            warnings: [
+              { code: "SALES_WITHOUT_PARTNER", message: "取引先なし" },
+              { code: "RENT_DETAILS_MISMATCH", message: "家賃の不一致" },
+              { code: "DEFERRED_ASSET_NOT_AMORTIZED", message: "開業費の未決定" },
+            ],
+          }),
+        }),
+    });
+    renderYear();
+    const warning = within(await screen.findByRole("region", { name: "警告" }));
+    for (const toggle of warning.getAllByText("説明と対応を見る"))
+      await userEvent.setup().click(toggle);
+    expect(warning.getByText(/売上の合計には含まれています/)).toBeInTheDocument();
+    expect(warning.getByText(/摘要に名前を書くだけでは/)).toBeInTheDocument();
+    expect(warning.getByText(/家賃総額と、家事按分後の必要経費算入額/)).toBeInTheDocument();
+    expect(warning.getByText(/0円で「償却しない」と決定/)).toBeInTheDocument();
+    expect(warning.getByRole("link", { name: "仕訳帳で取引先を確認する" })).toHaveAttribute(
+      "href",
+      "/e/e1/journals",
+    );
+    expect(warning.getByRole("link", { name: "地代家賃の内訳を直す" })).toHaveAttribute(
+      "href",
+      "/e/e1/blue-return/2025/home-use",
+    );
+    expect(warning.getByRole("link", { name: "開業費の償却額を決める" })).toHaveAttribute(
+      "href",
+      "/e/e1/deferred-assets?year=2025",
+    );
+  });
+});
 
 describe("決算書の2ページ（US5）", () => {
   it("月別の売上・雑収入・計を1〜12月と合計で表示する", async () => {
@@ -387,6 +446,8 @@ describe("決算書の3ページの減価償却（009 US1）", () => {
     const list = await screen.findByRole("region", { name: "警告" });
     for (const w of warnings)
       expect(within(list).getByText(new RegExp(w.message.slice(0, 12)))).toBeInTheDocument();
+    for (const toggle of within(list).getAllByText("説明と対応を見る"))
+      await userEvent.setup().click(toggle);
     const links = within(list).getAllByRole("link", { name: "固定資産台帳を開く" });
     expect(links).toHaveLength(2);
     expect(links[0]).toHaveAttribute("href", "/e/e1/fixed-assets?year=2025");
