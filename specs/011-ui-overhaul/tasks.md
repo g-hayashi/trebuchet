@@ -210,6 +210,9 @@ description: "Task list for 011-ui-overhaul"
 ## Phase 15: 利用者の端末での確認（メイン・利用者。値・取引先名は書かない）
 
 - [ ] T050 利用者の端末で `pnpm --filter @trebuchet/web e2e`（既存 5 本 + `mobile.spec.ts`）、`pnpm bench:reports`（SC-003）、`pnpm eval:statements` を T018・T042 の前（T019・T020 を T018 より先に行い、T020 の直後のコミットを基準にする）と後で実行して比べる（憲法 IV。明細の場面のルール・AI の精度が下がらないこと。`journal_entry` の場面は前の版にないので、後の値を初めての基準値として記録する）。結果（通った・落ちた、件数と割合だけ）をこの行の下に記録する
+  - 2026-11-04 `pnpm bench:reports`: すべて OK（SC-004 帳票 10 件、003/SC-006 決算書、011/SC-003 `GET /home` 最大 10.2 ms、009/SC-005、010/SC-002）
+  - e2e: 未実行
+  - eval:statements: 未実行
 - [ ] T051 Q: §3 の手動の確認（SC-011、Mac とスマホ）。要望ごとに日付と OK／NG と理由をこの行の下に記録する
 
 ---
