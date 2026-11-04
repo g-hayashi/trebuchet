@@ -307,6 +307,9 @@ apps/server ──→ packages/schema
 | 最初からある科目の保護（INV-70） | `ACCOUNT_SYSTEM_PROTECTED`（`packages/schema/src/errors.ts`、`packages/domain/src/usecases/masters.ts`、`apps/web/src/lib/api-errors.ts`） |
 | 印刷 | `apps/web/src/print.css`（請求書）、`features/blue-return/print.css`（決算書）、`features/invoicing/InvoiceDetail.tsx`・`InvoicePrint.tsx` |
 | バックアップの既定の置き場所 | `apps/server/src/lib/backup-folder.ts`（`resolveBackupFolder`） |
+| 明細の取込の手順と確認 | `apps/web/src/features/statements/`（`ImportWorkspace.tsx` の `Steps`、`candidate-chain.ts`、`ReviewQueue.tsx`）、`routes/e/$entityId/statements/review.tsx` |
+| ルールの `managed_by`（INV-71） | `packages/domain/src/statements/rules.ts`（`learnRule`）、`usecases/inference-rules.ts`、`packages/db/src/schema/tenant.ts` |
+| 仕訳の入力の AI の候補 | `packages/domain/src/statements/mask.ts`（`buildJournalEntryPayload`）・`prompt.ts`（`scene`）、`usecases/journal-ai-suggestion.ts`、`POST /journals/ai-suggestion`（`apps/server/src/routes/journals.ts`）、`apps/web/src/features/ai-assist/` |
 | 評価・E2E | `scripts/eval-statements.ts`、`packages/domain/src/statements/eval-runner.ts`、`packages/domain/test/fixtures/statements/statement-evals.ts`、`apps/web/e2e/mobile.spec.ts` |
 
 - **各画面で `variant="default"` のボタンは 1 つ**（`variant` を省くと `default`。主な操作。名前は ui-shell §7 の表）。それ以外は `outline` などにして見分けがつくようにする。新しい画面を足すときは §7 に足す。
@@ -314,6 +317,8 @@ apps/server ──→ packages/schema
 - **印刷は詳細の画面から直接行う**（別のページ `/print` を作らない）。印刷する範囲は詳細の `data-print-root` で示し、ヘッダー・メニュー・知らせを隠す規則は `print.css` に置く。
 - **バックアップの置き場所が未設定のとき、既定は `<リポジトリ直下>/bak/`**（011/R16。`resolveBackupFolder`。環境変数 `TREBUCHET_DEFAULT_BACKUP_DIR` で変えられる。`TREBUCHET_DATA_DIR` を変えても `bak/` はリポジトリ直下。`.gitignore` 済み）。既定の間は Mac を失うとバックアップも失われる。`BackupStatus.folderSource` が `configured`／`default`。テストは一時のディレクトリを渡す。
 - **申告の控え（`tax_return_memos`・`filed_documents`）とアプリの中の評価（`eval_runs`、`lib/jobs.ts`、`JOB_RUNNING`）は消した**（011 の migration で `DROP TABLE`）。過去の migration と snapshot にだけ残る。決算書の計算は控えを参照していなかったので変わらない。再び作らない。
+- **明細の承認の入力に `learn` はない**。承認のたびに学ぶ条件（`learnFromApproval`）でルールを作る・直す。ルールの一覧で利用者が直した・止めた・再開したルールは `managed_by = 'user'` になり、戻さない。承認と `seedRulesFromJournals` は `user` のルールを変えない（INV-71）。取込の確定の後、web が `inference-rules/seed` → `statements/candidates` → `statements/infer`（AI が無効なら飛ばす）を順に呼ぶ（`candidate-chain.ts`）。
+- **AI の推定の場面は `scene`（`statement`・`journal_entry`）で分ける**。`journal_entry` に送るのは `buildJournalEntryPayload` の日付・金額・`maskContent` を通した摘要だけ（INV-45）。`statement` の場面の指示文は `packages/domain/test/statements/prompt-golden.test.ts` が固定する（変えるときは `eval:statements` の前後の比較が要る）。仕訳の AI の候補は保存せず、ルールを使わない。
 - **`eval:statements` の規則**: 明細の推定のプロンプト・推定の経路（ルール → 端末内 → 外部）を変えるときは、変更の前と後で `pnpm eval:statements` を実行して結果を比べる（Constitution IV、011/R10）。AI（`fm` と外部）を呼ぶので CI に含まれない。結果は `.tmp/eval-statements/` に件数と割合だけを残し、モデル名・URL・キー・明細・AI の回答を書かない。外部の有効・無効の状態や fixture の版が違う結果は比べない。CI のテストは偽の `SuggestionProvider` で集計だけを確かめる。`eval:columns`（007）・`eval:receipts`（010）と同じ規則。
 
 ## データと一時ファイル
