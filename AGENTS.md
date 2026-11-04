@@ -36,11 +36,12 @@ apps/server ──→ packages/schema
 | 型チェック（全パッケージ + scripts） | `pnpm typecheck` |
 | Lint（Biome） | `pnpm lint` |
 | 整形（Biome で書き換え） | `pnpm format` |
-| 性能計測（SC-004 の仕訳 2,000 件、003 の SC-006 の決算書、009 の SC-005 の資産の画面、010 の SC-002 の証憑 5,000 件の検索。認証つき） | `pnpm bench:reports` |
+| 性能計測（SC-004 の仕訳 2,000 件、003 の SC-006 の決算書、009 の SC-005 の資産の画面、010 の SC-002 の証憑 5,000 件の検索、011 の SC-003 の `GET /home`。認証つき） | `pnpm bench:reports` |
 | 性能計測（freee 取込の 500 仕訳、002 の SC-002） | `pnpm bench:import` |
 | 性能計測（バックアップ、004 の SC-005） | `pnpm bench:backup`（環境変数でしきい値と件数を変えられる。使い方は `scripts/bench-backup.ts` の先頭のコメント） |
 | 性能計測（明細 500 件の CSV の読み取り・確認・候補、007 の SC-006。AI は呼ばない） | `pnpm bench:statements`（環境変数でしきい値・回数・件数を変えられる。使い方は `scripts/bench-statements.ts` の先頭のコメント） |
 | 列の案の評価（端末内の AI `fm serve` を呼ぶ。合成の例。CI に含まれない） | `pnpm eval:columns`（結果を `.tmp/eval-columns/` に残し前回と比べる。使い方は `scripts/eval-column-suggestions.ts` の先頭のコメント） |
+| 明細の推定の評価（ルール → 端末内 → 外部。合成の明細。CI に含まれない） | `pnpm eval:statements`（接続先は環境変数。結果を `.tmp/eval-statements/` に残し前回と比べる。使い方は `scripts/eval-statements.ts` の先頭のコメント） |
 | 証憑の読み取りの評価（外部の AI を呼ぶ。合成の画像。CI に含まれない） | `pnpm eval:receipts`（接続先は環境変数。結果を `.tmp/eval-receipts/` に残し前回と比べる。使い方は `scripts/eval-receipts.ts` の先頭のコメント） |
 | バックアップ（`.tbk`）の復元（server を止めて行う） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--receipts-dir <dir>] [--allow-missing-receipts] [--yes]`（回復キーを標準入力から読む。証憑のフラグは下の 010 の節。`scripts/restore-backup.ts` の先頭のコメント） |
 | freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。`scripts/verify-freee-import.ts` の先頭のコメント。`--continue` は 008 以降使えない: 実行ごとに乱数の DK で作るため） |
@@ -107,7 +108,7 @@ apps/server ──→ packages/schema
 |---|---|
 | 決算書の組み立て（様式、按分、減価償却、控除の判定、月別売上と売上先、期首の貸借対照表の検査、CSV） | `packages/domain/src/blue-return/`（`form.ts`、`build.ts`、`home-use.ts`、`depreciation.ts`、`deduction.ts`、`sales.ts`、`balance-sheet.ts`、`opening-check.ts`、`tax-parameters.ts`、`csv.ts`） |
 | ユースケース | `packages/domain/src/usecases/blue-return.ts` |
-| 永続化（按分・資産・控除の回答・メモの保存、決算整理の仕訳との結びつけ） | `packages/db/src/closing-repository.ts` |
+| 永続化（按分・資産・控除の回答の保存、決算整理の仕訳との結びつけ。申告の控え `tax_return_memos`・`filed_documents` は 011 で消した） | `packages/db/src/closing-repository.ts` |
 | HTTP | `apps/server/src/routes/blue-return.ts`、`fixed-assets.ts` |
 | 画面 | `apps/web/src/features/blue-return/`、`fixed-assets/`、`apps/web/src/routes/e/$entityId/` の `blue-return/`・`fixed-assets/` |
 
@@ -198,10 +199,10 @@ apps/server ──→ packages/schema
 |---|---|
 | 入出力の型（明細・口座・候補・ルール・評価、AI の出力 `AiSuggestion`） | `packages/schema/src/statements.ts`、`ai.ts` |
 | 業務ルール（表の読み取り（007 で `paste.ts` を置き換えた。下の 007 の節）、安定したキー、正規化、仕訳の形、振替、既存の仕訳との照合、ルール、マスクと送信の内容、プロンプト、評価、状態の導出） | `packages/domain/src/statements/`（`table.ts`、`columns.ts`、`keys.ts`、`normalize.ts`、`journal-shape.ts`、`transfer.ts`、`match-existing.ts`、`rules.ts`、`mask.ts`、`prompt.ts`、`evals.ts`、`status.ts`） |
-| ユースケース | `packages/domain/src/usecases/statements.ts`、`statement-candidates.ts`、`statement-approval.ts`、`inference.ts`、`inference-rules.ts`、`evals.ts` |
-| 永続化（取込の回・明細・候補・結びつき・ルール・評価・操作の記録、registry の AI 設定） | `packages/db/src/statement-repository.ts`、`ai-settings-repository.ts` |
+| ユースケース | `packages/domain/src/usecases/statements.ts`、`statement-candidates.ts`、`statement-approval.ts`、`inference.ts`、`inference-rules.ts`（評価のユースケース `evals.ts` は 011 で消した） |
+| 永続化（取込の回・明細・候補・結びつき・ルール・操作の記録、registry の AI 設定） | `packages/db/src/statement-repository.ts`、`ai-settings-repository.ts` |
 | HTTP | `apps/server/src/routes/statements.ts`、`ai-settings.ts` |
-| server の部品 | `apps/server/src/lib/`（`ai-client.ts`、`ai-runtime.ts`、`fm-server.ts`、`jobs.ts`） |
+| server の部品 | `apps/server/src/lib/`（`ai-client.ts`、`ai-runtime.ts`、`fm-server.ts`） |
 | 画面 | `apps/web/src/features/statements/`、`features/ai-settings/`、`apps/web/src/routes/e/$entityId/statements/`、`apps/web/src/routes/settings/ai.tsx` |
 | E2E・性能 | `apps/web/e2e/statements.spec.ts`、`scripts/bench-statements.ts` |
 
@@ -210,7 +211,7 @@ apps/server ──→ packages/schema
 - **端末内のモデルは `fm serve`**（モデル名 `system`。`stream` は送らない（`stream: false` には応答しない。省くと SSE で返り、`ai-client.ts` が読み分ける）。ポート `TREBUCHET_FM_PORT`、既定 18790）。最初の推定で起動し、server の終了で止める（006/R10）。外部の AI の API キーはキーチェーン（004 と同じ `SecretStore`）に置く。`ai_settings` は registry の表で、バックアップに含めない（006/R12）。
 - **AI の設定の必須項目の検査**（外部を有効にするのに URL・モデル・API キーがそろっていなければ 422 `AI_NOT_CONFIGURED`）は `apps/server/src/routes/ai-settings.ts` にある。帳簿の業務ルールではなく、端末の設定値の検査なので server に置く。
 - **銀行の自動連携は実装しない**（2026-11-02 利用者の判断。API でも画面からの取得でも作らない。MF ME の画面からの取得は 2026-10-26 に取りやめ済み）。取込は貼り付けとファイル（007）。`apps/server` は Playwright に依存しない。
-- **評価のジョブは同時に 1 つ**（409 `JOB_RUNNING`。`lib/jobs.ts` の `startTask`）。server の差し替えは `createApp({ jobs, ai: { fetch, secrets, settings, fm } })`。
+- **アプリの中の評価（実行・履歴の保存・表示。表 `eval_runs`、`lib/jobs.ts`、`JOB_RUNNING`）は 011 で消した**（011/R10）。評価はスクリプト `pnpm eval:statements`（CI に含まれない。規則は下の 011 の節）。採点の純関数 `statements/evals.ts` は残る。server の差し替えは `createApp({ ai: { fetch, secrets, settings, fm } })`。
 - **テストは `fm`・外部の AI を呼ばない**。偽の `SuggestionProvider`（domain）と偽の `fetch`（server）を使う。
 - **明細の承認だけが仕訳を作る**（INV-41）。仕訳の `source` は `statement`（通常どおり訂正・取消できる）。明細の状態は保存せず、結びつき・除外・仕訳の状態から導く（006/R15）。
 - **実環境の確認（貼り付けの形、`fm serve`）の結果は、値・口座名・摘要を書かない**。形だけを記録する（quickstart §3）。
@@ -292,6 +293,29 @@ apps/server ──→ packages/schema
 - **区分などの表示名は `features/receipts/labels.ts` の 1 か所だけ**に置く（`paper_scan` は「紙を撮影（原本は保存）」、`electronic` は「電子取引」）。識別子は schema の値のまま使い、画面・テストで表示名を書き直さない。
 - **web の証憑の操作の後の読み直し**: 仕訳が変わる操作（証憑と仕訳の結びつけ・解除、証憑からの仕訳の登録）は `invalidateLedger`（証憑の query も読み直す）、証憑だけが変わる操作は `receiptKeys.all(entityId)` を読み直す。API 呼び出しと query key は `features/receipts/api.ts`（「開発の進め方」のとおり）。
 
+## 画面の作り直し（011）
+
+仕様: `specs/011-ui-overhaul/`。画面の正本は UI の契約 `contracts/ui-shell.md`（主な操作は §7、スマホは §4）。API の変更は `contracts/http-api.md`。ホーム・ヘッダー・メニュー・主なボタン・スマホ・設定・仕訳のかんたん入力・請求・印刷などを作り直した。帳簿の不変条件（INV-1〜68）は変えず、INV-69〜72 を足した（`specs/INVARIANTS.md`）。
+
+| 層 | 場所 |
+|---|---|
+| 骨組み（ヘッダー、事業体のメニュー、スマホのメニュー、PC の推奨の表示） | `apps/web/src/components/layout/`（`AppHeader.tsx`、`EntityNav.tsx`、`MobileNav.tsx`、`PcRecommended.tsx`）、`apps/web/src/lib/use-media-query.ts` |
+| 共通の部品 | `apps/web/src/components/ui/`（`sheet.tsx`、`steps.tsx`、`toast.tsx`、`combobox.tsx`、`dialog.tsx`、`button.tsx`、`table.tsx` など） |
+| ホーム（今日やること、今期の数字） | `apps/web/src/features/home/`（`HomePage.tsx`、`api.ts`）、server の `GET /home`（`apps/server/src/routes/home.ts`）、`packages/domain/src/usecases/home.ts` |
+| 仕訳の入力 | `apps/web/src/features/journals/`（`QuickEntryForm.tsx`、`JournalSuggestions.tsx`）、下書き `packages/domain/src/usecases/journal-drafts.ts`・`packages/db/src/journal-draft-repository.ts`、税区分の既定 `packages/schema/src/tax-defaults.ts`、科目の読み `account-readings.ts` |
+| 取引先の一括の保存 | `POST /partners/profile`・`PUT /partners/:partnerId/profile`（`apps/server/src/routes/invoicing.ts`）、`savePartnerProfile`（`packages/domain/src/usecases/invoicing.ts`） |
+| 最初からある科目の保護（INV-70） | `ACCOUNT_SYSTEM_PROTECTED`（`packages/schema/src/errors.ts`、`packages/domain/src/usecases/masters.ts`、`apps/web/src/lib/api-errors.ts`） |
+| 印刷 | `apps/web/src/print.css`（請求書）、`features/blue-return/print.css`（決算書）、`features/invoicing/InvoiceDetail.tsx`・`InvoicePrint.tsx` |
+| バックアップの既定の置き場所 | `apps/server/src/lib/backup-folder.ts`（`resolveBackupFolder`） |
+| 評価・E2E | `scripts/eval-statements.ts`、`packages/domain/src/statements/eval-runner.ts`、`packages/domain/test/fixtures/statements/statement-evals.ts`、`apps/web/e2e/mobile.spec.ts` |
+
+- **各画面で `variant="default"` のボタンは 1 つ**（`variant` を省くと `default`。主な操作。名前は ui-shell §7 の表）。それ以外は `outline` などにして見分けがつくようにする。新しい画面を足すときは §7 に足す。
+- **ブラウザに覚える値は `localStorage` に置く**（帳簿のデータではない。011/R4）。最後に開いた事業体（`EntitySwitcher.tsx` の `entityToRestore`）、`trebuchet.receiptCategory.<entityId>`、`trebuchet.depositAccount.<entityId>`。DB や API に足さない。
+- **印刷は詳細の画面から直接行う**（別のページ `/print` を作らない）。印刷する範囲は詳細の `data-print-root` で示し、ヘッダー・メニュー・知らせを隠す規則は `print.css` に置く。
+- **バックアップの置き場所が未設定のとき、既定は `<リポジトリ直下>/bak/`**（011/R16。`resolveBackupFolder`。環境変数 `TREBUCHET_DEFAULT_BACKUP_DIR` で変えられる。`TREBUCHET_DATA_DIR` を変えても `bak/` はリポジトリ直下。`.gitignore` 済み）。既定の間は Mac を失うとバックアップも失われる。`BackupStatus.folderSource` が `configured`／`default`。テストは一時のディレクトリを渡す。
+- **申告の控え（`tax_return_memos`・`filed_documents`）とアプリの中の評価（`eval_runs`、`lib/jobs.ts`、`JOB_RUNNING`）は消した**（011 の migration で `DROP TABLE`）。過去の migration と snapshot にだけ残る。決算書の計算は控えを参照していなかったので変わらない。再び作らない。
+- **`eval:statements` の規則**: 明細の推定のプロンプト・推定の経路（ルール → 端末内 → 外部）を変えるときは、変更の前と後で `pnpm eval:statements` を実行して結果を比べる（Constitution IV、011/R10）。AI（`fm` と外部）を呼ぶので CI に含まれない。結果は `.tmp/eval-statements/` に件数と割合だけを残し、モデル名・URL・キー・明細・AI の回答を書かない。外部の有効・無効の状態や fixture の版が違う結果は比べない。CI のテストは偽の `SuggestionProvider` で集計だけを確かめる。`eval:columns`（007）・`eval:receipts`（010）と同じ規則。
+
 ## データと一時ファイル
 
 - **実データを読まない、コミットしない**。`work/` と `data/` は実データを含む。中身を開く・要約する・テストの入力にする・コミットすることをしない。`.gitignore` で除外済み。
@@ -300,7 +324,7 @@ apps/server ──→ packages/schema
 
 ## 仕様と文書
 
-- Spec Kit の成果物は `specs/<NNN-feature>/`（001〜007）に置く: `spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`tasks.md`（`contracts/`、`checklists/` がある機能もある）。完了した機能の `tasks.md` と `checklists/` は記録として残す。
+- Spec Kit の成果物は `specs/<NNN-feature>/`（001〜011）に置く: `spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`tasks.md`（`contracts/`、`checklists/` がある機能もある）。完了した機能の `tasks.md` と `checklists/` は記録として残す。
 - **番号は機能ごとに振り直される**（research の R、タスクの T）。他の機能の番号を指すときは `001/R6`、`005/T024` の形で機能の番号をつける。不変条件の INV だけは通し番号（`specs/INVARIANTS.md`）。
 - Spec Kit のテンプレート、スクリプト、憲法（`.specify/memory/constitution.md`）は `.specify/` に置く。
 - Spec Kit のスキルは、Claude Code 用が `.claude/skills/speckit-*`、GitHub Copilot CLI 用が `.github/skills/speckit-*` にある。どちらも `uvx --from git+https://github.com/github/spec-kit.git@v1.2.1 specify integration upgrade <claude|copilot>` で更新する（手で片方だけを直さない）。
