@@ -35,8 +35,8 @@ export const Route = createFileRoute("/e/$entityId/deferred-assets/")({
 });
 
 /**
- * 開業費の画面（009 US3。以前は固定資産台帳の下の節だった）。
- * 開業費の登録・編集と、年分ごとの償却額の決定、決算整理の仕訳の案。見出し・主な操作の仕上げは US7（T033）
+ * 開業費の画面（009 US3。以前は固定資産台帳の下の節だった。011 FR-046）。
+ * 開業費の登録・編集と、年分ごとの償却額の決定、決算整理の仕訳の案。API・規則（009）は変えない
  */
 function DeferredAssetsPage() {
   const { entityId } = Route.useParams();

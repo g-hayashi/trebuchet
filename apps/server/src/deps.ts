@@ -56,7 +56,6 @@ import {
   type SecretStore,
   type StatementUnitOfWork,
   type SuggestionProvider,
-  type TaxReturnRecordDeps,
 } from "@trebuchet/domain";
 import { type BackupRunner, createBackupRunner } from "./lib/backup-run.ts";
 import { createFmServer } from "./lib/fm-server.ts";
@@ -147,13 +146,13 @@ export function blueReturnDeps(db: TenantDb): ReportDeps & { closing: ClosingSto
 }
 
 /**
- * 決算の設定（控除の回答・メモ・按分・内訳・資産・控え）の依存。読み取りは masters・closing、
+ * 決算の設定（控除の回答・メモ・按分・内訳・資産）の依存。読み取りは masters・closing、
  * 保存は uow（保存と履歴を 1 つのトランザクションで書く）を使う
  */
 export function closingSettingsDeps(
   db: TenantDb,
   clock: Clock,
-): ClosingSettingsDeps & ClosingReadDeps & TaxReturnRecordDeps {
+): ClosingSettingsDeps & ClosingReadDeps {
   return {
     uow: createClosingUnitOfWork(db),
     masters: new DrizzleMasterRepository(db),

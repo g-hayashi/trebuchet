@@ -13,14 +13,12 @@ import {
   DepreciationMethod,
   DepreciationRowMethod,
   ErrorCode,
-  FiledDocumentInput,
   FixedAssetDisposeInput,
   FixedAssetInput,
   FixedAssetsQuery,
   FixedAssetUpdateInput,
   HomeUseAllocationInput,
   RentDetailInput,
-  TaxReturnMemoInput,
 } from "../src/index.ts";
 
 const ID = "0190f3a0-0000-7000-8000-000000000001";
@@ -190,72 +188,6 @@ describe("ClosingNoteKind", () => {
     expect(ClosingNoteKind.safeParse("special_circumstances").success).toBe(true);
     expect(ClosingNoteKind.safeParse("opening_difference").success).toBe(true);
     expect(ClosingNoteKind.safeParse("other").success).toBe(false);
-  });
-});
-
-describe("TaxReturnMemoInput", () => {
-  it("11種の kind を受け付ける（other は label つき）", () => {
-    for (const kind of [
-      "salary",
-      "social_insurance",
-      "small_business_mutual_aid",
-      "life_insurance",
-      "earthquake_insurance",
-      "donation",
-      "medical",
-      "stocks",
-      "crypto",
-      "foreign_tax_credit",
-    ]) {
-      expect(TaxReturnMemoInput.safeParse({ kind }).success).toBe(true);
-    }
-    expect(TaxReturnMemoInput.safeParse({ kind: "other", label: "ふるさと納税" }).success).toBe(
-      true,
-    );
-  });
-  it("other で label なし・空は拒否する", () => {
-    expect(TaxReturnMemoInput.safeParse({ kind: "other" }).success).toBe(false);
-    expect(TaxReturnMemoInput.safeParse({ kind: "other", label: "  " }).success).toBe(false);
-    expect(TaxReturnMemoInput.safeParse({ kind: "other", label: null }).success).toBe(false);
-  });
-  it("amount は 0 以上の整数", () => {
-    expect(TaxReturnMemoInput.safeParse({ kind: "salary", amount: 0 }).success).toBe(true);
-    expect(TaxReturnMemoInput.safeParse({ kind: "salary", amount: -1 }).success).toBe(false);
-    expect(TaxReturnMemoInput.safeParse({ kind: "salary", amount: 1.5 }).success).toBe(false);
-  });
-  it("filePath は / で始まる絶対パスだけ", () => {
-    expect(
-      TaxReturnMemoInput.safeParse({ kind: "salary", filePath: "/Users/a/b.pdf" }).success,
-    ).toBe(true);
-    expect(TaxReturnMemoInput.safeParse({ kind: "salary", filePath: null }).success).toBe(true);
-    expect(TaxReturnMemoInput.safeParse({ kind: "salary", filePath: "docs/a.pdf" }).success).toBe(
-      false,
-    );
-    expect(TaxReturnMemoInput.safeParse({ kind: "salary", filePath: "" }).success).toBe(false);
-  });
-  it("未知の kind を拒否する", () => {
-    expect(TaxReturnMemoInput.safeParse({ kind: "unknown" }).success).toBe(false);
-  });
-});
-
-describe("FiledDocumentInput", () => {
-  const ok = { kind: "blue_return", filePath: "/Users/a/r.pdf" };
-  it("4種の kind と絶対パスを受け付ける", () => {
-    for (const kind of ["blue_return", "tax_return", "attachment", "other"]) {
-      expect(FiledDocumentInput.safeParse({ ...ok, kind }).success).toBe(true);
-    }
-    expect(
-      FiledDocumentInput.safeParse({ ...ok, filedOn: "2026-03-10", memo: "控え" }).success,
-    ).toBe(true);
-  });
-  it.each([
-    { ...ok, filePath: "docs/a.pdf" },
-    { ...ok, filePath: "./a.pdf" },
-    { ...ok, filePath: "" },
-    { ...ok, kind: "receipt" },
-    { kind: "blue_return" },
-  ])("不正な入力を拒否する %#", (input) => {
-    expect(FiledDocumentInput.safeParse(input).success).toBe(false);
   });
 });
 

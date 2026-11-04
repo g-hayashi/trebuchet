@@ -8,7 +8,6 @@ import type {
   EntityKind,
   ErrorCode,
   ErrorDetails,
-  FiledDocumentKind,
   InvoiceIssuer,
   InvoicePriceMode,
   InvoiceTaxDisplay,
@@ -27,7 +26,6 @@ import type {
   StatementLinkKind,
   TaxCategoryCode,
   TaxpayerStatus,
-  TaxReturnMemoKind,
   WarningCode,
 } from "@trebuchet/schema";
 
@@ -333,13 +331,7 @@ export type Page<T> = {
 
 // ---- 決算処理・確定申告（003-tax-return。data-model §1 の各表に対応する） ----
 
-export type {
-  AdjustmentKind,
-  ClosingNoteKind,
-  DepreciationMethod,
-  FiledDocumentKind,
-  TaxReturnMemoKind,
-};
+export type { AdjustmentKind, ClosingNoteKind, DepreciationMethod };
 
 export type TaxParameterKey =
   | "SMALL_ASSET_THRESHOLD"
@@ -490,27 +482,6 @@ export type ClosingNote = {
   kind: ClosingNoteKind;
   body: string;
   updatedAt: string;
-};
-
-/** 事業所得以外の控え（§1.8） */
-export type TaxReturnMemo = {
-  id: string;
-  fiscalYear: number;
-  kind: TaxReturnMemoKind;
-  label: string | null;
-  amount: number | null;
-  filePath: string | null;
-  memo: string | null;
-};
-
-/** 提出書類の記録（§1.9） */
-export type FiledDocument = {
-  id: string;
-  fiscalYear: number;
-  kind: FiledDocumentKind;
-  filePath: string;
-  filedOn: string | null;
-  memo: string | null;
 };
 
 export type ClosingAuditTargetType =

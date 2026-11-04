@@ -144,9 +144,9 @@ description: "Task list for 011-ui-overhaul"
 
 **Independent Test**: spec US7 の Independent Test
 
-- [ ] T031 [US7] テスト先行で申告の控えを消す（R14、§1.3、H: §3）: 表 `tax_return_memos`・`filed_documents` の `DROP TABLE`（マイグレーション）と、R14 の Decision の 1 項目めと追記の参照（db・domain・schema・server・web の控えの部分と関係するテスト）を消す（`routeTree.gen.ts` を再生成）。消した API が 404 になるテストを足す。控えに固有のエラーコードがあれば grep で消す。`grep -rn "tax_return_memos\|filed_documents\|filedDocuments\|TaxReturnMemo" packages apps scripts` が 0 件（マイグレーションの履歴を除く）
-- [ ] T032 [US7] テスト先行で決算書の画面（R14、FR-043〜045）: `routes/e/$entityId/blue-return/index.tsx` を今日を含む会計期間の年（なければ最新）へ転送、`$year/index.tsx` の上に年度の select。`blue-return/$year/deduction.tsx` を消し（`routeTree.gen.ts` を再生成）、回答の欄を `features/blue-return/DeductionAnswersDialog.tsx` に移して欄 44 の近くに「要件を直す」（回答がなければ「要件に回答すると控除額が出ます」）、保存の後に決算書を読み直す。使わない欄の切替をなくし常に隠す、CSV は `blankUnused=true` を常に付ける。テスト `blue-return.test.tsx`・`blue-return-page*.test.tsx`・`blue-return-home-use.test.tsx` を直す
-- [ ] T033 [US7] テスト先行で開業費の画面（R14、FR-046）: T005 で足した `routes/e/$entityId/deferred-assets/index.tsx` を仕上げる（`features/deferred-assets/` の部品、見出し、主な操作。固定資産台帳からの削除は T005 で済み）。API・規則（009）は変えない。テスト: `fixed-assets.test.tsx` の開業費の部分を新しい `deferred-assets.test.tsx` に移す
+- [X] T031 [US7] テスト先行で申告の控えを消す（R14、§1.3、H: §3）: 表 `tax_return_memos`・`filed_documents` の `DROP TABLE`（マイグレーション）と、R14 の Decision の 1 項目めと追記の参照（db・domain・schema・server・web の控えの部分と関係するテスト）を消す（`routeTree.gen.ts` を再生成）。消した API が 404 になるテストを足す。控えに固有のエラーコードがあれば grep で消す。`grep -rn "tax_return_memos\|filed_documents\|filedDocuments\|TaxReturnMemo" packages apps scripts` が 0 件（マイグレーションの履歴を除く）
+- [X] T032 [US7] テスト先行で決算書の画面（R14、FR-043〜045）: `routes/e/$entityId/blue-return/index.tsx` を今日を含む会計期間の年（なければ最新）へ転送、`$year/index.tsx` の上に年度の select。`blue-return/$year/deduction.tsx` を消し（`routeTree.gen.ts` を再生成）、回答の欄を `features/blue-return/DeductionAnswersDialog.tsx` に移して欄 44 の近くに「要件を直す」（回答がなければ「要件に回答すると控除額が出ます」）、保存の後に決算書を読み直す。使わない欄の切替をなくし常に隠す、CSV は `blankUnused=true` を常に付ける。テスト `blue-return.test.tsx`・`blue-return-page*.test.tsx`・`blue-return-home-use.test.tsx` を直す
+- [X] T033 [US7] テスト先行で開業費の画面（R14、FR-046）: T005 で足した `routes/e/$entityId/deferred-assets/index.tsx` を仕上げる（`features/deferred-assets/` の部品、見出し、主な操作。固定資産台帳からの削除は T005 で済み）。API・規則（009）は変えない。テスト: `fixed-assets.test.tsx` の開業費の部分を新しい `deferred-assets.test.tsx` に移す
 
 ---
 

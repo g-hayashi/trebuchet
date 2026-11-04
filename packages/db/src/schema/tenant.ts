@@ -687,60 +687,6 @@ export const closingNotes = sqliteTable(
   ],
 );
 
-export const taxReturnMemos = sqliteTable(
-  "tax_return_memos",
-  {
-    id: text("id").primaryKey(),
-    fiscalYear: integer("fiscal_year").notNull(),
-    kind: text("kind", {
-      enum: [
-        "salary",
-        "social_insurance",
-        "small_business_mutual_aid",
-        "life_insurance",
-        "earthquake_insurance",
-        "donation",
-        "medical",
-        "stocks",
-        "crypto",
-        "foreign_tax_credit",
-        "other",
-      ],
-    }).notNull(),
-    label: text("label"),
-    amount: integer("amount"),
-    filePath: text("file_path"),
-    memo: text("memo"),
-  },
-  (t) => [
-    index("tax_return_memos_year").on(t.fiscalYear),
-    check(
-      "tax_return_memos_kind",
-      sql`${t.kind} IN ('salary', 'social_insurance', 'small_business_mutual_aid', 'life_insurance', 'earthquake_insurance', 'donation', 'medical', 'stocks', 'crypto', 'foreign_tax_credit', 'other')`,
-    ),
-    check("tax_return_memos_amount", sql`${t.amount} IS NULL OR ${t.amount} >= 0`),
-  ],
-);
-
-export const filedDocuments = sqliteTable(
-  "filed_documents",
-  {
-    id: text("id").primaryKey(),
-    fiscalYear: integer("fiscal_year").notNull(),
-    kind: text("kind", { enum: ["blue_return", "tax_return", "attachment", "other"] }).notNull(),
-    filePath: text("file_path").notNull(),
-    filedOn: text("filed_on"),
-    memo: text("memo"),
-  },
-  (t) => [
-    index("filed_documents_year").on(t.fiscalYear),
-    check(
-      "filed_documents_kind",
-      sql`${t.kind} IN ('blue_return', 'tax_return', 'attachment', 'other')`,
-    ),
-  ],
-);
-
 export const closingAuditLog = sqliteTable(
   "closing_audit_log",
   {

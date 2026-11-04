@@ -48,7 +48,6 @@ import { recurringRoutes } from "./routes/recurring.ts";
 import { reportRoutes } from "./routes/reports.ts";
 import { remoteSettingsRoutes } from "./routes/settings.ts";
 import { statementRoutes } from "./routes/statements.ts";
-import { taxReturnRoutes } from "./routes/tax-return.ts";
 import { type TenantEnv, tenant } from "./tenant.ts";
 
 /**
@@ -75,7 +74,6 @@ function tenantRoutes(
     .route("/", blueReturnRoutes(options))
     .route("/", fixedAssetRoutes(options))
     .route("/", deferredAssetRoutes(options))
-    .route("/", taxReturnRoutes(options))
     .route("/", invoicingRoutes(options))
     .route("/", recurringRoutes(options))
     .route("/", statementRoutes(options))

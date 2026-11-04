@@ -11,14 +11,8 @@ import { formatSignedYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import "./print.css";
 
-/** 決算書の1ページ（損益計算書）。blankUnused なら使わない欄の金額を空欄にする（FR-008） */
-export function FormPage1({
-  lines,
-  blankUnused,
-}: {
-  lines: BlueReturn["page1"]["lines"];
-  blankUnused: boolean;
-}) {
+/** 決算書の1ページ（損益計算書）。使わない欄の金額は常に空欄にする（FR-045） */
+export function FormPage1({ lines }: { lines: BlueReturn["page1"]["lines"] }) {
   return (
     <section className="print-page" aria-label="決算書 1ページ（損益計算書）">
       <Table aria-label="決算書 1ページ">
@@ -37,7 +31,7 @@ export function FormPage1({
               </TableCell>
               <TableCell>{line.label}</TableCell>
               <TableCell className="text-right tabular-nums">
-                {blankUnused && line.kind === "unused"
+                {line.kind === "unused"
                   ? ""
                   : line.amount === null
                     ? "未回答"

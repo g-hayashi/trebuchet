@@ -107,9 +107,9 @@ apps/server ──→ packages/schema
 |---|---|
 | 決算書の組み立て（様式、按分、減価償却、控除の判定、月別売上と売上先、期首の貸借対照表の検査、CSV） | `packages/domain/src/blue-return/`（`form.ts`、`build.ts`、`home-use.ts`、`depreciation.ts`、`deduction.ts`、`sales.ts`、`balance-sheet.ts`、`opening-check.ts`、`tax-parameters.ts`、`csv.ts`） |
 | ユースケース | `packages/domain/src/usecases/blue-return.ts` |
-| 永続化（按分・資産・控除の回答・メモ・控えの保存、決算整理の仕訳との結びつけ） | `packages/db/src/closing-repository.ts` |
-| HTTP | `apps/server/src/routes/blue-return.ts`、`fixed-assets.ts`、`tax-return.ts` |
-| 画面 | `apps/web/src/features/blue-return/`、`fixed-assets/`、`tax-return/`、`apps/web/src/routes/e/$entityId/` の `blue-return/`・`fixed-assets/`・`tax-return/` |
+| 永続化（按分・資産・控除の回答・メモの保存、決算整理の仕訳との結びつけ） | `packages/db/src/closing-repository.ts` |
+| HTTP | `apps/server/src/routes/blue-return.ts`、`fixed-assets.ts` |
+| 画面 | `apps/web/src/features/blue-return/`、`fixed-assets/`、`apps/web/src/routes/e/$entityId/` の `blue-return/`・`fixed-assets/` |
 
 - **按分と減価償却（少額の特例のほか、009 の定額法・一括償却・開業費）は、決算整理の「仕訳」として登録する**。ドメインが案を作り、利用者が確かめて 001 の `createJournal` で登録する。決算書は帳簿の損益計算書・貸借対照表と一致する。
 - **税制の値の足し方**（基準額、控除額など。Constitution VI）: 次の**両方**に、適用の期間つきの行を足す。出典の URL は必須（国税庁・財務省などの一次資料）。

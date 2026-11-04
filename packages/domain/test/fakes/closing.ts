@@ -6,13 +6,11 @@ import type {
   DeductionAnswers,
   DeferredAmortization,
   DeferredAsset,
-  FiledDocument,
   FixedAsset,
   HomeUseAllocation,
   RentDetail,
   StraightLineRate,
   TaxParameter,
-  TaxReturnMemo,
 } from "../../src/types.ts";
 import { InMemoryLedgerRepository } from "./ledger.ts";
 import { InMemoryMasterRepository } from "./master.ts";
@@ -29,8 +27,6 @@ type ClosingState = {
   adjustmentRefs: AdjustmentRef[];
   deductionAnswers: DeductionAnswers[];
   closingNotes: ClosingNote[];
-  taxReturnMemos: TaxReturnMemo[];
-  filedDocuments: FiledDocument[];
   audits: ClosingAuditEntry[];
 };
 
@@ -45,8 +41,6 @@ const emptyClosingState = (): ClosingState => ({
   adjustmentRefs: [],
   deductionAnswers: [],
   closingNotes: [],
-  taxReturnMemos: [],
-  filedDocuments: [],
   audits: [],
 });
 
@@ -159,26 +153,6 @@ export class InMemoryClosingStore implements ClosingStore {
       ),
       { ...row },
     ];
-  }
-
-  listTaxReturnMemos(fiscalYear: number): TaxReturnMemo[] {
-    return structuredClone(this.state.taxReturnMemos.filter((m) => m.fiscalYear === fiscalYear));
-  }
-  upsertTaxReturnMemo(row: TaxReturnMemo): void {
-    this.state.taxReturnMemos = upsertById(this.state.taxReturnMemos, row);
-  }
-  deleteTaxReturnMemo(id: string): void {
-    this.state.taxReturnMemos = this.state.taxReturnMemos.filter((m) => m.id !== id);
-  }
-
-  listFiledDocuments(fiscalYear: number): FiledDocument[] {
-    return structuredClone(this.state.filedDocuments.filter((d) => d.fiscalYear === fiscalYear));
-  }
-  upsertFiledDocument(row: FiledDocument): void {
-    this.state.filedDocuments = upsertById(this.state.filedDocuments, row);
-  }
-  deleteFiledDocument(id: string): void {
-    this.state.filedDocuments = this.state.filedDocuments.filter((d) => d.id !== id);
   }
 
   appendClosingAudit(entry: ClosingAuditEntry): void {

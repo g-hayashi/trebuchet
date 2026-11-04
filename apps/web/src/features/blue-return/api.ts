@@ -95,6 +95,6 @@ export const putClosingNote = async (
     }),
   );
 
-/** CSV のダウンロードの URL。blankUnused は表示の切り替えと同じ値を渡す（保存しない） */
-export const blueReturnCsvUrl = (entityId: string, year: string, blankUnused: boolean) =>
-  `/api/entities/${encodeURIComponent(entityId)}/blue-return/${encodeURIComponent(year)}/csv?blankUnused=${blankUnused}`;
+/** CSV のダウンロードの URL。使わない欄は常に空にする（`blankUnused=true`。様式の行の対応を保つ。FR-045） */
+export const blueReturnCsvUrl = (entityId: string, year: string) =>
+  `/api/entities/${encodeURIComponent(entityId)}/blue-return/${encodeURIComponent(year)}/csv?blankUnused=true`;

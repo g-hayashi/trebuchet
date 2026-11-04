@@ -14,7 +14,7 @@ const latest = (periods: readonly FiscalPeriod[]) =>
   );
 
 /** 今日を含む会計期間。なければ最新の会計期間 */
-function currentPeriod(periods: readonly FiscalPeriod[]) {
+export function currentPeriod(periods: readonly FiscalPeriod[]) {
   return periodOf(periods, today()) ?? latest(periods);
 }
 

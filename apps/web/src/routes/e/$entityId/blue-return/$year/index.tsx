@@ -1,19 +1,56 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
+import { NativeSelect } from "@/components/ui/input";
 import { blueReturnCsvUrl, blueReturnQuery } from "@/features/blue-return/api";
+import { DeductionAnswersDialog } from "@/features/blue-return/DeductionAnswersDialog";
 import { FormPage1 } from "@/features/blue-return/FormPage1";
 import { FormPage2 } from "@/features/blue-return/FormPage2";
 import { FormPage3 } from "@/features/blue-return/FormPage3";
 import { FormPage4 } from "@/features/blue-return/FormPage4";
 import { WarningList } from "@/features/blue-return/WarningList";
+import { fiscalPeriodsQuery } from "@/features/periods/api";
 import { formatSignedYen } from "@/lib/format";
 
 export const Route = createFileRoute("/e/$entityId/blue-return/$year/")({
   component: BlueReturnPage,
 });
+
+/** 年度の切り替え（FR-043）。会計期間のある年度を新しい順に並べる。開いている年度は必ず含める */
+function YearSwitcher({ entityId, year }: { entityId: string; year: string }) {
+  const id = useId();
+  const navigate = useNavigate();
+  const { data: periods } = useQuery(fiscalPeriodsQuery(entityId));
+  const years = [...new Set([...(periods ?? []).map((p) => p.fiscalYear), Number(year)])].sort(
+    (a, b) => b - a,
+  );
+  return (
+    <div className="no-print flex items-center gap-2">
+      <label htmlFor={id} className="text-sm font-medium">
+        年度
+      </label>
+      <NativeSelect
+        id={id}
+        className="w-32"
+        value={year}
+        onChange={(e) =>
+          navigate({
+            to: "/e/$entityId/blue-return/$year",
+            params: { entityId, year: e.target.value },
+          })
+        }
+      >
+        {years.map((y) => (
+          <option key={y} value={String(y)}>
+            {y}年分
+          </option>
+        ))}
+      </NativeSelect>
+    </div>
+  );
+}
 
 /** 第一表に転記する値の1項目。回答がなく金額が null のときは「要件の回答が必要」 */
 function TransferValue({ label, amount }: { label: string; amount: number | null }) {
@@ -35,25 +72,23 @@ function TransferValue({ label, amount }: { label: string; amount: number | null
 function BlueReturnPage() {
   const { entityId, year } = Route.useParams();
   const { data, error } = useQuery(blueReturnQuery(entityId, year));
-  // 使わない欄を空欄で表示する切り替え。保存しない（FR-008）
-  const [blankUnused, setBlankUnused] = useState(false);
+  // 控除の要件の回答のダイアログ（FR-044）
+  const [answersOpen, setAnswersOpen] = useState(false);
 
   return (
     <main className="blue-return-print grid gap-4">
-      <div className="no-print">
-        <Link to="/e/$entityId/blue-return" params={{ entityId }} className="text-sm underline">
-          年度の一覧
-        </Link>
-      </div>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">青色申告決算書 {year}年分</h1>
+        <YearSwitcher entityId={entityId} year={year} />
+      </div>
+      <div className="flex flex-wrap items-center justify-end gap-4">
         {data && (
           <div className="no-print flex flex-wrap items-center gap-3">
             <Button variant="outline" onClick={() => window.print()}>
               印刷
             </Button>
             <a
-              href={blueReturnCsvUrl(entityId, year, blankUnused)}
+              href={blueReturnCsvUrl(entityId, year)}
               download
               className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium shadow-xs hover:bg-muted"
             >
@@ -92,14 +127,23 @@ function BlueReturnPage() {
               />
             </dl>
             {(data.transfer.businessIncome === null || data.transfer.blueDeduction === null) && (
-              <Link
-                to="/e/$entityId/blue-return/$year/deduction"
-                params={{ entityId, year }}
-                className="no-print mt-3 inline-block text-sm underline"
-              >
-                要件を回答する
-              </Link>
+              <p className="no-print mt-3 text-sm text-muted-foreground">
+                要件に回答すると控除額が出ます
+              </p>
             )}
+            <Button
+              variant="outline"
+              className="no-print mt-3"
+              onClick={() => setAnswersOpen(true)}
+            >
+              要件を直す
+            </Button>
+            <DeductionAnswersDialog
+              entityId={entityId}
+              year={year}
+              open={answersOpen}
+              onOpenChange={setAnswersOpen}
+            />
           </section>
           <p className="no-print text-sm">
             <Link
@@ -120,16 +164,7 @@ function BlueReturnPage() {
             </Link>
           </p>
           <WarningList entityId={entityId} year={year} warnings={data.warnings} />
-          <label className="no-print flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="size-4"
-              checked={blankUnused}
-              onChange={(e) => setBlankUnused(e.target.checked)}
-            />
-            使わない欄を空欄で表示
-          </label>
-          <FormPage1 lines={data.page1.lines} blankUnused={blankUnused} />
+          <FormPage1 lines={data.page1.lines} />
           <FormPage2 page2={data.page2} />
           <FormPage3 entityId={entityId} year={year} page3={data.page3} />
           <FormPage4 entityId={entityId} year={year} page4={data.page4} warnings={data.warnings} />

@@ -49,7 +49,6 @@ import type {
   DeferredAsset,
   EntityProfile,
   EntitySummary,
-  FiledDocument,
   FiscalPeriod,
   FixedAsset,
   HomeUseAllocation,
@@ -87,7 +86,6 @@ import type {
   TaxCategory,
   TaxParameter,
   TaxRate,
-  TaxReturnMemo,
   TaxSetting,
   ValidJournal,
   WorkHoursRow,
@@ -300,12 +298,6 @@ export interface ClosingStore {
   upsertDeductionAnswers(row: DeductionAnswers): void;
   listClosingNotes(fiscalYear: number): ClosingNote[];
   upsertClosingNote(row: ClosingNote): void;
-  listTaxReturnMemos(fiscalYear: number): TaxReturnMemo[];
-  upsertTaxReturnMemo(row: TaxReturnMemo): void;
-  deleteTaxReturnMemo(id: string): void;
-  listFiledDocuments(fiscalYear: number): FiledDocument[];
-  upsertFiledDocument(row: FiledDocument): void;
-  deleteFiledDocument(id: string): void;
   appendClosingAudit(entry: ClosingAuditEntry): void;
   // ---- 009（定額法・一括償却資産・開業費） ----
   /** 定額法の償却率の表（耐用年数、適用の開始日の順） */

@@ -1,8 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { BlueReturn } from "@trebuchet/schema";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { Route as DeductionRoute } from "@/routes/e/$entityId/blue-return/$year/deduction";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route as YearRoute } from "@/routes/e/$entityId/blue-return/$year/index";
 import { Route as ListRoute } from "@/routes/e/$entityId/blue-return/index";
 import { mockApi, ok } from "../mock-api";
@@ -93,41 +92,53 @@ const lineRow = (no: number) => {
   return row;
 };
 
-describe("決算書の年度の一覧", () => {
-  it("会計期間ごとに年分と状態を表示し、決算書へのリンクを出す", async () => {
-    mockApi({
-      [`GET ${ENTITY}/fiscal-periods`]: () =>
-        ok({
-          fiscalPeriods: [
-            {
-              id: "p1",
-              fiscalYear: 2025,
-              startDate: "2025-01-01",
-              endDate: "2025-12-31",
-              status: "closed",
-              closedAt: "2026-01-10T00:00:00.000Z",
-            },
-            {
-              id: "p2",
-              fiscalYear: 2026,
-              startDate: "2026-01-01",
-              endDate: "2026-12-31",
-              status: "open",
-              closedAt: null,
-            },
-          ],
-        }),
-    });
+const period = (fiscalYear: number, status: "open" | "closed" = "open") => ({
+  id: `p${fiscalYear}`,
+  fiscalYear,
+  startDate: `${fiscalYear}-01-01`,
+  endDate: `${fiscalYear}-12-31`,
+  status,
+  closedAt: status === "closed" ? `${fiscalYear + 1}-01-10T00:00:00.000Z` : null,
+});
+
+describe("決算書の年度の入口（FR-043）", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const renderList = () =>
     renderRoute(ListRoute, { path: "/e/$entityId/blue-return/", url: "/e/e1/blue-return" });
 
-    const link = await screen.findByRole("link", { name: "2025年分" });
-    expect(link).toHaveAttribute("href", "/e/e1/blue-return/2025");
-    expect(screen.getByRole("link", { name: "2026年分" })).toHaveAttribute(
-      "href",
-      "/e/e1/blue-return/2026",
-    );
-    expect(screen.getByText("締め済み")).toBeInTheDocument();
-    expect(screen.getByText("締め前（暫定）")).toBeInTheDocument();
+  it("今日を含む会計期間の年の決算書へ転送する", async () => {
+    mockApi({
+      [`GET ${ENTITY}/fiscal-periods`]: () =>
+        ok({ fiscalPeriods: [period(2025, "closed"), period(2026), period(2027)] }),
+    });
+    const { router } = renderList();
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/e/e1/blue-return/2026"));
+  });
+
+  it("今日を含む会計期間がなければ最新の年へ転送する", async () => {
+    mockApi({
+      [`GET ${ENTITY}/fiscal-periods`]: () =>
+        ok({ fiscalPeriods: [period(2024, "closed"), period(2025, "closed")] }),
+    });
+    const { router } = renderList();
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/e/e1/blue-return/2025"));
+  });
+
+  it("会計期間がなければ転送せず、その旨を示す", async () => {
+    mockApi({ [`GET ${ENTITY}/fiscal-periods`]: () => ok({ fiscalPeriods: [] }) });
+    const { router } = renderList();
+
+    expect(await screen.findByText("会計期間がありません。")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/e/e1/blue-return");
   });
 });
 
@@ -168,10 +179,11 @@ describe("決算書の画面（US1）", () => {
     const cells = within(lineRow(17)).getAllByRole("cell");
     expect(cells.map((c) => c.textContent)).toEqual(["17", "消耗品費", "100,000"]);
     expect(within(lineRow(33)).getAllByRole("cell")[2]).toHaveTextContent("900,000");
-    expect(within(lineRow(2)).getAllByRole("cell")[2]).toHaveTextContent("0");
+    // 使わない欄は常に空欄（FR-045）
+    expect(within(lineRow(2)).getAllByRole("cell")[2]?.textContent).toBe("");
   });
 
-  it("要件の回答がないとき、欄45・44 に「要件の回答が必要」と回答の画面へのリンクを出す", async () => {
+  it("要件の回答がないとき、欄45・44 に「要件の回答が必要」と、回答すると控除額が出る旨と「要件を直す」を出す", async () => {
     mockApi({
       [`GET ${YEAR_API}`]: () =>
         ok({
@@ -192,38 +204,65 @@ describe("決算書の画面（US1）", () => {
 
     const region = await screen.findByRole("region", { name: "第一表に転記する値" });
     expect(within(region).getAllByText("要件の回答が必要")).toHaveLength(2);
-    const link = within(region).getByRole("link", { name: "要件を回答する" });
-    expect(link).toHaveAttribute("href", "/e/e1/blue-return/2025/deduction");
+    expect(within(region).getByText("要件に回答すると控除額が出ます")).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "要件を直す" })).toBeInTheDocument();
+    // 画面は別の画面へのリンクを持たない（回答はこの画面の中で直す）
+    expect(within(region).queryByRole("link", { name: "要件を回答する" })).not.toBeInTheDocument();
     // 0 と見間違えない
     expect(within(region).queryByText("0")).not.toBeInTheDocument();
     expect(within(lineRow(45)).getAllByRole("cell")[2]).not.toHaveTextContent("0");
   });
 
-  it("使わない欄を空欄で表示する切り替え。保存せず、CSV のリンクにも blankUnused を渡す", async () => {
+  it("回答があるときも「要件を直す」を欄44の近くに常に置く（回答の案内は出さない）", async () => {
     mockApi({ [`GET ${YEAR_API}`]: () => ok({ blueReturn: blueReturn() }) });
-    const user = userEvent.setup();
+    renderYear();
+
+    const region = await screen.findByRole("region", { name: "第一表に転記する値" });
+    expect(within(region).getByRole("button", { name: "要件を直す" })).toBeInTheDocument();
+    expect(within(region).queryByText("要件に回答すると控除額が出ます")).not.toBeInTheDocument();
+  });
+
+  it("使わない欄は常に空欄で表示し（切り替えはない）、CSV のリンクには常に blankUnused=true を付ける", async () => {
+    mockApi({ [`GET ${YEAR_API}`]: () => ok({ blueReturn: blueReturn() }) });
     renderYear();
     await screen.findByRole("table", { name: "決算書 1ページ" });
 
-    const csv = screen.getByRole("link", { name: "CSV をダウンロード" });
-    expect(csv).toHaveAttribute("href", `${YEAR_API}/csv?blankUnused=false`);
+    expect(screen.queryByRole("checkbox", { name: "使わない欄を空欄で表示" })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByRole("link", { name: "CSV をダウンロード" })).toHaveAttribute(
+      "href",
+      `${YEAR_API}/csv?blankUnused=true`,
+    );
     const unusedNos = [2, 3, 4, 5, 6, 7, 34, 35, 36, 37, 38, 39, 40, 41, 42];
-    for (const no of unusedNos) {
-      expect(within(lineRow(no)).getAllByRole("cell")[2]).toHaveTextContent("0");
-    }
-
-    await user.click(screen.getByRole("checkbox", { name: "使わない欄を空欄で表示" }));
-
     for (const no of unusedNos) {
       expect(within(lineRow(no)).getAllByRole("cell")[2]).toHaveTextContent(/^$/);
     }
     // 使う欄は 0 でも空欄にしない
     expect(within(lineRow(8)).getAllByRole("cell")[2]).toHaveTextContent("0");
     expect(within(lineRow(17)).getAllByRole("cell")[2]).toHaveTextContent("100,000");
-    expect(screen.getByRole("link", { name: "CSV をダウンロード" })).toHaveAttribute(
-      "href",
-      `${YEAR_API}/csv?blankUnused=true`,
+  });
+
+  it("画面の上の年度の select で別の年度の決算書へ切り替える（FR-043）", async () => {
+    mockApi({
+      [`GET ${ENTITY}/fiscal-periods`]: () =>
+        ok({ fiscalPeriods: [period(2024, "closed"), period(2025), period(2026)] }),
+      [`GET ${YEAR_API}`]: () => ok({ blueReturn: blueReturn() }),
+    });
+    const user = userEvent.setup();
+    const { router } = renderYear();
+
+    const select = await screen.findByRole("combobox", { name: "年度" });
+    await waitFor(() =>
+      expect(
+        within(select)
+          .getAllByRole("option")
+          .map((o) => o.textContent),
+      ).toEqual(["2026年分", "2025年分", "2024年分"]),
     );
+    expect(select).toHaveValue("2025");
+    await user.selectOptions(select, "2026");
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/e/e1/blue-return/2026"));
   });
 
   it("OPTIONAL_LINES_OVERFLOW は載らなかった科目名と金額を出し、科目の画面へのリンクを付ける", async () => {
@@ -276,87 +315,81 @@ describe("決算書の画面（US1）", () => {
   });
 });
 
-describe("控除の要件の回答の画面", () => {
+describe("控除の要件の回答のダイアログ（FR-044）", () => {
   const ANSWERS = `${YEAR_API}/deduction-answers`;
-  const renderDeduction = () =>
-    renderRoute(DeductionRoute, {
-      path: "/e/$entityId/blue-return/$year/deduction",
-      url: "/e/e1/blue-return/2025/deduction",
-    });
-
-  it("5つの質問に答えて保存し、上限額と満たさない要件を表示する", async () => {
-    let saved = false;
-    const calls = mockApi({
-      [`GET ${ANSWERS}`]: () =>
-        saved
-          ? ok({
-              answers: {
-                doubleEntry: true,
-                statementsAttached: true,
-                filedOnTime: true,
-                eTax: false,
-                electronicBooks: false,
-              },
-              cap: {
-                cap: 550_000,
-                tier: "standard",
-                unmet: ["e-Tax での送信または優良な電子帳簿の保存"],
-              },
-            })
-          : ok({ answers: null, cap: null }),
-      [`PUT ${ANSWERS}`]: () => {
-        saved = true;
-        return ok({
-          answers: {
-            doubleEntry: true,
-            statementsAttached: true,
-            filedOnTime: true,
-            eTax: false,
-            electronicBooks: false,
-          },
-          cap: {
-            cap: 550_000,
-            tier: "standard",
-            unmet: ["e-Tax での送信または優良な電子帳簿の保存"],
-          },
-        });
-      },
-    });
-    const user = userEvent.setup();
-    renderDeduction();
-
-    expect(await screen.findByText("まだ回答がありません。")).toBeInTheDocument();
-    const boxes = screen.getAllByRole("checkbox");
-    expect(boxes).toHaveLength(5);
-    for (const box of boxes) expect(box).not.toBeChecked();
-
-    await user.click(screen.getByRole("checkbox", { name: /正規の簿記の原則/ }));
-    await user.click(screen.getByRole("checkbox", { name: /貸借対照表と損益計算書を/ }));
-    await user.click(screen.getByRole("checkbox", { name: /期限内に申告/ }));
-    await user.click(screen.getByRole("button", { name: "保存" }));
-
-    expect(await screen.findByText("上限額: 550,000 円")).toBeInTheDocument();
-    // 保存後に入力欄を作り直しても、成功のメッセージは残る
-    expect(await screen.findByText("保存しました。")).toBeInTheDocument();
-    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
+  const SAVED = {
+    answers: {
       doubleEntry: true,
       statementsAttached: true,
       filedOnTime: true,
       eTax: false,
       electronicBooks: false,
+    },
+    cap: {
+      cap: 550_000,
+      tier: "standard",
+      unmet: ["e-Tax での送信または優良な電子帳簿の保存"],
+    },
+  };
+
+  const openDialog = async (user: ReturnType<typeof userEvent.setup>) => {
+    const region = await screen.findByRole("region", { name: "第一表に転記する値" });
+    await user.click(within(region).getByRole("button", { name: "要件を直す" }));
+    return screen.findByRole("dialog", { name: /青色申告特別控除の要件/ });
+  };
+
+  it("5つの質問に答えて保存し、決算書を読み直して欄44・45 を更新する。上限額と満たさない要件も出す", async () => {
+    let saved = false;
+    const calls = mockApi({
+      [`GET ${YEAR_API}`]: () =>
+        ok({
+          blueReturn: saved
+            ? blueReturn({}, { businessIncome: 350_000, blueDeduction: 550_000 })
+            : blueReturn({}, { businessIncome: null, blueDeduction: null }),
+        }),
+      [`GET ${ANSWERS}`]: () => ok(saved ? SAVED : { answers: null, cap: null }),
+      [`PUT ${ANSWERS}`]: () => {
+        saved = true;
+        return ok(SAVED);
+      },
     });
-    expect(screen.getByText("e-Tax での送信または優良な電子帳簿の保存")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "決算書に戻る" })).toHaveAttribute(
-      "href",
-      "/e/e1/blue-return/2025",
-    );
+    const user = userEvent.setup();
+    renderYear();
+    const dialog = await openDialog(user);
+
+    expect(await within(dialog).findByText("まだ回答がありません。")).toBeInTheDocument();
+    const boxes = within(dialog).getAllByRole("checkbox");
+    expect(boxes).toHaveLength(5);
+    for (const box of boxes) expect(box).not.toBeChecked();
+
+    await user.click(within(dialog).getByRole("checkbox", { name: /正規の簿記の原則/ }));
+    await user.click(within(dialog).getByRole("checkbox", { name: /貸借対照表と損益計算書を/ }));
+    await user.click(within(dialog).getByRole("checkbox", { name: /期限内に申告/ }));
+    await user.click(within(dialog).getByRole("button", { name: "保存" }));
+
+    expect(await within(dialog).findByText("上限額: 550,000 円")).toBeInTheDocument();
+    // 保存後に入力欄を作り直しても、成功のメッセージは残る
+    expect(await screen.findByText("保存しました。")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual(SAVED.answers);
+    expect(
+      within(dialog).getByText("e-Tax での送信または優良な電子帳簿の保存"),
+    ).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByRole("checkbox", { name: /期限内に申告/ })).toBeChecked(),
+      expect(within(dialog).getByRole("checkbox", { name: /期限内に申告/ })).toBeChecked(),
     );
+
+    // 決算書を読み直し、欄44・45 に値が出る（回答がないときの案内は消える）
+    expect(calls.filter((c) => c.method === "GET" && c.path === YEAR_API)).toHaveLength(2);
+    await user.click(within(dialog).getByRole("button", { name: "閉じる" }));
+    const region = screen.getByRole("region", { name: "第一表に転記する値" });
+    await waitFor(() => expect(within(region).getByText("550,000")).toBeInTheDocument());
+    expect(within(region).getByText("350,000")).toBeInTheDocument();
+    expect(within(region).queryByText("要件に回答すると控除額が出ます")).not.toBeInTheDocument();
   });
 
   it("保存済みの回答を表示する。満たさない要件がなければその一覧は出さない", async () => {
     mockApi({
+      [`GET ${YEAR_API}`]: () => ok({ blueReturn: blueReturn() }),
       [`GET ${ANSWERS}`]: () =>
         ok({
           answers: {
@@ -369,12 +402,14 @@ describe("控除の要件の回答の画面", () => {
           cap: { cap: 650_000, tier: "max", unmet: [] },
         }),
     });
-    renderDeduction();
+    const user = userEvent.setup();
+    renderYear();
+    const dialog = await openDialog(user);
 
-    expect(await screen.findByText("上限額: 650,000 円")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /e-Tax で/ })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /優良な電子帳簿/ })).not.toBeChecked();
-    expect(screen.queryByText("満たしていない要件")).not.toBeInTheDocument();
+    expect(await within(dialog).findByText("上限額: 650,000 円")).toBeInTheDocument();
+    expect(within(dialog).getByRole("checkbox", { name: /e-Tax で/ })).toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: /優良な電子帳簿/ })).not.toBeChecked();
+    expect(within(dialog).queryByText("満たしていない要件")).not.toBeInTheDocument();
   });
 });
 

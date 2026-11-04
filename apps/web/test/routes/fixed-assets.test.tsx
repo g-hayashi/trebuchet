@@ -91,18 +91,8 @@ const PROPOSAL: AdjustmentProposal = {
 
 const DEFERRED = `${ENTITY}/deferred-assets`;
 
-/** 年度の償却の見え方（API の `amortization`）。2025 年: 上限 300,000、目安 45,000（9 か月分） */
-const deferredView = (over: Record<string, unknown> = {}) => ({
-  fiscalYear: 2025,
-  openingBalance: 300_000,
-  target: 45_000,
-  decision: null,
-  registered: false,
-  closingBalance: 300_000,
-  ...over,
-});
-
-const deferred = (over: Record<string, unknown> = {}) => ({
+/** 開業費は固定資産台帳に出さない。出さないことの検査だけに使う（開業費の画面は deferred-assets.test.tsx） */
+const deferred = () => ({
   id: "d-1",
   name: "開業費",
   totalAmount: 300_000,
@@ -113,8 +103,7 @@ const deferred = (over: Record<string, unknown> = {}) => ({
   note: null,
   createdAt: "2025-04-01T00:00:00.000Z",
   updatedAt: "2025-04-01T00:00:00.000Z",
-  amortization: deferredView(),
-  ...over,
+  amortization: null,
 });
 
 const DEFERRED_PROPOSAL: AdjustmentProposal = {
@@ -229,31 +218,6 @@ function mockScreen(opts: Opts = {}) {
       return ok({ asset: saved });
     },
     [`GET ${DEFERRED}`]: () => ok({ deferredAssets: state.deferredAssets }),
-    [`POST ${DEFERRED}`]: (call) => {
-      const saved = deferred({ id: "d-new", ...(call.body as object), amortization: null });
-      state.deferredAssets = [...state.deferredAssets, saved];
-      return ok({ deferredAsset: saved }, 201);
-    },
-    [`PUT ${DEFERRED}/d-1`]: (call) => {
-      const saved = deferred({ ...(call.body as object) });
-      state.deferredAssets = [saved];
-      return ok({ deferredAsset: saved });
-    },
-    [`PUT ${DEFERRED}/d-1/amortizations/2025`]: (call) => {
-      const { amount } = call.body as { amount: number };
-      const amortization = deferredView({
-        decision: {
-          deferredAssetId: "d-1",
-          fiscalYear: 2025,
-          amount,
-          decidedAt: "2025-12-01T00:00:00.000Z",
-          updatedAt: "2025-12-01T00:00:00.000Z",
-        },
-        closingBalance: 300_000 - amount,
-      });
-      state.deferredAssets = [deferred({ amortization })];
-      return ok({ amortization, proposal: amount === 0 ? null : DEFERRED_PROPOSAL });
-    },
     [`GET ${ADJUSTMENTS}`]: () => ok({ proposals: state.proposals }),
     [`POST ${ADJUSTMENTS}`]: () => {
       state.proposals = [];

@@ -2,13 +2,9 @@ import {
   type AdjustmentProposal,
   type BlueReturn,
   CLOSING_NOTE_MAX,
-  type FiledDocumentInput,
   type FixedAssetInput,
   type HomeUseAllocationInput,
   type RentDetailInput,
-  TAX_RETURN_LABEL_MAX,
-  TAX_RETURN_MEMO_MAX,
-  type TaxReturnMemoInput,
   YEN_LIMIT,
 } from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
@@ -58,7 +54,6 @@ import {
   type DomainWarning,
   domainError,
   err,
-  type FiledDocument,
   type FiscalPeriod,
   type FixedAsset,
   type HomeUseAllocation,
@@ -67,8 +62,6 @@ import {
   periodNotFound,
   type RentDetail,
   type Result,
-  type TaxReturnMemo,
-  validation,
 } from "../types.ts";
 import { createJournal } from "./create-journal.ts";
 import type { ReportDeps } from "./reports.ts";
@@ -1070,162 +1063,4 @@ export function commitAdjustment(
     tx.closing.insertAdjustmentRef(ref);
     return ok({ journal: created.value.journal, ref, warnings: created.value.warnings });
   });
-}
-
-// ---- 申告の控え・提出書類（US6。FR-033〜036） ----
-
-/** 控え・書類の保存の依存。決算書の計算に使わず、履歴（closing_audit_log）にも残さないので Clock は要らない */
-export type TaxReturnRecordDeps = {
-  masters: MasterRepository;
-  closing: ClosingStore;
-  ids: IdGenerator;
-};
-
-const invalid = (field: string, message: string): Result<never> => validation(message, { field });
-
-/** ファイルの場所（R13）。相対パスはサーバーの作業ディレクトリに依存するため拒否する。中身は読まない */
-function checkFilePath(value: string | null | undefined, required: boolean): Result<string | null> {
-  if (value == null || value === "") {
-    return required ? invalid("filePath", "ファイルの場所を入力してください") : ok(null);
-  }
-  if (!value.startsWith("/") || value.length > 1000) {
-    return invalid("filePath", "絶対パス（/ で始まる）を入力してください");
-  }
-  return ok(value);
-}
-
-const checkMemoText = (value: string | null | undefined): Result<string | null> =>
-  value != null && value.length > TAX_RETURN_MEMO_MAX
-    ? invalid("memo", `メモは ${TAX_RETURN_MEMO_MAX} 文字以内で入力してください`)
-    : ok(value ?? null);
-
-/** 事業所得以外の控えの一覧（FR-033）。ファイルの有無はサーバーが付ける（R13） */
-export function listTaxReturnMemos(
-  deps: Pick<TaxReturnRecordDeps, "masters" | "closing">,
-  params: { fiscalYear: number },
-): Result<TaxReturnMemo[]> {
-  const individual = requireIndividual(deps.masters);
-  if (!individual.ok) return individual;
-  return ok(deps.closing.listTaxReturnMemos(params.fiscalYear));
-}
-
-/**
- * 事業所得以外の控え（給与・社会保険料・寄附金など）を登録・更新する（FR-033）。params.id があれば
- * 更新（同じ年度の控えだけ）、なければ作る。決算書の計算には使わない（FR-034）。履歴は残さない
- */
-export function saveTaxReturnMemo(
-  deps: TaxReturnRecordDeps,
-  params: TaxReturnMemoInput & { fiscalYear: number; id?: string },
-): Result<TaxReturnMemo> {
-  const individual = requireIndividual(deps.masters);
-  if (!individual.ok) return individual;
-  if (
-    params.id !== undefined &&
-    !deps.closing.listTaxReturnMemos(params.fiscalYear).some((m) => m.id === params.id)
-  ) {
-    return invalid("id", "控えが見つかりません");
-  }
-  const label = params.label?.trim() || null;
-  if (params.kind === "other" && label === null) {
-    return invalid("label", "「その他」のときは項目名を入力してください");
-  }
-  if (label !== null && label.length > TAX_RETURN_LABEL_MAX) {
-    return invalid("label", `項目名は ${TAX_RETURN_LABEL_MAX} 文字以内で入力してください`);
-  }
-  const amount = params.amount ?? null;
-  if (amount !== null && (!Number.isInteger(amount) || amount < 0)) {
-    return invalid("amount", "金額は 0 以上の整数で入力してください");
-  }
-  const filePath = checkFilePath(params.filePath, false);
-  if (!filePath.ok) return filePath;
-  const memo = checkMemoText(params.memo);
-  if (!memo.ok) return memo;
-  const saved: TaxReturnMemo = {
-    id: params.id ?? deps.ids.next(),
-    fiscalYear: params.fiscalYear,
-    kind: params.kind,
-    label,
-    amount,
-    filePath: filePath.value,
-    memo: memo.value,
-  };
-  deps.closing.upsertTaxReturnMemo(saved);
-  return ok(saved);
-}
-
-/** 控えを削除する（計算に使わないので物理削除する）。その年度にない id は VALIDATION */
-export function deleteTaxReturnMemo(
-  deps: Pick<TaxReturnRecordDeps, "masters" | "closing">,
-  params: { fiscalYear: number; id: string },
-): Result<null> {
-  const individual = requireIndividual(deps.masters);
-  if (!individual.ok) return individual;
-  if (!deps.closing.listTaxReturnMemos(params.fiscalYear).some((m) => m.id === params.id)) {
-    return invalid("id", "控えが見つかりません");
-  }
-  deps.closing.deleteTaxReturnMemo(params.id);
-  return ok(null);
-}
-
-/** 提出書類の記録の一覧（FR-035）。ファイルの有無はサーバーが付ける（R13） */
-export function listFiledDocuments(
-  deps: Pick<TaxReturnRecordDeps, "masters" | "closing">,
-  params: { fiscalYear: number },
-): Result<FiledDocument[]> {
-  const individual = requireIndividual(deps.masters);
-  if (!individual.ok) return individual;
-  return ok(deps.closing.listFiledDocuments(params.fiscalYear));
-}
-
-/**
- * 提出書類（青色申告決算書・確定申告書・添付書類など）の場所を記録・更新する（FR-035）。
- * params.id があれば更新（同じ年度の記録だけ）、なければ作る。決算書の計算には使わない。履歴は残さない
- */
-export function saveFiledDocument(
-  deps: TaxReturnRecordDeps,
-  params: FiledDocumentInput & { fiscalYear: number; id?: string },
-): Result<FiledDocument> {
-  const individual = requireIndividual(deps.masters);
-  if (!individual.ok) return individual;
-  if (
-    params.id !== undefined &&
-    !deps.closing.listFiledDocuments(params.fiscalYear).some((d) => d.id === params.id)
-  ) {
-    return invalid("id", "書類の記録が見つかりません");
-  }
-  const filePath = checkFilePath(params.filePath, true);
-  if (!filePath.ok) return filePath;
-  const filedOn = params.filedOn ?? null;
-  if (
-    filedOn !== null &&
-    (!/^\d{4}-\d{2}-\d{2}$/.test(filedOn) || Number.isNaN(Date.parse(filedOn)))
-  ) {
-    return invalid("filedOn", "提出日は YYYY-MM-DD で入力してください");
-  }
-  const memo = checkMemoText(params.memo);
-  if (!memo.ok) return memo;
-  const saved: FiledDocument = {
-    id: params.id ?? deps.ids.next(),
-    fiscalYear: params.fiscalYear,
-    kind: params.kind,
-    filePath: params.filePath,
-    filedOn,
-    memo: memo.value,
-  };
-  deps.closing.upsertFiledDocument(saved);
-  return ok(saved);
-}
-
-/** 提出書類の記録を削除する（ファイルそのものには触れない）。その年度にない id は VALIDATION */
-export function deleteFiledDocument(
-  deps: Pick<TaxReturnRecordDeps, "masters" | "closing">,
-  params: { fiscalYear: number; id: string },
-): Result<null> {
-  const individual = requireIndividual(deps.masters);
-  if (!individual.ok) return individual;
-  if (!deps.closing.listFiledDocuments(params.fiscalYear).some((d) => d.id === params.id)) {
-    return invalid("id", "書類の記録が見つかりません");
-  }
-  deps.closing.deleteFiledDocument(params.id);
-  return ok(null);
 }

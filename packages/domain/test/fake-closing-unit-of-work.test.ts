@@ -286,33 +286,6 @@ describe("fakeClosingUnitOfWork", () => {
       updatedAt: AT,
     });
     expect(c.listClosingNotes(2025).map((n) => n.body)).toEqual(["b"]);
-
-    const memo = {
-      id: "m-1",
-      fiscalYear: 2025,
-      kind: "salary" as const,
-      label: null,
-      amount: 100,
-      filePath: null,
-      memo: null,
-    };
-    c.upsertTaxReturnMemo(memo);
-    expect(c.listTaxReturnMemos(2025)).toEqual([memo]);
-    c.deleteTaxReturnMemo("m-1");
-    expect(c.listTaxReturnMemos(2025)).toEqual([]);
-
-    const doc = {
-      id: "d-1",
-      fiscalYear: 2025,
-      kind: "blue_return" as const,
-      filePath: "/a.pdf",
-      filedOn: null,
-      memo: null,
-    };
-    c.upsertFiledDocument(doc);
-    expect(c.listFiledDocuments(2025)).toEqual([doc]);
-    c.deleteFiledDocument("d-1");
-    expect(c.listFiledDocuments(2025)).toEqual([]);
   });
 
   it("listTaxParameters は初期の値を返し、listFixedAssets は取得日の順", () => {
