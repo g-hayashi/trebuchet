@@ -117,17 +117,11 @@ describe("請求書の一覧（US1。FR-020 の基本形）", () => {
     expect(calls.find((c) => c.path === `${BASE}/invoices`)?.query).toEqual({ status: "overdue" });
   });
 
-  it("設定・工数・請求書の作成への導線を置く", async () => {
+  it("請求書の作成への導線を置く（工数・請求の設定の入口はメニュー）", async () => {
     setup();
     await screen.findByRole("table", { name: "請求書の一覧" });
-    expect(screen.getByRole("link", { name: "請求の設定" })).toHaveAttribute(
-      "href",
-      expect.stringContaining("/e/e1/invoice-settings"),
-    );
-    expect(screen.getByRole("link", { name: "工数の入力" })).toHaveAttribute(
-      "href",
-      expect.stringContaining("/e/e1/work-hours"),
-    );
+    expect(screen.queryByRole("link", { name: "請求の設定" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "工数の入力" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "請求書を作る" })).toHaveAttribute(
       "href",
       expect.stringContaining("/e/e1/invoices/new"),

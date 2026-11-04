@@ -71,8 +71,7 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
   });
 
   await test.step("対象月の工数を入力する", async () => {
-    await openNav(page, "請求", "請求の流れ");
-    await page.getByRole("link", { name: "工数の入力" }).click();
+    await openNav(page, "請求", "工数");
     await expect(page.getByRole("heading", { name: "工数の入力" })).toBeVisible();
 
     await page.getByLabel("対象月", { exact: true }).fill(TARGET_MONTH);

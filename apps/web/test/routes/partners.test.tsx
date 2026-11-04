@@ -33,13 +33,15 @@ const HOURLY = {
   partnerActive: true,
 };
 
+let queryClient: ReturnType<typeof renderRoute>["queryClient"];
+
 function setup(terms: unknown[] = [], extra: Parameters<typeof mockApi>[0] = {}) {
   const calls = mockApi({
     [`GET ${BASE}/partners`]: () => ok({ partners: [PARTNER_A, PARTNER_B, PARTNER_C] }),
     [`GET ${BASE}/billing-terms`]: () => ok({ terms }),
     ...extra,
   });
-  renderRoute(Route, { path: "/e/$entityId/partners", url: "/e/e1/partners" });
+  ({ queryClient } = renderRoute(Route, { path: "/e/$entityId/partners", url: "/e/e1/partners" }));
   return calls;
 }
 
@@ -153,6 +155,100 @@ describe("取引先の画面（011 FR-049）", () => {
       partner: { name: "新規D", isActive: true },
       billingTerms: null,
     });
+  });
+
+  it("名前と敬称だけなら、請求の条件なし（null）で POST /partners/profile する", async () => {
+    const calls = setup([], {
+      [`POST ${BASE}/partners/profile`]: () =>
+        ok(
+          {
+            partner: { id: "p9", name: "C 工業", honorific: "様", memo: null, isActive: true },
+            billingTerms: null,
+          },
+          201,
+        ),
+    });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "取引先を登録" }));
+    const form = within(await screen.findByRole("dialog")).getByRole("form", {
+      name: "取引先を登録",
+    });
+    expect(within(form).queryByLabelText("既定の品名")).not.toBeInTheDocument();
+    await user.type(within(form).getByLabelText("名称"), "C 工業");
+    await user.selectOptions(within(form).getByLabelText("敬称"), "様");
+    await user.click(within(form).getByRole("button", { name: "保存" }));
+
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    const post = calls.find((c) => c.method === "POST");
+    expect(post?.path).toBe(`${BASE}/partners/profile`);
+    expect(post?.body).toEqual({
+      partner: { name: "C 工業", honorific: "様", memo: "", isActive: true },
+      billingTerms: null,
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("請求の条件を設定して登録すると、取引先・条件・工数を読み直す", async () => {
+    const calls = setup([], {
+      [`POST ${BASE}/partners/profile`]: () =>
+        ok(
+          {
+            partner: { id: "p9", name: "C 工業", honorific: null, memo: null, isActive: true },
+            billingTerms: { ...HOURLY, partnerId: "p9", unitPrice: 8000 },
+          },
+          201,
+        ),
+    });
+    const user = userEvent.setup();
+    await screen.findByRole("table");
+    queryClient.setQueryData(["entities", "e1", "work-hours", "2026-10"], []);
+    await user.click(screen.getByRole("button", { name: "取引先を登録" }));
+    const form = within(await screen.findByRole("dialog")).getByRole("form", {
+      name: "取引先を登録",
+    });
+    await user.type(within(form).getByLabelText("名称"), "C 工業");
+    await user.click(within(form).getByLabelText("請求の条件を設定する"));
+    await user.type(within(form).getByLabelText("時間単価（円）"), "8000");
+    await user.type(within(form).getByLabelText("既定の品名"), "保守");
+    await user.click(within(form).getByRole("button", { name: "保存" }));
+
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      partner: { name: "C 工業", honorific: null },
+      billingTerms: {
+        billingType: "hourly",
+        unitPrice: 8000,
+        defaultItemName: "保守",
+        dueMonthsAfter: 1,
+        dueDay: 31,
+      },
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    // 請求の条件のある取引先が工数の対象になる（工数の問い合わせを無効にして読み直させる）
+    expect(
+      queryClient.getQueryState(["entities", "e1", "work-hours", "2026-10"])?.isInvalidated,
+    ).toBe(true);
+    expect(calls.filter((c) => c.method === "GET" && c.path === `${BASE}/partners`).length).toBe(2);
+    expect(
+      calls.filter((c) => c.method === "GET" && c.path === `${BASE}/billing-terms`).length,
+    ).toBe(2);
+  });
+
+  it("条件を設定するのに金額・品名が空なら、送らずに欄ごとに知らせる", async () => {
+    const calls = setup();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "取引先を登録" }));
+    const form = within(await screen.findByRole("dialog")).getByRole("form", {
+      name: "取引先を登録",
+    });
+    await user.type(within(form).getByLabelText("名称"), "C 工業");
+    await user.click(within(form).getByLabelText("請求の条件を設定する"));
+    await user.click(within(form).getByRole("button", { name: "保存" }));
+    expect(
+      await within(form).findByText("単価は 1 円以上の整数で入力してください"),
+    ).toBeInTheDocument();
+    expect(within(form).getByText("既定の品名を入力してください")).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
   });
 
   it("サーバーのエラーはフォームの近くに出す", async () => {
