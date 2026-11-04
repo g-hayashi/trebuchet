@@ -24,13 +24,25 @@ const tableNames = (db: ReturnType<typeof openTenant>) =>
     .all() as { name: string; sql: string }[];
 
 describe("openTenant", () => {
+  it("011 T019: 新しい DB はアプリ内評価の表を持たない", () => {
+    const db = openTenant(randomUUIDv7());
+    expect(tableNames(db).filter((table) => table.name.startsWith("eval"))).toEqual([]);
+  });
+
   it("新しい entityId で DB ファイルが作られ、マイグレーションが適用される", () => {
     const id = randomUUIDv7();
     const db = openTenant(id);
     expect(existsSync(tenantFile(id))).toBe(true);
     const tables = tableNames(db);
     expect(tables.map((t) => t.name)).toEqual(
-      expect.arrayContaining(["journals", "journal_lines", "audit_log", "tax_rates", "accounts"]),
+      expect.arrayContaining([
+        "journals",
+        "journal_lines",
+        "audit_log",
+        "tax_rates",
+        "accounts",
+        "journal_drafts",
+      ]),
     );
     // R2: 生成後の SQL に STRICT を付けている
     for (const t of tables) expect(t.sql).toMatch(/\)\s*STRICT$/);

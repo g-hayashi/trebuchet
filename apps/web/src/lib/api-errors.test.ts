@@ -24,6 +24,13 @@ describe("describeError", () => {
     });
   });
 
+  it("ACCOUNT_SYSTEM_PROTECTED は最初からある科目の保護と使用停止を案内する", () => {
+    const e = new ApiError(409, "ACCOUNT_SYSTEM_PROTECTED", "最初からある科目は削除できません");
+    expect(describeError(e).message).toBe(
+      "最初からある科目は名前の変更も削除もできません。使わないときは使用停止にしてください。",
+    );
+  });
+
   it("ACCOUNT_IN_USE は使用停止を案内する", () => {
     const e = new ApiError(409, "ACCOUNT_IN_USE", "使用中の科目は削除できません");
     expect(describeError(e).message).toBe(

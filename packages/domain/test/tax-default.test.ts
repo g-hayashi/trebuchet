@@ -1,49 +1,12 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { defaultTaxCategory, type JournalContext, validateJournal } from "../src/journal.ts";
+import { type JournalContext, validateJournal } from "../src/journal.ts";
 import { computeInclusiveTax } from "../src/money.ts";
 import { TAX_RATES } from "../src/seed/tax-rates.ts";
 import { resolveTaxRate } from "../src/tax-rates.ts";
 import type { TaxSettingDraft } from "../src/tax-settings.ts";
-import type { AccountCategory, TaxCategoryCode, TaxRate } from "../src/types.ts";
+import type { TaxCategoryCode, TaxRate } from "../src/types.ts";
 import { amountArb, dateInPeriodArb, makeAccount, makeFiscalPeriod } from "./arbitraries.ts";
-
-const exemptThenGeneral: TaxSettingDraft[] = [
-  { effectiveFrom: "2025-01-01", taxpayerStatus: "exempt", accountingMethod: "tax_included" },
-  { effectiveFrom: "2026-01-01", taxpayerStatus: "general", accountingMethod: "tax_included" },
-];
-
-const CATEGORIES: AccountCategory[] = ["asset", "liability", "equity", "revenue", "expense"];
-
-describe("defaultTaxCategory（FR-017）", () => {
-  it.each(CATEGORIES)("免税の期間は %s の科目でも OUT_OF_SCOPE", (category) => {
-    for (const side of ["debit", "credit"] as const) {
-      expect(defaultTaxCategory("2025-06-01", side, makeAccount(category), exemptThenGeneral)).toBe(
-        "OUT_OF_SCOPE",
-      );
-    }
-  });
-
-  it.each<[AccountCategory, TaxCategoryCode]>([
-    ["revenue", "SALES_10"],
-    ["expense", "PURCHASE_10"],
-    ["asset", "OUT_OF_SCOPE"],
-    ["liability", "OUT_OF_SCOPE"],
-    ["equity", "OUT_OF_SCOPE"],
-  ])("課税・税込の期間で %s の科目は %s", (category, expected) => {
-    for (const side of ["debit", "credit"] as const) {
-      expect(defaultTaxCategory("2026-06-01", side, makeAccount(category), exemptThenGeneral)).toBe(
-        expected,
-      );
-    }
-  });
-
-  it("消費税の設定がない日付は OUT_OF_SCOPE", () => {
-    expect(
-      defaultTaxCategory("2024-12-31", "credit", makeAccount("revenue"), exemptThenGeneral),
-    ).toBe("OUT_OF_SCOPE");
-  });
-});
 
 describe("内税額（INV-10, Constitution VI）", () => {
   const p2029 = makeFiscalPeriod(2029);

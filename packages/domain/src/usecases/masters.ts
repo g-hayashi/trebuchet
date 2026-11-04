@@ -54,6 +54,16 @@ function validName(
 const accountNotFound = (accountId: string) =>
   err(domainError("ACCOUNT_NOT_FOUND", "勘定科目が見つかりません", { accountId }));
 
+/** 最初からある科目（isSystem）の名前の変更・削除の拒否（FR-047、INV-70） */
+const systemAccountProtected = (accountId: string, operation: string) =>
+  err(
+    domainError(
+      "ACCOUNT_SYSTEM_PROTECTED",
+      `最初からある科目は${operation}できません。使用停止にはできます`,
+      { accountId },
+    ),
+  );
+
 /** マスタの変更を audit_log に残す（理由なし、日時は今） */
 function appendAudit(
   deps: MasterDeps,
@@ -187,6 +197,7 @@ export function renameAccount(
     const account = tx.getAccount(accountId);
     if (account === undefined) return accountNotFound(accountId);
     if (account.name === name.value) return ok(account);
+    if (account.isSystem) return systemAccountProtected(accountId, "名前を変更");
     if (tx.listAccounts().some((a) => a.id !== accountId && a.name === name.value)) {
       return err(domainError("VALIDATION", "同じ名前の科目があります", { name: name.value }));
     }
@@ -323,7 +334,9 @@ export function updateAccount(
 /** 使われていない科目を削除する（補助科目もあわせて消える）。使用中なら ACCOUNT_IN_USE */
 export function deleteAccount(deps: MasterDeps, accountId: string): Result<void> {
   return deps.repo.transaction((tx) => {
-    if (tx.getAccount(accountId) === undefined) return accountNotFound(accountId);
+    const account = tx.getAccount(accountId);
+    if (account === undefined) return accountNotFound(accountId);
+    if (account.isSystem) return systemAccountProtected(accountId, "削除");
     if (tx.isAccountUsed(accountId)) {
       return err(
         domainError(
@@ -372,35 +385,46 @@ export type PartnerDraft = {
   isActive?: boolean | undefined;
 };
 
-/** partnerId を渡すと更新、渡さなければ追加。名前は事業体内で重複しない */
-export function upsertPartner(
-  deps: MasterDeps,
+/**
+ * 取引先を追加・更新する（`MasterRepository` の `transaction` の中、または UnitOfWork の `masters` で呼ぶ）。
+ * partnerId を渡すと更新、渡さなければ追加。名前は事業体内で重複しない
+ */
+export function writePartner(
+  tx: MasterRepository,
+  ids: IdGenerator,
   draft: PartnerDraft,
   partnerId?: string,
 ): Result<Partner> {
   const name = validName(draft.name, "name");
   if (!name.ok) return name;
   const memo = draft.memo?.trim() || null;
-  return deps.repo.transaction((tx) => {
-    const partners = tx.listPartners();
-    const current = partnerId === undefined ? undefined : partners.find((p) => p.id === partnerId);
-    if (partnerId !== undefined && current === undefined) {
-      return err(domainError("VALIDATION", "取引先が見つかりません", { partnerId }));
-    }
-    if (partners.some((p) => p.id !== partnerId && p.name === name.value)) {
-      return err(domainError("VALIDATION", "同じ名前の取引先があります", { name: name.value }));
-    }
-    const partner: Partner = {
-      id: current?.id ?? deps.ids.next(),
-      name: name.value,
-      honorific: draft.honorific,
-      memo,
-      isActive: draft.isActive ?? current?.isActive ?? true,
-    };
-    if (current === undefined) tx.insertPartner(partner);
-    else tx.updatePartner(partner);
-    return ok(partner);
-  });
+  const partners = tx.listPartners();
+  const current = partnerId === undefined ? undefined : partners.find((p) => p.id === partnerId);
+  if (partnerId !== undefined && current === undefined) {
+    return err(domainError("VALIDATION", "取引先が見つかりません", { partnerId }));
+  }
+  if (partners.some((p) => p.id !== partnerId && p.name === name.value)) {
+    return err(domainError("VALIDATION", "同じ名前の取引先があります", { name: name.value }));
+  }
+  const partner: Partner = {
+    id: current?.id ?? ids.next(),
+    name: name.value,
+    honorific: draft.honorific,
+    memo,
+    isActive: draft.isActive ?? current?.isActive ?? true,
+  };
+  if (current === undefined) tx.insertPartner(partner);
+  else tx.updatePartner(partner);
+  return ok(partner);
+}
+
+/** partnerId を渡すと更新、渡さなければ追加。名前は事業体内で重複しない */
+export function upsertPartner(
+  deps: MasterDeps,
+  draft: PartnerDraft,
+  partnerId?: string,
+): Result<Partner> {
+  return deps.repo.transaction((tx) => writePartner(tx, deps.ids, draft, partnerId));
 }
 
 export function addTag(deps: MasterDeps, rawName: string): Result<Tag> {

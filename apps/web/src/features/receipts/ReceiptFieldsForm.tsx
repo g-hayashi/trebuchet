@@ -30,11 +30,13 @@ export function ReceiptFieldsForm({
   entityId,
   receipt,
   reading,
+  onNext,
 }: {
   entityId: string;
   receipt: ReceiptDetail;
   /** 入力欄の初期値にする AI の候補（成功した読み取り。010 US4）。入力済みの欄は上書きしない */
   reading?: ReceiptReadingView | undefined;
+  onNext?: (() => void) | undefined;
 }) {
   const id = useId();
   const queryClient = useQueryClient();
@@ -70,6 +72,7 @@ export function ReceiptFieldsForm({
   const [message, setMessage] = useState<"saved" | "unchanged" | undefined>();
   // 理由を求められた入力（server が REASON_REQUIRED を返したとき）
   const [correction, setCorrection] = useState<ReceiptUpdateInput | undefined>();
+  const nextAfterSave = useRef(false);
 
   const mutation = useMutation({
     mutationFn: (input: ReceiptUpdateInput) => patchReceipt(entityId, receipt.id, input),
@@ -80,6 +83,7 @@ export function ReceiptFieldsForm({
       setMessage("saved");
       // 一覧・検索の結果にも反映する
       await queryClient.invalidateQueries({ queryKey: receiptKeys.all(entityId) });
+      if (nextAfterSave.current) onNext?.();
     },
     onError: async (error) => {
       if (error instanceof ApiError && error.code === "VERSION_CONFLICT") {
@@ -107,6 +111,9 @@ export function ReceiptFieldsForm({
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (mutation.isPending) return;
+    nextAfterSave.current =
+      (e.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "next";
     mutation.reset();
     setMessage(undefined);
     const input: ReceiptUpdateInput = { version: receipt.version };
@@ -128,6 +135,7 @@ export function ReceiptFieldsForm({
 
     if (Object.keys(input).length === 1) {
       setMessage("unchanged");
+      if (nextAfterSave.current) onNext?.();
       return;
     }
     // 理由が要るか（訂正か）は server が決める。422 REASON_REQUIRED を受けたら理由を求める
@@ -200,9 +208,25 @@ export function ReceiptFieldsForm({
         </div>
         {!needsReason && <ApiErrorMessage error={mutation.error} />}
         <div className="flex flex-wrap items-center gap-4">
-          <Button type="submit" disabled={mutation.isPending}>
+          <Button
+            type="submit"
+            variant={onNext ? "outline" : "default"}
+            disabled={mutation.isPending}
+          >
             {mutation.isPending ? "保存中…" : "保存"}
           </Button>
+          {onNext && (
+            <Button
+              type="submit"
+              name="action"
+              value="next"
+              variant="outline"
+              disabled={mutation.isPending}
+              className="h-auto whitespace-normal"
+            >
+              次の未入力の証憑へ
+            </Button>
+          )}
           <SaveNotice
             message={
               message === "saved"

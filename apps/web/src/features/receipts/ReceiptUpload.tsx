@@ -1,195 +1,251 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { RECEIPT_MAX_BYTES, type ReceiptCategory, type ReceiptDetail } from "@trebuchet/schema";
-import { type ChangeEvent, type FormEvent, useId, useState } from "react";
+import { type FormEvent, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FieldError } from "@/components/ui/form-error";
+import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
 import { describeError } from "@/lib/api-errors";
-import { postReceipt, receiptKeys } from "./api";
-import { CategoryFieldset, duplicateOf, SavedNotice } from "./ReceiptFormParts";
-import { useAutoReceiptReading } from "./reading";
+import { postReceipt, receiptKeys, receiptQuery } from "./api";
+import { warningText } from "./labels";
+import { ReceiptFieldsForm } from "./ReceiptFieldsForm";
+import { CategoryFieldset, duplicateOf } from "./ReceiptFormParts";
+import { ReceiptReadingNote } from "./ReceiptReadingNote";
+import { ReceiptViewer } from "./ReceiptViewer";
+import { useAutoReceiptReading, useReceiptReading } from "./reading";
 
 const MAX_MB = RECEIPT_MAX_BYTES / (1024 * 1024);
-
-/** 撮影は画像（背面カメラ）、選択は JPEG・PNG・HEIC・PDF（R16） */
 const PICK_ACCEPT = "image/jpeg,image/png,image/heic,image/heif,application/pdf";
-
-type Errors = {
-  file?: string | undefined;
-  category?: string | undefined;
-};
-
-type Failure = { headline: string; lines: string[] };
-
-const NOT_SAVED = "この証憑は保存されていません。";
-
-/** 保存の失敗の表示。どの失敗でも、保存されていないことを明示する（US2 シナリオ 4） */
-function failureOf(error: unknown): Failure {
-  if (!(error instanceof ApiError)) {
-    return {
-      headline: "通信できませんでした。",
-      lines: [NOT_SAVED, "電波のよい場所で、もう一度送ってください。"],
-    };
+const categoryKey = (entityId: string) => `trebuchet.receiptCategory.${entityId}`;
+function storedCategory(entityId: string): ReceiptCategory | undefined {
+  try {
+    const value = localStorage.getItem(categoryKey(entityId));
+    return value === "paper_scan" || value === "electronic" ? value : undefined;
+  } catch {
+    return undefined;
   }
-  if (error.code === "LOCKED") {
-    return {
-      headline: "Mac の帳簿が施錠されています。",
-      lines: [NOT_SAVED, "Mac で解錠してから、もう一度送ってください。"],
-    };
-  }
-  if (error.status >= 500) {
-    return {
-      headline: "サーバーでエラーが起きました。",
-      lines: [NOT_SAVED, "しばらくしてから、もう一度送ってください。"],
-    };
-  }
-  const described = describeError(error);
-  return { headline: described.message, lines: [...described.details, NOT_SAVED] };
 }
 
-/**
- * 証憑の追加の唯一の入口（FR-001〜006、R16）。撮影か選択でファイルを 1 つ決め、区分（必須）を選んで保存する。
- * 取引年月日・金額・取引先・メモは、保存したあとの詳細の画面で入れる（FR-005）。
- * 保存の表示は 201 を受けた後だけ。失敗しても入力は残す。警告が出ても保存はされている。経路は server が決める
- */
+type UploadResult = { key: number; name: string } & (
+  | { receipt: ReceiptDetail; error?: never }
+  | { receipt?: never; error: unknown }
+);
+
+function failureOf(error: unknown): string {
+  if (!(error instanceof ApiError))
+    return "通信できませんでした。電波のよい場所で、もう一度送ってください。";
+  if (error.code === "LOCKED")
+    return "Mac の帳簿が施錠されています。Mac で解錠してから、もう一度送ってください。";
+  if (error.status >= 500)
+    return "サーバーでエラーが起きました。しばらくしてから、もう一度送ってください。";
+  const described = describeError(error);
+  return [described.message, ...described.details].join(" ");
+}
+
+/** 既存の1件追加APIを順に呼び、成功した証憑だけを連続入力の対象にする。 */
 export function ReceiptUpload({ entityId }: { entityId: string }) {
   const id = useId();
   const queryClient = useQueryClient();
-  const [category, setCategory] = useState<ReceiptCategory | undefined>();
-  const [file, setFile] = useState<File | undefined>();
-  const [errors, setErrors] = useState<Errors>({});
-  const [saved, setSaved] = useState<ReceiptDetail | undefined>();
+  const [category, setCategory] = useState(() => storedCategory(entityId));
+  const [files, setFiles] = useState<File[]>([]);
+  const [errors, setErrors] = useState<{ file?: string; category?: string }>({});
+  const [results, setResults] = useState<UploadResult[]>([]);
+  const [queue, setQueue] = useState<ReceiptDetail[]>([]);
+  const [position, setPosition] = useState(0);
+  const [pending, setPending] = useState(false);
+  const sending = useRef(false);
+  const nextResultKey = useRef(0);
   const [pickerKey, setPickerKey] = useState(0);
-
   const autoRead = useAutoReceiptReading(entityId);
 
-  const mutation = useMutation({
-    mutationFn: (input: { file: File; category: ReceiptCategory }) =>
-      postReceipt(entityId, input.file, { category: input.category }),
-    onSuccess: async ({ receipt }) => {
-      setSaved(receipt);
-      // 設定が有効なら、保存の直後に AI で読み取る（保存の表示は待たない）
-      autoRead(receipt.id);
-      setFile(undefined);
-      setPickerKey((k) => k + 1);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (sending.current) return;
+    setErrors({
+      ...(files.length === 0 ? { file: "ファイルを選んでください" } : {}),
+      ...(category === undefined ? { category: "区分を選んでください" } : {}),
+    });
+    if (files.length === 0 || category === undefined) return;
+    sending.current = true;
+    setPending(true);
+    const failed: File[] = [];
+    try {
+      for (const file of files) {
+        const key = nextResultKey.current++;
+        try {
+          if (file.size > RECEIPT_MAX_BYTES)
+            throw new Error(`ファイルが大きすぎます（${MAX_MB} MB まで）。`);
+          const { receipt } = await postReceipt(entityId, file, { category });
+          queryClient.setQueryData(receiptKeys.detail(entityId, receipt.id), receipt);
+          setResults((prev) => [...prev, { key, name: file.name, receipt }]);
+          if (receipt.warnings.some((w) => w.code === "FIELDS_MISSING"))
+            setQueue((prev) => [...prev, receipt]);
+          autoRead(receipt.id);
+        } catch (error) {
+          setResults((prev) => [...prev, { key, name: file.name, error }]);
+          if (duplicateOf(error) === undefined) failed.push(file);
+        }
+      }
+      setFiles(failed);
+      setPickerKey((key) => key + 1);
       await queryClient.invalidateQueries({ queryKey: receiptKeys.all(entityId) });
-    },
-  });
-
-  const choose = (event: ChangeEvent<HTMLInputElement>) => {
-    const chosen = event.currentTarget.files?.[0];
-    if (chosen === undefined) return;
-    setFile(chosen);
-    setErrors((prev) => ({ ...prev, file: undefined }));
-  };
-
-  const submit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setSaved(undefined);
-    mutation.reset();
-    const next: Errors = {};
-    if (file === undefined) next.file = "ファイルを選んでください";
-    else if (file.size > RECEIPT_MAX_BYTES) {
-      next.file = `ファイルが大きすぎます（${MAX_MB} MB まで）。`;
+    } finally {
+      sending.current = false;
+      setPending(false);
     }
-    if (category === undefined) next.category = "区分を選んでください";
-    setErrors(next);
-    if (file === undefined || category === undefined || next.file) return;
-    mutation.mutate({ file, category });
   };
 
-  const failure = mutation.isError ? failureOf(mutation.error) : undefined;
-  const duplicate = duplicateOf(mutation.error);
-
+  const current = queue[position];
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>証憑を追加</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form aria-label="証憑を追加" noValidate onSubmit={submit} className="grid gap-4">
-          <div className="grid gap-2" key={pickerKey}>
-            <div className="grid gap-1">
-              <Label htmlFor={`${id}-camera`}>写真を撮る</Label>
-              <Input
-                id={`${id}-camera`}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                disabled={mutation.isPending}
-                onChange={choose}
-                className="cursor-pointer"
-              />
-            </div>
-            <div className="grid gap-1">
+    <div className="grid min-w-0 gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>ファイルと区分</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form aria-label="証憑を追加" noValidate onSubmit={submit} className="grid gap-4">
+            <div className="grid min-w-0 gap-1" key={pickerKey}>
               <Label htmlFor={`${id}-pick`}>ファイルを選ぶ</Label>
               <Input
                 id={`${id}-pick`}
                 type="file"
+                multiple
                 accept={PICK_ACCEPT}
-                disabled={mutation.isPending}
-                onChange={choose}
-                className="cursor-pointer"
+                disabled={pending}
+                onChange={(event) => setFiles(Array.from(event.currentTarget.files ?? []))}
               />
               <p className="text-sm text-muted-foreground">
-                JPEG・PNG・HEIC・PDF（{MAX_MB} MB まで）。
+                JPEG・PNG・HEIC・PDF（1件 {MAX_MB} MB まで）。スマホでは写真の撮影も選べます。
               </p>
+              <p className="break-all text-sm" aria-live="polite">
+                {files.length
+                  ? `${files.length}件: ${files.map((file) => file.name).join("、")}`
+                  : "ファイルが選ばれていません。"}
+              </p>
+              <FieldError id={`${id}-file-error`} message={errors.file} />
             </div>
-            <p aria-live="polite" className="text-sm text-muted-foreground">
-              {file ? `選んだファイル: ${file.name}` : "ファイルが選ばれていません。"}
+            <fieldset disabled={pending}>
+              <CategoryFieldset
+                id={id}
+                value={category}
+                error={errors.category}
+                onChange={(value) => {
+                  setCategory(value);
+                  try {
+                    localStorage.setItem(categoryKey(entityId), value);
+                  } catch {
+                    /* 保存できなくても追加は続ける */
+                  }
+                }}
+              />
+            </fieldset>
+            <p className="text-sm text-muted-foreground">
+              追加したあと、この画面で取引年月日・金額・取引先を入力できます。
             </p>
-            <FieldError id={`${id}-file-error`} message={errors.file} />
-          </div>
+            <div>
+              <Button type="submit" disabled={pending}>
+                {pending ? "追加中…" : "追加する"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+      {results.length > 0 && (
+        <ul aria-label="追加の結果" aria-live="polite" className="grid gap-3">
+          {results.map((result) => {
+            const duplicate = duplicateOf(result.error);
+            return (
+              <li key={result.key} className="grid min-w-0 gap-1 rounded-md border p-3 text-sm">
+                <p className="break-all font-medium">{result.name}</p>
+                {result.receipt ? (
+                  <>
+                    <p>追加しました。</p>
+                    {result.receipt.warnings.map((warning) => (
+                      <p key={warning.code}>{warningText(warning)}</p>
+                    ))}
+                    <Link
+                      to="/e/$entityId/receipts/$receiptId"
+                      params={{ entityId, receiptId: result.receipt.id }}
+                      className="underline"
+                    >
+                      証憑を開く
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      {duplicate ? "重複: " : "エラー: "}
+                      {result.error instanceof Error &&
+                      !(result.error instanceof ApiError) &&
+                      result.error.message.startsWith("ファイルが大きすぎます")
+                        ? result.error.message
+                        : failureOf(result.error)}
+                      この証憑は保存されていません。
+                    </p>
+                    {duplicate && (
+                      <Link
+                        to="/e/$entityId/receipts/$receiptId"
+                        params={{ entityId, receiptId: duplicate }}
+                        className="underline"
+                      >
+                        同じ内容の証憑を開く
+                      </Link>
+                    )}
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {current && (
+        <ReceiptEntry
+          key={current.id}
+          entityId={entityId}
+          initial={current}
+          onNext={() => setPosition((value) => value + 1)}
+        />
+      )}
+      {!pending && queue.length > 0 && !current && (
+        <p role="status">
+          追加した証憑の入力を終えました。未入力の項目は証憑の一覧から確認できます。
+        </p>
+      )}
+    </div>
+  );
+}
 
-          <CategoryFieldset
-            id={id}
-            value={category}
-            error={errors.category}
-            onChange={(value) => {
-              setCategory(value);
-              setErrors((prev) => ({ ...prev, category: undefined }));
-            }}
+function ReceiptEntry({
+  entityId,
+  initial,
+  onNext,
+}: {
+  entityId: string;
+  initial: ReceiptDetail;
+  onNext: () => void;
+}) {
+  const query = useQuery({ ...receiptQuery(entityId, initial.id), initialData: initial });
+  const receipt = query.data;
+  const { usable } = useReceiptReading(receipt);
+  return (
+    <section aria-label="追加した証憑の値" className="grid gap-4">
+      <h2 className="text-lg font-semibold">値を入力</h2>
+      <ApiErrorMessage error={query.error} />
+      <div className="grid min-w-0 gap-6 lg:grid-cols-2">
+        <ReceiptViewer entityId={entityId} receipt={receipt} />
+        <div className="grid min-w-0 content-start gap-4">
+          <ReceiptFieldsForm
+            entityId={entityId}
+            receipt={receipt}
+            reading={usable}
+            onNext={onNext}
           />
-          <p className="text-sm text-muted-foreground">
-            取引年月日・金額・取引先は、保存してから、詳細の画面で入力できます。
-          </p>
-
-          <div aria-live="assertive">
-            {failure && (
-              <div
-                role="alert"
-                className="grid gap-1 rounded-md border border-destructive/50 px-3 py-2 text-sm text-destructive"
-              >
-                <p className="font-medium">{failure.headline}</p>
-                {failure.lines.map((line) => (
-                  <p key={line}>{line}</p>
-                ))}
-              </div>
-            )}
-          </div>
-          {duplicate !== undefined && (
-            <Link
-              to="/e/$entityId/receipts/$receiptId"
-              params={{ entityId, receiptId: duplicate }}
-              className="text-sm underline"
-            >
-              同じ内容の証憑を開く
-            </Link>
-          )}
-
-          <div>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "保存中…" : "保存"}
-            </Button>
-          </div>
-        </form>
-
-        {saved && <SavedNotice entityId={entityId} receipt={saved} />}
-      </CardContent>
-    </Card>
+          <ReceiptReadingNote entityId={entityId} receipt={receipt} />
+        </div>
+      </div>
+    </section>
   );
 }

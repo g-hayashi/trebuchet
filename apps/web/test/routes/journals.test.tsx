@@ -1,6 +1,6 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Account } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/journals/index";
 import { type ApiCall, type ApiReply, mockApi, ok } from "../mock-api";
@@ -64,12 +64,16 @@ const journal = (
 const partnerA = { id: uuid(7001), name: "取引先A", honorific: "御中", memo: null, isActive: true };
 const tagA = { id: uuid(8001), name: "定期" };
 
-function mockListApi(journals: (call: ApiCall) => ApiReply) {
+function mockListApi(
+  journals: (call: ApiCall) => ApiReply | Promise<ApiReply>,
+  extra: Parameters<typeof mockApi>[0] = {},
+) {
   return mockApi({
     [`GET ${ENTITY}/accounts`]: () => ok({ accounts: [bank, owner, receivable, sales] }),
     [`GET ${ENTITY}/partners`]: () => ok({ partners: [partnerA] }),
     [`GET ${ENTITY}/tags`]: () => ok({ tags: [tagA] }),
     [`GET ${ENTITY}/journals`]: journals,
+    ...extra,
   });
 }
 
@@ -80,8 +84,14 @@ function renderJournals(url = "/e/e1/journals") {
 const journalCalls = (calls: ApiCall[]) => calls.filter((c) => c.path === `${ENTITY}/journals`);
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-31T12:00:00+09:00"));
 });
 
 describe("仕訳の一覧（US2）", () => {
@@ -201,7 +211,6 @@ describe("仕訳の検索（US3, FR-023）", () => {
     await u.selectOptions(within(form).getByLabelText("勘定科目"), "売掛金");
     await u.selectOptions(within(form).getByLabelText("タグ"), "定期");
     await u.type(within(form).getByLabelText("摘要・メモ"), "10月分");
-    await u.click(within(form).getByRole("button", { name: "検索" }));
 
     await waitFor(() =>
       expect(router.state.location.search).toEqual({
@@ -236,7 +245,6 @@ describe("仕訳の検索（US3, FR-023）", () => {
     const form = await screen.findByRole("search", { name: "仕訳の検索" });
     const min = within(form).getByLabelText("金額（以上）");
     await u.type(min, "abc");
-    await u.click(within(form).getByRole("button", { name: "検索" }));
 
     await waitFor(() => expect(min).toHaveAttribute("aria-invalid", "true"));
     expect(router.state.location.search).toEqual({});
@@ -263,12 +271,215 @@ describe("仕訳の検索（US3, FR-023）", () => {
     expect(screen.queryByRole("button", { name: "さらに読み込む" })).not.toBeInTheDocument();
   });
 
-  it("各行から仕訳の詳細を開ける", async () => {
-    mockListApi(() => ok({ journals: [j(3, "2026-10-03")], nextCursor: null }));
-    renderJournals();
-    expect(await screen.findByRole("link", { name: "仕訳 No.3 の詳細" })).toHaveAttribute(
-      "href",
-      `/e/e1/journals/${uuid(9003)}`,
+  it("各行のボタンをキーボードで開き、その場で訂正を開始できる", async () => {
+    const entry = j(3, "2026-10-03");
+    mockListApi(
+      () => ok({ journals: [entry], nextCursor: null, summary: { count: 1, amount: 3000 } }),
+      {
+        [`GET ${ENTITY}/journals/${entry.id}`]: () =>
+          ok({ journal: entry, correctsJournal: null, correctingJournals: [] }),
+        [`GET ${ENTITY}/journals/${entry.id}/history`]: () => ok({ history: [] }),
+        [`GET ${ENTITY}/tax-settings`]: () => ok({ taxSettings: [] }),
+        [`GET ${ENTITY}/tax-categories`]: () =>
+          ok({ taxCategories: [{ code: "OUT_OF_SCOPE", name: "対象外", kind: null }] }),
+      },
     );
+    const u = userEvent.setup();
+    const { router } = renderJournals();
+    const open = await screen.findByRole("button", { name: "仕訳 No.3 の詳細" });
+    open.focus();
+    await u.keyboard("{Enter}");
+    const sheet = await screen.findByRole("dialog", { name: "仕訳の詳細" });
+    expect(router.state.location.pathname).toBe("/e/e1/journals");
+    await u.click(await within(sheet).findByRole("button", { name: "訂正する" }));
+    expect(within(sheet).getByRole("form", { name: "仕訳" })).toBeInTheDocument();
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    await u.click(within(sheet).getByRole("button", { name: "閉じる" }));
+    await waitFor(() => expect(open).toHaveFocus());
+  });
+
+  it("今期を初期期間にし、summaryの全件数と金額をページの件数と別に表示する", async () => {
+    const calls = mockListApi(
+      () =>
+        ok({
+          journals: [j(3, "2026-10-03")],
+          nextCursor: null,
+          summary: { count: 250, amount: 12345678 },
+        }),
+      {
+        [`GET ${ENTITY}/fiscal-periods`]: () =>
+          ok({
+            fiscalPeriods: [
+              {
+                id: "p2026",
+                fiscalYear: 2026,
+                startDate: "2026-04-01",
+                endDate: "2027-03-31",
+                status: "open",
+                closedAt: null,
+              },
+            ],
+          }),
+      },
+    );
+    renderJournals();
+    expect(await screen.findByLabelText("日付（から）")).toHaveValue("2026-04-01");
+    expect(screen.getByLabelText("日付（まで）")).toHaveValue("2027-03-31");
+    await waitFor(() =>
+      expect(journalCalls(calls).at(-1)?.query).toEqual({
+        dateFrom: "2026-04-01",
+        dateTo: "2027-03-31",
+      }),
+    );
+    const summary = await screen.findByLabelText("検索結果の集計");
+    expect(summary).toHaveTextContent("250 件");
+    expect(summary).toHaveTextContent("12,345,678 円");
+  });
+
+  it("検索ボタンを出さず、変更300ms後に再検索し、続く編集で入力位置を失わない", async () => {
+    const calls = mockListApi(() =>
+      ok({ journals: [], nextCursor: null, summary: { count: 0, amount: 0 } }),
+    );
+    const u = userEvent.setup();
+    renderJournals();
+    const memo = await screen.findByLabelText("摘要・メモ");
+    expect(screen.queryByRole("button", { name: "検索" })).not.toBeInTheDocument();
+    const initial = journalCalls(calls).length;
+    await u.type(memo, "月");
+    expect(journalCalls(calls)).toHaveLength(initial);
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 350)));
+    await waitFor(() => expect(journalCalls(calls).at(-1)?.query.q).toBe("月"));
+    expect(memo).toHaveFocus();
+    await u.type(memo, "額");
+    await waitFor(() => expect(journalCalls(calls).at(-1)?.query.q).toBe("月額"));
+  });
+});
+
+describe("一覧のレビューの指摘（011）", () => {
+  const periods = {
+    [`GET ${ENTITY}/fiscal-periods`]: () =>
+      ok({
+        fiscalPeriods: [
+          {
+            id: "p2026",
+            fiscalYear: 2026,
+            startDate: "2026-04-01",
+            endDate: "2027-03-31",
+            status: "open",
+            closedAt: null,
+          },
+        ],
+      }),
+  };
+  const deferred = <T,>() => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  };
+  const entry = journal(3, "2026-10-03", [
+    ["debit", receivable.id, 3000],
+    ["credit", bank.id, 3000],
+  ]);
+  const detailApi = {
+    [`GET ${ENTITY}/journals/${entry.id}`]: () =>
+      ok({ journal: entry, correctsJournal: null, correctingJournals: [] }),
+    [`GET ${ENTITY}/journals/${entry.id}/history`]: () => ok({ history: [] }),
+    [`GET ${ENTITY}/tax-settings`]: () => ok({ taxSettings: [] }),
+    [`GET ${ENTITY}/tax-categories`]: () =>
+      ok({ taxCategories: [{ code: "OUT_OF_SCOPE", name: "対象外", kind: null }] }),
+  };
+
+  it("日付を両方空にして検索すると全期間で探し、API へ日付を送らない", async () => {
+    const calls = mockListApi(() => ok({ journals: [entry], nextCursor: null }), periods);
+    const u = userEvent.setup();
+    const { router } = renderJournals();
+    const form = await screen.findByRole("search", { name: "仕訳の検索" });
+    await waitFor(() =>
+      expect(within(form).getByLabelText("日付（から）")).toHaveValue("2026-04-01"),
+    );
+    await waitFor(() =>
+      expect(journalCalls(calls).at(-1)?.query).toEqual({
+        dateFrom: "2026-04-01",
+        dateTo: "2027-03-31",
+      }),
+    );
+
+    await u.clear(within(form).getByLabelText("日付（から）"));
+    await u.clear(within(form).getByLabelText("日付（まで）"));
+    await waitFor(() => expect(router.state.location.search).toEqual({ allDates: true }));
+    await waitFor(() => expect(journalCalls(calls).at(-1)?.query).toEqual({}));
+    expect(within(form).getByLabelText("日付（から）")).toHaveValue("");
+    expect(within(form).getByLabelText("日付（まで）")).toHaveValue("");
+
+    // 日付を入れると全期間の指定を外す。クリアは既定の期間へ戻す
+    await u.type(within(form).getByLabelText("日付（から）"), "2026-06-01");
+    await waitFor(() => expect(router.state.location.search).toEqual({ dateFrom: "2026-06-01" }));
+    await u.clear(within(form).getByLabelText("日付（から）"));
+    await waitFor(() => expect(router.state.location.search).toEqual({ allDates: true }));
+    await u.click(within(form).getByRole("button", { name: "条件をクリア" }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({
+        dateFrom: "2026-04-01",
+        dateTo: "2027-03-31",
+      }),
+    );
+  });
+
+  it("条件を変えて読み直す間は、前の結果の行を表に残す", async () => {
+    const next = deferred<ReturnType<typeof ok>>();
+    mockListApi((call) => (call.query.q === "新" ? next.promise : ok({ journals: [entry] })));
+    const u = userEvent.setup();
+    renderJournals();
+    await screen.findByRole("table", { name: "仕訳の一覧" });
+    await u.type(await screen.findByLabelText("摘要・メモ"), "新");
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 450)));
+    expect(screen.getByRole("table", { name: "仕訳の一覧" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "仕訳 No.3 の詳細" })).toBeInTheDocument();
+    next.resolve(ok({ journals: [journal(4, "2026-10-04", [["debit", bank.id, 4000]])] }));
+    expect(await screen.findByRole("button", { name: "仕訳 No.4 の詳細" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "仕訳 No.3 の詳細" })).not.toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "仕訳の一覧" })).not.toHaveAttribute("aria-busy");
+  });
+
+  async function openCorrection(u: ReturnType<typeof userEvent.setup>) {
+    mockListApi(() => ok({ journals: [entry], nextCursor: null }), detailApi);
+    renderJournals();
+    await u.click(await screen.findByRole("button", { name: "仕訳 No.3 の詳細" }));
+    const sheet = await screen.findByRole("dialog", { name: "仕訳の詳細" });
+    await u.click(await within(sheet).findByRole("button", { name: "訂正する" }));
+    await within(sheet).findByRole("form", { name: "仕訳" });
+    return sheet;
+  }
+
+  it("訂正の入力があるまま Sheet を閉じるときは確認し、キャンセルなら残す", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValue(true);
+    const u = userEvent.setup();
+    const sheet = await openCorrection(u);
+    await u.type(within(sheet).getByLabelText("メモ"), "訂正中");
+
+    await u.click(within(sheet).getByRole("button", { name: "閉じる" }));
+    expect(confirm).toHaveBeenLastCalledWith("訂正の入力を破棄して閉じますか？");
+    expect(screen.getByRole("dialog", { name: "仕訳の詳細" })).toBeInTheDocument();
+    expect(within(sheet).getByLabelText("メモ")).toHaveValue("訂正中");
+
+    await u.keyboard("{Escape}");
+    expect(confirm).toHaveBeenCalledTimes(2);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "仕訳の詳細" })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("訂正の入力がなければ確認なしで Sheet を閉じる", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const u = userEvent.setup();
+    const sheet = await openCorrection(u);
+
+    await u.click(within(sheet).getByRole("button", { name: "閉じる" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "仕訳の詳細" })).not.toBeInTheDocument(),
+    );
+    expect(confirm).not.toHaveBeenCalled();
   });
 });

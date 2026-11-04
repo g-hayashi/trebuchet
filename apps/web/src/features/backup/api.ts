@@ -23,10 +23,18 @@ export const backupStatusQuery = () =>
     refetchInterval: (query) => (query.state.data?.running ? POLL_MS : false),
   });
 
-export const backupRunsQuery = () =>
+/** 画面に出す最近の件数（FR-054）。全件は CSV の書き出しで取る */
+export const RECENT_RUN_LIMIT = 5;
+
+/** バックアップの履歴の全件の CSV（server が表示用の列だけを返す。FR-054） */
+export const RUNS_CSV_HREF = "/api/backup/runs?format=csv";
+
+export const backupRunsQuery = (limit = RECENT_RUN_LIMIT) =>
   queryOptions({
-    queryKey: backupKeys.runs,
-    queryFn: async () => (await unwrap(await backup.runs.$get())).runs,
+    // backupKeys.runs の下に置く（実行のあとの invalidate が前方一致で効く）
+    queryKey: [...backupKeys.runs, { limit }] as const,
+    queryFn: async () =>
+      (await unwrap(await backup.runs.$get({ query: { limit: String(limit) } }))).runs,
   });
 
 export const saveBackupSettings = async (json: BackupSettingsInput) =>

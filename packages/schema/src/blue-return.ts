@@ -14,15 +14,7 @@ const Amount = z.number().int();
 const FiscalYear = z.number().int().min(1900).max(9999);
 const NonEmpty = z.string().trim().min(1, "入力してください").max(500);
 /** 文字数の上限。domain の検査もこの値を使う */
-export const TAX_RETURN_MEMO_MAX = 1000;
-export const TAX_RETURN_LABEL_MAX = 200;
 export const CLOSING_NOTE_MAX = 5000;
-const Memo = z.string().max(TAX_RETURN_MEMO_MAX);
-/** `/` で始まる絶対パス（research R13。相対パスはサーバーの作業ディレクトリに依存するため拒否する） */
-const AbsolutePath = z
-  .string()
-  .max(1000)
-  .refine((v) => v.startsWith("/"), "絶対パス（/ で始まる）を入力してください");
 
 // ---- 入力 ----
 
@@ -161,54 +153,6 @@ export const ClosingNoteParam = FiscalYearParam.extend({ kind: ClosingNoteKind }
 
 export const ClosingNoteInput = z.object({ body: z.string().max(CLOSING_NOTE_MAX) });
 export type ClosingNoteInput = z.infer<typeof ClosingNoteInput>;
-
-export const TaxReturnMemoKind = z.enum([
-  "salary",
-  "social_insurance",
-  "small_business_mutual_aid",
-  "life_insurance",
-  "earthquake_insurance",
-  "donation",
-  "medical",
-  "stocks",
-  "crypto",
-  "foreign_tax_credit",
-  "other",
-]);
-export type TaxReturnMemoKind = z.infer<typeof TaxReturnMemoKind>;
-
-/** 事業所得以外の控え（POST /tax-return/:year/memos） */
-export const TaxReturnMemoInput = z
-  .object({
-    kind: TaxReturnMemoKind,
-    label: z.string().max(TAX_RETURN_LABEL_MAX).nullish(),
-    amount: NonNegativeYen.nullish(),
-    filePath: AbsolutePath.nullish(),
-    memo: Memo.nullish(),
-  })
-  .refine((v) => v.kind !== "other" || (v.label != null && v.label.trim() !== ""), {
-    message: "「その他」のときは項目名を入力してください",
-    path: ["label"],
-  });
-export type TaxReturnMemoInput = z.infer<typeof TaxReturnMemoInput>;
-
-/** `/tax-return/:year/memos/:memoId` のパス（ID の形は検査しない。ないものは domain が見つからないとする） */
-export const TaxReturnMemoParam = FiscalYearParam.extend({ memoId: z.string() });
-
-/** `/tax-return/:year/documents/:documentId` のパス */
-export const FiledDocumentParam = FiscalYearParam.extend({ documentId: z.string() });
-
-export const FiledDocumentKind = z.enum(["blue_return", "tax_return", "attachment", "other"]);
-export type FiledDocumentKind = z.infer<typeof FiledDocumentKind>;
-
-/** 提出書類の記録（POST /tax-return/:year/documents） */
-export const FiledDocumentInput = z.object({
-  kind: FiledDocumentKind,
-  filePath: AbsolutePath,
-  filedOn: DateString.nullish(),
-  memo: Memo.nullish(),
-});
-export type FiledDocumentInput = z.infer<typeof FiledDocumentInput>;
 
 // ---- 出力 ----
 

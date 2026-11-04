@@ -1,7 +1,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import {
+  defaultTaxCategory,
+  type JournalDraft,
   type JournalInput,
   JournalInputFields,
   JournalLineInput,
@@ -9,7 +10,7 @@ import {
   type TaxCategoryCode,
   Yen,
 } from "@trebuchet/schema";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Control,
   type FieldError as RhfFieldError,
@@ -29,6 +30,9 @@ import { groupAccountsBySection } from "@/lib/accounts";
 import { ApiError } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { CreateFiscalPeriodLink } from "./CreateFiscalPeriodLink";
+import { JournalSuggestions, type SuggestionStatus } from "./JournalSuggestions";
+import { QuickEntryForm } from "./QuickEntryForm";
 
 const SIDE_LABELS: Record<Side, string> = { debit: "借方", credit: "貸方" };
 
@@ -42,8 +46,57 @@ const FormSchema = JournalInputFields.extend({ lines: z.array(LineSchema).min(2)
 );
 type FormInput = z.input<typeof FormSchema>;
 type FormOutput = z.output<typeof FormSchema>;
-type Form = UseFormReturn<FormInput, unknown, FormOutput>;
+export type JournalFormControl = UseFormReturn<FormInput, unknown, FormOutput>;
+type Form = JournalFormControl;
 type LineValues = FormInput["lines"][number];
+
+/** 簡易入力へ移しても行ごとの情報を失わない形だけを許す。 */
+export function canUseQuickEntry(lines: JournalDraft["lines"]): boolean {
+  return (
+    lines.length === 2 &&
+    lines[0]?.side === "debit" &&
+    lines[1]?.side === "credit" &&
+    lines[0]?.amount === lines[1]?.amount &&
+    lines.every((line) => !line.subAccountId && !line.description) &&
+    JSON.stringify(lines[0]?.tagIds ?? []) === JSON.stringify(lines[1]?.tagIds ?? [])
+  );
+}
+
+function draftOf(values: FormInput, mode: JournalDraft["mode"]): JournalDraft {
+  return {
+    mode,
+    date: values.date || null,
+    memo: values.memo ?? "",
+    partnerId: null,
+    tagIds: [],
+    lines: values.lines.map((line) => ({
+      side: line.side,
+      accountId: line.accountId || null,
+      subAccountId: line.subAccountId ?? null,
+      amount: typeof line.amount === "number" && Number.isInteger(line.amount) ? line.amount : null,
+      taxCategory: line.taxCategory ?? null,
+      partnerId: line.partnerId ?? null,
+      tagIds: line.tagIds ?? [],
+      description: line.description ?? null,
+    })),
+  };
+}
+
+function draftValues(draft: JournalDraft): FormInput {
+  return {
+    date: draft.date ?? "",
+    memo: draft.memo,
+    lines: draft.lines.map((line) => ({
+      ...line,
+      accountId: line.accountId ?? "",
+      subAccountId: line.subAccountId ?? undefined,
+      amount: line.amount ?? undefined,
+      taxCategory: line.taxCategory === null ? undefined : (line.taxCategory as TaxCategoryCode),
+      partnerId: line.partnerId ?? undefined,
+      description: line.description ?? undefined,
+    })),
+  };
+}
 
 const emptyLine = (side: Side): LineValues => ({
   side,
@@ -54,27 +107,6 @@ const emptyLine = (side: Side): LineValues => ({
 
 /** 空の選択・入力を「指定なし」にする */
 const blankToUndefined = (v: unknown) => (v === "" || v === null ? undefined : v);
-
-/**
- * 税区分の既定値（FR-017）。サーバー（domain の defaultTaxCategory）と同じ規則で、
- * 「自動」の表示に使う。実際の値は税区分を省略して送り、サーバーが決める
- */
-function defaultTaxCategory(
-  date: string,
-  account: Account | undefined,
-  settings: readonly TaxSetting[],
-): TaxCategoryCode {
-  let setting: TaxSetting | undefined;
-  for (const s of settings) {
-    if (s.effectiveFrom <= date && (!setting || s.effectiveFrom > setting.effectiveFrom)) {
-      setting = s;
-    }
-  }
-  if (!setting || setting.taxpayerStatus === "exempt" || !account) return "OUT_OF_SCOPE";
-  if (account.category === "revenue") return "SALES_10";
-  if (account.category === "expense") return "PURCHASE_10";
-  return "OUT_OF_SCOPE";
-}
 
 /**
  * フォームの初期値になる仕訳の形。訂正する仕訳（`Journal`）のほか、定期仕訳の定義
@@ -202,6 +234,14 @@ const messageOf = (
 // ---- フォーム ----
 
 export type JournalFormProps = {
+  draft?: JournalDraft | undefined;
+  onDraftChange?: ((draft: JournalDraft) => void) | undefined;
+  historySuggestions?: boolean | undefined;
+  disabled?: boolean | undefined;
+  allowModeSwitch?: boolean | undefined;
+  initialMode?: "quick" | "detailed" | undefined;
+  focusAfterSave?: boolean | undefined;
+  autoBalance?: boolean | undefined;
   entityId: string;
   accounts: Account[];
   partners: Partner[];
@@ -209,6 +249,8 @@ export type JournalFormProps = {
   taxSettings: TaxSetting[];
   taxCategories: TaxCategory[];
   defaultDate: string;
+  /** 入力が初期値から変わったかが変わったとき呼ぶ。アンマウントで false を渡す（閉じる前の確認用） */
+  onDirtyChange?: ((dirty: boolean) => void) | undefined;
   /** 訂正する仕訳。その内容で始め、使っている使用停止の科目・補助科目・取引先も選べるようにする */
   journal?: JournalFormSource | undefined;
   /** 訂正仕訳として登録するときの訂正元（FR-019a） */
@@ -243,27 +285,93 @@ export function JournalForm({
   hideDate = false,
   leading,
   onSubmit,
+  initialMode = "detailed",
+  focusAfterSave = false,
+  autoBalance = false,
+  draft,
+  onDraftChange,
+  historySuggestions = false,
+  disabled = false,
+  allowModeSwitch = initialMode === "quick",
+  onDirtyChange,
 }: JournalFormProps) {
   const form: Form = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(FormSchema),
-    defaultValues: journal
-      ? valuesOf(journal, accounts, taxSettings)
-      : {
-          date: defaultDate,
-          correctsJournalId,
-          lines: [emptyLine("debit"), emptyLine("credit")],
-        },
+    defaultValues: draft
+      ? draftValues(draft)
+      : journal
+        ? valuesOf(journal, accounts, taxSettings)
+        : {
+            date: defaultDate,
+            correctsJournalId,
+            lines: [emptyLine("debit"), emptyLine("credit")],
+          },
   });
   const keep = useMemo(
     () =>
       new Set(
-        journal?.lines.flatMap((l) =>
-          [l.accountId, l.subAccountId ?? [], l.partnerId ?? []].flat(),
+        (draft?.lines ?? journal?.lines)?.flatMap((l) =>
+          [l.accountId ?? [], l.subAccountId ?? [], l.partnerId ?? []].flat(),
         ),
       ),
-    [journal],
+    [journal, draft],
   );
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "lines" });
+  const [mode, setMode] = useState(initialMode);
+  const isDirty = form.formState.isDirty;
+  const dirtyListener = useRef(onDirtyChange);
+  dirtyListener.current = onDirtyChange;
+  useEffect(() => {
+    dirtyListener.current?.(isDirty);
+  }, [isDirty]);
+  useEffect(() => () => dirtyListener.current?.(false), []);
+  /** 摘要の履歴の候補の状態。かんたん入力の摘要で Enter を押したときの扱いを決める */
+  const [suggestionStatus, setSuggestionStatus] = useState<SuggestionStatus>("idle");
+  // 値の変更を購読し、未完成の値も同じフォームから保存用に取り出す。
+  useWatch({ control: form.control });
+  const changeListener = useRef(onDraftChange);
+  changeListener.current = onDraftChange;
+  const snapshot = JSON.stringify(draftOf(form.getValues(), mode));
+  const previousSnapshot = useRef(snapshot);
+  useEffect(() => {
+    if (previousSnapshot.current === snapshot) return;
+    previousSnapshot.current = snapshot;
+    changeListener.current?.(JSON.parse(snapshot) as JournalDraft);
+  }, [snapshot]);
+  const currentLines = useWatch({ control: form.control, name: "lines" });
+  const canQuick = canUseQuickEntry(
+    draftOf({ ...form.getValues(), lines: currentLines }, mode).lines,
+  );
+
+  // 最後の行の金額を、他の行との差額で補う。自動で入れた行（field.id を覚える）は、他の行が変わったら
+  // 差額に合わせ直す。利用者が手で触った行は覚えから外し、以後は書き換えない。
+  // 差額が 0 以下になったら、自動で入れた値は消して空に戻す（空のままなら何もしない）
+  const autoFilledId = useRef<string | undefined>(undefined);
+  const fillRemainder = () => {
+    if (!autoBalance) return;
+    const lines = form.getValues("lines");
+    const last = lines.at(-1);
+    const lastId = fields.at(-1)?.id;
+    if (!last || lastId === undefined) return;
+    const isAuto = autoFilledId.current === lastId;
+    if (last.amount !== undefined && !isAuto) return;
+    const diff = lines.slice(0, -1).reduce((sum, line) => {
+      const amount = Number.isFinite(line.amount) ? (line.amount ?? 0) : 0;
+      return sum + (line.side === last.side ? -amount : amount);
+    }, 0);
+    const name = `lines.${lines.length - 1}.amount` as const;
+    if (diff > 0) {
+      if (last.amount !== diff) form.setValue(name, diff, { shouldDirty: true });
+      autoFilledId.current = lastId;
+    } else if (isAuto) {
+      form.setValue(name, undefined, { shouldDirty: true });
+      autoFilledId.current = undefined;
+    }
+  };
+  /** 利用者が金額を直した行は、自動の補完の対象から外す */
+  const markAmountEdited = (id: string) => {
+    if (autoFilledId.current === id) autoFilledId.current = undefined;
+  };
   const [generalErrors, setGeneralErrors] = useState<string[]>([]);
   const [unexpected, setUnexpected] = useState<unknown>();
   const [suggestPeriod, setSuggestPeriod] = useState(false);
@@ -315,77 +423,122 @@ export function JournalForm({
 
   return (
     <form noValidate aria-label={formLabel} onSubmit={submit}>
-      <fieldset disabled={pending} className="grid gap-4">
+      <fieldset disabled={pending || disabled} className="grid gap-4">
         {leading}
-        <div className={cn("grid gap-4", hideDate ? undefined : "sm:grid-cols-[12rem_1fr]")}>
-          {!hideDate && (
-            <div className="grid content-start gap-1">
-              <label htmlFor="journal-date" className="text-sm font-medium">
-                日付
-              </label>
-              <Input
-                id="journal-date"
-                type="date"
-                aria-invalid={errors.date ? true : undefined}
-                aria-describedby="journal-date-error"
-                {...form.register("date")}
-              />
-              <FieldError id="journal-date-error" message={errors.date?.message} />
-              {suggestPeriod && (
-                <Link
-                  to="/e/$entityId/periods"
-                  params={{ entityId }}
-                  className="text-sm text-primary underline underline-offset-4"
-                >
-                  会計期間を作成する
-                </Link>
-              )}
-            </div>
-          )}
-          <div className="grid content-start gap-1">
-            <label htmlFor="journal-memo" className="text-sm font-medium">
-              メモ
-            </label>
-            <Input
-              id="journal-memo"
-              autoComplete="off"
-              aria-invalid={errors.memo ? true : undefined}
-              aria-describedby="journal-memo-error"
-              {...form.register("memo", { setValueAs: blankToUndefined })}
-            />
-            <FieldError
-              id="journal-memo-error"
-              message={messageOf(errors.memo, "メモは 1,000 文字以内で入力してください")}
-            />
+        {allowModeSwitch && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              aria-pressed={mode === "quick"}
+              disabled={!canQuick}
+              onClick={() => setMode("quick")}
+            >
+              かんたん入力
+            </Button>
+            <Button
+              variant="outline"
+              aria-pressed={mode === "detailed"}
+              onClick={() => setMode("detailed")}
+            >
+              詳細
+            </Button>
+            {!canQuick && (
+              <p className="text-sm text-muted-foreground">
+                行ごとの情報を失わないよう、詳細の入力を保持しています。
+              </p>
+            )}
           </div>
-        </div>
+        )}
+        {mode === "quick" ? (
+          <QuickEntryForm
+            form={form}
+            accounts={accounts}
+            partners={partners}
+            tags={tags}
+            taxSettings={taxSettings}
+            taxCategories={taxCategories}
+            focusAfterSave={focusAfterSave}
+            entityId={entityId}
+            suggestPeriod={suggestPeriod}
+            suggestionStatus={suggestionStatus}
+          />
+        ) : (
+          <div className="grid gap-4">
+            <div className={cn("grid gap-4", hideDate ? undefined : "sm:grid-cols-[12rem_1fr]")}>
+              {!hideDate && (
+                <div className="grid content-start gap-1">
+                  <label htmlFor="journal-date" className="text-sm font-medium">
+                    日付
+                  </label>
+                  <Input
+                    id="journal-date"
+                    type="date"
+                    aria-invalid={errors.date ? true : undefined}
+                    aria-describedby="journal-date-error"
+                    {...form.register("date")}
+                  />
+                  <FieldError id="journal-date-error" message={errors.date?.message} />
+                  {suggestPeriod && <CreateFiscalPeriodLink entityId={entityId} />}
+                </div>
+              )}
+              <div className="grid content-start gap-1">
+                <label htmlFor="journal-memo" className="text-sm font-medium">
+                  メモ
+                </label>
+                <Input
+                  id="journal-memo"
+                  autoComplete="off"
+                  aria-invalid={errors.memo ? true : undefined}
+                  aria-describedby="journal-memo-error"
+                  {...form.register("memo", { setValueAs: blankToUndefined })}
+                />
+                <FieldError
+                  id="journal-memo-error"
+                  message={messageOf(errors.memo, "メモは 1,000 文字以内で入力してください")}
+                />
+              </div>
+            </div>
 
-        <ol aria-label="仕訳の行" className="grid gap-3">
-          {fields.map((field, index) => (
-            <JournalLineRow
-              key={field.id}
-              index={index}
-              form={form}
-              entityId={entityId}
-              accounts={accounts}
-              partners={partners}
-              tags={tags}
-              taxSettings={taxSettings}
-              taxCategories={taxCategories}
-              keep={keep}
-              canRemove={fields.length > 2}
-              onRemove={() => remove(index)}
-            />
-          ))}
-        </ol>
+            <ol aria-label="仕訳の行" className="grid gap-3">
+              {fields.map((field, index) => (
+                <JournalLineRow
+                  key={field.id}
+                  index={index}
+                  form={form}
+                  entityId={entityId}
+                  accounts={accounts}
+                  partners={partners}
+                  tags={tags}
+                  taxSettings={taxSettings}
+                  taxCategories={taxCategories}
+                  keep={keep}
+                  canRemove={fields.length > 2}
+                  onRemove={() => remove(index)}
+                  onAmountBlur={fillRemainder}
+                  onAmountEdit={() => markAmountEdited(field.id)}
+                />
+              ))}
+            </ol>
 
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <Button variant="outline" onClick={() => append(emptyLine("debit"))}>
-            行を追加
-          </Button>
-          <Totals control={form.control} />
-        </div>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <Button variant="outline" onClick={() => append(emptyLine("debit"))}>
+                行を追加
+              </Button>
+              <Totals control={form.control} />
+            </div>
+          </div>
+        )}
 
+        {historySuggestions && (
+          <JournalSuggestions
+            form={form}
+            entityId={entityId}
+            accounts={accounts}
+            partners={partners}
+            taxCategories={taxCategories}
+            onStatusChange={setSuggestionStatus}
+          />
+        )}
         <div aria-live="assertive">
           {(generalErrors.length > 0 || linesError) && (
             <ul
@@ -444,6 +597,8 @@ function JournalLineRow({
   keep,
   canRemove,
   onRemove,
+  onAmountBlur,
+  onAmountEdit,
 }: {
   index: number;
   form: Form;
@@ -457,6 +612,8 @@ function JournalLineRow({
   keep: ReadonlySet<string>;
   canRemove: boolean;
   onRemove: () => void;
+  onAmountBlur: () => void;
+  onAmountEdit: () => void;
 }) {
   const date = useWatch({ control: form.control, name: "date" });
   const accountId = useWatch({ control: form.control, name: `lines.${index}.accountId` });
@@ -553,6 +710,10 @@ function JournalLineRow({
           {...described("amount")}
           {...form.register(`lines.${index}.amount`, {
             setValueAs: (v: unknown) => (typeof v === "string" ? parseYenInput(v) : v),
+            // register の設定は切替後も残るため、簡易入力の左右同期を解除する。
+            // 手で直した行は、差額の自動補完の対象から外す。
+            onChange: onAmountEdit,
+            onBlur: onAmountBlur,
           })}
         />
         <FieldError
@@ -622,7 +783,8 @@ function JournalLineRow({
           className="h-auto py-1"
           aria-invalid={invalid(lineErrors?.tagIds)}
           {...described("tags")}
-          {...form.register(`lines.${index}.tagIds`)}
+          // 簡易入力で登録した左右同期ハンドラを、詳細では使わない。
+          {...form.register(`lines.${index}.tagIds`, { onChange: () => {} })}
         >
           {tags.map((t) => (
             <option key={t.id} value={t.id}>

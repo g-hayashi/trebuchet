@@ -1,6 +1,10 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { buildAiPayload, maskContent } from "../../src/statements/mask.ts";
+import {
+  buildAiPayload,
+  buildJournalEntryPayload,
+  maskContent,
+} from "../../src/statements/mask.ts";
 import type { StatementRecord } from "../../src/types.ts";
 
 // 006 T023（R11、INV-45）。AI に送る内容は許可した項目だけで、マスクした内容に 4 桁以上の数字・振込の名義がなく、
@@ -87,6 +91,7 @@ describe("buildAiPayload（INV-45）", () => {
   it("許可した項目だけを持つ", () => {
     const payload = buildAiPayload(statement(), account);
     expect(payload).toEqual({
+      scene: "statement",
       date: "2026-05-10",
       amount: 1200,
       direction: "out",
@@ -133,7 +138,57 @@ describe("buildAiPayload（INV-45）", () => {
             "content",
             "date",
             "direction",
+            "scene",
           ]);
+        },
+      ),
+    );
+  });
+});
+
+describe("buildJournalEntryPayload（011 T042。INV-45）", () => {
+  it("scene・日付・金額・マスクした摘要だけを持つ", () => {
+    const payload = buildJournalEntryPayload({
+      date: "2026-05-10",
+      amount: 3300,
+      memo: "カード 1234567890 03-1234-5678",
+    });
+    expect(payload).toEqual({
+      scene: "journal_entry",
+      date: "2026-05-10",
+      amount: 3300,
+      memo: "カード #### [連絡先]",
+    });
+  });
+
+  it("性質: 摘要に 4 桁以上の数字・振込の名義がなく、取引先・口座の名前などの余分な項目が漏れない", () => {
+    fc.assert(
+      fc.property(
+        contentArb,
+        uuidArb,
+        fc.constantFrom(...TRANSFER_PREFIXES),
+        fc.boolean(),
+        fc.integer({ min: 1, max: 999_999_999_999 }),
+        (content, name, prefix, asTransfer, amount) => {
+          const holder = `名義${name}`;
+          const memo = asTransfer ? `${prefix} ${holder} ${content}` : content;
+          // 余分な項目を持つ入力（取引先・口座の名前）を渡しても、payload には出ない
+          const input = {
+            date: "2026-05-10",
+            amount,
+            memo,
+            partnerName: `取引先${name}`,
+            accountName: `口座${name}`,
+          };
+          const payload = buildJournalEntryPayload(input);
+          expect(payload.memo).not.toMatch(DIGIT_RUN);
+          if (asTransfer) expect(payload.memo).not.toContain(holder);
+          const json = JSON.stringify(payload);
+          expect(json).not.toContain(`取引先${name}`);
+          expect(json).not.toContain(`口座${name}`);
+          expect(Object.keys(payload).sort()).toEqual(["amount", "date", "memo", "scene"]);
+          expect(payload.scene).toBe("journal_entry");
+          expect(payload.amount).toBe(amount);
         },
       ),
     );

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Account } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/journals/$journalId";
+import { Route as ListRoute } from "@/routes/e/$entityId/journals/index";
 import { type ApiCall, type ApiReply, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
@@ -175,6 +176,12 @@ function mockDetailApi(
         () => ok({ subAccounts: [] }),
       ]),
     ),
+    [`GET ${ENTITY}/journals`]: () =>
+      ok({
+        journals: [{ ...detail.journal, memo: null, status: "active" }],
+        nextCursor: null,
+        summary: { count: 1, amount: 495000 },
+      }),
     [`GET ${path}`]: () => ok(detail),
     [`GET ${path}/history`]: () => ok({ history }),
     ...(origin !== undefined && { [`GET ${path}/origin`]: () => ok({ origin }) }),
@@ -183,7 +190,7 @@ function mockDetailApi(
   });
 }
 
-function renderDetail(journalId: string) {
+function renderDetailRoute(journalId: string) {
   return renderRoute(Route, {
     path: "/e/$entityId/journals/$journalId",
     url: `/e/e1/journals/${journalId}`,
@@ -197,10 +204,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("仕訳の詳細（US3）", () => {
+describe.each(["直接URL", "一覧のSheet"] as const)("仕訳の詳細（%s）", (surface) => {
+  async function renderDetail(journalId: string) {
+    if (surface === "直接URL") return renderDetailRoute(journalId);
+    const result = renderRoute(ListRoute, {
+      path: "/e/$entityId/journals/",
+      url: "/e/e1/journals",
+    });
+    await user().click(await screen.findByRole("button", { name: /^仕訳 No\.\d+ の詳細$/ }));
+    await screen.findByRole("dialog", { name: "仕訳の詳細" });
+    return result;
+  }
   it("仕訳の内容と、変更履歴（日時・操作・理由・変更前後）を表示する", async () => {
     mockDetailApi({ journal: j1, correctsJournal: null, correctingJournals: [] });
-    renderDetail(j1.id);
+    await renderDetail(j1.id);
 
     expect(await screen.findByRole("heading", { name: "仕訳 No.1" })).toBeInTheDocument();
     const lines = await screen.findByRole("table", { name: "仕訳の内容" });
@@ -232,7 +249,7 @@ describe("仕訳の詳細（US3）", () => {
       },
     );
     const u = user();
-    renderDetail(j1.id);
+    await renderDetail(j1.id);
 
     await u.click(await screen.findByRole("button", { name: "訂正する" }));
     // 訂正元の仕訳で使っている使用停止の科目は選べる
@@ -260,7 +277,9 @@ describe("仕訳の詳細（US3）", () => {
         { side: "credit", accountId: sales.id, amount: 495_000 },
       ],
     });
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /^(訂正|取消)の理由$/ })).not.toBeInTheDocument(),
+    );
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1);
   });
 
@@ -276,13 +295,15 @@ describe("仕訳の詳細（US3）", () => {
       },
     );
     const u = user();
-    renderDetail(j1.id);
+    await renderDetail(j1.id);
 
     await u.click(await screen.findByRole("button", { name: "訂正する" }));
     await u.click(await screen.findByRole("button", { name: "訂正を保存" }));
     let dialog = await screen.findByRole("dialog", { name: "訂正の理由" });
     await u.click(within(dialog).getByRole("button", { name: "戻る" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /^(訂正|取消)の理由$/ })).not.toBeInTheDocument(),
+    );
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
 
     await u.click(screen.getByRole("button", { name: "訂正を保存" }));
@@ -307,7 +328,7 @@ describe("仕訳の詳細（US3）", () => {
       },
     );
     const u = user();
-    renderDetail(j1.id);
+    await renderDetail(j1.id);
 
     await u.click(await screen.findByRole("button", { name: "取り消す" }));
     const dialog = await screen.findByRole("dialog", { name: "取消の理由" });
@@ -316,7 +337,64 @@ describe("仕訳の詳細（US3）", () => {
     await u.type(within(dialog).getByLabelText("理由"), "二重登録");
     await u.click(confirm);
     await waitFor(() => expect(body).toEqual({ reason: "二重登録", version: 2 }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /^(訂正|取消)の理由$/ })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("定型理由を選んで編集でき、複製リンクは新規入力のfromへ渡す", async () => {
+    let body: unknown;
+    mockDetailApi(
+      { journal: j1, correctsJournal: null, correctingJournals: [] },
+      {
+        voidReply: (call) => {
+          body = call.body;
+          return ok({ journal: { ...j1, status: "voided" } });
+        },
+      },
+    );
+    const u = user();
+    await renderDetail(j1.id);
+    expect(await screen.findByRole("link", { name: "複製して入力" })).toHaveAttribute(
+      "href",
+      `/e/e1/journals/new?from=${j1.id}`,
+    );
+    await u.click(screen.getByRole("button", { name: "取り消す" }));
+    const dialog = await screen.findByRole("dialog", { name: "取消の理由" });
+    await u.selectOptions(within(dialog).getByLabelText("定型の理由"), "二重の登録");
+    expect(within(dialog).getByLabelText("理由")).toHaveValue("二重の登録");
+    await u.type(within(dialog).getByLabelText("理由"), "（確認済み）");
+    await u.click(within(dialog).getByRole("button", { name: "取消を確定" }));
+    await waitFor(() => expect(body).toEqual({ reason: "二重の登録（確認済み）", version: 2 }));
+  });
+
+  it("リンク仕訳と楽観ロックの拒否は理由dialogに表示し、取消を完了扱いにしない", async () => {
+    let code: "JOURNAL_LINKED" | "VERSION_CONFLICT" = "JOURNAL_LINKED";
+    mockDetailApi(
+      { journal: j1, correctsJournal: null, correctingJournals: [] },
+      {
+        voidReply: () =>
+          apiError(
+            409,
+            code,
+            code === "JOURNAL_LINKED"
+              ? "請求に結びついた仕訳は取消できません"
+              : "他の操作で更新されています",
+          ),
+      },
+    );
+    const u = user();
+    await renderDetail(j1.id);
+    await u.click(await screen.findByRole("button", { name: "取り消す" }));
+    const dialog = await screen.findByRole("dialog", { name: "取消の理由" });
+    await u.type(within(dialog).getByLabelText("理由"), "確認");
+    await u.click(within(dialog).getByRole("button", { name: "取消を確定" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("請求に結びついた仕訳");
+    code = "VERSION_CONFLICT";
+    await u.click(within(dialog).getByRole("button", { name: "取消を確定" }));
+    await waitFor(() =>
+      expect(within(dialog).getByRole("alert")).toHaveTextContent("他の操作で更新"),
+    );
   });
 
   it("取消済みの仕訳は取消済みと表示し、訂正・取消のボタンを出さない", async () => {
@@ -325,7 +403,7 @@ describe("仕訳の詳細（US3）", () => {
       correctsJournal: null,
       correctingJournals: [],
     });
-    renderDetail(j1.id);
+    await renderDetail(j1.id);
 
     expect(await screen.findByText("取消済み")).toBeInTheDocument();
     await screen.findByRole("table", { name: "仕訳の内容" });
@@ -342,7 +420,7 @@ describe("仕訳の詳細（US3）", () => {
       { journal: old, correctsJournal: null, correctingJournals: [] },
       { closed2025: true },
     );
-    renderDetail(old.id);
+    await renderDetail(old.id);
 
     expect(await screen.findByText(/2025年度は締め済みです/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "当年度に訂正仕訳を起票" })).toHaveAttribute(
@@ -365,7 +443,7 @@ describe("仕訳の詳細（US3）", () => {
       },
     );
     const u = user();
-    renderDetail(j1.id);
+    await renderDetail(j1.id);
 
     await u.click(await screen.findByRole("button", { name: "取り消す" }));
     const dialog = await screen.findByRole("dialog", { name: "取消の理由" });
@@ -400,7 +478,7 @@ describe("仕訳の詳細（US3）", () => {
       { journal: fix, correctsJournal: ref(original), correctingJournals: [ref(fix2)] },
       { closed2025: true },
     );
-    renderDetail(fix.id);
+    await renderDetail(fix.id);
 
     expect(await screen.findByRole("link", { name: "訂正元の仕訳 No.1" })).toHaveAttribute(
       "href",
@@ -419,7 +497,7 @@ describe("仕訳の詳細（US3）", () => {
       mockDetailApi(detail, {
         origin: { kind: "invoice", invoiceId: "inv1", invoiceNo: "2026-0001" },
       });
-      renderDetail(j1.id);
+      await renderDetail(j1.id);
 
       expect(await screen.findByRole("link", { name: "請求書 2026-0001" })).toHaveAttribute(
         "href",
@@ -431,7 +509,7 @@ describe("仕訳の詳細（US3）", () => {
       mockDetailApi(detail, {
         origin: { kind: "payment", invoiceId: "inv1", invoiceNo: "2026-0001", paymentId: "pay1" },
       });
-      renderDetail(j1.id);
+      await renderDetail(j1.id);
 
       const link = await screen.findByRole("link", { name: "請求書 2026-0001" });
       expect(link.closest("p")).toHaveTextContent("入金の消し込み");
@@ -441,14 +519,14 @@ describe("仕訳の詳細（US3）", () => {
       mockDetailApi(detail, {
         origin: { kind: "recurring", recurringId: "r1", name: "家賃", targetMonth: "2026-10" },
       });
-      renderDetail(j1.id);
+      await renderDetail(j1.id);
 
       expect(await screen.findByText(/定期仕訳「家賃」（2026-10）/)).toBeInTheDocument();
     });
 
     it("出所がなければ何も出さない（mock-api の既定は origin: null）", async () => {
       mockDetailApi(detail);
-      renderDetail(j1.id);
+      await renderDetail(j1.id);
 
       await screen.findByRole("heading", { name: "仕訳 No.1" });
       expect(screen.queryByText(/請求書|定期仕訳/)).not.toBeInTheDocument();
@@ -466,7 +544,7 @@ describe("仕訳の詳細（US3）", () => {
           { statementId: uuid(7002), kind: "matched" },
         ],
       });
-      renderDetail(j1.id);
+      await renderDetail(j1.id);
 
       const links = await screen.findAllByRole("link", { name: /元の明細/ });
       expect(links.map((l) => l.getAttribute("href"))).toEqual([
@@ -484,7 +562,7 @@ describe("仕訳の詳細（US3）", () => {
         correctingJournals: [],
         statements: [],
       });
-      renderDetail(j1.id);
+      await renderDetail(j1.id);
 
       await screen.findByRole("heading", { name: "仕訳 No.1" });
       expect(screen.queryByRole("link", { name: /元の明細/ })).not.toBeInTheDocument();
@@ -493,6 +571,12 @@ describe("仕訳の詳細（US3）", () => {
 
   it("仕訳が見つからなければその旨を表示する", async () => {
     mockApi({
+      [`GET ${ENTITY}/journals`]: () =>
+        ok({
+          journals: [{ ...j1, id: uuid(1), memo: null }],
+          nextCursor: null,
+          summary: { count: 1, amount: 495000 },
+        }),
       [`GET ${ENTITY}/accounts`]: () => ok({ accounts }),
       [`GET ${ENTITY}/fiscal-periods`]: () => ok({ fiscalPeriods: periods(false) }),
       [`GET ${ENTITY}/journals/${uuid(1)}`]: () =>
@@ -500,7 +584,7 @@ describe("仕訳の詳細（US3）", () => {
       [`GET ${ENTITY}/journals/${uuid(1)}/history`]: () =>
         apiError(404, "JOURNAL_NOT_FOUND", "仕訳が見つかりません"),
     });
-    renderDetail(uuid(1));
+    await renderDetail(uuid(1));
     expect(await screen.findByText("仕訳が見つかりません")).toBeInTheDocument();
   });
 });

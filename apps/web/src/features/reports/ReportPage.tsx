@@ -6,6 +6,7 @@ import type { DateRange } from "./periods";
 import { WarningsBanner } from "./WarningsBanner";
 
 const tabProps = {
+  activeOptions: { exact: true },
   activeProps: { className: "font-semibold underline", "aria-current": "page" as const },
 };
 
@@ -60,7 +61,7 @@ export function ReportPage({
   children?: ReactNode;
 }) {
   return (
-    <main className="grid gap-4">
+    <main className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <ReportTabs entityId={entityId} range={range} />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">{title}</h1>

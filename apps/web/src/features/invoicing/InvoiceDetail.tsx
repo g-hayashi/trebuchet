@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { InvoiceDetail as InvoiceDetailData } from "@trebuchet/schema";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ReasonDialog } from "@/components/reason-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import { formatDateTime, formatYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
 import { postInvoiceVoid, postPaymentVoid } from "./api";
 import { invoiceTaxSummary, quantityOf, recipientOf } from "./display";
+import { InvoicePrint } from "./InvoicePrint";
 import { PaymentForm } from "./PaymentForm";
 import { INVOICE_STATUS_LABELS } from "./status";
 
@@ -39,6 +40,15 @@ export function InvoiceDetail({
   const voided = invoice.status === "voided";
   const summary = invoiceTaxSummary(invoice);
 
+  // 印刷（PDF に保存）のファイル名の既定になるので、開いている間だけ title を請求番号にする
+  const invoiceNo = invoice.invoiceNo;
+  useEffect(() => {
+    const previous = document.title;
+    document.title = invoiceNo;
+    return () => {
+      document.title = previous;
+    };
+  }, [invoiceNo]);
   const voidInvoice = useMutation({
     mutationFn: (reason: string) => postInvoiceVoid(entityId, invoice.id, reason),
     onSuccess: () => invalidateLedger(queryClient, entityId),
@@ -75,13 +85,7 @@ export function InvoiceDetail({
                 期限切れ
               </span>
             )}
-            <Link
-              to="/e/$entityId/invoices/$invoiceId/print"
-              params={{ entityId, invoiceId: invoice.id }}
-              className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium shadow-xs hover:bg-accent"
-            >
-              印刷・PDF に保存
-            </Link>
+            <Button onClick={() => window.print()}>印刷・PDF に保存</Button>
             {!voided && (
               <Button variant="outline" onClick={() => setVoiding(true)}>
                 取り消す
@@ -90,6 +94,9 @@ export function InvoiceDetail({
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
+          <p className="text-xs text-muted-foreground">
+            ブラウザの印刷の設定でヘッダーとフッターを消せます
+          </p>
           <div className="grid gap-1 text-sm">
             <p>{`対象月 ${invoice.targetMonth}`}</p>
             <p>{`発行日 ${invoice.issueDate}`}</p>
@@ -264,6 +271,11 @@ export function InvoiceDetail({
         onConfirm={confirmVoidPayment}
         onCancel={() => setVoidingPayment(null)}
       />
+
+      {/* 印刷するもの。画面では inline の display: none で隠し、印刷では src/print.css の !important で出す（011 FR-036）。hidden 属性は使わない（preflight の [hidden] は layer 内の !important で上書きできず、印刷が空白になる） */}
+      <div data-print-root style={{ display: "none" }}>
+        <InvoicePrint invoice={invoice} />
+      </div>
     </>
   );
 }

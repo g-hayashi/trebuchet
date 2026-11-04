@@ -54,6 +54,12 @@ afterEach(() => {
 });
 
 describe("AI の設定の表示", () => {
+  it("h1 は設定のメニューの名前と同じ「AI」で、ページ自身は幅を決めない（幅は設定のレイアウト）", async () => {
+    openSettings();
+    const h1 = await screen.findByRole("heading", { level: 1, name: "AI" });
+    expect(h1.parentElement?.className).not.toMatch(/max-w-/);
+  });
+
   it("端末内の AI の可否と、外部の接続先・モデルを表示する。API キーは出さない", async () => {
     openSettings({
       externalEnabled: true,

@@ -25,6 +25,7 @@ export class InMemoryReportRepository implements ReportRepository {
             journalNo: j.journalNo,
             date: j.date,
             memo: j.memo,
+            createdAt: j.createdAt,
             status: j.status,
             lineNo: l.lineNo,
             side: l.side,

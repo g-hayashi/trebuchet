@@ -42,6 +42,7 @@ const salesLineArb = (fiscalPeriod: FiscalPeriod): fc.Arbitrary<PostedLine> =>
         journalNo: 1,
         date,
         memo: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
         status: status as PostedLine["status"],
         lineNo: 1,
         side: side as PostedLine["side"],

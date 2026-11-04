@@ -33,10 +33,18 @@ export const sessionsQuery = () =>
     queryFn: async () => (await unwrap(await auth.sessions.$get())).sessions,
   });
 
-export const eventsQuery = () =>
+/** 画面に出す最近の件数（FR-054）。全件は CSV の書き出しで取る */
+export const RECENT_EVENT_LIMIT = 5;
+
+/** 認証の記録の全件の CSV（server が表示用の列だけを返す。FR-054） */
+export const EVENTS_CSV_HREF = "/api/auth/events?format=csv";
+
+export const eventsQuery = (limit = RECENT_EVENT_LIMIT) =>
   queryOptions({
-    queryKey: authKeys.events,
-    queryFn: async () => (await unwrap(await auth.events.$get({ query: {} }))).events,
+    // authKeys.events の下に置く（操作のあとの invalidate が前方一致で効く）
+    queryKey: [...authKeys.events, { limit }] as const,
+    queryFn: async () =>
+      (await unwrap(await auth.events.$get({ query: { limit: String(limit) } }))).events,
   });
 
 /** ブラウザの WebAuthn の操作の失敗（取り消し、対応していない端末など）を、画面に出せるエラーにする */

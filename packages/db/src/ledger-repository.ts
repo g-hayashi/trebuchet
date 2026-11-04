@@ -13,6 +13,7 @@ import {
   RepositoryConflictError,
   type Result,
 } from "@trebuchet/domain";
+import type { JournalSummary } from "@trebuchet/schema";
 import { and, asc, between, desc, eq, inArray, max, type SQL, sql } from "drizzle-orm";
 import { asTaxCategory, rowidOf, type TenantConn } from "./internal.ts";
 import { inTransaction } from "./rollback.ts";
@@ -138,10 +139,17 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
 
   findJournals(query: JournalQuery): Page<Journal> {
     const limit = query.limit ?? DEFAULT_LIMIT;
+    const conditions = searchConditions(query);
+    if (query.cursor !== undefined) {
+      const [date, no] = query.cursor.split("_");
+      conditions.push(
+        sql`(${journals.date} < ${date} or (${journals.date} = ${date} and ${journals.journalNo} < ${Number(no)}))`,
+      );
+    }
     const rows = this.db
       .select()
       .from(journals)
-      .where(and(...searchConditions(query)))
+      .where(and(...conditions))
       .orderBy(desc(journals.date), desc(journals.journalNo))
       .limit(limit + 1)
       .all();
@@ -152,6 +160,30 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
       nextCursor:
         rows.length > limit && last !== undefined ? `${last.date}_${last.journalNo}` : null,
     };
+  }
+
+  summarizeJournals(query: JournalQuery): JournalSummary {
+    // 一致した仕訳単位で借方を合計し、行やタグの結合による重複を避ける。
+    const debits = this.db
+      .select({
+        journalId: journalLines.journalId,
+        amount: sql<number>`sum(${journalLines.amount})`.as("amount"),
+      })
+      .from(journalLines)
+      .where(eq(journalLines.side, "debit"))
+      .groupBy(journalLines.journalId)
+      .as("debits");
+    return (
+      this.db
+        .select({
+          count: sql<number>`count(*)`,
+          amount: sql<number>`coalesce(sum(${debits.amount}), 0)`,
+        })
+        .from(journals)
+        .leftJoin(debits, eq(debits.journalId, journals.id))
+        .where(and(...searchConditions(query)))
+        .get() ?? { count: 0, amount: 0 }
+    );
   }
 
   getJournal(id: string): Journal | undefined {
@@ -175,6 +207,17 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
       .select()
       .from(journals)
       .orderBy(desc(journals.date), desc(journals.journalNo))
+      .limit(limit)
+      .all();
+    return this.withLines(rows);
+  }
+
+  recentRegistered(limit: number): Journal[] {
+    const rows = this.db
+      .select()
+      .from(journals)
+      .where(eq(journals.status, "active"))
+      .orderBy(desc(journals.createdAt), desc(journals.journalNo))
       .limit(limit)
       .all();
     return this.withLines(rows);
@@ -231,6 +274,7 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
         journalNo: journals.journalNo,
         date: journals.date,
         memo: journals.memo,
+        createdAt: journals.createdAt,
         status: journals.status,
         lineNo: journalLines.lineNo,
         side: journalLines.side,
@@ -292,7 +336,7 @@ const conflict = (id: string, expectedVersion: number) =>
 const anyLine = (condition: SQL) =>
   sql`exists (select 1 from ${journalLines} where ${journalLines.journalId} = ${journals.id} and ${condition})`;
 
-/** 検索の条件（FR-023）。カーソルは直前のページの最後の仕訳の「日付_仕訳番号」 */
+/** ページ送りと集計で共有する検索の条件（FR-023）。cursor・limit は含めない */
 function searchConditions(query: JournalQuery): SQL[] {
   const conditions: SQL[] = [];
   if (query.includeVoided !== true) conditions.push(eq(journals.status, "active"));
@@ -326,12 +370,6 @@ function searchConditions(query: JournalQuery): SQL[] {
       sql`(instr(coalesce(${journals.memo}, ''), ${q}) > 0 or ${anyLine(
         sql`instr(coalesce(${journalLines.description}, ''), ${q}) > 0`,
       )})`,
-    );
-  }
-  if (query.cursor !== undefined) {
-    const [date, no] = query.cursor.split("_");
-    conditions.push(
-      sql`(${journals.date} < ${date} or (${journals.date} = ${date} and ${journals.journalNo} < ${Number(no)}))`,
     );
   }
   return conditions;

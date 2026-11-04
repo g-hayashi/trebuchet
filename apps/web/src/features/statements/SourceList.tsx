@@ -67,6 +67,7 @@ function RenameRow({
         <Button
           type="submit"
           size="sm"
+          variant="outline"
           disabled={name.trim() === "" || rename.isPending}
           aria-label={`「${source.name}」の名前を保存`}
         >

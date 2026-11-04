@@ -208,8 +208,7 @@ export function CandidateEditor({
   const learnId = useId();
   const [mode, setMode] = useState<Mode>(candidate?.method === "match" ? "link" : "create");
   const [selected, setSelected] = useState<LineRef | undefined>(candidate?.match);
-  // 推定ルールの学習（US3）。既定は学ぶ。判定・取引先は「仕訳のとおり」なら送らない
-  const [learn, setLearn] = useState(true);
+  // 推定ルールの学習は承認のたびに行う（011 R9）。判定・取引先は「仕訳のとおり」なら送らない
   const [purposeChoice, setPurposeChoice] = useState<Purpose | "">("");
   const [partnerChoice, setPartnerChoice] = useState("");
 
@@ -280,16 +279,11 @@ export function CandidateEditor({
       {ready && mode === "create" && (
         <>
           <fieldset aria-label="ルールの学習" className="grid gap-3 rounded-md border px-3 py-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={learn} onChange={(e) => setLearn(e.target.checked)} />
-              この承認からルールを学ぶ
-            </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid content-start gap-1">
                 <Label htmlFor={`${learnId}-purpose`}>判定（ルールに記憶）</Label>
                 <NativeSelect
                   id={`${learnId}-purpose`}
-                  disabled={!learn}
                   value={purposeChoice}
                   onChange={(e) => setPurposeChoice(e.target.value as Purpose | "")}
                 >
@@ -305,7 +299,6 @@ export function CandidateEditor({
                 <Label htmlFor={`${learnId}-partner`}>取引先（ルールに記憶）</Label>
                 <NativeSelect
                   id={`${learnId}-partner`}
-                  disabled={!learn}
                   value={partnerChoice}
                   onChange={(e) => setPartnerChoice(e.target.value)}
                 >
@@ -319,7 +312,7 @@ export function CandidateEditor({
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              同じ内容の明細の候補を、次からこの内容で作ります。外すと、この承認からは学びません。
+              同じ内容の明細の候補を、次からこの内容で作ります。利用者が直した・止めたルールは変わりません。
             </p>
           </fieldset>
           <JournalForm
@@ -338,12 +331,8 @@ export function CandidateEditor({
               checkStatementLines(input, statement, statementAccount);
               await approve.mutateAsync({
                 draft: input,
-                ...(learn
-                  ? {
-                      ...(purposeChoice === "" ? {} : { purpose: purposeChoice }),
-                      ...(partnerChoice === "" ? {} : { partnerId: partnerChoice }),
-                    }
-                  : { learn: false as const }),
+                ...(purposeChoice === "" ? {} : { purpose: purposeChoice }),
+                ...(partnerChoice === "" ? {} : { partnerId: partnerChoice }),
               });
             }}
           />

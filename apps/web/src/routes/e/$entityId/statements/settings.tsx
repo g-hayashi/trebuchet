@@ -22,7 +22,8 @@ function StatementSettingsPage() {
         </Link>
       </div>
       <p className="text-sm text-muted-foreground">
-        この事業体の、まとめて承認と外部の AI へ送る確信度のしきい値です。
+        この事業体の、確信度のしきい値です。ここでだけ変えます（一覧・確認の画面には出ません）。まとめて承認（確認の画面の「まとめて承認」）と、外部の
+        AI へ送るかどうかの判定に使います。
       </p>
       <StatementSettingsForm entityId={entityId} />
       <SourceList entityId={entityId} />

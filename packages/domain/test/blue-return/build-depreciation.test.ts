@@ -25,6 +25,7 @@ const entry = (debit: string, credit: string, amount: number): PostedLine[] => {
     journalNo: seq,
     date: "2025-12-31",
     memo: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
     status: "active" as const,
     accountName: "",
     subAccountName: null,

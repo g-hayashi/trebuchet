@@ -1,7 +1,7 @@
 import { AiSuggestion, TaxCategoryCode } from "@trebuchet/schema";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import type { AiPayload } from "../../src/statements/mask.ts";
+import type { AiPayload, JournalEntryPayload } from "../../src/statements/mask.ts";
 import {
   buildPrompt,
   counterAccounts,
@@ -114,6 +114,7 @@ describe("parseSuggestion", () => {
 
 describe("buildPrompt", () => {
   const payload: AiPayload = {
+    scene: "statement",
     date: "2026-05-10",
     amount: 1200,
     direction: "out",
@@ -139,13 +140,52 @@ describe("buildPrompt", () => {
     expect(prompt.system).not.toContain("3010");
   });
 
-  it("性質: user には payload の項目だけが出る（JSON として読み戻すと payload と一致）", () => {
+  it("性質: user には payload の項目だけが出る（JSON として読み戻すと、scene を除く payload と一致）", () => {
     fc.assert(
       fc.property(fc.string({ maxLength: 30 }), fc.integer({ min: 1, max: 999_999 }), (c, n) => {
         const p: AiPayload = { ...payload, content: c, amount: n };
         const prompt = buildPrompt(p, counterAccounts(ACCOUNTS), TAX_CATEGORIES);
-        expect(JSON.parse(prompt.user)).toEqual(p);
+        const { scene: _scene, ...sent } = p;
+        expect(JSON.parse(prompt.user)).toEqual(sent);
       }),
     );
+  });
+
+  describe("journal_entry の場面（011 T042）", () => {
+    const entry: JournalEntryPayload = {
+      scene: "journal_entry",
+      date: "2026-05-10",
+      amount: 3300,
+      memo: "コピー用紙 ####",
+    };
+
+    it("明細の指示文とは別で、仕訳の摘要・金額からの推定と書き、明細・口座の語を含まない", () => {
+      const eligible = counterAccounts(ACCOUNTS);
+      const statementPrompt = buildPrompt(payload, eligible, TAX_CATEGORIES);
+      const prompt = buildPrompt(entry, eligible, TAX_CATEGORIES);
+      expect(prompt.system).not.toBe(statementPrompt.system);
+      expect(prompt.system).toContain("摘要");
+      expect(prompt.system).not.toContain("明細");
+      expect(prompt.system).not.toContain("口座");
+      for (const a of eligible) {
+        expect(prompt.system).toContain(a.code);
+        expect(prompt.system).toContain(a.name);
+      }
+      for (const t of TAX_CATEGORIES) expect(prompt.system).toContain(t);
+      expect(prompt.system).toContain("accountCode");
+      expect(prompt.system).toContain("confidence");
+    });
+
+    it("user は摘要・金額・日付だけ（口座の種類・使い方・分類・向きを含まない）", () => {
+      const prompt = buildPrompt(entry, counterAccounts(ACCOUNTS), TAX_CATEGORIES);
+      expect(JSON.parse(prompt.user)).toEqual({
+        date: "2026-05-10",
+        amount: 3300,
+        memo: "コピー用紙 ####",
+      });
+      for (const word of ["accountKind", "accountUsage", "direction", "categoryMajor", "scene"]) {
+        expect(prompt.user).not.toContain(word);
+      }
+    });
   });
 });

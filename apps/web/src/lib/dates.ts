@@ -37,3 +37,49 @@ export function previousMonth(month: string): string {
   const [y, pm] = m === 1 ? [year - 1, 12] : [year, m - 1];
   return `${y}-${pad2(pm)}`;
 }
+
+/** 帳票の期間のプリセット（FR-040）。暦の月・四半期・年 */
+export type RangePreset = "this-month" | "last-month" | "this-quarter" | "this-year" | "last-year";
+
+export const RANGE_PRESETS: readonly { id: RangePreset; label: string }[] = [
+  { id: "this-month", label: "今月" },
+  { id: "last-month", label: "先月" },
+  { id: "this-quarter", label: "今四半期" },
+  { id: "this-year", label: "今年" },
+  { id: "last-year", label: "昨年" },
+];
+
+/** 月（YYYY-MM）の初日〜末日 */
+function monthRange(month: string): { from: string; to: string } {
+  const year = Number(month.slice(0, 4));
+  const m = Number(month.slice(5, 7));
+  // 翌月の 0 日 = 月末（UTC で計算し、時差の影響を受けない）
+  const last = new Date(Date.UTC(year, m, 0)).getUTCDate();
+  return { from: `${month}-01`, to: `${month}-${pad2(last)}` };
+}
+
+/** プリセットの期間（date は基準の日。既定は今日） */
+export function presetRange(
+  preset: RangePreset,
+  date: string = today(),
+): { from: string; to: string } {
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(5, 7));
+  switch (preset) {
+    case "this-month":
+      return monthRange(date.slice(0, 7));
+    case "last-month":
+      return monthRange(previousMonth(date.slice(0, 7)));
+    case "this-quarter": {
+      const first = Math.floor((month - 1) / 3) * 3 + 1;
+      return {
+        from: `${year}-${pad2(first)}-01`,
+        to: monthRange(`${year}-${pad2(first + 2)}`).to,
+      };
+    }
+    case "this-year":
+      return { from: `${year}-01-01`, to: `${year}-12-31` };
+    case "last-year":
+      return { from: `${year - 1}-01-01`, to: `${year - 1}-12-31` };
+  }
+}

@@ -43,6 +43,24 @@ function listRoutes(): { method: string; path: string }[] {
 const protectedRoutes = () => listRoutes().filter((r) => requiresAuth(r.method, r.path));
 
 describe("INV-29 全ルートの保護", () => {
+  it("下書きの全操作が保護対象", () => {
+    for (const method of ["GET", "PUT", "DELETE"]) {
+      expect(protectedRoutes()).toContainEqual({
+        method,
+        path: "/api/entities/:entityId/journal-draft",
+      });
+    }
+  });
+  it("取引先の一括の保存（011 T025）が保護対象", () => {
+    expect(protectedRoutes()).toContainEqual({
+      method: "POST",
+      path: "/api/entities/:entityId/partners/profile",
+    });
+    expect(protectedRoutes()).toContainEqual({
+      method: "PUT",
+      path: "/api/entities/:entityId/partners/:partnerId/profile",
+    });
+  });
   it("列挙したルートの数が下限を下回らない（列挙が空で素通りしない）", () => {
     expect(listRoutes().length).toBeGreaterThanOrEqual(40);
     expect(protectedRoutes().length).toBeGreaterThanOrEqual(35);
@@ -119,6 +137,21 @@ describe("INV-29 全ルートの保護", () => {
     }
     expect(failures).toEqual([]);
     expect(existsSync(registryFile())).toBe(false);
+  });
+
+  it("ホームの要約（011 T008）は列挙に入り、保護されている", () => {
+    const protectedKeys = new Set(protectedRoutes().map((r) => `${r.method} ${r.path}`));
+    expect(protectedKeys.has("GET /api/entities/:entityId/home")).toBe(true);
+  });
+
+  it("仕訳の履歴候補（011 T012）は列挙に入り、保護されている", () => {
+    const protectedKeys = new Set(protectedRoutes().map((r) => `${r.method} ${r.path}`));
+    expect(protectedKeys.has("GET /api/entities/:entityId/journals/suggestions")).toBe(true);
+  });
+
+  it("仕訳の入力の AI の候補（011 T043）は列挙に入り、保護されている", () => {
+    const protectedKeys = new Set(protectedRoutes().map((r) => `${r.method} ${r.path}`));
+    expect(protectedKeys.has("POST /api/entities/:entityId/journals/ai-suggestion")).toBe(true);
   });
 
   it("明細の取込（007）の layout・preview・確定は列挙に入り、保護されている。multipart でも未サインインは 401", async () => {

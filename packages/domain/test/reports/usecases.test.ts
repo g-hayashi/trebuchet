@@ -96,6 +96,34 @@ describe("帳票のユースケース（US4）", () => {
       compare: "previous-year",
     });
     expect(r.ok && r.value.netIncome).toEqual({ amount: 80_000, previous: 0, change: 80_000 });
+    expect(r.ok && r.value.previousHasData).toBe(false);
+  });
+
+  it("FR-041: 損益計算書の previousHasData は、前年の同じ範囲に取消を除く仕訳の行があるか", () => {
+    const range = { from: "2026-01-01", to: "2026-12-31", compare: "previous-year" as const };
+    f.create(f.sale(100_000, "2026-04-15"));
+    const none = getProfitAndLoss(deps, range);
+    expect(none.ok && none.value.previousHasData).toBe(false);
+    // 当年の仕訳は前年の範囲の外なので数えない
+    expect(getProfitAndLoss(deps, range)).toMatchObject({ value: { previousHasData: false } });
+    // 取消済みの仕訳は数えない
+    const voided = f.create(f.sale(2_000, "2025-04-15"));
+    expect(voidJournal(f.deps, voided.id, { reason: "二重登録", version: 1 }).ok).toBe(true);
+    expect(getProfitAndLoss(deps, range)).toMatchObject({ value: { previousHasData: false } });
+    f.create(f.sale(80_000, "2025-04-15"));
+    expect(getProfitAndLoss(deps, range)).toMatchObject({ value: { previousHasData: true } });
+    // 比較しないときは付けない
+    const plain = getProfitAndLoss(deps, { from: "2026-01-01", to: "2026-12-31" });
+    expect(plain.ok && "previousHasData" in plain.value).toBe(false);
+  });
+
+  it("FR-041: 貸借対照表の previousHasData は、前年の会計期間があるか", () => {
+    const withPrev = getBalanceSheet(deps, { asOf: "2026-06-30", compare: "previous-year" });
+    expect(withPrev.ok && withPrev.value.previousHasData).toBe(true);
+    const noPrev = getBalanceSheet(deps, { asOf: "2025-06-30", compare: "previous-year" });
+    expect(noPrev.ok && noPrev.value.previousHasData).toBe(false);
+    const plain = getBalanceSheet(deps, { asOf: "2026-06-30" });
+    expect(plain.ok && "previousHasData" in plain.value).toBe(false);
   });
 
   it("貸借対照表: asOf 時点の残高。前年比較では 1 年前の同じ日と比べる", () => {

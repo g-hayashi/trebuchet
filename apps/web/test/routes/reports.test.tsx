@@ -199,7 +199,7 @@ const plRow = (n: number, name: string, amount: number, rest: object = {}) => ({
   ...rest,
 });
 
-const profitAndLoss = (compare: boolean) => {
+const profitAndLoss = (compare: boolean, previousHasData = true) => {
   const fig = (amount: number, previous: number) =>
     compare ? { amount, previous, change: amount - previous } : { amount };
   const row = (n: number, name: string, amount: number, previous: number) =>
@@ -209,6 +209,7 @@ const profitAndLoss = (compare: boolean) => {
     from: "2026-01-01",
     to: "2026-12-31",
     previous: compare ? { from: "2025-01-01", to: "2025-12-31" } : null,
+    ...(compare && { previousHasData }),
     sections: [
       {
         section: "PL_SALES",
@@ -487,5 +488,368 @@ describe("仕訳帳（US4, FR-026）", () => {
     const credit = screen.getByRole("row", { name: /売上高/ });
     expect(credit).toHaveTextContent("取引先A");
     expect(screen.getByRole("row", { name: /合計/ })).toHaveTextContent("330,000");
+  });
+
+  it("スマホで列の多い表がページを横に広げないよう、帳票の枠は列の幅を内容に合わせない（表の中だけで横に動かす）", async () => {
+    mockReports({
+      [`GET ${ENTITY}/reports/journal-book`]: () =>
+        ok({
+          kind: "journal-book",
+          from: "2026-01-01",
+          to: "2026-01-31",
+          entries: [
+            {
+              journalId: uuid(9001),
+              journalNo: 1,
+              date: "2026-01-31",
+              memo: null,
+              lines: [],
+            },
+          ],
+          totals: { debit: 0, credit: 0 },
+          warnings: [],
+        }),
+    });
+    renderRoute(JournalBookRoute, {
+      path: "/e/$entityId/reports/journal-book",
+      url: "/e/e1/reports/journal-book?from=2026-01-01&to=2026-01-31",
+    });
+
+    await screen.findByRole("table", { name: "仕訳帳" });
+    // grid の列を minmax(0,1fr) にしないと、子の表の幅（内容の幅）まで列が広がる
+    expect(screen.getByRole("main").className).toContain("grid-cols-[minmax(0,1fr)]");
+  });
+});
+
+const hrefOf = (el: HTMLElement) => {
+  const url = new URL(el.getAttribute("href") ?? "", "http://localhost");
+  return { path: url.pathname, query: Object.fromEntries(url.searchParams) };
+};
+
+const balanceSheet = (previousHasData?: boolean) => ({
+  kind: "balance-sheet",
+  asOf: "2026-12-31",
+  previousAsOf: previousHasData === undefined ? null : "2025-12-31",
+  ...(previousHasData !== undefined && { previousHasData }),
+  sections: [
+    { section: "BS_ASSET", rows: [bsRow(1020, "普通預金", 100)], total: { amount: 100 } },
+    { section: "BS_LIABILITY", rows: [], total: { amount: 0 } },
+    { section: "BS_EQUITY", rows: [bsRow(3010, "元入金", 100)], total: { amount: 100 } },
+  ],
+  netIncome: { amount: 0 },
+  totalAssets: { amount: 100 },
+  totalLiabilitiesAndEquity: { amount: 100 },
+  balanced: true,
+  warnings: [],
+});
+
+describe("仕訳帳の並べ替え（FR-038）", () => {
+  const emptyBook = (c: ApiCall) => ({
+    kind: "journal-book",
+    from: c.query.from ?? "",
+    to: c.query.to ?? "",
+    entries: [],
+    totals: { debit: 0, credit: 0 },
+    warnings: [],
+  });
+  const render = (url: string) =>
+    renderRoute(JournalBookRoute, { path: "/e/$entityId/reports/journal-book", url });
+
+  it("既定は取引日の昇順で取得し、CSV にも同じ並びを渡す。選ぶと取り直す", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-15T00:00:00+09:00"));
+    const calls = mockReports({
+      [`GET ${ENTITY}/reports/journal-book`]: (c) => ok(emptyBook(c)),
+    });
+    const user = userEvent.setup();
+    render("/e/e1/reports/journal-book");
+
+    await waitFor(() =>
+      expect(reportCalls(calls, "journal-book").map((c) => c.query)).toEqual([
+        { from: "2026-01-01", to: "2026-12-31", sort: "date", order: "asc" },
+      ]),
+    );
+    expect(screen.getByLabelText("並び")).toHaveValue("date");
+    expect(screen.getByLabelText("順序")).toHaveValue("asc");
+    expect(screen.getByRole("link", { name: "CSV をダウンロード" })).toHaveAttribute(
+      "href",
+      `${ENTITY}/reports/journal-book?from=2026-01-01&to=2026-12-31&sort=date&order=asc&format=csv`,
+    );
+
+    await user.selectOptions(screen.getByLabelText("並び"), "created");
+    await user.selectOptions(screen.getByLabelText("順序"), "desc");
+    await waitFor(() =>
+      expect(reportCalls(calls, "journal-book").at(-1)?.query).toEqual({
+        from: "2026-01-01",
+        to: "2026-12-31",
+        sort: "created",
+        order: "desc",
+      }),
+    );
+    expect(await screen.findByRole("link", { name: "CSV をダウンロード" })).toHaveAttribute(
+      "href",
+      `${ENTITY}/reports/journal-book?from=2026-01-01&to=2026-12-31&sort=created&order=desc&format=csv`,
+    );
+  });
+
+  it("URL の sort・order で開く。不正な値は既定に戻す", async () => {
+    const calls = mockReports({
+      [`GET ${ENTITY}/reports/journal-book`]: (c) => ok(emptyBook(c)),
+    });
+    render("/e/e1/reports/journal-book?from=2026-01-01&to=2026-12-31&sort=created&order=up");
+    await waitFor(() =>
+      expect(reportCalls(calls, "journal-book").at(-1)?.query).toMatchObject({
+        sort: "created",
+        order: "asc",
+      }),
+    );
+    expect(await screen.findByLabelText("並び")).toHaveValue("created");
+  });
+});
+
+describe("期間のプリセット（FR-040）", () => {
+  it("今月・先月・今四半期・今年・昨年を選ぶと、その期間で取り直す", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-20T00:00:00+09:00"));
+    const calls = mockReports({
+      [`GET ${ENTITY}/reports/trial-balance`]: (c) =>
+        ok(trialBalance(c.query.from ?? "", c.query.to ?? "", [])),
+    });
+    const user = userEvent.setup();
+    renderRoute(TrialBalanceRoute, {
+      path: "/e/$entityId/reports/trial-balance",
+      url: "/e/e1/reports/trial-balance",
+    });
+    await screen.findByRole("row", { name: /売掛金/ });
+
+    const expected: [string, string, string][] = [
+      ["今月", "2026-05-01", "2026-05-31"],
+      ["先月", "2026-04-01", "2026-04-30"],
+      ["今四半期", "2026-04-01", "2026-06-30"],
+      ["昨年", "2025-01-01", "2025-12-31"],
+      ["今年", "2026-01-01", "2026-12-31"],
+    ];
+    for (const [label, from, to] of expected) {
+      await user.click(screen.getByRole("button", { name: label }));
+      await waitFor(() =>
+        expect(reportCalls(calls, "trial-balance").at(-1)?.query).toEqual({ from, to }),
+      );
+      await waitFor(() => expect(screen.getByLabelText("開始日")).toHaveValue(from));
+      expect(screen.getByLabelText("終了日")).toHaveValue(to);
+    }
+  });
+
+  it("会計期間が今年だけのとき、昨年は押せず（理由つき）、今年・今月は押せる", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-20T00:00:00+09:00"));
+    mockReports({
+      [`GET ${ENTITY}/fiscal-periods`]: () => ok({ fiscalPeriods: [period(2026)] }),
+      [`GET ${ENTITY}/reports/trial-balance`]: (c) =>
+        ok(trialBalance(c.query.from ?? "", c.query.to ?? "", [])),
+    });
+    renderRoute(TrialBalanceRoute, {
+      path: "/e/$entityId/reports/trial-balance",
+      url: "/e/e1/reports/trial-balance",
+    });
+    await screen.findByRole("row", { name: /売掛金/ });
+
+    const lastYear = screen.getByRole("button", { name: "昨年" });
+    expect(lastYear).toBeDisabled();
+    expect(lastYear).toHaveAttribute("title", "この期間を含む会計期間がありません");
+    expect(lastYear).toHaveAccessibleDescription("この期間を含む会計期間がありません");
+    for (const label of ["今月", "先月", "今四半期", "今年"]) {
+      const button = screen.getByRole("button", { name: label });
+      expect(button, label).toBeEnabled();
+      expect(button, label).not.toHaveAttribute("title");
+    }
+  });
+
+  it("会計期間が 2 つの年にまたがる範囲（年をまたぐ四半期など）は、1 つの期間に収まらないので押せない", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-20T00:00:00+09:00"));
+    mockReports({
+      [`GET ${ENTITY}/fiscal-periods`]: () =>
+        ok({
+          fiscalPeriods: [
+            { ...period(2026), startDate: "2025-10-01", endDate: "2026-03-31" },
+            { ...period(2027), startDate: "2026-04-01", endDate: "2027-03-31" },
+          ],
+        }),
+      [`GET ${ENTITY}/reports/trial-balance`]: (c) =>
+        ok(trialBalance(c.query.from ?? "", c.query.to ?? "", [])),
+    });
+    renderRoute(TrialBalanceRoute, {
+      path: "/e/$entityId/reports/trial-balance",
+      url: "/e/e1/reports/trial-balance",
+    });
+    await screen.findByRole("row", { name: /売掛金/ });
+    expect(screen.getByRole("button", { name: "今月" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "今四半期" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "今年" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "昨年" })).toBeDisabled();
+  });
+
+  it("仕訳帳は会計期間をまたいでよいので、押せないプリセットはない", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-20T00:00:00+09:00"));
+    mockReports({
+      [`GET ${ENTITY}/fiscal-periods`]: () => ok({ fiscalPeriods: [period(2026)] }),
+      [`GET ${ENTITY}/reports/journal-book`]: (c) =>
+        ok({
+          kind: "journal-book",
+          from: c.query.from ?? "",
+          to: c.query.to ?? "",
+          entries: [],
+          warnings: [],
+        }),
+    });
+    renderRoute(JournalBookRoute, {
+      path: "/e/$entityId/reports/journal-book",
+      url: "/e/e1/reports/journal-book",
+    });
+    expect(await screen.findByRole("button", { name: "昨年" })).toBeEnabled();
+  });
+});
+
+describe("科目名から総勘定元帳へ（FR-039）", () => {
+  const ledgerLink = (el: HTMLElement) => hrefOf(el);
+
+  it("試算表: 科目名のリンクは同じ期間の元帳へ", async () => {
+    mockReports({
+      [`GET ${ENTITY}/reports/trial-balance`]: () => ok(trialBalance("2026-04-01", "2026-06-30")),
+    });
+    renderRoute(TrialBalanceRoute, {
+      path: "/e/$entityId/reports/trial-balance",
+      url: "/e/e1/reports/trial-balance?from=2026-04-01&to=2026-06-30",
+    });
+    const row = await screen.findByRole("row", { name: /売掛金/ });
+    expect(ledgerLink(within(row).getByRole("link", { name: "売掛金" }))).toEqual({
+      path: "/e/e1/reports/general-ledger",
+      query: { accountId: uuid(1100), from: "2026-04-01", to: "2026-06-30" },
+    });
+  });
+
+  it("損益計算書: 科目名のリンクは同じ期間の元帳へ。計・差引金額はリンクにしない", async () => {
+    mockReports({
+      [`GET ${ENTITY}/reports/profit-and-loss`]: () => ok(profitAndLoss(false)),
+    });
+    renderRoute(ProfitAndLossRoute, {
+      path: "/e/$entityId/reports/profit-and-loss",
+      url: "/e/e1/reports/profit-and-loss?from=2026-01-01&to=2026-12-31",
+    });
+    const row = await screen.findByRole("row", { name: /地代家賃/ });
+    expect(ledgerLink(within(row).getByRole("link", { name: "地代家賃" }))).toEqual({
+      path: "/e/e1/reports/general-ledger",
+      query: { accountId: uuid(8230), from: "2026-01-01", to: "2026-12-31" },
+    });
+    expect(within(screen.getByRole("row", { name: /差引金額/ })).queryByRole("link")).toBeNull();
+  });
+
+  it("貸借対照表: 会計期間の期首から基準日までの元帳へ", async () => {
+    mockReports({
+      [`GET ${ENTITY}/reports/balance-sheet`]: () => ok(balanceSheet()),
+    });
+    renderRoute(BalanceSheetRoute, {
+      path: "/e/$entityId/reports/balance-sheet",
+      url: "/e/e1/reports/balance-sheet?asOf=2026-06-30",
+    });
+    const row = await screen.findByRole("row", { name: /普通預金/ });
+    expect(ledgerLink(within(row).getByRole("link", { name: "普通預金" }))).toEqual({
+      path: "/e/e1/reports/general-ledger",
+      query: { accountId: uuid(1020), from: "2026-01-01", to: "2026-06-30" },
+    });
+  });
+});
+
+describe("前年の案内（FR-041）", () => {
+  const noticeText = /前年の.*ありません/;
+
+  it("損益計算書: previousHasData が false なら理由と、会計期間と移行の画面への案内を出す", async () => {
+    mockReports({
+      [`GET ${ENTITY}/reports/profit-and-loss`]: () => ok(profitAndLoss(true, false)),
+    });
+    renderRoute(ProfitAndLossRoute, {
+      path: "/e/$entityId/reports/profit-and-loss",
+      url: "/e/e1/reports/profit-and-loss?from=2026-01-01&to=2026-12-31&compare=previous-year",
+    });
+    const notice = await screen.findByRole("note", { name: "前年の案内" });
+    expect(notice).toHaveTextContent(noticeText);
+    expect(notice).toHaveTextContent("freee");
+    expect(within(notice).getByRole("link", { name: "会計期間と移行" })).toHaveAttribute(
+      "href",
+      "/e/e1/periods",
+    );
+  });
+
+  it("損益計算書: previousHasData が true、または比較していなければ出さない", async () => {
+    mockReports({
+      [`GET ${ENTITY}/reports/profit-and-loss`]: (c) =>
+        ok(profitAndLoss(c.query.compare === "previous-year", true)),
+    });
+    const { unmount } = renderRoute(ProfitAndLossRoute, {
+      path: "/e/$entityId/reports/profit-and-loss",
+      url: "/e/e1/reports/profit-and-loss?from=2026-01-01&to=2026-12-31&compare=previous-year",
+    });
+    await screen.findByRole("row", { name: /地代家賃/ });
+    expect(screen.queryByRole("note", { name: "前年の案内" })).not.toBeInTheDocument();
+    unmount();
+
+    mockReports({
+      [`GET ${ENTITY}/reports/profit-and-loss`]: () => ok(profitAndLoss(false)),
+    });
+    renderRoute(ProfitAndLossRoute, {
+      path: "/e/$entityId/reports/profit-and-loss",
+      url: "/e/e1/reports/profit-and-loss?from=2026-01-01&to=2026-12-31",
+    });
+    await screen.findByRole("row", { name: /地代家賃/ });
+    expect(screen.queryByRole("note", { name: "前年の案内" })).not.toBeInTheDocument();
+  });
+
+  it("貸借対照表: 前年の会計期間がなければ案内を出す。あれば出さない", async () => {
+    mockReports({
+      [`GET ${ENTITY}/reports/balance-sheet`]: () => ok(balanceSheet(false)),
+    });
+    const { unmount } = renderRoute(BalanceSheetRoute, {
+      path: "/e/$entityId/reports/balance-sheet",
+      url: "/e/e1/reports/balance-sheet?asOf=2026-12-31&compare=previous-year",
+    });
+    const notice = await screen.findByRole("note", { name: "前年の案内" });
+    expect(notice).toHaveTextContent("前年の会計期間がありません");
+    expect(within(notice).getByRole("link", { name: "会計期間と移行" })).toBeInTheDocument();
+    unmount();
+
+    mockReports({
+      [`GET ${ENTITY}/reports/balance-sheet`]: () => ok(balanceSheet(true)),
+    });
+    renderRoute(BalanceSheetRoute, {
+      path: "/e/$entityId/reports/balance-sheet",
+      url: "/e/e1/reports/balance-sheet?asOf=2026-12-31&compare=previous-year",
+    });
+    await screen.findByRole("row", { name: /普通預金/ });
+    expect(screen.queryByRole("note", { name: "前年の案内" })).not.toBeInTheDocument();
+  });
+});
+
+describe("帳票のタブ（R12）", () => {
+  it("5 つの帳票へ行き来するタブがあり、今の帳票だけが現在の印になる", async () => {
+    mockReports({
+      [`GET ${ENTITY}/reports/profit-and-loss`]: () => ok(profitAndLoss(false)),
+    });
+    renderRoute(ProfitAndLossRoute, {
+      path: "/e/$entityId/reports/profit-and-loss",
+      url: "/e/e1/reports/profit-and-loss?from=2026-01-01&to=2026-12-31",
+    });
+    await screen.findByRole("row", { name: /地代家賃/ });
+    const tabs = within(screen.getByRole("navigation", { name: "帳票" })).getAllByRole("link");
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "残高試算表",
+      "損益計算書",
+      "貸借対照表",
+      "総勘定元帳",
+      "仕訳帳",
+    ]);
+    expect(
+      tabs.filter((t) => t.getAttribute("aria-current") === "page").map((t) => t.textContent),
+    ).toEqual(["損益計算書"]);
   });
 });

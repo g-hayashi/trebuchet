@@ -1,0 +1,41 @@
+/*
+ * 印刷（011 R13、FR-036・037）。請求書の詳細の画面から直接印刷する。
+ * 印刷では [data-print-root]（請求書）の祖先と子孫だけを残し、ほかの要素
+ * （ヘッダー・メニュー・事業体名・知らせ・操作）は出さない。
+ * ブラウザが付けるヘッダー・フッター（URL・日付）は @page の余白を 0 にして出ないようにし、
+ * 用紙の余白は要素の padding で取る。
+ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0;
+    background: #fff;
+  }
+
+  body :not(:has([data-print-root])):not([data-print-root]):not([data-print-root] *) {
+    display: none;
+  }
+
+  /* 請求書は inline の display: none で隠してある（jsdom のテストでも隠れるように）。hidden 属性にしない（preflight の [hidden] は layer 内の !important で上書きできない） */
+  [data-print-root] {
+    /* biome-ignore lint/complexity/noImportantStyles: inline の display: none に勝つ必要がある */
+    display: block !important;
+    box-sizing: border-box;
+    padding: 12mm;
+    color: #000;
+    background: #fff;
+  }
+
+  [data-print-root] .invoice-sheet {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    break-inside: avoid-page;
+  }
+}

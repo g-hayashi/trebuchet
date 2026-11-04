@@ -12,32 +12,34 @@ import { formatYen, parseWholeYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
 import { postPayment } from "./api";
 
+/** 前回使った入金先の科目を覚えておく場所（事業体ごと。011 FR-035） */
+export const depositAccountKey = (entityId: string) => `trebuchet.depositAccount.${entityId}`;
+
 /**
  * 入金の消し込み（FR-017〜019）。入金日、入金額、入金先の科目・補助科目。入金額が残額より少ないとき、
- * 差額を「振込手数料」（支払手数料）として扱って残額を 0 にできる。検査は server（金額の超過など）が行う
+ * 差額を「振込手数料」（支払手数料）として扱って残額を 0 にできる。検査は server（金額の超過など）が行う。
+ * 入金先の既定は、同じ事業体で前回消し込んだ科目（今も選べるときだけ）。消し込めたら `onPaid` を呼ぶ
  */
 export function PaymentForm({
   entityId,
   invoice,
+  onPaid,
 }: {
   entityId: string;
   invoice: Pick<InvoiceDetail, "id" | "remaining">;
+  onPaid?: () => void;
 }) {
   const id = useId();
   const queryClient = useQueryClient();
   const [receivedOn, setReceivedOn] = useState(today);
   const [amount, setAmount] = useState(String(invoice.remaining));
-  const [accountId, setAccountId] = useState("");
+  const [picked, setPicked] = useState<string | null>(null);
   const [subAccountId, setSubAccountId] = useState("");
   const [treatAsFee, setTreatAsFee] = useState(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
 
   const accounts = useQuery(accountsQuery(entityId));
-  const subAccounts = useQuery({
-    ...subAccountsQuery(entityId, accountId),
-    enabled: accountId !== "",
-  });
   // 入金先は資産の科目（預金・現金など）。使用停止のものは選べない
   const depositAccounts = useMemo(
     () =>
@@ -46,6 +48,13 @@ export function PaymentForm({
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [accounts.data],
   );
+  const remembered = localStorage.getItem(depositAccountKey(entityId));
+  const accountId =
+    picked ?? (depositAccounts.some((a) => a.id === remembered) ? (remembered ?? "") : "");
+  const subAccounts = useQuery({
+    ...subAccountsQuery(entityId, accountId),
+    enabled: accountId !== "",
+  });
 
   const amountValue = parseWholeYen(amount, { min: 1 });
   const amountValid = amountValue !== null;
@@ -64,10 +73,12 @@ export function PaymentForm({
         ...(treatAsFee ? { treatDifferenceAsFee: true } : {}),
       }),
     onSuccess: async (result) => {
+      localStorage.setItem(depositAccountKey(entityId), accountId);
       setNotice("消し込みました。");
       setAmount(String(result.invoice.remaining));
       setTreatAsFee(false);
       await invalidateLedger(queryClient, entityId);
+      onPaid?.();
     },
   });
 
@@ -123,7 +134,7 @@ export function PaymentForm({
             id={`${id}-account`}
             value={accountId}
             onChange={(e) => {
-              setAccountId(e.target.value);
+              setPicked(e.target.value);
               setSubAccountId("");
             }}
           >
@@ -169,7 +180,7 @@ export function PaymentForm({
       <FieldError id={`${id}-form-error`} message={formError} />
       <ApiErrorMessage error={pay.error} />
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={pay.isPending}>
+        <Button type="submit" variant="outline" disabled={pay.isPending}>
           消し込む
         </Button>
         <SaveNotice message={notice} />

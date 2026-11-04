@@ -18,12 +18,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createEntity, entitiesQuery, entityKeys } from "@/features/entities/api";
-import { entityToRestore } from "@/features/entities/EntitySwitcher";
+import { entityToRestore, lastEntityIdOf } from "@/features/entities/EntitySwitcher";
 import { thisYear } from "@/lib/dates";
 
 export const Route = createFileRoute("/")({
-  // タブの最初の表示なら、前回の事業体の画面を開く（US6）
-  beforeLoad: async ({ context }) => {
+  // `?list=1`（ヘッダーの切替の「一覧・作成」。`true` も受ける）。1 件でも一覧と作成のフォームを出すための印
+  validateSearch: (search: Record<string, unknown>): { list?: true } =>
+    search.list === true || search.list === 1 || search.list === "1" || search.list === "true"
+      ? { list: true }
+      : {},
+  // 事業体が 1 件ならそのホームを開く。2 件以上は一覧、0 件は作成の案内（011 FR-010）。
+  // `list` があるときは開かない（1 件のとき 2 件目を作る画面へ行けなくなるため。2026-11-04 の E2E）
+  beforeLoad: async ({ context, search }) => {
+    if (search.list) return;
     const entityId = await entityToRestore(context.queryClient);
     if (entityId !== undefined) {
       throw redirect({ to: "/e/$entityId", params: { entityId }, replace: true });
@@ -44,7 +51,13 @@ function HomePage() {
 }
 
 function EntityList() {
-  const { data: entities, isPending, error } = useQuery(entitiesQuery());
+  const { data: loaded, isPending, error } = useQuery(entitiesQuery());
+  // 最後に開いた事業体を上に置き、印をつける（FR-010）
+  const lastId = lastEntityIdOf(loaded);
+  const entities = loaded && [
+    ...loaded.filter((e) => e.id === lastId),
+    ...loaded.filter((e) => e.id !== lastId),
+  ];
   return (
     <Card>
       <CardHeader>
@@ -67,7 +80,7 @@ function EntityList() {
             </TableHeader>
             <TableBody>
               {entities.map((e) => (
-                <TableRow key={e.id}>
+                <TableRow key={e.id} className={e.id === lastId ? "bg-accent/50" : undefined}>
                   <TableCell>
                     <Link
                       to="/e/$entityId"
@@ -76,6 +89,11 @@ function EntityList() {
                     >
                       {e.name}
                     </Link>
+                    {e.id === lastId && (
+                      <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
+                        最後に開いた
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>{KIND_LABELS[e.kind]}</TableCell>
                   <TableCell className="text-muted-foreground">
@@ -83,7 +101,7 @@ function EntityList() {
                   </TableCell>
                   <TableCell>
                     <Link
-                      to="/e/$entityId/receipts"
+                      to="/e/$entityId/receipts/new"
                       params={{ entityId: e.id }}
                       className="underline-offset-4 hover:underline"
                     >

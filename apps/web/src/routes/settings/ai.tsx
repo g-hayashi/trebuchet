@@ -7,8 +7,8 @@ export const Route = createFileRoute("/settings/ai")({
 
 function AiSettingsPage() {
   return (
-    <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6">
-      <h1 className="text-xl font-semibold">AI の設定</h1>
+    <main className="grid gap-6 px-4 py-6">
+      <h1 className="text-xl font-semibold">AI</h1>
       <p className="text-sm text-muted-foreground">
         明細の推定に使う AI
         の設定です。この端末の設定で、事業体によりません。外へ送るかどうかを決める確信度のしきい値は、事業体ごとの「明細の設定」にあります。

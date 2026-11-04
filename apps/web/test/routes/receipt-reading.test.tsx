@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Account } from "@/features/accounts/api";
 import { Route as NewJournalRoute } from "@/routes/e/$entityId/journals/new";
 import { Route as ReceiptRoute } from "@/routes/e/$entityId/receipts/$receiptId";
-import { Route as ReceiptsRoute } from "@/routes/e/$entityId/receipts/index";
+import { Route as ReceiptsRoute } from "@/routes/e/$entityId/receipts/new";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { RECEIPT_ID, receiptDetail, receiptReading } from "../receipts-fixtures";
 import { renderRoute } from "../render-route";
@@ -299,7 +299,7 @@ describe("読み取りの失敗（FR-017）", () => {
 describe("追加の直後の自動の読み取り", () => {
   const LIST = `${ENTITY}/receipts`;
   const upload = async () => {
-    renderRoute(ReceiptsRoute, { path: "/e/$entityId/receipts/", url: "/e/e1/receipts" });
+    renderRoute(ReceiptsRoute, { path: "/e/$entityId/receipts/new", url: "/e/e1/receipts/new" });
     const form = await screen.findByRole("form", { name: "証憑を追加" });
     const user = userEvent.setup();
     await user.upload(
@@ -307,8 +307,8 @@ describe("追加の直後の自動の読み取り", () => {
       new File([new Uint8Array(1000)], "領収書.jpg", { type: "image/jpeg" }),
     );
     await user.click(within(form).getByRole("radio", { name: "電子取引" }));
-    await user.click(within(form).getByRole("button", { name: "保存" }));
-    await screen.findByText("保存しました。");
+    await user.click(within(form).getByRole("button", { name: "追加する" }));
+    await screen.findByText("追加しました。");
   };
 
   it("設定が有効なら、保存の後に readings を呼ぶ（保存の表示は待たない）", async () => {
@@ -331,7 +331,7 @@ describe("追加の直後の自動の読み取り", () => {
     });
     await upload();
     await waitFor(() => expect(posts(calls, READINGS)).toHaveLength(1));
-    expect(screen.getByText("保存しました。")).toBeInTheDocument();
+    expect(screen.getByText("追加しました。")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -414,7 +414,7 @@ describe("証憑から仕訳を作るときの候補（readingId）", () => {
     expect(note).toHaveTextContent("文具の購入");
 
     await user.selectOptions(screen.getByLabelText("2行目の勘定科目"), "普通預金");
-    await user.click(screen.getByRole("button", { name: "登録する" }));
+    await user.click(screen.getByRole("button", { name: "登録" }));
     await waitFor(() => expect(posts(calls, JOURNAL)).toHaveLength(1));
     const body = posts(calls, JOURNAL)[0]?.body as { readingId?: string; journal: unknown };
     expect(body.readingId).toBe(uuid(11));
@@ -445,7 +445,7 @@ describe("証憑から仕訳を作るときの候補（readingId）", () => {
     expect(screen.queryByRole("note", { name: "AI の候補" })).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("1行目の勘定科目"), "消耗品費");
     await user.selectOptions(screen.getByLabelText("2行目の勘定科目"), "普通預金");
-    await user.click(screen.getByRole("button", { name: "登録する" }));
+    await user.click(screen.getByRole("button", { name: "登録" }));
     await waitFor(() => expect(posts(calls, JOURNAL)).toHaveLength(1));
     expect(posts(calls, JOURNAL)[0]?.body).not.toHaveProperty("readingId");
   });

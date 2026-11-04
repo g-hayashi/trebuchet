@@ -1,11 +1,20 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, stripSearchParams, useNavigate } from "@tanstack/react-router";
 import { JournalQuery } from "@trebuchet/schema";
-import { type FormEvent, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -16,18 +25,26 @@ import {
 } from "@/components/ui/table";
 import { type Account, accountsQuery } from "@/features/accounts/api";
 import { type Journal, type JournalSearch, journalSearchQuery } from "@/features/journals/api";
+import { JournalDetailContent } from "@/features/journals/JournalDetailContent";
 import { type Partner, partnersQuery, type Tag, tagsQuery } from "@/features/masters/api";
 import { ReceiptMark } from "@/features/receipts/JournalReceipts";
+import { useReportRange } from "@/features/reports/periods";
 import { groupAccountsBySection } from "@/lib/accounts";
 import { formatYen, parseWholeYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-/** URL の検索パラメータ（FR-023）。ページの指定（cursor・limit）は URL に残さない */
-const JournalSearchParams = JournalQuery.omit({ cursor: true, limit: true });
+/**
+ * URL の検索パラメータ（FR-023）。ページの指定（cursor・limit）は URL に残さない。
+ * `allDates` は利用者が日付を両方空にして探したことを表す（URL に日付がないと既定の会計期間を補うため）。
+ * API へは送らない
+ */
+const JournalSearchParams = JournalQuery.omit({ cursor: true, limit: true }).extend({
+  allDates: z.boolean().default(false),
+});
 
 export const Route = createFileRoute("/e/$entityId/journals/")({
   validateSearch: JournalSearchParams,
-  search: { middlewares: [stripSearchParams({ includeVoided: false })] },
+  search: { middlewares: [stripSearchParams({ includeVoided: false, allDates: false })] },
   component: JournalsPage,
 });
 
@@ -37,12 +54,32 @@ const hasFilter = (search: JournalSearch) =>
 function JournalsPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();
+  const defaults = useReportRange(entityId, {});
+  const effectiveSearch =
+    search.dateFrom !== undefined ||
+    search.dateTo !== undefined ||
+    search.allDates ||
+    !defaults.range
+      ? search
+      : { ...search, dateFrom: defaults.range.from, dateTo: defaults.range.to };
+  const { allDates: _allDates, ...apiSearch } = effectiveSearch;
+  const clearSearch: SearchInput = defaults.range
+    ? { dateFrom: defaults.range.from, dateTo: defaults.range.to }
+    : {};
   const navigate = useNavigate({ from: Route.fullPath });
-  const journals = useInfiniteQuery(journalSearchQuery(entityId, search));
+  const journals = useInfiniteQuery({
+    ...journalSearchQuery(entityId, apiSearch),
+    placeholderData: keepPreviousData,
+    enabled: !defaults.isPending && !defaults.error,
+  });
+  const [selected, setSelected] = useState<string>();
+  /** 開いている訂正のフォームに未保存の変更があるか（Sheet を閉じる前の確認に使う） */
+  const correctionDirty = useRef(false);
+  const opener = useRef<HTMLButtonElement | null>(null);
   const accounts = useQuery(accountsQuery(entityId));
   const partners = useQuery(partnersQuery(entityId));
   const tags = useQuery(tagsQuery(entityId));
-  const error = journals.error ?? accounts.error ?? partners.error ?? tags.error;
+  const error = defaults.error ?? journals.error ?? accounts.error ?? partners.error ?? tags.error;
   const accountNames = new Map(accounts.data?.map((a) => [a.id, a.name]));
   const items = journals.data?.pages.flatMap((p) => p.journals);
 
@@ -60,32 +97,52 @@ function JournalsPage() {
       </div>
       {accounts.data && partners.data && tags.data && (
         <SearchForm
-          search={search}
+          search={effectiveSearch}
+          clearSearch={clearSearch}
+          hasDefaultRange={defaults.range !== undefined}
           accounts={accounts.data}
           partners={partners.data}
           tags={tags.data}
           onSearch={(next) => navigate({ search: next })}
-          onClear={() => navigate({ search: {} })}
+          onClear={() => navigate({ search: clearSearch })}
         />
       )}
       <Card>
         <CardHeader>
-          <CardTitle>{hasFilter(search) ? "検索の結果（新しい順）" : "仕訳（新しい順）"}</CardTitle>
+          <CardTitle>
+            {hasFilter(apiSearch) ? "検索の結果（新しい順）" : "仕訳（新しい順）"}
+          </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4">
           <ApiErrorMessage error={error} />
+          {journals.data?.pages[0]?.summary && (
+            <dl
+              aria-label="検索結果の集計"
+              aria-live="polite"
+              className="flex flex-wrap gap-6 text-sm tabular-nums"
+            >
+              <div className="flex gap-2">
+                <dt>件数</dt>
+                <dd>{journals.data.pages[0].summary.count.toLocaleString("ja-JP")} 件</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt>金額の合計</dt>
+                <dd>{formatYen(journals.data.pages[0].summary.amount)} 円</dd>
+              </div>
+            </dl>
+          )}
           {(journals.isPending || accounts.isPending) && !error && (
             <p className="text-sm text-muted-foreground">読み込み中…</p>
           )}
           {items?.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              {hasFilter(search)
+              {hasFilter(apiSearch)
                 ? "条件に合う仕訳がありません。"
                 : "仕訳がありません。「仕訳を入力」から登録してください。"}
             </p>
           )}
           {items && items.length > 0 && accounts.data && (
-            <Table aria-label="仕訳の一覧">
+            <Table aria-label="仕訳の一覧" aria-busy={journals.isPlaceholderData || undefined}>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-28">日付</TableHead>
@@ -100,9 +157,12 @@ function JournalsPage() {
                 {items.map((j) => (
                   <JournalRow
                     key={j.id}
-                    entityId={entityId}
                     journal={j}
                     accountNames={accountNames}
+                    onOpen={(button) => {
+                      opener.current = button;
+                      setSelected(j.id);
+                    }}
                   />
                 ))}
               </TableBody>
@@ -120,6 +180,46 @@ function JournalsPage() {
           )}
         </CardContent>
       </Card>
+      <Sheet
+        open={selected !== undefined}
+        onOpenChange={(open) => {
+          if (open) return;
+          if (correctionDirty.current && !window.confirm("訂正の入力を破棄して閉じますか？"))
+            return;
+          setSelected(undefined);
+        }}
+      >
+        <SheetContent
+          className="md:max-w-5xl"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            opener.current?.focus();
+          }}
+        >
+          <SheetHeader>
+            <div className="flex items-center justify-between gap-3">
+              <SheetTitle>仕訳の詳細</SheetTitle>
+              <SheetClose asChild>
+                <Button variant="outline">閉じる</Button>
+              </SheetClose>
+            </div>
+            <SheetDescription>
+              内容と変更履歴を確認し、訂正・取消・複製ができます。
+            </SheetDescription>
+          </SheetHeader>
+          {selected && (
+            <JournalDetailContent
+              key={selected}
+              entityId={entityId}
+              journalId={selected}
+              embedded
+              onCorrectionDirtyChange={(dirty) => {
+                correctionDirty.current = dirty;
+              }}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
     </main>
   );
 }
@@ -131,9 +231,40 @@ function parseAmount(raw: string): number | undefined | null {
   return raw.trim() === "" ? undefined : parseWholeYen(raw, { min: 0 });
 }
 
-/** 検索の条件のフォーム（FR-023）。条件は URL の検索パラメータに入れる */
+type FilterValues = {
+  dateFrom: string;
+  dateTo: string;
+  amountMin: string;
+  amountMax: string;
+  accountId: string;
+  partnerId: string;
+  tagId: string;
+  q: string;
+  includeVoided: boolean;
+};
+const filterValues = (search: SearchInput): FilterValues => ({
+  dateFrom: search.dateFrom ?? "",
+  dateTo: search.dateTo ?? "",
+  amountMin: search.amountMin === undefined ? "" : String(search.amountMin),
+  amountMax: search.amountMax === undefined ? "" : String(search.amountMax),
+  accountId: search.accountId ?? "",
+  partnerId: search.partnerId ?? "",
+  tagId: search.tagId ?? "",
+  q: String(search.q ?? ""),
+  includeVoided: Boolean(search.includeVoided),
+});
+const searchKeyOf = (search: SearchInput) =>
+  JSON.stringify(
+    Object.entries(search)
+      .filter(([, value]) => value !== undefined && value !== false && value !== "")
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
+
+/** 条件を300ms待ってURLへ反映する。自分のURL更新で入力欄を作り直さない。 */
 function SearchForm({
   search,
+  clearSearch,
+  hasDefaultRange,
   accounts,
   partners,
   tags,
@@ -141,70 +272,91 @@ function SearchForm({
   onClear,
 }: {
   search: JournalSearch;
+  clearSearch: SearchInput;
+  /** 既定の会計期間があるか。日付を両方空にしたとき「全期間」を URL に明示する */
+  hasDefaultRange: boolean;
   accounts: Account[];
   partners: Partner[];
   tags: Tag[];
   onSearch: (next: SearchInput) => void;
   onClear: () => void;
 }) {
+  const [values, setValues] = useState(() => filterValues(search));
   const [amountErrors, setAmountErrors] = useState<{ min?: boolean; max?: boolean }>({});
-
-  const submit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    const text = (name: string) => {
-      const v = String(data.get(name) ?? "").trim();
-      return v === "" ? undefined : v;
-    };
-    const amountMin = parseAmount(String(data.get("amountMin") ?? ""));
-    const amountMax = parseAmount(String(data.get("amountMax") ?? ""));
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const emitted = useRef<string | undefined>(undefined);
+  const currentSearch = useRef(search);
+  currentSearch.current = search;
+  const searchKey = searchKeyOf(search);
+  useEffect(() => {
+    if (emitted.current === searchKey) {
+      emitted.current = undefined;
+      return;
+    }
+    clearTimeout(timer.current);
+    setValues(filterValues(currentSearch.current));
+    setAmountErrors({});
+  }, [searchKey]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  function change<K extends keyof FilterValues>(name: K, value: FilterValues[K]) {
+    const next = { ...values, [name]: value };
+    setValues(next);
+    clearTimeout(timer.current);
+    const amountMin = parseAmount(next.amountMin);
+    const amountMax = parseAmount(next.amountMax);
     setAmountErrors({ min: amountMin === null, max: amountMax === null });
     if (amountMin === null || amountMax === null) return;
-    const next: SearchInput = {
-      dateFrom: text("dateFrom"),
-      dateTo: text("dateTo"),
+    const parsed: SearchInput = {
+      dateFrom: next.dateFrom || undefined,
+      dateTo: next.dateTo || undefined,
       amountMin,
       amountMax,
-      partnerId: text("partnerId"),
-      accountId: text("accountId"),
-      q: text("q"),
-      tagId: text("tagId"),
-      includeVoided: data.get("includeVoided") === "on" ? true : undefined,
+      accountId: next.accountId || undefined,
+      partnerId: next.partnerId || undefined,
+      tagId: next.tagId || undefined,
+      q: next.q.trim() || undefined,
+      includeVoided: next.includeVoided || undefined,
+      allDates: hasDefaultRange && !next.dateFrom && !next.dateTo ? true : undefined,
     };
-    onSearch(
-      Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined)) as SearchInput,
-    );
-  };
-
-  const searchKey = JSON.stringify(search);
-  const amountMessage = "0 以上の整数で入力してください";
+    const filtered = Object.fromEntries(
+      Object.entries(parsed).filter(([, item]) => item !== undefined),
+    ) as SearchInput;
+    timer.current = setTimeout(() => {
+      emitted.current = searchKeyOf(filtered);
+      onSearch(filtered);
+    }, 300);
+  }
   const field = "grid content-start gap-1";
   const label = "text-sm font-medium";
-
+  const amountMessage = "0 以上の整数で入力してください";
   return (
     <Card>
       <CardContent className="pt-6">
-        {/* biome-ignore lint/a11y/noRedundantRoles: search 要素の暗黙のロールに未対応の支援技術・ブラウザがあるため明示する */}
+        {/* biome-ignore lint/a11y/noRedundantRoles: search要素の暗黙のロールに未対応のブラウザでも検索領域を識別する */}
         <search role="search" aria-label="仕訳の検索">
-          <form noValidate onSubmit={submit} className="grid gap-4">
-            {/* 条件が URL で変わったら（クリア・戻る）入力欄を作り直して URL の値に合わせる */}
-            <div key={searchKey} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <form noValidate onSubmit={(event) => event.preventDefault()} className="grid gap-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className={field}>
                 <label htmlFor="search-date-from" className={label}>
                   日付（から）
                 </label>
                 <Input
                   id="search-date-from"
-                  name="dateFrom"
                   type="date"
-                  defaultValue={search.dateFrom}
+                  value={values.dateFrom}
+                  onChange={(event) => change("dateFrom", event.target.value)}
                 />
               </div>
               <div className={field}>
                 <label htmlFor="search-date-to" className={label}>
                   日付（まで）
                 </label>
-                <Input id="search-date-to" name="dateTo" type="date" defaultValue={search.dateTo} />
+                <Input
+                  id="search-date-to"
+                  type="date"
+                  value={values.dateTo}
+                  onChange={(event) => change("dateTo", event.target.value)}
+                />
               </div>
               <div className={field}>
                 <label htmlFor="search-amount-min" className={label}>
@@ -212,12 +364,12 @@ function SearchForm({
                 </label>
                 <Input
                   id="search-amount-min"
-                  name="amountMin"
                   inputMode="numeric"
                   autoComplete="off"
                   className="text-right tabular-nums"
-                  defaultValue={search.amountMin}
-                  aria-invalid={amountErrors.min ? true : undefined}
+                  value={values.amountMin}
+                  onChange={(event) => change("amountMin", event.target.value)}
+                  aria-invalid={amountErrors.min || undefined}
                   aria-describedby="search-amount-min-error"
                 />
                 <FieldError
@@ -231,12 +383,12 @@ function SearchForm({
                 </label>
                 <Input
                   id="search-amount-max"
-                  name="amountMax"
                   inputMode="numeric"
                   autoComplete="off"
                   className="text-right tabular-nums"
-                  defaultValue={search.amountMax}
-                  aria-invalid={amountErrors.max ? true : undefined}
+                  value={values.amountMax}
+                  onChange={(event) => change("amountMax", event.target.value)}
+                  aria-invalid={amountErrors.max || undefined}
                   aria-describedby="search-amount-max-error"
                 />
                 <FieldError
@@ -250,15 +402,15 @@ function SearchForm({
                 </label>
                 <NativeSelect
                   id="search-account"
-                  name="accountId"
-                  defaultValue={search.accountId ?? ""}
+                  value={values.accountId}
+                  onChange={(event) => change("accountId", event.target.value)}
                 >
                   <option value="">すべて</option>
-                  {groupAccountsBySection(accounts).map((g) => (
-                    <optgroup key={g.section} label={g.label}>
-                      {g.accounts.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
+                  {groupAccountsBySection(accounts).map((group) => (
+                    <optgroup key={group.section} label={group.label}>
+                      {group.accounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.name}
                         </option>
                       ))}
                     </optgroup>
@@ -271,13 +423,13 @@ function SearchForm({
                 </label>
                 <NativeSelect
                   id="search-partner"
-                  name="partnerId"
-                  defaultValue={search.partnerId ?? ""}
+                  value={values.partnerId}
+                  onChange={(event) => change("partnerId", event.target.value)}
                 >
                   <option value="">すべて</option>
-                  {partners.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
+                  {partners.map((partner) => (
+                    <option key={partner.id} value={partner.id}>
+                      {partner.name}
                     </option>
                   ))}
                 </NativeSelect>
@@ -286,11 +438,15 @@ function SearchForm({
                 <label htmlFor="search-tag" className={label}>
                   タグ
                 </label>
-                <NativeSelect id="search-tag" name="tagId" defaultValue={search.tagId ?? ""}>
+                <NativeSelect
+                  id="search-tag"
+                  value={values.tagId}
+                  onChange={(event) => change("tagId", event.target.value)}
+                >
                   <option value="">すべて</option>
-                  {tags.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
+                  {tags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.name}
                     </option>
                   ))}
                 </NativeSelect>
@@ -299,31 +455,36 @@ function SearchForm({
                 <label htmlFor="search-q" className={label}>
                   摘要・メモ
                 </label>
-                <Input id="search-q" name="q" autoComplete="off" defaultValue={search.q} />
+                <Input
+                  id="search-q"
+                  autoComplete="off"
+                  value={values.q}
+                  onChange={(event) => change("q", event.target.value)}
+                />
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <label key={searchKey} className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  name="includeVoided"
-                  defaultChecked={search.includeVoided}
+                  checked={values.includeVoided}
+                  onChange={(event) => change("includeVoided", event.target.checked)}
                   className="size-4"
                 />
                 取消済みも表示
               </label>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setAmountErrors({});
-                    onClear();
-                  }}
-                >
-                  条件をクリア
-                </Button>
-                <Button type="submit">検索</Button>
-              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  clearTimeout(timer.current);
+                  emitted.current = undefined;
+                  setAmountErrors({});
+                  setValues(filterValues(clearSearch));
+                  onClear();
+                }}
+              >
+                条件をクリア
+              </Button>
             </div>
           </form>
         </search>
@@ -333,14 +494,14 @@ function SearchForm({
 }
 
 function JournalRow({
-  entityId,
   journal,
   accountNames,
+  onOpen,
 }: {
-  entityId: string;
   /** 一覧の項目。`receiptCount` は有効な結びつきの証憑の数（010 H: §4） */
   journal: Journal & { receiptCount?: number | undefined };
   accountNames: Map<string, string>;
+  onOpen: (button: HTMLButtonElement) => void;
 }) {
   const voided = journal.status === "voided";
   const sideLines = (side: "debit" | "credit") =>
@@ -360,17 +521,17 @@ function JournalRow({
   ];
 
   return (
-    <TableRow className={cn("align-top", voided && "text-muted-foreground")}>
+    <TableRow className={cn("relative align-top", voided && "text-muted-foreground")}>
       <TableCell className="tabular-nums">{journal.date}</TableCell>
       <TableCell className="text-right tabular-nums">
-        <Link
-          to="/e/$entityId/journals/$journalId"
-          params={{ entityId, journalId: journal.id }}
+        <button
+          type="button"
+          onClick={(event) => onOpen(event.currentTarget)}
           aria-label={`仕訳 No.${journal.journalNo} の詳細`}
-          className="text-primary underline-offset-4 hover:underline"
+          className="text-primary underline-offset-4 after:absolute after:inset-0 hover:underline focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
         >
           {journal.journalNo}
-        </Link>
+        </button>
       </TableCell>
       <TableCell className={cn(voided && "line-through")}>{sideLines("debit")}</TableCell>
       <TableCell className={cn(voided && "line-through")}>{sideLines("credit")}</TableCell>

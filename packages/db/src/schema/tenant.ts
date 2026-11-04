@@ -10,6 +10,7 @@ import {
   ReceiptMediaType,
   ReceiptReadingStatus,
   RULE_HISTORY_ACTIONS,
+  RULE_MANAGED_BY,
   RULE_ORIGINS,
   RULE_STATUSES,
   STATEMENT_ACCOUNT_KINDS,
@@ -33,6 +34,17 @@ import {
 // data-model.md §2〜§5。金額は INTEGER（円）、日付は TEXT（YYYY-MM-DD）、真偽値は INTEGER（0/1）
 
 const bool = (name: string) => integer(name, { mode: "boolean" }).notNull();
+
+/** 011/R6: 暗号化した事業体DBに、新規入力の状態だけを保存する。 */
+export const journalDrafts = sqliteTable(
+  "journal_drafts",
+  {
+    id: integer("id").primaryKey(),
+    payload: text("payload").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [check("journal_drafts_singleton", sql`${t.id} = 1`)],
+);
 
 // ---- §2 マスタ ----
 
@@ -676,60 +688,6 @@ export const closingNotes = sqliteTable(
   ],
 );
 
-export const taxReturnMemos = sqliteTable(
-  "tax_return_memos",
-  {
-    id: text("id").primaryKey(),
-    fiscalYear: integer("fiscal_year").notNull(),
-    kind: text("kind", {
-      enum: [
-        "salary",
-        "social_insurance",
-        "small_business_mutual_aid",
-        "life_insurance",
-        "earthquake_insurance",
-        "donation",
-        "medical",
-        "stocks",
-        "crypto",
-        "foreign_tax_credit",
-        "other",
-      ],
-    }).notNull(),
-    label: text("label"),
-    amount: integer("amount"),
-    filePath: text("file_path"),
-    memo: text("memo"),
-  },
-  (t) => [
-    index("tax_return_memos_year").on(t.fiscalYear),
-    check(
-      "tax_return_memos_kind",
-      sql`${t.kind} IN ('salary', 'social_insurance', 'small_business_mutual_aid', 'life_insurance', 'earthquake_insurance', 'donation', 'medical', 'stocks', 'crypto', 'foreign_tax_credit', 'other')`,
-    ),
-    check("tax_return_memos_amount", sql`${t.amount} IS NULL OR ${t.amount} >= 0`),
-  ],
-);
-
-export const filedDocuments = sqliteTable(
-  "filed_documents",
-  {
-    id: text("id").primaryKey(),
-    fiscalYear: integer("fiscal_year").notNull(),
-    kind: text("kind", { enum: ["blue_return", "tax_return", "attachment", "other"] }).notNull(),
-    filePath: text("file_path").notNull(),
-    filedOn: text("filed_on"),
-    memo: text("memo"),
-  },
-  (t) => [
-    index("filed_documents_year").on(t.fiscalYear),
-    check(
-      "filed_documents_kind",
-      sql`${t.kind} IN ('blue_return', 'tax_return', 'attachment', 'other')`,
-    ),
-  ],
-);
-
 export const closingAuditLog = sqliteTable(
   "closing_audit_log",
   {
@@ -1277,6 +1235,7 @@ export const inferenceRules = sqliteTable(
     overrides: integer("overrides").notNull().default(0),
     status: text("status", { enum: RULE_STATUSES }).notNull(),
     origin: text("origin", { enum: RULE_ORIGINS }).notNull(),
+    managedBy: text("managed_by", { enum: RULE_MANAGED_BY }).notNull().default("auto"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -1286,6 +1245,7 @@ export const inferenceRules = sqliteTable(
     check("inference_rules_purpose", sql`${t.purpose} IN (${inList(PURPOSES)})`),
     check("inference_rules_status", sql`${t.status} IN (${inList(RULE_STATUSES)})`),
     check("inference_rules_origin", sql`${t.origin} IN (${inList(RULE_ORIGINS)})`),
+    check("inference_rules_managed_by", sql`${t.managedBy} IN (${inList(RULE_MANAGED_BY)})`),
     check("inference_rules_hits", sql`${t.hits} >= 0`),
     check("inference_rules_overrides", sql`${t.overrides} >= 0`),
   ],
@@ -1322,23 +1282,6 @@ export const statementSettings = sqliteTable(
     check("statement_settings_single", sql`${t.id} = 1`),
     check("statement_settings_bulk", sql`${t.bulkThreshold} BETWEEN 0 AND 100`),
     check("statement_settings_external", sql`${t.externalThreshold} BETWEEN 0 AND 100`),
-  ],
-);
-
-export const evalRuns = sqliteTable(
-  "eval_runs",
-  {
-    id: text("id").primaryKey(),
-    splitDate: text("split_date").notNull(),
-    includeAi: integer("include_ai").notNull(),
-    sampleCount: integer("sample_count").notNull(),
-    resultJson: text("result_json").notNull(),
-    modelsJson: text("models_json").notNull(),
-    createdAt: text("created_at").notNull(),
-  },
-  (t) => [
-    check("eval_runs_include_ai", sql`${t.includeAi} IN (0, 1)`),
-    check("eval_runs_sample_count", sql`${t.sampleCount} >= 0`),
   ],
 );
 

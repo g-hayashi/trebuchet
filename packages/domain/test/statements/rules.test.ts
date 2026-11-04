@@ -19,6 +19,7 @@ const rule = (over: Partial<InferenceRule> = {}): InferenceRule => ({
   overrides: 0,
   status: "active",
   origin: "approval",
+  managedBy: "auto",
   createdAt: "2026-10-25T00:00:00.000Z",
   updatedAt: "2026-10-25T00:00:00.000Z",
   ...over,
@@ -102,6 +103,27 @@ describe("learnRule", () => {
     });
     expect(r.action).toBe("update");
     expect(r.rule).toMatchObject({ ...changed, hits: 2, overrides: 2 });
+  });
+
+  it("managedBy が user のルールは変えない（action は none。違う内容の承認でも hits・overrides・内容はそのまま。T018・INV-71）", () => {
+    const user = rule({ statementAccountId: "s1", hits: 2, overrides: 1, managedBy: "user" });
+    for (const body2 of [
+      body,
+      { ...body, counterAccountId: "acc-rent", purpose: "private" as const },
+    ]) {
+      const r = learnRule(user, { ...approval, body: body2 });
+      expect(r.action).toBe("none");
+      expect(r.rule).toMatchObject({
+        counterAccountId: user.counterAccountId,
+        counterSubAccountId: user.counterSubAccountId,
+        partnerId: user.partnerId,
+        taxCategory: user.taxCategory,
+        purpose: user.purpose,
+        descriptionTemplate: user.descriptionTemplate,
+        hits: 2,
+        overrides: 1,
+      });
+    }
   });
 
   it("取引先・税区分・補助科目・摘要の違いも違う内容", () => {

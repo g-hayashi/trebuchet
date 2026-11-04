@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { readdirSync, rmSync } from "node:fs";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BackupRunner } from "../src/lib/backup-run.ts";
@@ -65,10 +65,12 @@ describe("判断（tick）", () => {
     s.stop();
   });
 
-  it("置き場所が未設定なら実行しない", async () => {
+  it("置き場所が未設定でも既定の場所を作って自動実行する", async () => {
     const s = scheduler();
     await s.tick();
-    expect(await count()).toBe(0);
+    expect(await count()).toBe(1);
+    expect((await env.backups().getLastRun())?.status).toBe("succeeded");
+    expect(readdirSync(env.defaultFolder)).toHaveLength(1);
     s.stop();
   });
 

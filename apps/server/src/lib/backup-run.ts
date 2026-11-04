@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   BackupFileError,
@@ -35,6 +35,7 @@ import {
   shouldSkipBackup,
 } from "@trebuchet/domain";
 import type { BackupTrigger } from "@trebuchet/schema";
+import { resolveBackupFolder } from "./backup-folder.ts";
 
 export type BackupRunnerDeps = {
   auth: () => AuthStore;
@@ -52,7 +53,7 @@ type StartedBackup = { runId: string; done: Promise<BackupRun> };
 export type BackupRunner = {
   isRunning(): boolean;
   /**
-   * 実行を始める。同時に 1 つだけ（実行中は BACKUP_RUNNING）、置き場所が未設定なら BACKUP_NOT_CONFIGURED、
+   * 実行を始める。同時に 1 つだけ（実行中は BACKUP_RUNNING）、置き場所が未設定なら既定を使う。
    * 施錠中（DK がない）なら LOCKED。`done` は終わりで解決する（失敗は `failed` の行になる）。
    * 拒否されるのは、記録そのものが失敗したときだけ
    */
@@ -94,13 +95,14 @@ export function createBackupRunner(deps: BackupRunnerDeps): BackupRunner {
   async function execute(
     runId: string,
     trigger: BackupTrigger,
-    folder: string,
+    destination: ReturnType<typeof resolveBackupFolder>,
   ): Promise<BackupRun> {
     // 呼び出し元（202 の応答など）に先に制御を返してから、重い処理を始める
     await yieldToEventLoop();
     const startedAt = deps.clock.now();
     const auth = deps.auth();
     const backups = deps.backups();
+    const { folder, folderSource } = destination;
     const base = {
       id: runId,
       startedAt,
@@ -112,6 +114,9 @@ export function createBackupRunner(deps: BackupRunnerDeps): BackupRunner {
       summary: null,
     };
     try {
+      // 設定済みの先は従来どおり存在を検査する。既定先だけ、なければ作る。
+      // 作成の失敗も下の catch を通し、失敗の記録・警告を残す。
+      if (folderSource === "default") mkdirSync(folder, { recursive: true, mode: 0o700 });
       // スナップショット（平文の写し。作ったらすぐ消す）→ アーカイブ → 内容の SHA-256
       let tmpDir: string | undefined;
       let archive: Buffer;
@@ -214,13 +219,9 @@ export function createBackupRunner(deps: BackupRunnerDeps): BackupRunner {
       }
       running = true;
       try {
-        const folder = await deps.auth().getSetting("backup_folder");
-        if (folder === undefined) {
-          running = false;
-          return err(domainError("BACKUP_NOT_CONFIGURED", "バックアップの置き場所が未設定です"));
-        }
+        const destination = resolveBackupFolder(await deps.auth().getSetting("backup_folder"));
         const runId = deps.ids.next();
-        const done = execute(runId, trigger, folder)
+        const done = execute(runId, trigger, destination)
           .catch((e: unknown) => {
             // 記録そのものが失敗した場合。鍵を含まない種別だけをログに残す
             console.error("backup: 実行の記録に失敗", e instanceof Error ? e.name : "unknown");

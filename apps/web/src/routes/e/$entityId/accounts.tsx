@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { AccountPatch, SubAccountCreate } from "@trebuchet/schema";
-import { Fragment, useState } from "react";
+import { Fragment, useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import {
   postSubAccount,
   subAccountsQuery,
 } from "@/features/accounts/api";
+import { filterAccounts } from "@/lib/account-search";
 import { CATEGORY_LABELS, groupAccountsBySection } from "@/lib/accounts";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +39,15 @@ export const Route = createFileRoute("/e/$entityId/accounts")({
 function AccountsPage() {
   const { entityId } = Route.useParams();
   const { data: accounts, isPending, error } = useQuery(accountsQuery(entityId));
+  const [query, setQuery] = useState("");
+  // 使用停止の科目は既定で隠す（FR-048）
+  const [hideInactive, setHideInactive] = useState(true);
+  const searchId = useId();
+  const hideId = useId();
+  const hiddenCount = accounts ? accounts.filter((a) => !a.isActive).length : 0;
+  const visible = accounts
+    ? filterAccounts(accounts, query).filter((a) => !hideInactive || a.isActive)
+    : [];
   return (
     <main className="grid gap-6">
       <h1 className="text-xl font-semibold">勘定科目</h1>
@@ -49,35 +59,67 @@ function AccountsPage() {
           <CardHeader>
             <CardTitle>科目の一覧</CardTitle>
             <CardDescription>
-              青色申告決算書の順に並んでいます。使用停止の科目は薄く表示されます。
+              青色申告決算書の順に並んでいます。最初からある科目は名称の変更と削除ができません（使用停止はできます）。
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-20">コード</TableHead>
-                  <TableHead>名称</TableHead>
-                  <TableHead className="w-20">区分</TableHead>
-                  <TableHead className="w-24 text-right">決算書の欄</TableHead>
-                  <TableHead className="w-0">
-                    <span className="sr-only">操作</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              {groupAccountsBySection(accounts).map((group) => (
-                <TableBody key={group.section}>
-                  <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead colSpan={5} scope="colgroup" className="text-foreground">
-                      {group.label}
+          <CardContent className="grid gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label htmlFor={searchId}>科目を検索</Label>
+                <Input
+                  id={searchId}
+                  type="search"
+                  className="h-8 w-60"
+                  placeholder="名称・コード・読み"
+                  autoComplete="off"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  id={hideId}
+                  type="checkbox"
+                  checked={hideInactive}
+                  onChange={(e) => setHideInactive(e.target.checked)}
+                />
+                <Label htmlFor={hideId}>使用停止を隠す</Label>
+              </div>
+              {hideInactive && hiddenCount > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  使用停止の科目 {hiddenCount} 件を隠しています。
+                </p>
+              )}
+            </div>
+            {visible.length === 0 ? (
+              <p className="text-sm text-muted-foreground">条件に合う科目はありません。</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-20">コード</TableHead>
+                    <TableHead>名称</TableHead>
+                    <TableHead className="w-20">区分</TableHead>
+                    <TableHead className="w-24 text-right">決算書の欄</TableHead>
+                    <TableHead className="w-0">
+                      <span className="sr-only">操作</span>
                     </TableHead>
                   </TableRow>
-                  {group.accounts.map((account) => (
-                    <AccountRow key={account.id} entityId={entityId} account={account} />
-                  ))}
-                </TableBody>
-              ))}
-            </Table>
+                </TableHeader>
+                {groupAccountsBySection(visible).map((group) => (
+                  <TableBody key={group.section}>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead colSpan={5} scope="colgroup" className="text-foreground">
+                        {group.label}
+                      </TableHead>
+                    </TableRow>
+                    {group.accounts.map((account) => (
+                      <AccountRow key={account.id} entityId={entityId} account={account} />
+                    ))}
+                  </TableBody>
+                ))}
+              </Table>
+            )}
           </CardContent>
         </Card>
       )}
@@ -138,6 +180,11 @@ function AccountRow({ entityId, account }: { entityId: string; account: Account 
               {!account.isActive && (
                 <span className="ml-2 text-xs text-muted-foreground">（使用停止）</span>
               )}
+              {account.isSystem && (
+                <span className="ml-2 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">
+                  最初からある科目
+                </span>
+              )}
             </span>
           )}
         </TableCell>
@@ -164,31 +211,33 @@ function AccountRow({ entityId, account }: { entityId: string; account: Account 
               補助科目
               <span className="sr-only">（{account.name}）</span>
             </Button>
-            {!editing && (
+            {!account.isSystem && !editing && (
               <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
                 名称変更
                 <span className="sr-only">（{account.name}）</span>
               </Button>
             )}
+            {!account.isSystem && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive"
+                disabled={remove.isPending}
+                onClick={() => {
+                  if (window.confirm(`「${account.name}」を削除しますか？`)) remove.mutate();
+                }}
+              >
+                削除
+                <span className="sr-only">（{account.name}）</span>
+              </Button>
+            )}
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               disabled={patch.isPending}
               onClick={() => patch.mutate({ isActive: !account.isActive })}
             >
               {account.isActive ? "使用停止" : "使用再開"}
-              <span className="sr-only">（{account.name}）</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive"
-              disabled={remove.isPending}
-              onClick={() => {
-                if (window.confirm(`「${account.name}」を削除しますか？`)) remove.mutate();
-              }}
-            >
-              削除
               <span className="sr-only">（{account.name}）</span>
             </Button>
           </div>
@@ -278,7 +327,7 @@ function RenameForm({
         aria-describedby={`${id}-error`}
         {...form.register("name")}
       />
-      <Button type="submit" size="sm" disabled={pending}>
+      <Button type="submit" size="sm" variant="outline" disabled={pending}>
         保存
       </Button>
       <Button size="sm" variant="ghost" onClick={onCancel}>
@@ -341,7 +390,7 @@ function SubAccountsPanel({ entityId, account }: { entityId: string; account: Ac
           aria-describedby={`${id}-error`}
           {...form.register("name")}
         />
-        <Button type="submit" size="sm" disabled={create.isPending}>
+        <Button type="submit" size="sm" variant="outline" disabled={create.isPending}>
           追加
         </Button>
         <FieldError id={`${id}-error`} message={message} />

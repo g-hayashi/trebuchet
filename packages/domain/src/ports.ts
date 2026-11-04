@@ -2,15 +2,18 @@ import type {
   BillingTerms,
   InvoiceSettings,
   JournalOrigin,
+  JournalSummary,
   ReceiptMediaType,
   ReceiptQuery,
   Recurring,
   RemoteSettings,
+  JournalDraft as SavedJournalInput,
   StatementAccount,
   StatementBatch,
   StatementSettings,
   StatementSource,
 } from "@trebuchet/schema";
+
 import type {
   AppSettingKey,
   AuthEvent,
@@ -33,7 +36,7 @@ import type {
   TaxMapping,
 } from "./import/types.ts";
 import type { ColumnPrompt } from "./statements/column-prompt.ts";
-import type { AiPayload } from "./statements/mask.ts";
+import type { SuggestionPayload } from "./statements/mask.ts";
 import type { PromptAccount } from "./statements/prompt.ts";
 import type {
   Account,
@@ -46,8 +49,6 @@ import type {
   DeferredAsset,
   EntityProfile,
   EntitySummary,
-  EvalRunRecord,
-  FiledDocument,
   FiscalPeriod,
   FixedAsset,
   HomeUseAllocation,
@@ -85,11 +86,21 @@ import type {
   TaxCategory,
   TaxParameter,
   TaxRate,
-  TaxReturnMemo,
   TaxSetting,
   ValidJournal,
   WorkHoursRow,
 } from "./types.ts";
+
+/** 帳簿とは独立した、新規入力の保存枠（事業体ごとに1件）。監査は記録しない。 */
+export type SavedJournalDraft = {
+  draft: SavedJournalInput | null;
+  updatedAt: string | null;
+};
+export interface JournalDraftStore {
+  get(): SavedJournalDraft;
+  replace(draft: SavedJournalInput, updatedAt: string): void;
+  delete(): void;
+}
 
 export interface IdGenerator {
   next(): string;
@@ -161,6 +172,10 @@ export interface LedgerRepository extends JournalRepository {
   correctingJournalsOf(id: string): Journal[];
   /** 日付の降順・同じ日付は仕訳番号の降順。limit の既定は 50 */
   findJournals(query: JournalQuery): Page<Journal>;
+  /** 全検索結果の件数と借方合計。cursor・limit は無視する */
+  summarizeJournals(query: JournalQuery): JournalSummary;
+  /** 取消を除き、登録日時（`created_at`）の新しい順（同じなら仕訳番号の降順）に `limit` 件（011 のホーム） */
+  recentRegistered(limit: number): Journal[];
 }
 
 /** 帳票の集計（US4 で実装する） */
@@ -283,12 +298,6 @@ export interface ClosingStore {
   upsertDeductionAnswers(row: DeductionAnswers): void;
   listClosingNotes(fiscalYear: number): ClosingNote[];
   upsertClosingNote(row: ClosingNote): void;
-  listTaxReturnMemos(fiscalYear: number): TaxReturnMemo[];
-  upsertTaxReturnMemo(row: TaxReturnMemo): void;
-  deleteTaxReturnMemo(id: string): void;
-  listFiledDocuments(fiscalYear: number): FiledDocument[];
-  upsertFiledDocument(row: FiledDocument): void;
-  deleteFiledDocument(id: string): void;
   appendClosingAudit(entry: ClosingAuditEntry): void;
   // ---- 009（定額法・一括償却資産・開業費） ----
   /** 定額法の償却率の表（耐用年数、適用の開始日の順） */
@@ -455,19 +464,13 @@ export interface StatementStore {
   /** 保存がなければ undefined */
   getStatementSettings(): StatementSettings | undefined;
   saveStatementSettings(settings: StatementSettings): void;
-
-  // ---- 評価（US5。§1.9） ----
-  /** 追記のみ（評価の結果は書き換えない） */
-  insertEvalRun(run: EvalRunRecord): void;
-  /** 新しい順（作成の日時の降順、同じなら ID の降順） */
-  listEvalRuns(): EvalRunRecord[];
 }
 
 /** 明細の取込・承認で、仕訳・マスタ・明細の記録を1つのトランザクションで扱う（INV-47。data-model §6） */
 export type StatementUnitOfWork = TenantUnitOfWork<{ statements: StatementStore }>;
 
-/** AI に渡す明細の内容（`buildAiPayload` の出力。R11） */
-export type SuggestionPayload = AiPayload;
+/** AI に渡す内容（場面ごと。明細は `buildAiPayload`、仕訳の入力は `buildJournalEntryPayload` の出力。R11・R19） */
+export type { SuggestionPayload };
 /** AI に渡す文脈（相手になりうる有効な科目のコードと名前、税区分のコード。R10。`buildPrompt` の入力） */
 export type SuggestionContext = {
   readonly accounts: readonly PromptAccount[];
@@ -513,6 +516,8 @@ export interface ReceiptStore {
   findFileBySha(sha256: string): ReceiptFileRow | undefined;
   /** `received_at DESC, id DESC`。結びつきと仕訳の状態を含む。`limit` 件まで */
   search(query: ReceiptQuery): { rows: ReceiptSearchRow[]; nextCursor: string | null };
+  /** `search` と同じ条件に合う件数（`cursor`・`limit` は見ない。011 のホーム） */
+  count(query: ReceiptQuery): number;
   getActiveLink(receiptId: string): ReceiptLinkRow | undefined;
   insertLink(row: ReceiptLinkRow): void;
   /** 有効な結びつきを閉じる（`unlinked_at`・`unlink_reason`）。ない・閉じ済みなら例外 */
@@ -648,8 +653,8 @@ export interface AuthStore {
   deleteAllSessions(): Promise<number>;
   // 認証の記録（追記のみ）
   appendEvent(event: NewAuthEvent): Promise<void>;
-  /** 新しい順 */
-  listEvents(limit: number): Promise<AuthEvent[]>;
+  /** 新しい順。limit を省略すると全件 */
+  listEvents(limit?: number): Promise<AuthEvent[]>;
   /** since 以降の、kinds の記録（新しい順） */
   listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]>;
   // ペアリングのトークン（ハッシュは hashToken）
@@ -695,6 +700,6 @@ export interface BackupStore {
   getLastCheck(): Promise<BackupRun | undefined>;
   /** 最後の succeeded */
   getLastSuccess(): Promise<BackupRun | undefined>;
-  /** 新しい順 */
-  listRuns(limit: number): Promise<BackupRun[]>;
+  /** 新しい順。limit を省略すると全件 */
+  listRuns(limit?: number): Promise<BackupRun[]>;
 }

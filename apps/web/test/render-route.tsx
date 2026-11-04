@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { render } from "@testing-library/react";
 import { vi } from "vitest";
+import { ToastProvider } from "@/components/ui/toast";
 
 /**
  * 画面のルート 1 つだけを持つルーターで url を開き、描画する。
@@ -29,7 +30,9 @@ export function renderRoute(route: AnyRoute, { path, url }: { path: string; url:
   });
   const result = render(
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
     </QueryClientProvider>,
   );
   return { ...result, queryClient, router };

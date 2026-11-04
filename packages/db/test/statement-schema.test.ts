@@ -22,7 +22,6 @@ const NEW_TABLES = [
   "inference_rules",
   "inference_rule_history",
   "statement_settings",
-  "eval_runs",
   "statement_audit_log",
   "statement_sources",
 ];
@@ -513,6 +512,21 @@ describe("inference_rules（§1.6）", () => {
     );
     expect(() => insert("inference_rules", ruleRow(acc, { hits: -1 }))).toThrow(/CHECK/);
     expect(() => insert("inference_rules", ruleRow(acc, { overrides: -1 }))).toThrow(/CHECK/);
+    expect(() => insert("inference_rules", ruleRow(acc, { managed_by: "x" }))).toThrow(/CHECK/);
+  });
+
+  it("managed_by は既定 auto。user も入る（T018）", () => {
+    const acc = seedAccount("4004");
+    insert("inference_rules", ruleRow(acc));
+    insert("inference_rules", ruleRow(acc, { normalized_content: "別", managed_by: "user" }));
+    expect(
+      all("SELECT normalized_content AS c, managed_by AS m FROM inference_rules ORDER BY c"),
+    ).toEqual(
+      expect.arrayContaining([
+        { c: "ランチ", m: "auto" },
+        { c: "別", m: "user" },
+      ]),
+    );
   });
 
   it("（正規化した内容, 口座 | すべて）は一意。NULL（すべて）どうしも重複できない", () => {
@@ -574,24 +588,6 @@ describe("statement_settings（§1.8）", () => {
     expect(() => insert("statement_settings", row({ external_threshold: -1 }))).toThrow(/CHECK/);
     expect(() => insert("statement_settings", row())).not.toThrow();
     expect(() => insert("statement_settings", row())).toThrow(/UNIQUE|PRIMARY/);
-  });
-});
-
-describe("eval_runs（§1.9）", () => {
-  it("include_ai は 0・1、sample_count は 0 以上", () => {
-    const row = (over: Row = {}): Row => ({
-      id: randomUUIDv7(),
-      split_date: "2026-01-01",
-      include_ai: 0,
-      sample_count: 3,
-      result_json: "{}",
-      models_json: "[]",
-      created_at: NOW,
-      ...over,
-    });
-    expect(() => insert("eval_runs", row({ include_ai: 2 }))).toThrow(/CHECK/);
-    expect(() => insert("eval_runs", row({ sample_count: -1 }))).toThrow(/CHECK/);
-    expect(() => insert("eval_runs", row())).not.toThrow();
   });
 });
 

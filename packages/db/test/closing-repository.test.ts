@@ -7,7 +7,6 @@ import {
   type DeductionAnswers,
   type DeferredAmortization,
   type DeferredAsset,
-  type FiledDocument,
   type FixedAsset,
   type HomeUseAllocation,
   type JournalDraft,
@@ -17,7 +16,6 @@ import {
   STRAIGHT_LINE_RATES,
   type StraightLineRate,
   TAX_PARAMETERS,
-  type TaxReturnMemo,
   validateJournal,
 } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -235,54 +233,6 @@ describe("DrizzleClosingStore（T008）", () => {
       note("special_circumstances", "A2"),
     ]);
     expect(store.listClosingNotes(2024)).toEqual([]);
-  });
-
-  it("事業所得以外の控え: 往復、更新、削除", () => {
-    const memo: TaxReturnMemo = {
-      id: randomUUIDv7(),
-      fiscalYear: 2025,
-      kind: "salary",
-      label: null,
-      amount: 3_000_000,
-      filePath: "/Users/x/源泉徴収票.pdf",
-      memo: "他社の給与",
-    };
-    const nullable: TaxReturnMemo = {
-      id: randomUUIDv7(),
-      fiscalYear: 2025,
-      kind: "other",
-      label: "ふるさと納税",
-      amount: null,
-      filePath: null,
-      memo: null,
-    };
-    store.upsertTaxReturnMemo(memo);
-    store.upsertTaxReturnMemo(nullable);
-    expect(store.listTaxReturnMemos(2025)).toEqual([memo, nullable]);
-    const changed = { ...memo, amount: 3_100_000 };
-    store.upsertTaxReturnMemo(changed);
-    expect(store.listTaxReturnMemos(2025)).toEqual([changed, nullable]);
-    store.deleteTaxReturnMemo(memo.id);
-    expect(store.listTaxReturnMemos(2025)).toEqual([nullable]);
-    expect(store.listTaxReturnMemos(2024)).toEqual([]);
-  });
-
-  it("提出書類の記録: 往復、更新、削除", () => {
-    const doc: FiledDocument = {
-      id: randomUUIDv7(),
-      fiscalYear: 2025,
-      kind: "blue_return",
-      filePath: "/Users/x/青色申告決算書.pdf",
-      filedOn: null,
-      memo: null,
-    };
-    store.upsertFiledDocument(doc);
-    expect(store.listFiledDocuments(2025)).toEqual([doc]);
-    const changed = { ...doc, filedOn: "2026-03-10", memo: "e-Tax" };
-    store.upsertFiledDocument(changed);
-    expect(store.listFiledDocuments(2025)).toEqual([changed]);
-    store.deleteFiledDocument(doc.id);
-    expect(store.listFiledDocuments(2025)).toEqual([]);
   });
 
   it("決算の設定の変更履歴: 追記でき、更新・削除はトリガーで拒否される", () => {

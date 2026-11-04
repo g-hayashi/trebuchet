@@ -2,6 +2,7 @@ import { queryOptions } from "@tanstack/react-query";
 import type {
   BalanceSheetQuery,
   GeneralLedgerQuery,
+  JournalBookQuery,
   ProfitAndLossQuery,
   TrialBalanceQuery,
 } from "@trebuchet/schema";
@@ -20,17 +21,18 @@ const reportKey = (entityId: string, kind: string, params: object) =>
 
 /** 帳票の条件（CSV の指定を除く）。指定のないキーは持たない（そのまま API のクエリ文字列にする） */
 export type ReportRange = Omit<TrialBalanceQuery, "format">;
+export type JournalBookParams = Omit<JournalBookQuery, "format">;
 export type GeneralLedgerParams = Omit<GeneralLedgerQuery, "format">;
 export type ProfitAndLossParams = Omit<ProfitAndLossQuery, "format">;
 export type BalanceSheetParams = Omit<BalanceSheetQuery, "format">;
 
 const param = (entityId: string) => ({ param: { entityId } });
 
-export const journalBookQuery = (entityId: string, range: ReportRange) =>
+export const journalBookQuery = (entityId: string, params: JournalBookParams) =>
   queryOptions({
-    queryKey: reportKey(entityId, "journal-book", range),
+    queryKey: reportKey(entityId, "journal-book", params),
     queryFn: async () =>
-      unwrap(await reports["journal-book"].$get({ ...param(entityId), query: range })),
+      unwrap(await reports["journal-book"].$get({ ...param(entityId), query: params })),
   });
 
 export const generalLedgerQuery = (entityId: string, params: GeneralLedgerParams) =>

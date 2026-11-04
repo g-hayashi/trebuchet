@@ -274,6 +274,7 @@ function postedLines(
         journalNo: offset + index + 1,
         date: j.date,
         memo: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
         status: "active",
         lineNo: i + 1,
         side: l.side,

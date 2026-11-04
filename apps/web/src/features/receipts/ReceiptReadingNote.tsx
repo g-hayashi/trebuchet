@@ -93,7 +93,12 @@ export function ReceiptReadingNote({
                 に送り、取引年月日・金額・取引先・科目・税区分の候補を読み取ります。候補は入力欄の初期値になるだけで、保存するまで証憑の値は変わりません。
               </p>
               <div>
-                <Button type="button" disabled={read.isPending} onClick={() => read.mutate()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={read.isPending}
+                  onClick={() => read.mutate()}
+                >
                   {read.isPending ? "読み取り中…" : "AI で読み取る"}
                 </Button>
               </div>

@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import type { ImportBatch } from "@trebuchet/schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatDateTime } from "@/lib/format";
@@ -96,5 +96,45 @@ describe("取込の履歴（T026）", () => {
     expect(await screen.findByText("まだ取込はありません。")).toBeInTheDocument();
     expect(screen.queryByRole("table", { name: "取込の履歴" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "新しい取込" })).toBeInTheDocument();
+  });
+
+  it("FR-051: 上に、期首残高（元帳から作る）と元帳との照合へのリンクを出す", async () => {
+    mockApi({
+      [`GET ${IMPORTS}`]: () => ok({ batches: [] }),
+      "GET /api/entities/e1/fiscal-periods": () =>
+        ok({
+          fiscalPeriods: [
+            {
+              id: "p2026",
+              fiscalYear: 2026,
+              startDate: "2026-01-01",
+              endDate: "2026-12-31",
+              status: "open",
+              closedAt: null,
+            },
+          ],
+        }),
+    });
+    renderImports();
+
+    const link = await screen.findByRole("link", { name: "期首残高（元帳から作る）" });
+    await waitFor(() =>
+      expect(link).toHaveAttribute("href", "/e/e1/periods/2026/opening-balances"),
+    );
+    expect(screen.getByRole("link", { name: "元帳と照合" })).toHaveAttribute(
+      "href",
+      "/e/e1/imports/reconcile",
+    );
+  });
+
+  it("会計期間がまだないときは、期首残高のリンクは会計期間の画面へ向かう", async () => {
+    mockApi({ [`GET ${IMPORTS}`]: () => ok({ batches: [] }) });
+    renderImports();
+
+    await screen.findByText("まだ取込はありません。");
+    expect(await screen.findByRole("link", { name: "期首残高（元帳から作る）" })).toHaveAttribute(
+      "href",
+      "/e/e1/periods",
+    );
   });
 });

@@ -152,6 +152,15 @@ export class FakeReceiptStore implements ReceiptStore {
     };
   }
 
+  /** `search` と同じ条件に合う件数（ページは見ない） */
+  count(query: ReceiptQuery): number {
+    return this.state.receipts.filter((receipt) => {
+      const link = this.activeLink(receipt.id);
+      const journal = link === undefined ? undefined : this.journalOf?.(link.journalId);
+      return matchesReceiptQuery(receipt, linkStateOf(link, journal?.status), query);
+    }).length;
+  }
+
   getActiveLink(receiptId: string): ReceiptLinkRow | undefined {
     const found = this.activeLink(receiptId);
     return found === undefined ? undefined : structuredClone(found);

@@ -13,9 +13,12 @@ import { acknowledgeRecoveryKey } from "./api";
 export function RecoveryCodePanel({
   code,
   onDone,
+  secondary = false,
 }: {
   code: string;
   onDone: () => void | Promise<void>;
+  /** 別の主な操作がある画面（設定のセキュリティ）に置くときは、目立たない見た目にする */
+  secondary?: boolean;
 }) {
   const checkId = useId();
   const [checked, setChecked] = useState(false);
@@ -51,7 +54,11 @@ export function RecoveryCodePanel({
         <label htmlFor={checkId}>回復キーを安全な場所に保管しました</label>
       </div>
       <ApiErrorMessage error={acknowledge.error} />
-      <Button disabled={!checked || acknowledge.isPending} onClick={() => acknowledge.mutate()}>
+      <Button
+        variant={secondary ? "outline" : "default"}
+        disabled={!checked || acknowledge.isPending}
+        onClick={() => acknowledge.mutate()}
+      >
         続ける
       </Button>
     </section>

@@ -35,6 +35,7 @@ export const DEFAULT_AUTH_STATUS = {
 /** バックアップの状態（004）の既定の応答。設定済みで、知らせなし */
 const DEFAULT_BACKUP_STATUS = {
   configured: true,
+  folderSource: "configured",
   folder: "/Users/me/backup",
   lastSuccess: null,
   lastCheck: null,
@@ -78,8 +79,46 @@ const DEFAULT_ROUTES: Record<string, Handler> = {
  * 取引先の画面など既存の画面が読むので、既存のテストが落ちないよう空の応答を置く
  */
 const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
+  "GET /journal-draft": () => ok({ draft: null, updatedAt: null }),
+  "PUT /journal-draft": () => ok({ updatedAt: "2026-10-31T01:00:00.000Z" }),
+  "DELETE /journal-draft": () => ok(undefined, 204),
+  "GET /journals/suggestions": () => ok({ suggestions: [] }),
+  "GET /fiscal-periods": () => ok({ fiscalPeriods: [] }),
+  // 会計期間のカード（011 US8）が、年度ごとの期首残高と仕訳の件数を読む
+  "GET /fiscal-periods/:year/opening-balances": () =>
+    ok({ fiscalPeriod: null, openingBalances: [] }),
+  "GET /journals": () => ok({ journals: [], nextCursor: null, summary: { count: 0, amount: 0 } }),
+  // ホーム（011 US1）。作業は 0 件、今日を含む会計期間なし、仕訳・取込なし
+  "GET /home": () =>
+    ok({
+      tasks: {
+        status: "ok",
+        value: {
+          unprocessedStatements: 0,
+          unlinkedReceipts: 0,
+          unpaidInvoices: 0,
+          overdueInvoices: 0,
+          blockedRecurring: 0,
+          blueReturnWarnings: 0,
+        },
+      },
+      figures: { status: "ok", value: null },
+      recentJournals: { status: "ok", value: [] },
+      lastStatementImportAt: { status: "ok", value: null },
+    }),
   "GET /invoice-settings": () => ok({ settings: null, minimumNextSeq: 1 }),
   "GET /billing-terms": () => ok({ terms: [] }),
+  // 請求の画面の取引先の登録・編集（011 US5）。名前と敬称だけを返す
+  "POST /partners/profile": ({ body }) =>
+    ok(
+      {
+        partner: { id: "p-new", ...(body as { partner: object }).partner, memo: null },
+        billingTerms: null,
+      },
+      201,
+    ),
+  "PUT /partners/:id/profile": ({ body }) =>
+    ok({ partner: { id: "p-1", ...(body as { partner: object }).partner }, billingTerms: null }),
   // 工数・請求書の一覧（US1）。仕訳の詳細は出所を読む（`:id` は 1 つのパスの区切り）
   "GET /work-hours": () => ok({ entries: [] }),
   "GET /invoices": () => ok({ invoices: [], outstandingByPartner: [] }),
@@ -92,6 +131,8 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
     return ok({ subtotal, total: subtotal, taxBreakdown: [] });
   },
   "GET /journals/:id/origin": () => ok({ origin: null }),
+  // 仕訳の入力への AI の候補（011 US11）。既定は候補なし（外部の AI は既定で無効なので普通は呼ばれない）
+  "POST /journals/ai-suggestion": () => ok({ suggestion: null }),
   // 請求書の詳細の消し込みの入力（US2）が入金先の科目・補助科目を読む
   "GET /accounts": () => ok({ accounts: [] }),
   "GET /accounts/:id/sub-accounts": () => ok({ subAccounts: [] }),
@@ -122,13 +163,15 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 取込元（007 US2。列の対応の保存）。保存したものはまだない
   "GET /statement-sources": () => ok({ sources: [] }),
   // ジョブ（評価）の状態は完了
-  "GET /jobs/:jobId": () => ok({ status: "done" }),
   // 明細の一覧・しきい値の設定（US2）。一覧は空、設定は既定の値
   "GET /statements": () => ok({ statements: [] }),
   // 推定のルール（US3）。一覧は空
   "GET /inference-rules": () => ok({ rules: [] }),
+  // 取込の後の連鎖（011 US3。R9）。ルールの作成も候補の作成も 0 件で、AI に回す明細はなし
+  "POST /inference-rules/seed": () => ok({ created: 0, skipped: 0 }),
+  "POST /statements/candidates": () => ok({ built: 0, needsAi: [] }),
+  "POST /statements/infer": () => ok({ results: [], localAvailable: true, externalUsed: false }),
   // 評価の履歴（US5）。実行はまだない
-  "GET /statements/evals": () => ok({ runs: [] }),
   // 証憑（010 US1）。一覧は空。詳細は電子取引の 1 件で、PATCH は送られた値を当てて version を進める
   "GET /receipts": () => ok({ receipts: [], nextCursor: null }),
   "GET /receipts/:receiptId": () => ok({ receipt: receiptDetail() }),

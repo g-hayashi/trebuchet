@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { enterVault } from "./helpers/auth.ts";
-import { openNav } from "./helpers/nav.ts";
+import { openImports, openNav } from "./helpers/nav.ts";
 
 const fixtures = resolve(import.meta.dirname, "../../../packages/domain/test/fixtures/freee");
 const JOURNAL = resolve(fixtures, "journal-2025.csv");
@@ -15,7 +15,8 @@ test("freee の仕訳帳の取込から、元帳による期首残高、照合�
   });
 
   await test.step("事業体を作成する（開始年度 2025）", async () => {
-    await page.goto("/");
+    // 事業体が 1 件だとトップはそのホームへ移るので、一覧と作成を開く
+    await page.goto("/?list=1");
     const form = page
       .locator("form")
       .filter({ has: page.getByRole("button", { name: "作成する" }) });
@@ -29,7 +30,7 @@ test("freee の仕訳帳の取込から、元帳による期首残高、照合�
   });
 
   await test.step("仕訳帳を選ぶとプレビューが出る（帳簿はまだ変わらない）", async () => {
-    await openNav(page, "事業体の設定", "freee から移行");
+    await openImports(page);
     await page.getByRole("link", { name: "新しい取込" }).click();
     await expect(page.getByRole("heading", { name: "新しい取込" })).toBeVisible();
 
@@ -66,16 +67,19 @@ test("freee の仕訳帳の取込から、元帳による期首残高、照合�
       page.getByRole("status").filter({ hasText: "14件の仕訳を取り込みました。" }),
     ).toBeVisible();
 
-    await openNav(page, "記帳", "仕訳");
+    await openNav(page, "仕訳", "一覧");
     const list = page.getByRole("table", { name: "仕訳の一覧" });
-    await expect(list.getByRole("link", { name: /^仕訳 No\.\d+ の詳細$/ })).toHaveCount(14);
+    await expect(
+      list.getByRole("button", { name: /^仕訳 No\.\d+ の詳細$/, exact: true }),
+    ).toHaveCount(14);
   });
 
   await test.step("元帳から期首残高を読み込んで保存する", async () => {
-    await openNav(page, "事業体の設定", "会計期間");
+    await openNav(page, "事業体の設定", "会計期間と移行");
     await page
-      .getByRole("row", { name: /2025年度/ })
-      .getByRole("link", { name: "期首残高" })
+      .getByRole("region", { name: "2025年度", exact: true })
+      .getByRole("listitem", { name: "期首残高", exact: true })
+      .getByRole("link", { name: "期首残高を開く", exact: true })
       .click();
     await expect(page.getByRole("heading", { name: "2025年度の期首残高" })).toBeVisible();
 
@@ -97,7 +101,7 @@ test("freee の仕訳帳の取込から、元帳による期首残高、照合�
   });
 
   await test.step("元帳と照合するとすべて一致する", async () => {
-    await openNav(page, "事業体の設定", "freee から移行");
+    await openImports(page);
     await page.getByRole("link", { name: "元帳と照合" }).click();
     await expect(page.getByRole("heading", { name: "元帳と照合" })).toBeVisible();
 
@@ -108,7 +112,7 @@ test("freee の仕訳帳の取込から、元帳による期首残高、照合�
   });
 
   await test.step("同じ仕訳帳をもう一度選ぶと、新規は0件で取り込めない", async () => {
-    await openNav(page, "事業体の設定", "freee から移行");
+    await openImports(page);
     await page.getByRole("link", { name: "新しい取込" }).click();
     await page.getByLabel("仕訳帳のファイル").setInputFiles(JOURNAL);
 

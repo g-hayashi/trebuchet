@@ -129,11 +129,16 @@ export async function recoverWithKey(
   return next;
 }
 
-/** 設定のセキュリティの「施錠」を押して、解錠の画面に戻る */
+/** 設定のセキュリティの「施錠してサインアウト」を押し、確認のダイアログで確定して、解錠の画面に戻る */
 export async function lockVault(page: Page): Promise<void> {
+  const name = "施錠してサインアウト";
   await page.goto("/settings/security");
   await expect(page.getByRole("heading", { name: "セキュリティ", exact: true })).toBeVisible();
-  await shell(page).getByRole("button", { name: "施錠", exact: true }).click();
+  await shell(page).getByRole("button", { name, exact: true }).click();
+  await page
+    .getByRole("dialog", { name, exact: true })
+    .getByRole("button", { name, exact: true })
+    .click();
   await expect(lockedHeading(page)).toBeVisible();
 }
 

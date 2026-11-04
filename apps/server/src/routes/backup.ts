@@ -7,10 +7,12 @@ import {
   backupAlert,
   type Clock,
   domainError,
+  encodeCsv,
 } from "@trebuchet/domain";
 import { type BackupInspection, BackupSettingsInput, type BackupStatus } from "@trebuchet/schema";
 import { Hono } from "hono";
 import { DomainException } from "../errors.ts";
+import { resolveBackupFolder } from "../lib/backup-folder.ts";
 import type { BackupRunner } from "../lib/backup-run.ts";
 import { readUpload, uploadLimitFor } from "../lib/upload.ts";
 import type { GuardEnv } from "../middleware/host.ts";
@@ -62,14 +64,14 @@ export function backupRoutes(deps: BackupRouteDeps) {
     .get("/status", async (c) => {
       const a = auth();
       const b = backups();
-      const folder = (await a.getSetting("backup_folder")) ?? null;
-      const configured = folder !== null;
+      const destination = resolveBackupFolder(await a.getSetting("backup_folder"));
+      const configured = true;
       const lastSuccess = (await b.getLastSuccess())?.finishedAt ?? null;
       const lastCheck = (await b.getLastCheck())?.finishedAt ?? null;
       const lastRun = (await b.getLastRun()) ?? null;
       const status: BackupStatus = {
         configured,
-        folder,
+        ...destination,
         lastSuccess,
         lastCheck,
         lastRun,
@@ -102,6 +104,22 @@ export function backupRoutes(deps: BackupRouteDeps) {
       return c.json({ runId: started.value.runId }, 202);
     })
     .get("/runs", async (c) => {
+      if (c.req.query("format") === "csv") {
+        const runs = await backups().listRuns();
+        // ファイル名・保存先・エラー本文・事業体の要約は出さず、表示用の列だけを選ぶ。
+        return c.text(
+          encodeCsv([
+            ["開始日時", "終了日時", "種類", "結果", "サイズ（バイト）"],
+            ...runs.map((r) => [r.startedAt, r.finishedAt, r.trigger, r.status, r.sizeBytes]),
+          ]),
+          200,
+          {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": 'attachment; filename="backup-runs.csv"',
+            "Cache-Control": "no-store",
+          },
+        );
+      }
       const raw = c.req.query("limit");
       let limit = DEFAULT_RUN_LIMIT;
       if (raw !== undefined) {

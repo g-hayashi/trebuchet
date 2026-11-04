@@ -11,12 +11,33 @@ const ID = "0190f3a0-0000-7000-8000-000000000001";
 
 describe("帳票のクエリ（US4）", () => {
   it("期間の帳票は from・to を受け付け、format の既定は json", () => {
-    for (const Query of [JournalBookQuery, TrialBalanceQuery]) {
-      expect(Query.parse({ from: "2026-01-01", to: "2026-12-31" })).toEqual({
+    expect(TrialBalanceQuery.parse({ from: "2026-01-01", to: "2026-12-31" })).toEqual({
+      from: "2026-01-01",
+      to: "2026-12-31",
+      format: "json",
+    });
+  });
+
+  it("仕訳帳の sort の既定は date、order の既定は asc（FR-038）", () => {
+    expect(JournalBookQuery.parse({ from: "2026-01-01", to: "2026-12-31" })).toEqual({
+      from: "2026-01-01",
+      to: "2026-12-31",
+      format: "json",
+      sort: "date",
+      order: "asc",
+    });
+    expect(
+      JournalBookQuery.parse({
         from: "2026-01-01",
         to: "2026-12-31",
-        format: "json",
-      });
+        sort: "created",
+        order: "desc",
+      }),
+    ).toMatchObject({ sort: "created", order: "desc" });
+    for (const bad of [{ sort: "memo" }, { order: "up" }]) {
+      expect(
+        JournalBookQuery.safeParse({ from: "2026-01-01", to: "2026-12-31", ...bad }).success,
+      ).toBe(false);
     }
   });
 

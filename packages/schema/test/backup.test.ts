@@ -83,11 +83,12 @@ describe("BackupStatus", () => {
     contentSha256: "a".repeat(64),
     summary: null,
   };
-  it("未設定", () => {
+  it("未設定でも既定の置き場所で実行できる", () => {
     expect(
       BackupStatus.safeParse({
-        configured: false,
-        folder: null,
+        configured: true,
+        folder: "/bak",
+        folderSource: "default",
         lastSuccess: null,
         lastCheck: null,
         lastRun: null,
@@ -101,6 +102,7 @@ describe("BackupStatus", () => {
       BackupStatus.safeParse({
         configured: true,
         folder: "/x",
+        folderSource: "configured",
         lastSuccess: NOW,
         lastCheck: NOW,
         lastRun: run,
@@ -115,6 +117,7 @@ describe("BackupStatus", () => {
         BackupStatus.safeParse({
           configured: true,
           folder: "/x",
+          folderSource: "configured",
           lastSuccess: null,
           lastCheck: null,
           lastRun: null,

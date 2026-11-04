@@ -223,6 +223,19 @@ afterEach(() => {
 });
 
 describe("新しい取込: プレビュー（T026）", () => {
+  it("FR-051: 上に、期首残高（元帳から作る）と元帳との照合へのリンクを出す", async () => {
+    mockImport({});
+    renderNew();
+
+    expect(
+      await screen.findByRole("link", { name: "期首残高（元帳から作る）" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "元帳と照合" })).toHaveAttribute(
+      "href",
+      "/e/e1/imports/reconcile",
+    );
+  });
+
   it("ファイルを選ぶと、件数・期間・借方と貸方の合計・年度ごとの件数を表示する", async () => {
     const calls = mockImport({
       [`POST ${PREVIEW}`]: () => ok({ preview: buildPreview(baseItems()) }),

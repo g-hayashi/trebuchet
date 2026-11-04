@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { blueReturnKeys } from "@/features/blue-return/api";
+import { homeKeys } from "@/features/home/api";
 import { invoiceKeys } from "@/features/invoicing/api";
 import { journalKeys } from "@/features/journals/api";
 import { receiptKeys } from "@/features/receipts/api";
@@ -22,4 +23,6 @@ export const invalidateLedger = (queryClient: QueryClient, entityId: string) =>
     queryClient.invalidateQueries({ queryKey: statementKeys.all(entityId) }),
     // 証憑の結びつきの状態（取消済みの仕訳など）は仕訳から導く。候補・詳細も読み直す（010）
     queryClient.invalidateQueries({ queryKey: receiptKeys.all(entityId) }),
+    // ホームの件数・今期の数字・最近の仕訳（011）
+    queryClient.invalidateQueries({ queryKey: homeKeys.all(entityId) }),
   ]);

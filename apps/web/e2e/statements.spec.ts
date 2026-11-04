@@ -36,7 +36,8 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
   });
 
   await test.step("事業体を作成する（開始年度 2026）", async () => {
-    await page.goto("/");
+    // 事業体が 1 件だとトップはそのホームへ移るので、一覧と作成を開く
+    await page.goto("/?list=1");
     const form = page
       .locator("form")
       .filter({ has: page.getByRole("button", { name: "作成する" }) });
@@ -104,7 +105,7 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
   }
 
   await test.step("ファイルを選ぶと列の案が出て、確認へ進むとプレビューが出る（帳簿はまだ変わらない）", async () => {
-    await openNav(page, "記帳", "明細");
+    await openNav(page, "明細", "一覧と確認");
     await expect(page.getByRole("heading", { name: "明細", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "明細を取り込む", exact: true }).click();
     await expect(page.getByRole("heading", { name: "明細の取込", exact: true })).toBeVisible();
@@ -161,11 +162,11 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
   });
 
   await test.step("候補を作り、候補なしの明細を、科目を選んで承認する", async () => {
-    await openNav(page, "記帳", "明細");
+    await openNav(page, "明細", "一覧と確認");
     await expect(statementRow(TARGET)).toBeVisible();
     await expect(statementRow(TARGET)).toContainText("未処理");
 
-    await page.getByRole("button", { name: "候補を作る", exact: true }).click();
+    await page.getByRole("button", { name: "候補をもう一度作る", exact: true }).click();
     await expect(
       page.getByRole("status").filter({ hasText: /^候補を \d+ 件作りました/ }),
     ).toBeVisible();
@@ -195,10 +196,11 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
   });
 
   await test.step("仕訳帳に仕訳が出る", async () => {
-    await openNav(page, "記帳", "仕訳");
+    await openNav(page, "仕訳", "一覧");
     const list = page.getByRole("table", { name: "仕訳の一覧" });
     const row = list.getByRole("row").filter({
-      has: page.getByRole("link", { name: `仕訳 No.${journalNo} の詳細`, exact: true }),
+      // has の中は行からの相対。表から始まる探し方（list.…）だと、行の中に表を探して見つからない
+      has: page.getByRole("button", { name: `仕訳 No.${journalNo} の詳細`, exact: true }),
     });
     await expect(row).toContainText("地代家賃");
     await expect(row).toContainText("普通預金");
@@ -206,7 +208,7 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
   });
 
   await test.step("明細は登録済みになり、仕訳の詳細に元の明細が出る", async () => {
-    await openNav(page, "記帳", "明細");
+    await openNav(page, "明細", "一覧と確認");
     await page.getByLabel("状態", { exact: true }).selectOption({ label: "登録済み" });
     await expect(statementRow(TARGET)).toContainText("登録済み");
     await statementRow(TARGET).getByRole("link", { name: "仕訳を開く", exact: true }).click();
@@ -227,7 +229,7 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     await expect(dialog).toBeHidden();
     await expect(page.getByRole("button", { name: "取り消す", exact: true })).toBeHidden();
 
-    await openNav(page, "記帳", "明細");
+    await openNav(page, "明細", "一覧と確認");
     // 既定の絞り込みは「未処理」
     await expect(page.getByLabel("状態", { exact: true })).toHaveValue("unprocessed");
     await expect(statementRow(TARGET)).toContainText("未処理");

@@ -326,14 +326,12 @@ export class DrizzleAuthStore implements AuthStore {
       .run();
   }
 
-  async listEvents(limit: number): Promise<AuthEvent[]> {
-    return this.db
+  async listEvents(limit?: number): Promise<AuthEvent[]> {
+    const query = this.db
       .select()
       .from(authEvents)
-      .orderBy(...newestFirst)
-      .limit(limit)
-      .all()
-      .map(toEvent);
+      .orderBy(...newestFirst);
+    return (limit === undefined ? query : query.limit(limit)).all().map(toEvent);
   }
 
   async listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]> {

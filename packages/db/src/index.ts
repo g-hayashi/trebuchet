@@ -5,6 +5,7 @@ export * from "./backup/index.ts";
 export * from "./closing-repository.ts";
 export * from "./import-repository.ts";
 export * from "./invoicing-repository.ts";
+export * from "./journal-draft-repository.ts";
 export * from "./ledger-repository.ts";
 export * from "./master-repository.ts";
 export * from "./receipt-files.ts";

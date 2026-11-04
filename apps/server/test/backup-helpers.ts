@@ -27,6 +27,7 @@ export const HOUR = 60 * 60 * 1000;
 
 export type BackupEnv = {
   folder: string;
+  defaultFolder: string;
   tmpRoot: string;
   runner: BackupRunner;
   clock: ReturnType<typeof mutableClock>;
@@ -73,6 +74,9 @@ export function makeBackupEnv(
   } = {},
 ): BackupEnv {
   const folder = join(tmp.dir, "dest");
+  const defaultFolder = join(tmp.dir, "default-backup");
+  const previousDefault = process.env.TREBUCHET_DEFAULT_BACKUP_DIR;
+  process.env.TREBUCHET_DEFAULT_BACKUP_DIR = defaultFolder;
   const tmpRoot = join(tmp.dir, "snap");
   mkdirSync(folder, { recursive: true });
   const clock = mutableClock();
@@ -89,6 +93,7 @@ export function makeBackupEnv(
   const recovery = opts.recovery ?? seedRecoveryWrap(clock.clock.now());
   return {
     folder,
+    defaultFolder,
     tmpRoot,
     runner,
     clock,
@@ -106,6 +111,8 @@ export function makeBackupEnv(
     finish: async () => {
       await runner.idle();
       tmp.cleanup();
+      if (previousDefault === undefined) delete process.env.TREBUCHET_DEFAULT_BACKUP_DIR;
+      else process.env.TREBUCHET_DEFAULT_BACKUP_DIR = previousDefault;
     },
   };
 }

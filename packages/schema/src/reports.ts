@@ -25,7 +25,16 @@ const RANGE_ORDER = { message: "開始日は終了日以前にしてください
 /** 期間（from〜to, 両端を含む）の帳票のクエリ */
 export const ReportRangeFields = z.object({ from: DateString, to: DateString, format });
 
-export const JournalBookQuery = ReportRangeFields.refine(fromNotAfterTo, RANGE_ORDER);
+/** 仕訳帳の並び（FR-038）: 取引日（date）か登録日時（created）、昇順か降順 */
+export const JournalBookSort = z.enum(["date", "created"]);
+export type JournalBookSort = z.infer<typeof JournalBookSort>;
+export const JournalBookOrder = z.enum(["asc", "desc"]);
+export type JournalBookOrder = z.infer<typeof JournalBookOrder>;
+
+export const JournalBookQuery = ReportRangeFields.extend({
+  sort: JournalBookSort.default("date"),
+  order: JournalBookOrder.default("asc"),
+}).refine(fromNotAfterTo, RANGE_ORDER);
 export type JournalBookQuery = z.infer<typeof JournalBookQuery>;
 
 export const TrialBalanceQuery = ReportRangeFields.refine(fromNotAfterTo, RANGE_ORDER);
@@ -193,6 +202,8 @@ export const ProfitAndLoss = z.object({
   grossProfit: Figure,
   /** 差引金額（当期利益） */
   netIncome: Figure,
+  /** 比較のときだけ: 前年の同じ範囲に取消を除く仕訳の行があるか（FR-041） */
+  previousHasData: z.boolean().optional(),
 });
 export type ProfitAndLoss = z.infer<typeof ProfitAndLoss>;
 
@@ -206,6 +217,8 @@ export const BalanceSheet = z.object({
   totalAssets: Figure,
   totalLiabilitiesAndEquity: Figure,
   balanced: z.boolean(),
+  /** 比較のときだけ: 前年の会計期間があるか（FR-041） */
+  previousHasData: z.boolean().optional(),
 });
 export type BalanceSheet = z.infer<typeof BalanceSheet>;
 

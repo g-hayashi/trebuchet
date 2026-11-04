@@ -7,13 +7,11 @@ import type {
   DeductionAnswers,
   DeferredAmortization,
   DeferredAsset,
-  FiledDocument,
   FixedAsset,
   HomeUseAllocation,
   RentDetail,
   StraightLineRate,
   TaxParameter,
-  TaxReturnMemo,
 } from "@trebuchet/domain";
 import { asc, eq } from "drizzle-orm";
 import { insertionOrder, type TenantConn } from "./internal.ts";
@@ -24,13 +22,11 @@ import {
   closingNotes,
   deferredAmortizations,
   deferredAssets,
-  filedDocuments,
   fixedAssets,
   homeUseAllocations,
   rentDetails,
   straightLineRates,
   taxParameters,
-  taxReturnMemos,
 } from "./schema/tenant.ts";
 import { drizzleUnitOfWork } from "./unit-of-work.ts";
 
@@ -172,54 +168,6 @@ export class DrizzleClosingStore implements ClosingStore {
         set: { body: row.body, updatedAt: row.updatedAt },
       })
       .run();
-  }
-
-  // ---- 事業所得以外の控え ----
-
-  listTaxReturnMemos(fiscalYear: number): TaxReturnMemo[] {
-    return this.db
-      .select()
-      .from(taxReturnMemos)
-      .where(eq(taxReturnMemos.fiscalYear, fiscalYear))
-      .orderBy(insertionOrder)
-      .all();
-  }
-
-  upsertTaxReturnMemo(row: TaxReturnMemo): void {
-    const { id: _id, ...set } = row;
-    this.db
-      .insert(taxReturnMemos)
-      .values(row)
-      .onConflictDoUpdate({ target: taxReturnMemos.id, set })
-      .run();
-  }
-
-  deleteTaxReturnMemo(id: string): void {
-    this.db.delete(taxReturnMemos).where(eq(taxReturnMemos.id, id)).run();
-  }
-
-  // ---- 提出書類の記録 ----
-
-  listFiledDocuments(fiscalYear: number): FiledDocument[] {
-    return this.db
-      .select()
-      .from(filedDocuments)
-      .where(eq(filedDocuments.fiscalYear, fiscalYear))
-      .orderBy(insertionOrder)
-      .all();
-  }
-
-  upsertFiledDocument(row: FiledDocument): void {
-    const { id: _id, ...set } = row;
-    this.db
-      .insert(filedDocuments)
-      .values(row)
-      .onConflictDoUpdate({ target: filedDocuments.id, set })
-      .run();
-  }
-
-  deleteFiledDocument(id: string): void {
-    this.db.delete(filedDocuments).where(eq(filedDocuments.id, id)).run();
   }
 
   // ---- 変更履歴 ----

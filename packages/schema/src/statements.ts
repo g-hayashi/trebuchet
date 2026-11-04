@@ -337,17 +337,6 @@ export const StatementImportCommitted = z.object({
 });
 export type StatementImportCommitted = z.infer<typeof StatementImportCommitted>;
 
-export const JOB_STATUSES = ["running", "done", "failed"] as const;
-export const JobStatus = z.enum(JOB_STATUSES);
-export type JobStatus = z.infer<typeof JobStatus>;
-
-/** GET /jobs/:jobId（評価のジョブ） */
-export const JobView = z.object({
-  status: JobStatus,
-  error: z.object({ code: z.string(), message: z.string() }).optional(),
-});
-export type JobView = z.infer<typeof JobView>;
-
 // ---- 明細と候補（§4） ----
 
 export const STATEMENT_STATUSES = ["unprocessed", "registered", "excluded"] as const;
@@ -427,13 +416,12 @@ export const InferInput = z.object({
 });
 export type InferInput = z.infer<typeof InferInput>;
 
-/** POST /statements/:statementId/approve（省略で候補のまま） */
+/** POST /statements/:statementId/approve（省略で候補のまま。承認のたびにルールを学ぶ） */
 export const ApproveInput = z.object({
   draft: JournalInput.optional(),
   purpose: Purpose.optional(),
   match: z.object({ journalId: Id, lineId: Id }).optional(),
   partnerId: Id.optional(),
-  learn: z.boolean().default(true),
 });
 export type ApproveInput = z.infer<typeof ApproveInput>;
 
@@ -462,6 +450,11 @@ export const RULE_ORIGINS = ["approval", "seed"] as const;
 export const RuleOrigin = z.enum(RULE_ORIGINS);
 export type RuleOrigin = z.infer<typeof RuleOrigin>;
 
+/** ルールの管理の主体。`user` は利用者が直した・止めたルール。承認・初期作成の自動の作成・更新は変えない（011 R9・INV-71） */
+export const RULE_MANAGED_BY = ["auto", "user"] as const;
+export const RuleManagedBy = z.enum(RULE_MANAGED_BY);
+export type RuleManagedBy = z.infer<typeof RuleManagedBy>;
+
 export const InferenceRuleView = z.object({
   id: Id,
   normalizedContent: z.string(),
@@ -477,6 +470,7 @@ export const InferenceRuleView = z.object({
   confidence: Percent,
   status: RuleStatus,
   origin: RuleOrigin,
+  managedBy: RuleManagedBy,
   createdAt: Timestamp,
   updatedAt: Timestamp,
 });
@@ -514,37 +508,6 @@ export const InferenceRuleHistoryEntry = z.object({
   at: Timestamp,
 });
 export type InferenceRuleHistoryEntry = z.infer<typeof InferenceRuleHistoryEntry>;
-
-// ---- 評価（§6.1・§6.2）と設定（§6.3） ----
-
-/** POST /statements/evals */
-export const EvalStartInput = z.object({
-  splitDate: DateString.optional(),
-  includeAi: z.boolean().optional(),
-});
-export type EvalStartInput = z.infer<typeof EvalStartInput>;
-
-/** 率は千分率の整数（0〜1000） */
-const PerMille = z.number().int().min(0).max(1000);
-
-export const EvalRun = z.object({
-  id: Id,
-  splitDate: DateString,
-  includeAi: z.boolean(),
-  sampleCount: Count,
-  result: z.object({
-    fields: z.object({
-      counterAccount: PerMille,
-      taxCategory: PerMille,
-      partner: PerMille,
-      purpose: PerMille,
-    }),
-    methods: z.array(z.object({ method: CandidateMethod, count: Count, matchRate: PerMille })),
-  }),
-  models: z.array(z.string()),
-  createdAt: Timestamp,
-});
-export type EvalRun = z.infer<typeof EvalRun>;
 
 /** PUT /statement-settings */
 export const StatementSettingsInput = z.object({

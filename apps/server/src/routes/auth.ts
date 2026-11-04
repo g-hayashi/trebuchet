@@ -11,6 +11,7 @@ import {
   type Clock,
   canDeletePasskey,
   domainError,
+  encodeCsv,
   LOCAL_RP_ID,
   type NewPasskey,
   type Passkey,
@@ -544,6 +545,26 @@ export function authRoutes(deps: AuthRouteDeps) {
         return c.body(null, 204);
       })
       .get("/events", async (c) => {
+        if (c.req.query("format") === "csv") {
+          const events = await deps.store().listEvents();
+          // 自由入力の detail・userAgent や資格情報・セッションの ID は CSV に含めない。
+          return c.text(
+            encodeCsv([
+              ["日時", "種類", "端末の種類"],
+              ...events.map((e) => [
+                e.occurredAt,
+                e.kind,
+                e.rpId === null ? "不明" : e.rpId === LOCAL_RP_ID ? "この Mac" : "スマホ・リモート",
+              ]),
+            ]),
+            200,
+            {
+              "Content-Type": "text/csv; charset=utf-8",
+              "Content-Disposition": 'attachment; filename="auth-events.csv"',
+              "Cache-Control": "no-store",
+            },
+          );
+        }
         const raw = c.req.query("limit");
         let limit = DEFAULT_EVENT_LIMIT;
         if (raw !== undefined) {

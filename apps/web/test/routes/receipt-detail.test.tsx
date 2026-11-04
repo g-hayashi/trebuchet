@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@/routes/e/$entityId/receipts/$receiptId";
 import { apiError, mockApi, ok } from "../mock-api";
@@ -25,10 +26,33 @@ afterEach(() => {
 });
 
 describe("証憑の詳細", () => {
+  it("原本・値・結びつきは上にあり、情報・履歴・差し替え・削除は閉じたdetailsで下に並ぶ", async () => {
+    withDetail();
+    renderDetail();
+    const image = await screen.findByRole("img", { name: "証憑の画像" });
+    const values = screen.getByRole("form", { name: "証憑の値" });
+    const links = screen.getByRole("region", { name: "仕訳との結びつき" });
+    expect(image.closest("details")).toBeNull();
+    expect(values.closest("details")).toBeNull();
+    expect(links.closest("details")).toBeNull();
+    for (const name of ["証憑の情報", "履歴", "ファイルの差し替え", "削除"]) {
+      const summary = screen.getByText(name, { selector: "summary" });
+      const details = summary.closest("details") as HTMLDetailsElement;
+      expect(details).not.toHaveAttribute("open");
+      for (const primary of [image, values, links])
+        expect(
+          primary.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      await userEvent.click(summary);
+      expect(details).toHaveAttribute("open");
+      await userEvent.click(summary);
+      expect(details).not.toHaveAttribute("open");
+    }
+  });
   it("受領日時・ハッシュ・元の名前・形式・大きさ・経路・区分を表示する", async () => {
     withDetail({ receivedAt: "2026-10-20T12:00:00.000Z" });
     renderDetail();
-
+    await userEvent.click(await screen.findByText("証憑の情報", { selector: "summary" }));
     const info = await screen.findByRole("region", { name: "証憑の情報" });
     const value = (name: string) => {
       const term = within(info).getByText(name, { selector: "dt" });
@@ -111,7 +135,7 @@ describe("証憑の詳細", () => {
       journal: { id: "j1", journalNo: 12, date: "2026-10-20", status: "active" },
     });
     renderDetail();
-    expect(await screen.findByRole("link", { name: "仕訳 No.12" })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: "仕訳 No.12 を開く" })).toHaveAttribute(
       "href",
       "/e/e1/journals/j1",
     );

@@ -48,6 +48,30 @@ export const JournalInput = JournalInputFields.refine(hasBothSides, {
 });
 export type JournalInput = z.infer<typeof JournalInput>;
 
+/** 新規入力の保存用。未完成の文字列・金額を保持し、仕訳として検証しない（011/R6）。 */
+export const JournalDraft = z.object({
+  mode: z.enum(["quick", "detailed"]),
+  date: z.string().nullable(),
+  memo: z.string().max(1000),
+  partnerId: z.string().nullable(),
+  tagIds: z.array(z.string()),
+  lines: z
+    .array(
+      z.object({
+        side: Side,
+        accountId: z.string().nullable(),
+        subAccountId: z.string().nullable(),
+        amount: z.number().int().nullable(),
+        taxCategory: z.string().nullable(),
+        partnerId: z.string().nullable(),
+        tagIds: z.array(z.string()),
+        description: z.string().nullable(),
+      }),
+    )
+    .max(50),
+});
+export type JournalDraft = z.infer<typeof JournalDraft>;
+
 export const JournalStatus = z.enum(["active", "voided"]);
 export type JournalStatus = z.infer<typeof JournalStatus>;
 
@@ -77,6 +101,30 @@ export const JournalOutput = z.object({
   lines: z.array(JournalLineOutput),
 });
 export type JournalOutput = z.infer<typeof JournalOutput>;
+
+/** GET /journals/suggestions（011/R5）。空白だけの摘要では検索しない。 */
+export const JournalSuggestionQuery = z
+  .object({
+    memo: z.string().max(200).optional(),
+    partnerId: Id.optional(),
+  })
+  .refine((query) => Boolean(query.memo?.trim() || query.partnerId), {
+    message: "摘要か取引先を指定してください",
+  });
+export type JournalSuggestionQuery = z.infer<typeof JournalSuggestionQuery>;
+
+/** 履歴からの候補。左右の税区分・取引先をそのまま保持する（011/R5）。 */
+export const JournalSuggestion = z.object({
+  debitAccountId: Id,
+  creditAccountId: Id,
+  debitTaxCategory: TaxCategoryCode,
+  creditTaxCategory: TaxCategoryCode,
+  debitPartnerId: Id.nullable(),
+  creditPartnerId: Id.nullable(),
+  sourceJournalId: Id,
+  date: DateString,
+});
+export type JournalSuggestion = z.infer<typeof JournalSuggestion>;
 
 /**
  * 訂正の理由など。空欄・空白のみ・500 文字超の判定はドメインで行い REASON_REQUIRED を返すため、
@@ -141,6 +189,20 @@ export const JournalQuery = z.object({
 });
 export type JournalQuery = z.infer<typeof JournalQuery>;
 export type JournalQueryInput = z.input<typeof JournalQuery>;
+
+/** 条件に合う全仕訳の件数と借方合計。ページの cursor・limit に影響されない（011/R7）。 */
+export const JournalSummary = z.object({
+  count: z.number().int().nonnegative(),
+  amount: z.number().int().nonnegative(),
+});
+export type JournalSummary = z.infer<typeof JournalSummary>;
+
+export const JournalListOutput = z.object({
+  journals: z.array(JournalOutput.extend({ receiptCount: z.number().int().nonnegative() })),
+  nextCursor: JournalCursor.nullable(),
+  summary: JournalSummary,
+});
+export type JournalListOutput = z.infer<typeof JournalListOutput>;
 
 /** 訂正元・訂正仕訳への参照（FR-019a） */
 export const JournalRef = z.object({

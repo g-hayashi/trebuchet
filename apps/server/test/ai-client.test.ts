@@ -22,6 +22,7 @@ import {
 // 006 R10: OpenAI 互換の Chat Completions を fetch で呼ぶ。実際のネットワークには出ない（偽の fetch）
 
 const PAYLOAD: SuggestionPayload = {
+  scene: "statement",
   date: "2026-05-10",
   amount: 1200,
   direction: "out",
@@ -128,7 +129,10 @@ describe("createOpenAiProvider: 要求", () => {
     const messages = call.body.messages as { role: string; content: string }[];
     expect(messages.map((m) => m.role)).toEqual(["system", "user"]);
     expect(messages[0]?.content).toContain("5100 消耗品費");
-    expect(messages[1]?.content).toBe(JSON.stringify(PAYLOAD));
+    // 明細の場面の中身は 006 のまま（scene は送らない。011 T042）
+    expect(messages[1]?.content).toBe(
+      '{"date":"2026-05-10","amount":1200,"direction":"out","content":"ショップ####","categoryMajor":"日用品","categoryMinor":null,"accountKind":"bank","accountUsage":"business"}',
+    );
     expect((call.body.response_format as { type: string }).type).toBe("json_schema");
     // fm serve は stream: false を送ると応答しない。stream は送らない（SSE で返れば読む）
     expect(call.body).not.toHaveProperty("stream");
@@ -143,6 +147,20 @@ describe("createOpenAiProvider: 要求", () => {
       CONTEXT,
     );
     expect(new Headers(calls[0]?.init.headers).has("authorization")).toBe(false);
+  });
+
+  it("responseFormat: false（端末内の fm）なら response_format を送らない（fm serve は json_schema つきに応答しない。2026-11-04）", async () => {
+    const { fn, calls } = fakeFetch(completion(SUGGESTION_TEXT));
+    const result = await createOpenAiProvider({
+      fetch: fn,
+      timeoutMs: 1000,
+      responseFormat: false,
+      available: async () => true,
+      endpoint: async () => ({ baseUrl: "http://127.0.0.1:18790", model: "system" }),
+    }).suggest(PAYLOAD, CONTEXT);
+    expect(result).toEqual({ ok: true, value: SUGGESTION_TEXT });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.body).not.toHaveProperty("response_format");
   });
 
   it("時間切れの既定は端末内 30 秒・外部 60 秒", () => {

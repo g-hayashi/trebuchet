@@ -1,7 +1,7 @@
 import { AiSuggestion } from "@trebuchet/schema";
 import { type Account, ok, type Result, validation } from "../types.ts";
 import { STATEMENT_ACCOUNT_CODES } from "./journal-shape.ts";
-import type { AiPayload } from "./mask.ts";
+import type { SuggestionPayload } from "./mask.ts";
 
 // AI への要求と出力の検証（006 R10、INV-46）。呼び出し（HTTP、プロセス）はドメインの外
 
@@ -33,18 +33,29 @@ export function counterAccounts<A extends Pick<Account, "code" | "isActive">>(
   return accounts.filter(isCounterAccount);
 }
 
+/** 場面ごとの指示文の書き出し（2 行）。明細の場面は 006 から 1 バイトも変えない（評価の前後の比較。T042） */
+const INTRO: Record<SuggestionPayload["scene"], readonly [string, string]> = {
+  statement: [
+    "あなたは日本の個人事業主の経理を手伝います。与えられた銀行・カード・現金の明細 1 件に対し、",
+    "仕訳の相手の勘定科目、税区分、事業か私用かの判定を推定してください。",
+  ],
+  journal_entry: [
+    "あなたは日本の個人事業主の経理を手伝います。与えられた仕訳の摘要と金額に対し、",
+    "仕訳の相手の勘定科目、税区分、事業か私用かの判定を推定してください。",
+  ],
+};
+
 /**
- * 要求を作る。system に科目の一覧（コードと名前。`accounts` は `counterAccounts` を通したもの）、
- * 税区分のコード、出力の形。user に明細 1 件（`AiPayload` の JSON）
+ * 要求を作る。`payload.scene` で指示文を分ける。system に科目の一覧（コードと名前。`accounts` は
+ * `counterAccounts` を通したもの）、税区分のコード、出力の形。user に 1 件（payload の JSON。`scene` は送らない）
  */
 export function buildPrompt(
-  payload: AiPayload,
+  payload: SuggestionPayload,
   accounts: readonly PromptAccount[],
   taxCategories: readonly string[],
 ): AiPrompt {
   const system = [
-    "あなたは日本の個人事業主の経理を手伝います。与えられた銀行・カード・現金の明細 1 件に対し、",
-    "仕訳の相手の勘定科目、税区分、事業か私用かの判定を推定してください。",
+    ...INTRO[payload.scene],
     "",
     "勘定科目（コード 名前）:",
     ...accounts.map((a) => `${a.code} ${a.name}`),
@@ -56,7 +67,8 @@ export function buildPrompt(
     ' "purpose": "business" か "private", "confidence": 0〜100 の整数, "reason": 根拠を 200 字以内で}',
     "一覧にないコードを作らないでください。分からないときは confidence を低くしてください。",
   ].join("\n");
-  return { system, user: JSON.stringify(payload) };
+  const { scene: _scene, ...sent } = payload;
+  return { system, user: JSON.stringify(sent) };
 }
 
 /** JSON の文字列（コードフェンス・前後の文章つきも）を読む。読めなければ undefined */

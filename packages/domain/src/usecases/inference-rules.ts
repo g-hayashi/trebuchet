@@ -132,6 +132,8 @@ export function learnFromApproval(
     statementAccountId: record.statementAccountId,
     body,
   });
+  // 利用者が管理するルールは変えない（履歴・監査も書かず、候補も作り直さない。INV-71）
+  if (learned.action === "none") return null;
   const after: InferenceRule =
     previous === null
       ? {
@@ -139,6 +141,7 @@ export function learnFromApproval(
           ...learned.rule,
           status: "active",
           origin: "approval",
+          managedBy: "auto",
           createdAt: now,
           updatedAt: now,
         }
@@ -234,6 +237,7 @@ export function seedRulesFromJournals(
       ...s,
       status: "active",
       origin: "seed",
+      managedBy: "auto",
       createdAt: now,
       updatedAt: now,
     });
@@ -338,7 +342,7 @@ export function updateRule(
     ).some((k) => next[k] !== rule[k]);
     if (!changed) return ok(toRuleView(rule));
 
-    const after = { ...next, updatedAt: deps.clock.now() };
+    const after = { ...next, managedBy: "user" as const, updatedAt: deps.clock.now() };
     writeRule(deps, tx, { before: rule, after, action: "edit", auditAction: "edit" });
     rebuildRuleCandidates(deps, tx, new Set([rule.normalizedContent]));
     return ok(toRuleView(after));
@@ -354,7 +358,12 @@ function setRuleStatus(
     const rule = tx.statements.listInferenceRules().find((r) => r.id === ruleId);
     if (rule === undefined) return notFound(ruleId);
     if (rule.status === status) return ok(toRuleView(rule));
-    const after: InferenceRule = { ...rule, status, updatedAt: deps.clock.now() };
+    const after: InferenceRule = {
+      ...rule,
+      status,
+      managedBy: "user",
+      updatedAt: deps.clock.now(),
+    };
     const action = status === "paused" ? "pause" : "resume";
     writeRule(deps, tx, { before: rule, after, action, auditAction: action });
     rebuildRuleCandidates(deps, tx, new Set([rule.normalizedContent]));

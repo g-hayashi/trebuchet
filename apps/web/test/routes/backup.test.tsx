@@ -21,6 +21,7 @@ afterEach(() => {
 
 const status = (patch: Partial<BackupStatus> = {}): BackupStatus => ({
   configured: true,
+  folderSource: "configured",
   folder: "/Users/me/backup",
   lastSuccess: "2026-10-19T10:00:00.000Z",
   lastCheck: "2026-10-19T10:00:00.000Z",
@@ -64,12 +65,73 @@ function open(
 
 const settingsForm = () => screen.findByRole("form", { name: "置き場所の設定" });
 
+describe("バックアップの画面の並び（FR-057）", () => {
+  it("h1 は設定のメニューの名前と同じ「バックアップ」で、見出しは 状態 → 置き場所の設定 → 復元 → 実行の履歴 の順。h1 と重ならない", async () => {
+    open();
+    const h1 = await screen.findByRole("heading", { level: 1, name: "バックアップ" });
+    expect(h1.parentElement?.className).not.toMatch(/max-w-/);
+    await screen.findByRole("heading", { level: 2, name: "状態" });
+    await screen.findByRole("heading", { level: 2, name: "置き場所の設定" });
+    await screen.findByRole("heading", { level: 2, name: "実行の履歴" });
+    const names = screen.getAllByRole("heading").map((h) => h.textContent);
+    expect(names).toEqual(["バックアップ", "状態", "置き場所の設定", "復元", "実行の履歴"]);
+  });
+});
+
+describe("既定の置き場所（FR-056・R16）", () => {
+  const DEFAULT_NOTE = /この Mac の中（bak\/）にあります。Mac を失うとバックアップも失われます/;
+
+  it("folderSource が default のときだけ、Mac の中にあること・変えられることを出す", async () => {
+    open({}, status({ folderSource: "default", folder: "/repo/bak" }));
+    const note = await screen.findByText(DEFAULT_NOTE);
+    expect(note).toHaveTextContent("同期フォルダなどに変えられます");
+  });
+
+  it("configured なら出さない", async () => {
+    open({}, status({ folderSource: "configured" }));
+    await screen.findByText("/Users/me/backup");
+    expect(screen.queryByText(DEFAULT_NOTE)).not.toBeInTheDocument();
+  });
+});
+
+describe("書けずに失敗したときの案内（Edge Cases）", () => {
+  const failed = (errorCode: string) =>
+    status({
+      alert: { reason: "LAST_RUN_FAILED" },
+      lastRun: run({ status: "failed", errorCode, contentSha256: null }),
+    });
+
+  it.each([
+    ["WRITE_FAILED", "configured"],
+    ["FOLDER_NOT_FOUND", "default"],
+  ] as const)("%s（%s）: 警告と一緒に、置き場所を変える案内を出す", async (code, source) => {
+    open({}, { ...failed(code), folderSource: source });
+    const warning = await screen.findByRole("region", { name: "バックアップの警告" });
+    expect(warning).toHaveTextContent("直近のバックアップに失敗しました");
+    expect(warning).toHaveTextContent("置き場所を変えてください");
+  });
+
+  it("書き込みの失敗でなければ（帳簿の写しの失敗など）置き場所の案内は出さない", async () => {
+    open({}, failed("SNAPSHOT_FAILED"));
+    const warning = await screen.findByRole("region", { name: "バックアップの警告" });
+    expect(warning).not.toHaveTextContent("置き場所を変えてください");
+  });
+
+  it("alert がなければ警告は出ない", async () => {
+    open();
+    await screen.findByRole("heading", { level: 2, name: "状態" });
+    expect(screen.queryByRole("region", { name: "バックアップの警告" })).not.toBeInTheDocument();
+  });
+});
+
 describe("バックアップの設定（008 の D9: パスフレーズ・同意はない）", () => {
   it("置き場所の欄だけがあり、パスフレーズ・同意・パスフレーズの変更はない", async () => {
-    open({}, status({ configured: false, folder: null }));
+    open({}, status({ folderSource: "default", folder: "/bak" }));
     const form = within(await settingsForm());
     expect(form.getByLabelText("置き場所")).toBeInTheDocument();
     expect(form.getByRole("button", { name: "保存" })).toBeEnabled();
+    // 主な操作は設定の「保存」（「今すぐバックアップ」は副）
+    expect(screen.getByRole("button", { name: "今すぐバックアップ" })).toBeInTheDocument();
     expect(screen.queryByLabelText(/パスフレーズ/)).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("form", { name: "パスフレーズの変更" })).not.toBeInTheDocument();
@@ -77,7 +139,7 @@ describe("バックアップの設定（008 の D9: パスフレーズ・同意�
   });
 
   it("鍵は端末の鍵から作ること、新しい Mac では回復キーで復元することを案内する", async () => {
-    open({}, status({ configured: false, folder: null }));
+    open({}, status({ folderSource: "default", folder: "/bak" }));
     expect((await screen.findAllByText(/回復キー/)).length).toBeGreaterThan(0);
   });
 
@@ -86,9 +148,10 @@ describe("バックアップの設定（008 の D9: パスフレーズ・同意�
       {
         "PUT /api/backup/settings": () => ok({ runId: "r9" }),
       },
-      status({ configured: false, folder: null }),
+      status({ folderSource: "default", folder: "/bak" }),
     );
     const form = within(await settingsForm());
+    await userEvent.clear(form.getByLabelText("置き場所"));
     await userEvent.type(form.getByLabelText("置き場所"), "/Users/me/backup");
     await userEvent.click(form.getByRole("button", { name: "保存" }));
 
@@ -96,7 +159,8 @@ describe("バックアップの設定（008 の D9: パスフレーズ・同意�
     expect(callsTo(calls, "PUT", "/api/backup/settings")[0]?.body).toEqual({
       folder: "/Users/me/backup",
     });
-    expect(await form.findByText(/保存しました/)).toBeInTheDocument();
+    // 保存の知らせは画面の上の toast に出る（フォームの外）
+    expect(await screen.findByText(/保存しました/)).toBeInTheDocument();
   });
 
   it("サーバーの拒否（置き場所がない）の文言を表示する", async () => {
@@ -119,9 +183,9 @@ describe("今すぐバックアップ", () => {
     expect(await screen.findByRole("button", { name: /今すぐバックアップ/ })).toBeDisabled();
   });
 
-  it("未設定のときは押せない", async () => {
-    open({}, status({ configured: false, folder: null }));
-    expect(await screen.findByRole("button", { name: /今すぐバックアップ/ })).toBeDisabled();
+  it("未設定でも既定の置き場所があるので押せる", async () => {
+    open({}, status({ folderSource: "default", folder: "/bak" }));
+    expect(await screen.findByRole("button", { name: /今すぐバックアップ/ })).toBeEnabled();
   });
 
   it("実行中の再要求（BACKUP_RUNNING）の文言を表示する", async () => {
@@ -132,6 +196,24 @@ describe("今すぐバックアップ", () => {
 });
 
 describe("実行の履歴", () => {
+  it("最近の 5 件だけを読む（limit=5）", async () => {
+    const calls = open({}, status(), [run({})]);
+    await screen.findByRole("table", { name: "バックアップの実行履歴" });
+    expect(callsTo(calls, "GET", "/api/backup/runs").map((c) => c.query)).toEqual([{ limit: "5" }]);
+  });
+
+  it("「CSV に書き出す」は全件の CSV（format=csv）へのリンク", async () => {
+    open({}, status(), [run({})]);
+    const link = await screen.findByRole("link", { name: "CSV に書き出す" });
+    expect(link).toHaveAttribute("href", "/api/backup/runs?format=csv");
+    expect(link).toHaveAttribute("download");
+  });
+
+  it("0 件なら「CSV に書き出す」は無効（リンクではなく押せないボタン）", async () => {
+    open();
+    expect(await screen.findByRole("button", { name: "CSV に書き出す" })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: "CSV に書き出す" })).not.toBeInTheDocument();
+  });
   it("成功・変更なし・失敗を表に示す", async () => {
     open({}, status(), [
       run({

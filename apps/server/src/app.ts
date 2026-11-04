@@ -20,7 +20,6 @@ import { createAuthSupport } from "./lib/auth-support.ts";
 import type { BackupRunner } from "./lib/backup-run.ts";
 import { ChallengeStore } from "./lib/challenges.ts";
 import type { FmServer } from "./lib/fm-server.ts";
-import { createJobStore, type JobStore } from "./lib/jobs.ts";
 import { type GetRemoteSettings, SERVER_PORT } from "./lib/origin.ts";
 import { createTailscaleCli, type TailscaleCli } from "./lib/tailscale.ts";
 import type { Vault } from "./lib/vault.ts";
@@ -36,8 +35,10 @@ import { blueReturnRoutes } from "./routes/blue-return.ts";
 import { deferredAssetRoutes } from "./routes/deferred-assets.ts";
 import { entitiesRoutes, entityRoutes } from "./routes/entities.ts";
 import { fixedAssetRoutes } from "./routes/fixed-assets.ts";
+import { homeRoutes } from "./routes/home.ts";
 import { importRoutes } from "./routes/imports.ts";
 import { invoicingRoutes } from "./routes/invoicing.ts";
+import { journalDraftRoutes } from "./routes/journal-drafts.ts";
 import { journalRoutes } from "./routes/journals.ts";
 import { masterRoutes } from "./routes/masters.ts";
 import { pairingRoutes } from "./routes/pairing.ts";
@@ -47,7 +48,6 @@ import { recurringRoutes } from "./routes/recurring.ts";
 import { reportRoutes } from "./routes/reports.ts";
 import { remoteSettingsRoutes } from "./routes/settings.ts";
 import { statementRoutes } from "./routes/statements.ts";
-import { taxReturnRoutes } from "./routes/tax-return.ts";
 import { type TenantEnv, tenant } from "./tenant.ts";
 
 /**
@@ -57,7 +57,6 @@ import { type TenantEnv, tenant } from "./tenant.ts";
 function tenantRoutes(
   options: RouteOptions & {
     suggestion?: SuggestionProviders;
-    jobs: JobStore;
     ai: AiRuntime;
     receipts: ReceiptRuntime;
   },
@@ -68,12 +67,13 @@ function tenantRoutes(
     .route("/", masterRoutes(options))
     .route("/", periodRoutes(options))
     .route("/", journalRoutes(options))
+    .route("/", journalDraftRoutes(options))
     .route("/", reportRoutes)
+    .route("/", homeRoutes(options))
     .route("/", importRoutes(options))
     .route("/", blueReturnRoutes(options))
     .route("/", fixedAssetRoutes(options))
     .route("/", deferredAssetRoutes(options))
-    .route("/", taxReturnRoutes(options))
     .route("/", invoicingRoutes(options))
     .route("/", recurringRoutes(options))
     .route("/", statementRoutes(options))
@@ -101,8 +101,6 @@ export type AppOptions = {
    * `reader` は外部の AI による読み取り（既定は `ai` の設定から作った `createReceiptReader`）
    */
   receipts?: Partial<ReceiptRuntime>;
-  /** 評価のジョブの置き場（006 R17）。既定はこのアプリ専用の置き場 */
-  jobs?: JobStore;
   /** WebAuthn の検証。既定は @simplewebauthn/server。ルートのテストは偽物を渡す */
   webauthn?: WebAuthnVerifier;
   /** 解錠中の DK（008 の D3）。既定は deps.ts の vault（背景の処理が解錠・施錠を受け取る） */
@@ -128,7 +126,6 @@ export function createApp(options: AppOptions = {}) {
   const getRemoteSettings = options.getRemoteSettings ?? (() => store().getRemoteSettings());
   const clock = options.clock ?? defaultClock;
   const vault = options.vault ?? defaultVault;
-  const jobs = options.jobs ?? createJobStore();
   const ai = createAiRuntime({
     fetch: options.ai?.fetch ?? ((...args) => globalThis.fetch(...args)),
     secrets: options.ai?.secrets ?? secretStore,
@@ -187,7 +184,6 @@ export function createApp(options: AppOptions = {}) {
       "/entities/:entityId",
       tenantRoutes({
         clock,
-        jobs,
         ai,
         receipts: { ...defaultReceiptRuntime, reader: ai.receipts, ...options.receipts },
         ...(options.suggestion === undefined ? {} : { suggestion: options.suggestion }),

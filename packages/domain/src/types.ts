@@ -8,7 +8,6 @@ import type {
   EntityKind,
   ErrorCode,
   ErrorDetails,
-  FiledDocumentKind,
   InvoiceIssuer,
   InvoicePriceMode,
   InvoiceTaxDisplay,
@@ -21,13 +20,13 @@ import type {
   ReceiptReadingStatus,
   ReportSection,
   RuleHistoryAction,
+  RuleManagedBy,
   RuleOrigin,
   RuleStatus,
   Side,
   StatementLinkKind,
   TaxCategoryCode,
   TaxpayerStatus,
-  TaxReturnMemoKind,
   WarningCode,
 } from "@trebuchet/schema";
 
@@ -236,6 +235,8 @@ export type PostedLine = {
   journalNo: number;
   date: string;
   memo: string | null;
+  /** 仕訳の登録日時（仕訳帳の並びに使う） */
+  createdAt: string;
   status: JournalStatus;
   lineNo: number;
   side: Side;
@@ -331,13 +332,7 @@ export type Page<T> = {
 
 // ---- 決算処理・確定申告（003-tax-return。data-model §1 の各表に対応する） ----
 
-export type {
-  AdjustmentKind,
-  ClosingNoteKind,
-  DepreciationMethod,
-  FiledDocumentKind,
-  TaxReturnMemoKind,
-};
+export type { AdjustmentKind, ClosingNoteKind, DepreciationMethod };
 
 export type TaxParameterKey =
   | "SMALL_ASSET_THRESHOLD"
@@ -490,27 +485,6 @@ export type ClosingNote = {
   updatedAt: string;
 };
 
-/** 事業所得以外の控え（§1.8） */
-export type TaxReturnMemo = {
-  id: string;
-  fiscalYear: number;
-  kind: TaxReturnMemoKind;
-  label: string | null;
-  amount: number | null;
-  filePath: string | null;
-  memo: string | null;
-};
-
-/** 提出書類の記録（§1.9） */
-export type FiledDocument = {
-  id: string;
-  fiscalYear: number;
-  kind: FiledDocumentKind;
-  filePath: string;
-  filedOn: string | null;
-  memo: string | null;
-};
-
 export type ClosingAuditTargetType =
   | "home_use_allocation"
   | "rent_detail"
@@ -644,6 +618,8 @@ export type InferenceRule = {
   overrides: number;
   status: RuleStatus;
   origin: RuleOrigin;
+  /** `user` は利用者が直した・止めたルール。承認の学びと初期作成は変えない（011 R9・INV-71） */
+  managedBy: RuleManagedBy;
   createdAt: string;
   updatedAt: string;
 };
@@ -658,20 +634,6 @@ export type InferenceRuleHistoryRecord = {
   /** 承認が起点のとき */
   statementId: string | null;
   at: string;
-};
-
-/**
- * 評価の実行の記録（`eval_runs` の 1 行。006 data-model §1.9、R17）。`resultJson` は項目ごとの一致率・方法ごとの
- * 件数と一致率（千分率の整数）、`modelsJson` は使ったモデル名（JSON の配列）
- */
-export type EvalRunRecord = {
-  id: string;
-  splitDate: string;
-  includeAi: boolean;
-  sampleCount: number;
-  resultJson: string;
-  modelsJson: string;
-  createdAt: string;
 };
 
 /**

@@ -6,11 +6,21 @@ import {
   type DomainError,
   getJournalDetail,
   getJournalHistory,
+  type Journal,
   listJournalReceipts,
   listJournalStatements,
+  suggestFromHistory,
+  suggestJournalEntry,
   voidJournal,
 } from "@trebuchet/domain";
-import { JournalCorrection, JournalInput, JournalQuery, VoidInput } from "@trebuchet/schema";
+import {
+  JournalAiSuggestionInput,
+  JournalCorrection,
+  JournalInput,
+  JournalQuery,
+  JournalSuggestionQuery,
+  VoidInput,
+} from "@trebuchet/schema";
 import { type Context, Hono } from "hono";
 import {
   invoicingDeps,
@@ -18,9 +28,11 @@ import {
   type ReceiptRuntime,
   type RouteOptions,
   receiptDeps,
+  type SuggestionProviders,
   statementDeps,
 } from "../deps.ts";
 import { fail, respond } from "../errors.ts";
+import { type AiRuntime, LOCAL_AI_MODEL } from "../lib/ai-runtime.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 
@@ -43,13 +55,22 @@ function failJournal(c: Context<TenantEnv>, clock: Clock, error: DomainError) {
 }
 
 /** `/api/entities/:entityId` の下の仕訳（FR-013〜023） */
-export function journalRoutes({ clock, receipts }: RouteOptions & { receipts: ReceiptRuntime }) {
+export function journalRoutes({
+  clock,
+  receipts,
+  suggestion,
+  ai,
+}: RouteOptions & { receipts: ReceiptRuntime; suggestion?: SuggestionProviders; ai: AiRuntime }) {
+  const providers = suggestion ?? ai.providers;
   const receiptsOf = (c: { var: TenantEnv["Variables"] }) =>
     receiptDeps(c.var.db, clock, c.var.entityId, receipts);
 
   return new Hono<TenantEnv>()
     .get("/journals", validate("query", JournalQuery), (c) => {
-      const page = journalDeps(c.var.db, clock).ledger.findJournals(c.req.valid("query"));
+      const { ledger } = journalDeps(c.var.db, clock);
+      const query = c.req.valid("query");
+      const page = ledger.findJournals(query);
+      const summary = ledger.summarizeJournals(query);
       // 証憑の数は一覧の項目に合成する（010/R6。001 の型は変えない）。結びつきのない仕訳は 0
       const counts = countReceiptsByJournal(
         receiptsOf(c),
@@ -60,6 +81,7 @@ export function journalRoutes({ clock, receipts }: RouteOptions & { receipts: Re
           {
             journals: page.items.map((j) => ({ ...j, receiptCount: byJournal.get(j.id) ?? 0 })),
             nextCursor: page.nextCursor,
+            summary,
           },
           200,
         ),
@@ -69,6 +91,33 @@ export function journalRoutes({ clock, receipts }: RouteOptions & { receipts: Re
       const result = createJournal(journalDeps(c.var.db, clock), c.req.valid("json"));
       if (!result.ok) return failJournal(c, clock, result.error);
       return c.json(result.value, 201);
+    })
+    .get("/journals/suggestions", validate("query", JournalSuggestionQuery), (c) => {
+      const { ledger } = journalDeps(c.var.db, clock);
+      const journals: Journal[] = [];
+      let cursor: string | undefined;
+      // 摘要の正規化は domain で行う。直近の件数で打ち切らず全履歴を渡す。
+      do {
+        const page = ledger.findJournals({ limit: 200, cursor });
+        journals.push(...page.items);
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor !== undefined);
+      return c.json({ suggestions: suggestFromHistory(journals, c.req.valid("query")) }, 200);
+    })
+    .post("/journals/ai-suggestion", validate("json", JournalAiSuggestionInput), async (c) => {
+      // 摘要・金額・日付から科目・税区分の候補を出す（011/R19）。ルールは使わず 端末内 → 外部。候補は保存しない
+      const settings = ai.settings().get();
+      const result = await suggestJournalEntry(
+        {
+          ...statementDeps(c.var.db, clock, providers),
+          local: providers.local,
+          external: providers.external,
+          externalEnabled: settings.externalEnabled,
+          models: { local: LOCAL_AI_MODEL, external: settings.externalModel ?? "external" },
+        },
+        c.req.valid("json"),
+      );
+      return respond(c, result, (suggested) => c.json(suggested, 200));
     })
     .get("/journals/:journalId", (c) => {
       const journalId = c.req.param("journalId");

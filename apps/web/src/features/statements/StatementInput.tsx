@@ -16,9 +16,12 @@ const PASTE_FILE_NAME = "paste.txt";
  */
 export function StatementInput({
   pending,
+  primary = true,
   onRead,
 }: {
   pending: boolean;
+  /** 画面の主な操作か（variant=default）。取込の手順が ① のときだけ true。以降は outline */
+  primary?: boolean;
   onRead: (input: StatementInputValue) => void;
 }) {
   const id = useId();
@@ -100,7 +103,7 @@ export function StatementInput({
       <FieldError id={`${id}-error`} message={error} />
 
       <div>
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" variant={primary ? "default" : "outline"} disabled={pending}>
           読み取る
         </Button>
       </div>

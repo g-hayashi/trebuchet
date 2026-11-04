@@ -58,10 +58,7 @@ export function ReceiptLinkSection({
           )}
           {!receipt.deleted && (
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant={linkState === "linked" ? "outline" : "default"}
-                onClick={() => setLinking(true)}
-              >
+              <Button variant="outline" onClick={() => setLinking(true)}>
                 {linkState === "linked" ? "付け替える" : "仕訳に結びつける"}
               </Button>
               {linkState !== "linked" && (

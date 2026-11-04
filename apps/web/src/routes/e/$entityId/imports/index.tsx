@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { importsQuery } from "@/features/imports/api";
+import { LedgerShortcuts } from "@/features/imports/LedgerShortcuts";
 import { BATCH_STATUS_LABELS, DECISION_LABELS } from "@/features/imports/labels";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -28,23 +29,15 @@ function ImportsPage() {
     <main className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">取込</h1>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            to="/e/$entityId/imports/reconcile"
-            params={{ entityId }}
-            className="inline-flex h-9 items-center rounded-md border bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground"
-          >
-            元帳と照合
-          </Link>
-          <Link
-            to="/e/$entityId/imports/new"
-            params={{ entityId }}
-            className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90"
-          >
-            新しい取込
-          </Link>
-        </div>
+        <Link
+          to="/e/$entityId/imports/new"
+          params={{ entityId }}
+          className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90"
+        >
+          新しい取込
+        </Link>
       </div>
+      <LedgerShortcuts entityId={entityId} />
       <Card>
         <CardHeader>
           <CardTitle>取込の履歴</CardTitle>

@@ -28,6 +28,17 @@ async function accountByName(name: string) {
   return found;
 }
 
+/** 利用者が足した科目（最初からある科目は名前の変更・削除ができない。FR-047） */
+async function addUserAccount(
+  name: string,
+  category: "expense" | "asset" = "expense",
+  reportSection: "PL_EXPENSE" | "BS_ASSET" = "PL_EXPENSE",
+) {
+  const res = await e.accounts.$post({ param: param(), json: { name, category, reportSection } });
+  if (res.status !== 201) throw new Error(String(res.status));
+  return (await res.json()).account;
+}
+
 describe("勘定科目", () => {
   it("GET accounts は sort_order の順（同じ値はコードの順）", async () => {
     const accounts = await listAccounts();
@@ -70,7 +81,7 @@ describe("勘定科目", () => {
   });
 
   it("PATCH accounts で名称の変更と使用停止ができる", async () => {
-    const target = await accountByName("雑費");
+    const target = await addUserAccount("セミナー費");
     const renamed = await e.accounts[":accountId"].$patch({
       param: { ...param(), accountId: target.id },
       json: { name: "その他経費" },
@@ -92,13 +103,39 @@ describe("勘定科目", () => {
   });
 
   it("PATCH accounts で一部が失敗したら、ほかの変更も反映されない", async () => {
-    const target = await accountByName("雑費");
+    const target = await addUserAccount("セミナー費");
     const res = await e.accounts[":accountId"].$patch({
       param: { ...param(), accountId: target.id },
       json: { name: "現金", isActive: false },
     });
     expect(res.status).toBe(400);
-    expect(await accountByName("雑費")).toEqual(target);
+    expect(await accountByName("セミナー費")).toEqual(target);
+  });
+
+  it("最初からある科目の名前の変更は 409 ACCOUNT_SYSTEM_PROTECTED で、使用停止・再開と欄の変更は通る", async () => {
+    const target = await accountByName("消耗品費");
+    const patch = (json: Record<string, unknown>) =>
+      e.accounts[":accountId"].$patch({ param: { ...param(), accountId: target.id }, json });
+    const renamed = await patch({ name: "備品消耗品", isActive: false });
+    expect(renamed.status).toBe(409);
+    expect(await errorOf(renamed)).toMatchObject({
+      code: "ACCOUNT_SYSTEM_PROTECTED",
+      details: { accountId: target.id },
+    });
+    expect(await accountByName("消耗品費")).toEqual(target);
+    expect((await patch({ isActive: false })).status).toBe(200);
+    expect((await patch({ isActive: true })).status).toBe(200);
+    expect((await patch({ reportLine: 25 })).status).toBe(200);
+  });
+
+  it("最初からある科目の DELETE は未使用でも 409 ACCOUNT_SYSTEM_PROTECTED", async () => {
+    const target = await accountByName("研修費");
+    const res = await e.accounts[":accountId"].$delete({
+      param: { ...param(), accountId: target.id },
+    });
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("ACCOUNT_SYSTEM_PROTECTED");
+    expect((await listAccounts()).some((a) => a.id === target.id)).toBe(true);
   });
 
   it("PATCH accounts で変更する項目がなければ 400、存在しない科目は 422 ACCOUNT_NOT_FOUND", async () => {
@@ -160,7 +197,7 @@ describe("勘定科目", () => {
     });
 
     it("name・isActive・reportLine を同時に指定でき、reportLine が失敗したら全部取り消す", async () => {
-      const target = await accountByName("消耗品費");
+      const target = await addUserAccount("セミナー費");
       const ok = await patch(target.id, { name: "備品消耗品", isActive: false, reportLine: 25 });
       expect(ok.status).toBe(200);
       if (ok.status !== 200) return;
@@ -178,7 +215,7 @@ describe("勘定科目", () => {
   });
 
   it("未使用の科目は DELETE で 204 になり、一覧から消える", async () => {
-    const target = await accountByName("研修費");
+    const target = await addUserAccount("セミナー費");
     const res = await e.accounts[":accountId"].$delete({
       param: { ...param(), accountId: target.id },
     });
@@ -187,7 +224,7 @@ describe("勘定科目", () => {
   });
 
   it("使用中（期首残高で参照）の科目の DELETE は 409 ACCOUNT_IN_USE", async () => {
-    const cash = await accountByName("現金");
+    const cash = await addUserAccount("別口座", "asset", "BS_ASSET");
     const capital = await accountByName("元入金");
     const put = await e["fiscal-periods"][":year"]["opening-balances"].$put({
       param: { ...param(), year: "2026" },

@@ -4,9 +4,9 @@ import {
   AiSettings,
   AiSettingsInput,
   AiSuggestion,
+  ApproveInput,
   Candidate,
   ErrorCode,
-  EvalRun,
   InferenceRuleView,
   JOURNAL_SOURCES,
   JournalSource,
@@ -37,18 +37,16 @@ describe("ErrorCode（006 のコード、contracts/http-api.md §1）", () => {
     "STATEMENT_NOT_FOUND",
     "STATEMENT_ACCOUNT_NOT_FOUND",
     "INFERENCE_RULE_NOT_FOUND",
-    "JOB_NOT_FOUND",
     "STATEMENT_ACCOUNT_UNMAPPED",
     "STATEMENT_PLAN_CHANGED",
     "STATEMENT_ALREADY_REGISTERED",
     "STATEMENT_EXCLUDED",
     "STATEMENT_AMOUNT_MISMATCH",
     "JOURNAL_LINE_ALREADY_LINKED",
-    "JOB_RUNNING",
     "AI_NOT_CONFIGURED",
   ];
-  it("追加の12種がすべて入っている（STATEMENT_PASTE_UNREADABLE は 007 で STATEMENT_TABLE_UNREADABLE に変えた）", () => {
-    expect(new Set(added).size).toBe(12);
+  it("評価の削除後の10種が入っている（STATEMENT_PASTE_UNREADABLE は 007 で STATEMENT_TABLE_UNREADABLE に変えた）", () => {
+    expect(new Set(added).size).toBe(10);
     for (const code of added) expect(ErrorCode.safeParse(code).success).toBe(true);
     expect(ErrorCode.safeParse("STATEMENT_PASTE_UNREADABLE").success).toBe(false);
     expect(ErrorCode.safeParse("STATEMENT_TABLE_UNREADABLE").success).toBe(true);
@@ -270,7 +268,7 @@ describe("取込の入出力（H:§3）", () => {
   });
 });
 
-describe("Candidate・StatementView・InferenceRuleView・EvalRun", () => {
+describe("Candidate・StatementView・InferenceRuleView", () => {
   const candidate = {
     method: "rule",
     purpose: "business",
@@ -345,32 +343,20 @@ describe("Candidate・StatementView・InferenceRuleView・EvalRun", () => {
       confidence: 80,
       status: "active",
       origin: "approval",
+      managedBy: "auto",
       createdAt: NOW,
       updatedAt: NOW,
     };
     expect(InferenceRuleView.safeParse(rule).success).toBe(true);
     expect(InferenceRuleView.safeParse({ ...rule, status: "gone" }).success).toBe(false);
+    expect(InferenceRuleView.safeParse({ ...rule, managedBy: "user" }).success).toBe(true);
+    expect(InferenceRuleView.safeParse({ ...rule, managedBy: "other" }).success).toBe(false);
+    const { managedBy: _managedBy, ...withoutManagedBy } = rule;
+    expect(InferenceRuleView.safeParse(withoutManagedBy).success).toBe(false);
   });
-  it("EvalRun の形（率は千分率の整数）", () => {
-    const run = {
-      id: ID,
-      splitDate: "2026-01-01",
-      includeAi: false,
-      sampleCount: 10,
-      result: {
-        fields: { counterAccount: 800, taxCategory: 900, partner: 700, purpose: 950 },
-        methods: [{ method: "rule", count: 6, matchRate: 833 }],
-      },
-      models: [],
-      createdAt: NOW,
-    };
-    expect(EvalRun.safeParse(run).success).toBe(true);
-    expect(
-      EvalRun.safeParse({
-        ...run,
-        result: { ...run.result, fields: { ...run.result.fields, purpose: 0.9 } },
-      }).success,
-    ).toBe(false);
+  it("ApproveInput に learn はない（承認のたびに学ぶ。T018）", () => {
+    expect(ApproveInput.parse({ learn: false })).not.toHaveProperty("learn");
+    expect(ApproveInput.parse({})).not.toHaveProperty("learn");
   });
 });
 

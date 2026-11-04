@@ -1,6 +1,6 @@
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { ok, type ReceiptImageTool, type ReceiptProbe } from "@trebuchet/domain";
-import type { ReceiptDetail, ReceiptSummary } from "@trebuchet/schema";
+import { JournalListOutput, type ReceiptDetail, type ReceiptSummary } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { jpegBytes } from "../../../packages/domain/test/fixtures/receipts/sample-files.ts";
 import { createApp } from "../src/app.ts";
@@ -77,10 +77,42 @@ async function createJournal(app: App, date: string) {
 const link = (app: App, receiptId: string, journalId: string) =>
   post(app, `${base()}/receipts/${receiptId}/link`, { journalId });
 
-type ListBody = { journals: { id: string; receiptCount: number }[]; nextCursor: string | null };
+type ListBody = JournalListOutput;
 type DetailBody = { journal: { id: string }; receipts: ReceiptSummary[] };
 
 describe("GET /journals の receiptCount", () => {
+  it("summaryはページを越えた検索結果の件数と借方合計で、取消の条件にも従う", async () => {
+    const app = makeApp();
+    await createJournal(app, "2026-10-01");
+    await createJournal(app, "2026-10-02");
+    const voided = await createJournal(app, "2026-10-03");
+    expect(
+      (await post(app, `${base()}/journals/${voided.id}/void`, { version: 1, reason: "取消" }))
+        .status,
+    ).toBe(200);
+    const first = await json<ListBody>(await get(app, `${base()}/journals?limit=1`), 200);
+    expect(first.summary).toEqual({ count: 2, amount: 2200 });
+    expect(JournalListOutput.safeParse(first).success).toBe(true);
+    expect(first.journals).toHaveLength(1);
+    expect(first.nextCursor).not.toBeNull();
+    const second = await json<ListBody>(
+      await get(app, `${base()}/journals?limit=1&cursor=${first.nextCursor}`),
+      200,
+    );
+    expect(second.summary).toEqual(first.summary);
+    expect(second.journals[0]?.id).not.toBe(first.journals[0]?.id);
+    const included = await json<ListBody>(
+      await get(app, `${base()}/journals?includeVoided=true`),
+      200,
+    );
+    expect(included.summary).toEqual({ count: 3, amount: 3300 });
+    const empty = await json<ListBody>(
+      await get(app, `${base()}/journals?dateFrom=2026-11-01`),
+      200,
+    );
+    expect(empty.summary).toEqual({ count: 0, amount: 0 });
+  });
+
   it("有効な結びつきの数を返す（結びつきのない仕訳は 0）。解除・取消後も有効な数だけ数える", async () => {
     const app = makeApp();
     const none = await createJournal(app, "2026-10-01");

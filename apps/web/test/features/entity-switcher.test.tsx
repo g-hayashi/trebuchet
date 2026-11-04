@@ -13,7 +13,6 @@ import { Route as HomeRoute } from "@/routes/index";
 import { type ApiCall, mockApi, ok } from "../mock-api";
 
 const LAST_ENTITY_KEY = "trebuchet:lastEntityId";
-const RESTORED_KEY = "trebuchet:lastEntityRestored";
 
 const entityA = {
   id: "0190a000-0000-7000-8000-00000000000a",
@@ -88,17 +87,18 @@ describe("EntitySwitcher（US6, T113）", () => {
       within(select)
         .getAllByRole("option")
         .map((o) => o.textContent),
-    ).toEqual(["個人事業A", "株式会社B"]);
+    ).toEqual(["個人事業A", "株式会社B", "一覧・作成"]);
 
     await userEvent.selectOptions(select, "株式会社B");
 
     await waitFor(() => expect(path(router)).toBe(`/e/${entityB.id}`));
     expect(await switcher()).toHaveValue(entityB.id);
-    expect(await screen.findByText("株式会社B", { selector: "p" })).toBeInTheDocument();
+    expect(
+      within(await screen.findByRole("banner")).getByRole("link", { name: "株式会社B" }),
+    ).toHaveAttribute("href", `/e/${entityB.id}`);
   });
 
   it("トップ画面では未選択の状態で表示し、選ぶと移動する", async () => {
-    sessionStorage.setItem(RESTORED_KEY, "1");
     const { router } = renderApp("/");
     const select = await switcher();
     expect(select).toHaveValue("");
@@ -107,7 +107,6 @@ describe("EntitySwitcher（US6, T113）", () => {
   });
 
   it("最後に選んだ事業体を localStorage に保存する（トップ画面の一覧から開いた場合も）", async () => {
-    sessionStorage.setItem(RESTORED_KEY, "1");
     renderApp("/");
     await userEvent.click(await screen.findByRole("link", { name: "株式会社B" }));
     await entityNav();
@@ -136,35 +135,34 @@ describe("EntitySwitcher（US6, T113）", () => {
     expect(entitiesFetches()).toBe(1);
   });
 
+  it("事業体が 1 件でも表示し、「一覧・作成」で移動せずに一覧と作成のフォームを出す（E2E 2026-11-04）", async () => {
+    mockApi({ "GET /api/entities": () => ok({ entities: [entityA] }) });
+    const { router } = renderApp(`/e/${entityA.id}`);
+    const select = await switcher();
+    await waitFor(() => expect(select).toHaveValue(entityA.id));
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["個人事業A", "一覧・作成"]);
+
+    await userEvent.selectOptions(select, "一覧・作成");
+
+    expect(await screen.findByRole("button", { name: "作成する" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "個人事業A" })).toBeInTheDocument();
+    expect(path(router)).toBe("/");
+    expect(router.state.location.search).toEqual({ list: true });
+  });
+
   it("事業体がなければ表示しない", async () => {
     mockApi({ "GET /api/entities": () => ok({ entities: [] }) });
-    sessionStorage.setItem(RESTORED_KEY, "1");
     renderApp("/");
     expect(await screen.findByText(/事業体がまだありません/)).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "事業体" })).not.toBeInTheDocument();
   });
 });
 
-describe("トップ画面での復元（US6, T113）", () => {
-  it("タブで最初にトップ画面を開いたとき、前回の事業体の画面に移動する", async () => {
-    localStorage.setItem(LAST_ENTITY_KEY, entityB.id);
-    const { router } = renderApp("/");
-    await waitFor(() => expect(path(router)).toBe(`/e/${entityB.id}`));
-    expect(await switcher()).toHaveValue(entityB.id);
-  });
-
-  it("2回目以降のトップ画面は移動せず、一覧と作成のフォームを表示する", async () => {
-    localStorage.setItem(LAST_ENTITY_KEY, entityB.id);
-    const { router } = renderApp(`/e/${entityA.id}`);
-    await entityNav();
-
-    await userEvent.click(screen.getByRole("link", { name: "Trebuchet" }));
-
-    expect(await screen.findByRole("button", { name: "作成する" })).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: "株式会社B" })).toBeInTheDocument();
-    expect(path(router)).toBe("/");
-  });
-
+describe("トップ画面の復元（011 FR-010。件数による分岐は entity-nav.test.tsx）", () => {
   it("前回の事業体が一覧にもうなければ、移動せずにトップ画面を表示する", async () => {
     localStorage.setItem(LAST_ENTITY_KEY, "0190a000-0000-7000-8000-00000000dead");
     const { router } = renderApp("/");
@@ -175,7 +173,6 @@ describe("トップ画面での復元（US6, T113）", () => {
 
 describe("事業体の作成の種別（US6-2）", () => {
   it("種別「法人」を選んで作成できる", async () => {
-    sessionStorage.setItem(RESTORED_KEY, "1");
     const { router } = renderApp("/");
     await userEvent.type(await screen.findByLabelText("名称"), "株式会社B");
     await userEvent.selectOptions(screen.getByLabelText("種別"), "corporation");

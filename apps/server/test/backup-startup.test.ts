@@ -177,11 +177,13 @@ describe("startBackgroundServices", () => {
     expect(fm.stop).toHaveBeenCalledTimes(1);
   });
 
-  it("未設定なら実行しない", async () => {
-    const start = vi.fn();
-    const services = startBackgroundServices(deps({ start }));
-    await new Promise((r) => setTimeout(r, 20));
-    expect(start).not.toHaveBeenCalled();
+  it("未設定でも起動直後に既定の場所で自動実行する", async () => {
+    const services = startBackgroundServices(deps(env.runner));
+    await vi.waitFor(async () => {
+      expect((await env.backups().getLastRun())?.status).toBe("succeeded");
+    });
+    expect((await env.backups().getLastRun())?.trigger).toBe("auto");
+    expect(existsSync(env.defaultFolder)).toBe(true);
     services.stop();
   });
 });

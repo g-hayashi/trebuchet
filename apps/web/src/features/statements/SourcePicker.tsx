@@ -87,6 +87,7 @@ export function SourceChooser({
             <Button
               type="button"
               size="sm"
+              variant="outline"
               disabled={pending}
               aria-label={`「${s.name}」を使う`}
               onClick={() => onChoose(s)}

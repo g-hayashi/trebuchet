@@ -68,14 +68,12 @@ export class DrizzleBackupStore implements BackupStore {
     return this.lastWithStatus(["succeeded"]);
   }
 
-  async listRuns(limit: number): Promise<BackupRun[]> {
-    return this.db
+  async listRuns(limit?: number): Promise<BackupRun[]> {
+    const query = this.db
       .select()
       .from(backupRuns)
-      .orderBy(...newestFirst)
-      .limit(limit)
-      .all()
-      .map(toRun);
+      .orderBy(...newestFirst);
+    return (limit === undefined ? query : query.limit(limit)).all().map(toRun);
   }
 
   private lastWithStatus(statuses: Row["status"][]): BackupRun | undefined {

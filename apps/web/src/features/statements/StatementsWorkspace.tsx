@@ -37,14 +37,17 @@ type ReasonTarget = { kind: "unexclude" | "unlink"; statement: StatementView };
 export function StatementsWorkspace({
   entityId,
   highlightId,
+  initialStatus,
 }: {
   entityId: string;
   /** 仕訳の詳細の「元の明細」から開いた明細（状態を「すべて」にして印を付ける） */
   highlightId: string | undefined;
+  /** URL の `status`（ホームの「未処理の明細」など）。省略は未処理（`highlightId` があれば「すべて」） */
+  initialStatus?: StatementStatusFilter | undefined;
 }) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<StatementStatusFilter | "">(
-    highlightId === undefined ? "unprocessed" : "",
+    initialStatus ?? (highlightId === undefined ? "unprocessed" : ""),
   );
   const [accountId, setAccountId] = useState("");
   const [reviewingId, setReviewingId] = useState<string>();
@@ -106,18 +109,12 @@ export function StatementsWorkspace({
         <Link to="/e/$entityId/statements/rules" params={{ entityId }} className={linkButtonClass}>
           推定のルール
         </Link>
-        <Link
-          to="/e/$entityId/statements/settings"
-          params={{ entityId }}
-          className={linkButtonClass}
-        >
-          しきい値の設定
+        <Link to="/e/$entityId/statements/review" params={{ entityId }} className={linkButtonClass}>
+          1 件ずつ確認する
         </Link>
-        <Link to="/e/$entityId/statements/evals" params={{ entityId }} className={linkButtonClass}>
-          推定の評価
-        </Link>
-        <Button disabled={build.isPending} onClick={() => build.mutate()}>
-          候補を作る
+        {/* 取込の後は自動で作る。途中で画面を離れたときのために控えめに残す（011 R9） */}
+        <Button variant="outline" disabled={build.isPending} onClick={() => build.mutate()}>
+          候補をもう一度作る
         </Button>
         {notice && <SaveNotice message={notice} />}
       </div>

@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
-import { Input } from "@/components/ui/input";
+import { Input, NativeSelect } from "@/components/ui/input";
 import { ApiError } from "@/lib/api";
 
 /**
@@ -23,6 +23,7 @@ export function ReasonDialog({
   confirmLabel,
   onConfirm,
   onCancel,
+  presets = [],
 }: {
   open: boolean;
   title: string;
@@ -30,6 +31,7 @@ export function ReasonDialog({
   confirmLabel: string;
   onConfirm: (reason: string) => Promise<void>;
   onCancel: () => void;
+  presets?: readonly string[] | undefined;
 }) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<unknown>();
@@ -78,6 +80,29 @@ export function ReasonDialog({
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
+          {presets.length > 0 && (
+            <div className="grid gap-1">
+              <label htmlFor="reason-preset" className="text-sm font-medium">
+                定型の理由
+              </label>
+              <NativeSelect
+                id="reason-preset"
+                value=""
+                disabled={submitting}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                  setError(undefined);
+                }}
+              >
+                <option value="">選択してください</option>
+                {presets.map((preset) => (
+                  <option key={preset} value={preset}>
+                    {preset}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          )}
           <div className="grid gap-1">
             <label htmlFor="reason" className="text-sm font-medium">
               理由

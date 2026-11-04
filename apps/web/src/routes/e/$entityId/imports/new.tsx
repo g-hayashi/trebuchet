@@ -10,6 +10,7 @@ import { entityKeys, taxCategoriesQuery } from "@/features/entities/api";
 import { commitImport, importPreviewQuery } from "@/features/imports/api";
 import { FilePicker } from "@/features/imports/FilePicker";
 import { FreeeChangesPanel } from "@/features/imports/FreeeChangesPanel";
+import { LedgerShortcuts } from "@/features/imports/LedgerShortcuts";
 import {
   type AccountEdits,
   type AccountTarget,
@@ -143,6 +144,7 @@ function NewImportPage() {
           取込の履歴へ
         </Link>
       </div>
+      <LedgerShortcuts entityId={entityId} />
 
       <Card>
         <CardHeader>

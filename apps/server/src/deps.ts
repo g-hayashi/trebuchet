@@ -13,6 +13,7 @@ import {
   DrizzleClosingStore,
   DrizzleImportStore,
   DrizzleInvoicingStore,
+  DrizzleJournalDraftStore,
   DrizzleLedgerRepository,
   DrizzleMasterRepository,
   DrizzleRecurringStore,
@@ -35,11 +36,13 @@ import {
   type CommitAdjustmentDeps,
   domainError,
   err,
+  type HomeDeps,
   type IdGenerator,
   type ImportStore,
   type ImportUnitOfWork,
   type InvoicingStore,
   type InvoicingUnitOfWork,
+  type JournalDraftDeps,
   type LedgerDeps,
   type MasterDeps,
   type ReceiptDeps,
@@ -53,7 +56,6 @@ import {
   type SecretStore,
   type StatementUnitOfWork,
   type SuggestionProvider,
-  type TaxReturnRecordDeps,
 } from "@trebuchet/domain";
 import { type BackupRunner, createBackupRunner } from "./lib/backup-run.ts";
 import { createFmServer } from "./lib/fm-server.ts";
@@ -144,13 +146,13 @@ export function blueReturnDeps(db: TenantDb): ReportDeps & { closing: ClosingSto
 }
 
 /**
- * 決算の設定（控除の回答・メモ・按分・内訳・資産・控え）の依存。読み取りは masters・closing、
+ * 決算の設定（控除の回答・メモ・按分・内訳・資産）の依存。読み取りは masters・closing、
  * 保存は uow（保存と履歴を 1 つのトランザクションで書く）を使う
  */
 export function closingSettingsDeps(
   db: TenantDb,
   clock: Clock,
-): ClosingSettingsDeps & ClosingReadDeps & TaxReturnRecordDeps {
+): ClosingSettingsDeps & ClosingReadDeps {
   return {
     uow: createClosingUnitOfWork(db),
     masters: new DrizzleMasterRepository(db),
@@ -183,6 +185,10 @@ export function journalDeps(db: TenantDb, clock: Clock): LedgerDeps {
   };
 }
 
+export function journalDraftDeps(db: TenantDb, clock: Clock): JournalDraftDeps {
+  return { store: new DrizzleJournalDraftStore(db), clock };
+}
+
 /** リクエストの事業体の DB に対する帳票のユースケースの依存 */
 export function reportDeps(db: TenantDb): ReportDeps {
   return { masters: new DrizzleMasterRepository(db), reports: new DrizzleLedgerRepository(db) };
@@ -206,6 +212,21 @@ export function invoicingDeps(
     invoicing: new DrizzleInvoicingStore(db),
     ids,
     clock,
+  };
+}
+
+/**
+ * ホーム（011 US1）の依存。項目ごとに既存のユースケースの UnitOfWork・ストアを読み取りに使う
+ * （要約は保存しない。書き込みはない）
+ */
+export function homeDeps(db: TenantDb): HomeDeps {
+  return {
+    statements: { uow: createStatementUnitOfWork(db) },
+    receipts: { uow: createReceiptUnitOfWork(db) },
+    invoicing: { uow: createInvoicingUnitOfWork(db) },
+    recurring: { uow: createRecurringUnitOfWork(db) },
+    blueReturn: blueReturnDeps(db),
+    ledger: new DrizzleLedgerRepository(db),
   };
 }
 

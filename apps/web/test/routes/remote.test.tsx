@@ -57,6 +57,12 @@ function openRemote(
 }
 
 describe("設定 → リモート", () => {
+  it("h1 は設定のメニューの名前と同じ「リモート」で、ページ自身は幅を決めない（幅は設定のレイアウト）", async () => {
+    openRemote();
+    const h1 = await screen.findByRole("heading", { level: 1, name: "リモート" });
+    expect(h1.parentElement?.className).not.toMatch(/max-w-/);
+  });
+
   it("手動の手順は「手動で行う場合」に畳み、Funnel は使わない・tailnet の中だけの注意を出す", async () => {
     openRemote();
     expect(await screen.findByRole("heading", { name: "リモート" })).toBeInTheDocument();

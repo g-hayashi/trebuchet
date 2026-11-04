@@ -28,3 +28,6 @@ test-results/
 
 # pnpm のストア（ローカル）
 .pnpm-store/
+
+# 手元の退避（011、R16）
+bak/

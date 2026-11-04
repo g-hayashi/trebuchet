@@ -72,6 +72,8 @@ export const deleteBillingTerms = async (entityId: string, partnerId: string) =>
 // ---- 工数・請求書（US1。contracts §3、§6.1） ----
 
 export const invoiceKeys = {
+  /** 全ての月の工数（取引先を登録・編集したあとの読み直し用の接頭辞） */
+  workHoursAll: (entityId: string) => ["entities", entityId, "work-hours"] as const,
   workHours: (entityId: string, month: string) =>
     ["entities", entityId, "work-hours", month] as const,
   invoices: (entityId: string) => ["entities", entityId, "invoices"] as const,

@@ -209,7 +209,7 @@ export class FakeAuthStore implements AuthStore {
       )
       .map((x) => ({ ...x.e }));
   }
-  async listEvents(limit: number): Promise<AuthEvent[]> {
+  async listEvents(limit?: number): Promise<AuthEvent[]> {
     return this.newestFirst().slice(0, limit);
   }
   async listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]> {
@@ -316,7 +316,7 @@ export class FakeBackupStore implements BackupStore {
   async getLastSuccess(): Promise<BackupRun | undefined> {
     return this.newestFirst().find((r) => r.status === "succeeded");
   }
-  async listRuns(limit: number): Promise<BackupRun[]> {
+  async listRuns(limit?: number): Promise<BackupRun[]> {
     return this.newestFirst().slice(0, limit);
   }
 }

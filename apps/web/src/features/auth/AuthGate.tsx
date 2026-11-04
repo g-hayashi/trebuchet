@@ -106,7 +106,12 @@ function RecoveryReminder({ onIssued }: { onIssued: (code: string) => void }) {
         <p className="flex-1">
           回復キーを保管したことが確認できていません。キーを作り直して、書き留めてください。
         </p>
-        <Button size="sm" disabled={regenerate.isPending} onClick={() => regenerate.mutate()}>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={regenerate.isPending}
+          onClick={() => regenerate.mutate()}
+        >
           回復キーを作り直す
         </Button>
       </div>

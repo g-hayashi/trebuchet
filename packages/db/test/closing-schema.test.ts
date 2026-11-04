@@ -20,8 +20,6 @@ const NEW_TABLES = [
   "adjustment_journal_refs",
   "blue_deduction_answers",
   "closing_notes",
-  "tax_return_memos",
-  "filed_documents",
   "closing_audit_log",
 ];
 
@@ -98,7 +96,7 @@ function insertAsset(
 }
 
 describe("003 の表（T007）", () => {
-  it("新しい10表と 009 の 3 表がすべて STRICT（作り直した表を含む）", () => {
+  it("新しい8表と 009 の 3 表がすべて STRICT（作り直した表を含む）", () => {
     const rows = db.$client
       .prepare("SELECT name, sql FROM sqlite_schema WHERE type = 'table'")
       .all() as { name: string; sql: string }[];
@@ -107,6 +105,17 @@ describe("003 の表（T007）", () => {
       expect(row, name).toBeDefined();
       expect(row?.sql, name).toMatch(/\)\s*STRICT$/);
     }
+  });
+
+  it("申告の控えの表（011 R14 で消した）はない", () => {
+    const names = (
+      db.$client
+        .prepare("SELECT name FROM sqlite_schema WHERE type IN ('table', 'index')")
+        .all() as {
+        name: string;
+      }[]
+    ).map((r) => r.name);
+    expect(names.filter((n) => n.startsWith("tax_return_") || n.startsWith("filed_"))).toEqual([]);
   });
 
   it("tax_parameters の投入値がドメインの TAX_PARAMETERS と同じ", () => {
@@ -272,31 +281,6 @@ describe("003 の表（T007）", () => {
       expect(() => insert("special_circumstances")).not.toThrow();
       expect(() => insert("special_circumstances")).toThrow(/UNIQUE|PRIMARY/);
       expect(() => insert("opening_difference")).not.toThrow();
-    });
-
-    it("tax_return_memos: kind の列挙、amount >= 0", () => {
-      const insert = (kind: string, amount: number | null) =>
-        run(
-          "INSERT INTO tax_return_memos (id, fiscal_year, kind, amount) VALUES (?, 2026, ?, ?)",
-          randomUUIDv7(),
-          kind,
-          amount,
-        );
-      expect(() => insert("unknown", 1)).toThrow(/CHECK/);
-      expect(() => insert("salary", -1)).toThrow(/CHECK/);
-      expect(() => insert("salary", null)).not.toThrow();
-      expect(() => insert("crypto", 0)).not.toThrow();
-    });
-
-    it("filed_documents: kind の列挙", () => {
-      const insert = (kind: string) =>
-        run(
-          "INSERT INTO filed_documents (id, fiscal_year, kind, file_path) VALUES (?, 2026, ?, '/a/b.pdf')",
-          randomUUIDv7(),
-          kind,
-        );
-      expect(() => insert("unknown")).toThrow(/CHECK/);
-      expect(() => insert("blue_return")).not.toThrow();
     });
 
     it("closing_audit_log: target_type（account_report_line を含む）と action の列挙", () => {

@@ -158,6 +158,60 @@ describe("GET /reports/*（US4, FR-026〜FR-033）", () => {
     expect(bsBody.totalAssets.previous).toBe(1_250_000);
   });
 
+  it("FR-038: 仕訳帳の sort・order で並びを変えられ、CSV も同じ並び", async () => {
+    const nos = async (query: { sort?: "date" | "created"; order?: "asc" | "desc" }) => {
+      const res = await r()["journal-book"].$get({ param: param(), query: { ...YEAR, ...query } });
+      expect(res.status).toBe(200);
+      return JournalBookResponse.parse(await res.json()).entries.map((x) => x.journalNo);
+    };
+    expect(await nos({})).toEqual([3, 1, 2]);
+    expect(await nos({ sort: "date", order: "desc" })).toEqual([2, 1, 3]);
+    expect(await nos({ sort: "created", order: "asc" })).toEqual([1, 2, 3]);
+    expect(await nos({ sort: "created", order: "desc" })).toEqual([3, 2, 1]);
+
+    const csv = await r()["journal-book"].$get({
+      param: param(),
+      query: { ...YEAR, sort: "created", order: "desc", format: "csv" },
+    });
+    const rows = (await csv.text()).split("\r\n").slice(1);
+    const seen = rows.map((x) => x.split(",")[1]).filter((n) => n !== undefined && n !== "");
+    expect(seen.filter((n, i) => seen.indexOf(n) === i)).toEqual(["3", "2", "1"]);
+
+    const bad = await r()["journal-book"].$get({
+      param: param(),
+      query: { ...YEAR, sort: "memo" as never },
+    });
+    expect(bad.status).toBe(400);
+  });
+
+  it("FR-041: compare=previous-year の応答に previousHasData を含める", async () => {
+    const q = { ...YEAR, compare: "previous-year" } as const;
+    const pl = await r()["profit-and-loss"].$get({ param: param(), query: q });
+    expect(ProfitAndLossResponse.parse(await pl.json()).previousHasData).toBe(false);
+    const bs = await r()["balance-sheet"].$get({
+      param: param(),
+      query: { asOf: "2026-12-31", compare: "previous-year" },
+    });
+    expect(BalanceSheetResponse.parse(await bs.json()).previousHasData).toBe(false);
+
+    const plain = await r()["profit-and-loss"].$get({ param: param(), query: YEAR });
+    expect("previousHasData" in ProfitAndLossResponse.parse(await plain.json())).toBe(false);
+
+    const next = await e["fiscal-periods"].$post({ param: param() });
+    expect(next.status).toBe(201);
+    await simple("売掛金", "売上高", 400_000, "2027-02-28");
+    const pl2 = await r()["profit-and-loss"].$get({
+      param: param(),
+      query: { from: "2027-01-01", to: "2027-12-31", compare: "previous-year" },
+    });
+    expect(ProfitAndLossResponse.parse(await pl2.json()).previousHasData).toBe(true);
+    const bs2 = await r()["balance-sheet"].$get({
+      param: param(),
+      query: { asOf: "2027-12-31", compare: "previous-year" },
+    });
+    expect(BalanceSheetResponse.parse(await bs2.json()).previousHasData).toBe(true);
+  });
+
   it("format=csv で BOM 付き UTF-8 の CSV を返す", async () => {
     const res = await r()["trial-balance"].$get({
       param: param(),

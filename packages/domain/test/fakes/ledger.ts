@@ -1,3 +1,4 @@
+import type { JournalSummary } from "@trebuchet/schema";
 import {
   type JournalReplacement,
   type LedgerRepository,
@@ -139,6 +140,34 @@ export class InMemoryLedgerRepository implements LedgerRepository {
       items: structuredClone(page),
       nextCursor: rows.length > max && last !== undefined ? `${last.date}_${last.journalNo}` : null,
     };
+  }
+
+  summarizeJournals(query: JournalQuery): JournalSummary {
+    const { items } = this.findJournals({
+      ...query,
+      cursor: undefined,
+      limit: this.journals.length,
+    });
+    return {
+      count: items.length,
+      amount: items.reduce(
+        (sum, journal) =>
+          sum +
+          journal.lines
+            .filter((line) => line.side === "debit")
+            .reduce((n, line) => n + line.amount, 0),
+        0,
+      ),
+    };
+  }
+
+  recentRegistered(limit: number): Journal[] {
+    return structuredClone(
+      this.state.journals
+        .filter((j) => j.status === "active")
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.journalNo - a.journalNo)
+        .slice(0, limit),
+    );
   }
 
   private lockForUpdate(id: string, expectedVersion: number): Journal {

@@ -113,6 +113,34 @@
       "when": 1793614696372,
       "tag": "0015_receipts_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1793712197886,
+      "tag": "0016_journal_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1793743761378,
+      "tag": "0017_remove_statement_evaluation",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1793758405849,
+      "tag": "0018_remove_tax_return_memos",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1793764059934,
+      "tag": "0019_keen_earthquake",
+      "breakpoints": true
     }
   ]
 }

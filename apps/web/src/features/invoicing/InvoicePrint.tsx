@@ -1,11 +1,12 @@
 import type { InvoiceDetail } from "@trebuchet/schema";
 import { formatYen } from "@/lib/format";
 import { invoiceTaxSummary, quantityOf, recipientOf } from "./display";
-import "./print.css";
 
 /**
  * 印刷用の請求書（A4 縦 1 枚。FR-011・012）。発行時に写した値（`issuer`・明細）だけを使い、
- * 屋号と登録番号は設定されているときだけ、税率ごとの内訳は `tax_display = separate` のときだけ出す
+ * 屋号と登録番号は設定されているときだけ（屋号が氏名と同じなら 1 回だけ。011 FR-037）、
+ * 税率ごとの内訳は `tax_display = separate` のときだけ出す。
+ * 印刷の対象の絞り込みと余白は、全体の `src/print.css`（`[data-print-root]`）で行う
  */
 export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
   const { issuer } = invoice;
@@ -35,7 +36,9 @@ export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
           <p>{`支払期限 ${invoice.dueDate}`}</p>
         </div>
         <div className="grid gap-0.5 text-right">
-          {issuer.tradeName !== null && <p>{issuer.tradeName}</p>}
+          {issuer.tradeName !== null && issuer.tradeName !== issuer.issuerName && (
+            <p>{issuer.tradeName}</p>
+          )}
           <p>{issuer.issuerName}</p>
           <p>{issuer.address}</p>
           <p>{issuer.contact}</p>

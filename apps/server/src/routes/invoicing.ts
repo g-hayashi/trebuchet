@@ -12,6 +12,7 @@ import {
   recordPayment,
   saveBillingTerms,
   saveInvoiceSettings,
+  savePartnerProfile,
   saveWorkHours,
   voidInvoice,
   voidPayment,
@@ -24,6 +25,7 @@ import {
   InvoiceListQuery,
   InvoiceSettingsInput,
   InvoicingVoidInput,
+  PartnerProfileInput,
   PaymentInput,
   WorkHoursInput,
   WorkHoursQuery,
@@ -70,6 +72,20 @@ export function invoicingRoutes({ clock }: RouteOptions) {
       .delete("/partners/:partnerId/billing-terms", (c) => {
         const result = deleteBillingTerms(deps(c.var.db), c.req.param("partnerId"));
         return respond(c, result, () => c.body(null, 204));
+      })
+
+      // ---- 取引先と請求の条件の一括の保存（011 R15。H:§1） ----
+      .post("/partners/profile", validate("json", PartnerProfileInput), (c) => {
+        const result = savePartnerProfile(deps(c.var.db), c.req.valid("json"));
+        return respond(c, result, (profile) => c.json(profile, 201));
+      })
+      .put("/partners/:partnerId/profile", validate("json", PartnerProfileInput), (c) => {
+        const result = savePartnerProfile(
+          deps(c.var.db),
+          c.req.valid("json"),
+          c.req.param("partnerId"),
+        );
+        return respond(c, result, (profile) => c.json(profile, 200));
       })
 
       // ---- 工数（US1。§3.1・§3.2） ----

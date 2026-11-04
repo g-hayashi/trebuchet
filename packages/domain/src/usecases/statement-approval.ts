@@ -39,12 +39,10 @@ export type ApproveStatementInput = {
   draft?: JournalDraft | undefined;
   /** 結びつけ先の既存の仕訳の行（`match` の候補、または利用者が選んだ仕訳）。`draft` とは同時に渡せない */
   match?: { journalId: string; lineId: string } | undefined;
-  /** 推定ルールの学習（US3。R9）に使う判定。省略なら登録した仕訳の相手の科目から決める（事業主貸・借なら私用） */
+  /** 推定ルールの学習（承認のたびに行う。011 R9）に使う判定。省略なら登録した仕訳の相手の科目から決める（事業主貸・借なら私用） */
   purpose?: Purpose | undefined;
   /** 推定ルールの学習に使う取引先。省略なら登録した仕訳の相手の行の取引先 */
   partnerId?: string | undefined;
-  /** false ならルールを学ばない（既定は学ぶ）。既存の仕訳への結びつき（`match`）は学ばない */
-  learn?: boolean | undefined;
 };
 
 export type ApprovedStatement = {
@@ -55,7 +53,7 @@ export type ApprovedStatement = {
   /** 振替の対の相手の明細の結びつき（同じ仕訳の別の行）。対がなければ null */
   pairLink: StatementLinkRecord | null;
   warnings: DomainWarning[];
-  /** この承認で作った・直したルール。学ばなかったとき（`learn: false`、`match`、分割の仕訳）はない */
+  /** この承認で作った・直したルール。学ばなかったとき（`match`、分割の仕訳、`managedBy: user` のルール）はない */
   rule?: InferenceRuleView | undefined;
 };
 
@@ -287,18 +285,16 @@ export function approveCandidate(
       candidate?.method === "transfer"
         ? linkTransferPair(deps, tx, states, record, candidate, journal, ownLine.id, now)
         : null;
-    // 承認から学ぶ（同じ UnitOfWork。INV-47）。最後に行うので、ここまでに作った結びつきも候補の作り直しに反映される
-    const rule =
-      input.learn === false
-        ? null
-        : learnFromApproval(deps, tx, {
-            record,
-            journal,
-            ownLineId: ownLine.id,
-            purpose: input.purpose,
-            partnerId: input.partnerId,
-            now,
-          });
+    // 承認から学ぶ（同じ UnitOfWork。INV-47）。最後に行うので、ここまでに作った結びつきも候補の作り直しに反映される。
+    // 承認のたびに学ぶ（011 R9）。利用者が管理する（`managedBy: user`）ルールは変えない
+    const rule = learnFromApproval(deps, tx, {
+      record,
+      journal,
+      ownLineId: ownLine.id,
+      purpose: input.purpose,
+      partnerId: input.partnerId,
+      now,
+    });
     return ok({
       journal,
       link,

@@ -32,6 +32,7 @@ afterEach(() => tmp.cleanup());
 const clock = { now: () => "2026-10-31T03:00:00.000Z" };
 
 const PAYLOAD: SuggestionPayload = {
+  scene: "statement",
   date: "2026-05-10",
   amount: 1,
   direction: "out",

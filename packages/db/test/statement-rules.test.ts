@@ -112,6 +112,7 @@ const rule = (over: Partial<InferenceRule> = {}): InferenceRule => ({
   overrides: 0,
   status: "active",
   origin: "approval",
+  managedBy: "auto",
   createdAt: clock.now(),
   updatedAt: clock.now(),
   ...over,
@@ -130,9 +131,20 @@ describe("DrizzleStatementStore のルール", () => {
       /UNIQUE/,
     );
 
-    store.updateInferenceRule({ ...all, hits: 5, status: "paused", updatedAt: "2026-10-26" });
+    store.updateInferenceRule({
+      ...all,
+      hits: 5,
+      status: "paused",
+      managedBy: "user",
+      updatedAt: "2026-10-26",
+    });
     const back = store.listInferenceRules().find((r) => r.id === all.id);
-    expect(back).toMatchObject({ hits: 5, status: "paused", updatedAt: "2026-10-26" });
+    expect(back).toMatchObject({
+      hits: 5,
+      status: "paused",
+      managedBy: "user",
+      updatedAt: "2026-10-26",
+    });
     expect(() => store.updateInferenceRule(rule())).toThrow();
   });
 
@@ -182,17 +194,20 @@ describe("承認からの学習（実 DB）", () => {
     expect(learned).toMatchObject({ counterAccountId: supplies(), hits: 1, overrides: 1 });
   });
 
-  it("learn: false ならルールも履歴も書かない", () => {
+  it("承認のたびに学ぶ。managedBy が user のルールは承認で変わらず、履歴も増えない（T018・INV-71）", () => {
     mapBank();
-    importRows([row("ショップ001")]);
-    ok(
-      approveCandidate(deps(), idOf("ショップ001"), {
-        draft: draftFor("2026-10-10", rent()),
-        learn: false,
-      }),
-    );
-    expect(count("inference_rules")).toBe(0);
-    expect(count("inference_rule_history")).toBe(0);
+    importRows([row("ショップ001"), row("ショップ002", "2026-10-11")]);
+    ok(approveCandidate(deps(), idOf("ショップ001"), { draft: draftFor("2026-10-10", rent()) }));
+    const learned = store.listInferenceRules()[0];
+    expect(learned?.managedBy).toBe("auto");
+    ok(updateRule(deps(), learned?.id ?? "", { counterAccountId: supplies() }));
+    const edited = store.listInferenceRules()[0];
+    expect(edited).toMatchObject({ managedBy: "user", counterAccountId: supplies() });
+    const historyCount = count("inference_rule_history");
+
+    ok(approveCandidate(deps(), idOf("ショップ002"), { draft: draftFor("2026-10-11", rent()) }));
+    expect(store.listInferenceRules()).toEqual([edited]);
+    expect(count("inference_rule_history")).toBe(historyCount);
   });
 });
 

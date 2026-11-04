@@ -47,6 +47,15 @@ async function submit() {
 }
 
 describe("バックアップの検査（008 の D9: 解錠中の鍵で検査する。パスフレーズの入力はない）", () => {
+  it("復元の欄は実行の履歴より上にある（FR-057）", async () => {
+    open(() => ok(inspection));
+    const restore = await screen.findByRole("heading", { level: 2, name: "復元" });
+    const history = await screen.findByRole("heading", { level: 2, name: "実行の履歴" });
+    expect(
+      restore.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("ファイルだけを送り、要約を表示する。パスフレーズの欄はない", async () => {
     const calls = open(() => ok(inspection));
     expect(await screen.findByLabelText("バックアップのファイル")).toBeInTheDocument();

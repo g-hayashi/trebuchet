@@ -379,18 +379,29 @@ describe("同時実行と未設定", () => {
     expect((await env.runner.start("manual")).ok).toBe(true);
   });
 
-  it("置き場所が未設定なら BACKUP_NOT_CONFIGURED。実行中の印は残らない", async () => {
-    const fresh = useTempDataDir("server"); // 設定のない registry
-    try {
+  it.each(["manual", "auto"] as const)(
+    "未設定でも %s は既定の場所へ証憑を写す",
+    async (trigger) => {
+      const fresh = useTempDataDir("server"); // 設定のない registry
       const env2 = makeBackupEnv(fresh);
-      const started = await env2.runner.start("manual");
-      expect(started.ok).toBe(false);
-      if (!started.ok) expect(started.error.code).toBe("BACKUP_NOT_CONFIGURED");
-      expect(env2.runner.isRunning()).toBe(false);
-    } finally {
-      fresh.cleanup();
-    }
-  });
+      try {
+        const entityId = await createTestEntity("合成事業");
+        const sha = addReceiptFile(entityId, "default");
+        const started = await env2.runner.start(trigger);
+        expect(started.ok).toBe(true);
+        if (!started.ok) return;
+        const run = await started.value.done;
+        expect(run.status).toBe("succeeded");
+        const name = `${receiptBackupName(TEST_DATA_KEY, sha)}.trc`;
+        expect(
+          readFileSync(join(env2.defaultFolder, RECEIPT_STORE_DIRNAME, entityId, name)),
+        ).toEqual(readFileSync(receiptFile(entityId, sha)));
+        expect(env2.runner.isRunning()).toBe(false);
+      } finally {
+        await env2.finish();
+      }
+    },
+  );
 });
 
 describe("片付けの後に作業場所を作り直さない（.tmp/server-<id>/snap の漏れ）", () => {

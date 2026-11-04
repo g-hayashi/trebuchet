@@ -1,0 +1,5925 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "52828d27-cc8e-4812-a1bf-669eff2a4712",
+  "prevId": "7c76706a-7a49-475b-b84e-75d226b2d351",
+  "tables": {
+    "accounts": {
+      "name": "accounts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normal_side": {
+          "name": "normal_side",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "report_section": {
+          "name": "report_section",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "report_line": {
+          "name": "report_line",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_system": {
+          "name": "is_system",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "accounts_code_unique": {
+          "name": "accounts_code_unique",
+          "columns": [
+            "code"
+          ],
+          "isUnique": true
+        },
+        "accounts_name_unique": {
+          "name": "accounts_name_unique",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "accounts_category": {
+          "name": "accounts_category",
+          "value": "\"accounts\".\"category\" IN ('asset', 'liability', 'equity', 'revenue', 'expense')"
+        },
+        "accounts_normal_side": {
+          "name": "accounts_normal_side",
+          "value": "\"accounts\".\"normal_side\" IN ('debit', 'credit')"
+        },
+        "accounts_report_section": {
+          "name": "accounts_report_section",
+          "value": "\"accounts\".\"report_section\" IN ('PL_SALES', 'PL_COGS', 'PL_EXPENSE', 'PL_OTHER', 'BS_ASSET', 'BS_LIABILITY', 'BS_EQUITY')"
+        }
+      }
+    },
+    "adjustment_journal_refs": {
+      "name": "adjustment_journal_refs",
+      "columns": {
+        "journal_id": {
+          "name": "journal_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "allocation_id": {
+          "name": "allocation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "asset_id": {
+          "name": "asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "fiscal_year": {
+          "name": "fiscal_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deferred_asset_id": {
+          "name": "deferred_asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "adjustment_journal_refs_year": {
+          "name": "adjustment_journal_refs_year",
+          "columns": [
+            "fiscal_year"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "adjustment_journal_refs_journal_id_journals_id_fk": {
+          "name": "adjustment_journal_refs_journal_id_journals_id_fk",
+          "tableFrom": "adjustment_journal_refs",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "adjustment_journal_refs_allocation_id_home_use_allocations_id_fk": {
+          "name": "adjustment_journal_refs_allocation_id_home_use_allocations_id_fk",
+          "tableFrom": "adjustment_journal_refs",
+          "tableTo": "home_use_allocations",
+          "columnsFrom": [
+            "allocation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "adjustment_journal_refs_asset_id_fixed_assets_id_fk": {
+          "name": "adjustment_journal_refs_asset_id_fixed_assets_id_fk",
+          "tableFrom": "adjustment_journal_refs",
+          "tableTo": "fixed_assets",
+          "columnsFrom": [
+            "asset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "adjustment_journal_refs_deferred_asset_id_deferred_assets_id_fk": {
+          "name": "adjustment_journal_refs_deferred_asset_id_deferred_assets_id_fk",
+          "tableFrom": "adjustment_journal_refs",
+          "tableTo": "deferred_assets",
+          "columnsFrom": [
+            "deferred_asset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "adjustment_journal_refs_kind": {
+          "name": "adjustment_journal_refs_kind",
+          "value": "\"adjustment_journal_refs\".\"kind\" IN ('home_use', 'depreciation', 'deferred_amortization')"
+        },
+        "adjustment_journal_refs_source": {
+          "name": "adjustment_journal_refs_source",
+          "value": "(\"adjustment_journal_refs\".\"kind\" <> 'home_use' OR \"adjustment_journal_refs\".\"allocation_id\" IS NOT NULL) AND (\"adjustment_journal_refs\".\"kind\" <> 'depreciation' OR \"adjustment_journal_refs\".\"asset_id\" IS NOT NULL) AND (\"adjustment_journal_refs\".\"kind\" <> 'deferred_amortization' OR \"adjustment_journal_refs\".\"deferred_asset_id\" IS NOT NULL)"
+        }
+      }
+    },
+    "audit_log": {
+      "name": "audit_log",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "before_json": {
+          "name": "before_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "after_json": {
+          "name": "after_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "audit_log_target": {
+          "name": "audit_log_target",
+          "columns": [
+            "target_type",
+            "target_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "audit_log_target_type": {
+          "name": "audit_log_target_type",
+          "value": "\"audit_log\".\"target_type\" IN ('journal', 'account', 'fiscal_period', 'opening_balance', 'tax_setting')"
+        },
+        "audit_log_action": {
+          "name": "audit_log_action",
+          "value": "\"audit_log\".\"action\" IN ('create', 'correct', 'void', 'rename', 'deactivate', 'close', 'reopen', 'replace')"
+        }
+      }
+    },
+    "blue_deduction_answers": {
+      "name": "blue_deduction_answers",
+      "columns": {
+        "fiscal_year": {
+          "name": "fiscal_year",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "double_entry": {
+          "name": "double_entry",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "statements_attached": {
+          "name": "statements_attached",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "filed_on_time": {
+          "name": "filed_on_time",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "e_tax": {
+          "name": "e_tax",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "electronic_books": {
+          "name": "electronic_books",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "blue_deduction_answers_flags": {
+          "name": "blue_deduction_answers_flags",
+          "value": "\"blue_deduction_answers\".\"double_entry\" IN (0, 1) AND \"blue_deduction_answers\".\"statements_attached\" IN (0, 1) AND \"blue_deduction_answers\".\"filed_on_time\" IN (0, 1) AND \"blue_deduction_answers\".\"e_tax\" IN (0, 1) AND \"blue_deduction_answers\".\"electronic_books\" IN (0, 1)"
+        }
+      }
+    },
+    "closing_audit_log": {
+      "name": "closing_audit_log",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "before_json": {
+          "name": "before_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "after_json": {
+          "name": "after_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "closing_audit_log_target": {
+          "name": "closing_audit_log_target",
+          "columns": [
+            "target_type",
+            "target_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "closing_audit_log_target_type": {
+          "name": "closing_audit_log_target_type",
+          "value": "\"closing_audit_log\".\"target_type\" IN ('home_use_allocation', 'rent_detail', 'fixed_asset', 'blue_deduction_answer', 'closing_note', 'account_report_line', 'deferred_asset', 'deferred_amortization')"
+        },
+        "closing_audit_log_action": {
+          "name": "closing_audit_log_action",
+          "value": "\"closing_audit_log\".\"action\" IN ('create', 'update', 'dispose', 'delete')"
+        }
+      }
+    },
+    "closing_notes": {
+      "name": "closing_notes",
+      "columns": {
+        "fiscal_year": {
+          "name": "fiscal_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "closing_notes_fiscal_year_kind_pk": {
+          "columns": [
+            "fiscal_year",
+            "kind"
+          ],
+          "name": "closing_notes_fiscal_year_kind_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "closing_notes_kind": {
+          "name": "closing_notes_kind",
+          "value": "\"closing_notes\".\"kind\" IN ('special_circumstances', 'opening_difference')"
+        }
+      }
+    },
+    "consumption_tax_settings": {
+      "name": "consumption_tax_settings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taxpayer_status": {
+          "name": "taxpayer_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "accounting_method": {
+          "name": "accounting_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "consumption_tax_settings_effective_from_unique": {
+          "name": "consumption_tax_settings_effective_from_unique",
+          "columns": [
+            "effective_from"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "consumption_tax_settings_status": {
+          "name": "consumption_tax_settings_status",
+          "value": "\"consumption_tax_settings\".\"taxpayer_status\" IN ('exempt', 'general', 'simplified', 'two_tenths')"
+        },
+        "consumption_tax_settings_method": {
+          "name": "consumption_tax_settings_method",
+          "value": "\"consumption_tax_settings\".\"accounting_method\" IN ('tax_included', 'tax_excluded')"
+        }
+      }
+    },
+    "deferred_amortizations": {
+      "name": "deferred_amortizations",
+      "columns": {
+        "deferred_asset_id": {
+          "name": "deferred_asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fiscal_year": {
+          "name": "fiscal_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "deferred_amortizations_deferred_asset_id_deferred_assets_id_fk": {
+          "name": "deferred_amortizations_deferred_asset_id_deferred_assets_id_fk",
+          "tableFrom": "deferred_amortizations",
+          "tableTo": "deferred_assets",
+          "columnsFrom": [
+            "deferred_asset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "deferred_amortizations_fiscal_year_fiscal_periods_fiscal_year_fk": {
+          "name": "deferred_amortizations_fiscal_year_fiscal_periods_fiscal_year_fk",
+          "tableFrom": "deferred_amortizations",
+          "tableTo": "fiscal_periods",
+          "columnsFrom": [
+            "fiscal_year"
+          ],
+          "columnsTo": [
+            "fiscal_year"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "deferred_amortizations_deferred_asset_id_fiscal_year_pk": {
+          "columns": [
+            "deferred_asset_id",
+            "fiscal_year"
+          ],
+          "name": "deferred_amortizations_deferred_asset_id_fiscal_year_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "deferred_amortizations_amount": {
+          "name": "deferred_amortizations_amount",
+          "value": "\"deferred_amortizations\".\"amount\" >= 0"
+        }
+      }
+    },
+    "deferred_assets": {
+      "name": "deferred_assets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "total_amount": {
+          "name": "total_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "opened_on": {
+          "name": "opened_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prior_accumulated": {
+          "name": "prior_accumulated",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "prior_through_year": {
+          "name": "prior_through_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "deferred_assets_account_id_accounts_id_fk": {
+          "name": "deferred_assets_account_id_accounts_id_fk",
+          "tableFrom": "deferred_assets",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "deferred_assets_name": {
+          "name": "deferred_assets_name",
+          "value": "length(\"deferred_assets\".\"name\") > 0"
+        },
+        "deferred_assets_total": {
+          "name": "deferred_assets_total",
+          "value": "\"deferred_assets\".\"total_amount\" > 0"
+        },
+        "deferred_assets_prior": {
+          "name": "deferred_assets_prior",
+          "value": "\"deferred_assets\".\"prior_accumulated\" >= 0 AND \"deferred_assets\".\"prior_accumulated\" <= \"deferred_assets\".\"total_amount\""
+        },
+        "deferred_assets_prior_year": {
+          "name": "deferred_assets_prior_year",
+          "value": "\"deferred_assets\".\"prior_accumulated\" = 0 OR \"deferred_assets\".\"prior_through_year\" IS NOT NULL"
+        }
+      }
+    },
+    "entity_profile": {
+      "name": "entity_profile",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fiscal_start_month": {
+          "name": "fiscal_start_month",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "entity_profile_kind": {
+          "name": "entity_profile_kind",
+          "value": "\"entity_profile\".\"kind\" IN ('individual', 'corporation')"
+        },
+        "entity_profile_month": {
+          "name": "entity_profile_month",
+          "value": "\"entity_profile\".\"fiscal_start_month\" BETWEEN 1 AND 12"
+        }
+      }
+    },
+    "fiscal_periods": {
+      "name": "fiscal_periods",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fiscal_year": {
+          "name": "fiscal_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fiscal_periods_fiscal_year_unique": {
+          "name": "fiscal_periods_fiscal_year_unique",
+          "columns": [
+            "fiscal_year"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "fiscal_periods_range": {
+          "name": "fiscal_periods_range",
+          "value": "\"fiscal_periods\".\"start_date\" < \"fiscal_periods\".\"end_date\""
+        },
+        "fiscal_periods_status": {
+          "name": "fiscal_periods_status",
+          "value": "\"fiscal_periods\".\"status\" IN ('open', 'closed')"
+        }
+      }
+    },
+    "fixed_assets": {
+      "name": "fixed_assets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "acquired_on": {
+          "name": "acquired_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "acquisition_cost": {
+          "name": "acquisition_cost",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "method": {
+          "name": "method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "useful_life_years": {
+          "name": "useful_life_years",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "business_ratio": {
+          "name": "business_ratio",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "asset_account_id": {
+          "name": "asset_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "linked_journal_id": {
+          "name": "linked_journal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "disposed_on": {
+          "name": "disposed_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "in_service_on": {
+          "name": "in_service_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "prior_accumulated": {
+          "name": "prior_accumulated",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "prior_through_year": {
+          "name": "prior_through_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "disposal_kind": {
+          "name": "disposal_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "fixed_assets_asset_account_id_accounts_id_fk": {
+          "name": "fixed_assets_asset_account_id_accounts_id_fk",
+          "tableFrom": "fixed_assets",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "asset_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "fixed_assets_linked_journal_id_journals_id_fk": {
+          "name": "fixed_assets_linked_journal_id_journals_id_fk",
+          "tableFrom": "fixed_assets",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "linked_journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "fixed_assets_name": {
+          "name": "fixed_assets_name",
+          "value": "length(\"fixed_assets\".\"name\") > 0"
+        },
+        "fixed_assets_cost": {
+          "name": "fixed_assets_cost",
+          "value": "\"fixed_assets\".\"acquisition_cost\" > 0"
+        },
+        "fixed_assets_method": {
+          "name": "fixed_assets_method",
+          "value": "\"fixed_assets\".\"method\" IN ('small_asset_28_2', 'straight_line', 'lump_sum')"
+        },
+        "fixed_assets_ratio": {
+          "name": "fixed_assets_ratio",
+          "value": "\"fixed_assets\".\"business_ratio\" BETWEEN 0 AND 10000"
+        },
+        "fixed_assets_prior": {
+          "name": "fixed_assets_prior",
+          "value": "\"fixed_assets\".\"prior_accumulated\" >= 0"
+        },
+        "fixed_assets_prior_year": {
+          "name": "fixed_assets_prior_year",
+          "value": "\"fixed_assets\".\"prior_accumulated\" = 0 OR \"fixed_assets\".\"prior_through_year\" IS NOT NULL"
+        },
+        "fixed_assets_useful_life": {
+          "name": "fixed_assets_useful_life",
+          "value": "\"fixed_assets\".\"method\" <> 'straight_line' OR \"fixed_assets\".\"useful_life_years\" IS NOT NULL"
+        },
+        "fixed_assets_disposal_kind": {
+          "name": "fixed_assets_disposal_kind",
+          "value": "\"fixed_assets\".\"disposal_kind\" IN ('scrap', 'sale')"
+        },
+        "fixed_assets_disposal_pair": {
+          "name": "fixed_assets_disposal_pair",
+          "value": "(\"fixed_assets\".\"disposed_on\" IS NULL) = (\"fixed_assets\".\"disposal_kind\" IS NULL)"
+        }
+      }
+    },
+    "home_use_allocations": {
+      "name": "home_use_allocations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fiscal_year": {
+          "name": "fiscal_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sub_account_id": {
+          "name": "sub_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "business_ratio": {
+          "name": "business_ratio",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "basis": {
+          "name": "basis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "change_reason": {
+          "name": "change_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "home_use_allocations_no_sub": {
+          "name": "home_use_allocations_no_sub",
+          "columns": [
+            "fiscal_year",
+            "account_id"
+          ],
+          "isUnique": true,
+          "where": "sub_account_id IS NULL"
+        },
+        "home_use_allocations_key": {
+          "name": "home_use_allocations_key",
+          "columns": [
+            "fiscal_year",
+            "account_id",
+            "sub_account_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "home_use_allocations_fiscal_year_fiscal_periods_fiscal_year_fk": {
+          "name": "home_use_allocations_fiscal_year_fiscal_periods_fiscal_year_fk",
+          "tableFrom": "home_use_allocations",
+          "tableTo": "fiscal_periods",
+          "columnsFrom": [
+            "fiscal_year"
+          ],
+          "columnsTo": [
+            "fiscal_year"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "home_use_allocations_account_id_accounts_id_fk": {
+          "name": "home_use_allocations_account_id_accounts_id_fk",
+          "tableFrom": "home_use_allocations",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "home_use_allocations_sub_account_id_sub_accounts_id_fk": {
+          "name": "home_use_allocations_sub_account_id_sub_accounts_id_fk",
+          "tableFrom": "home_use_allocations",
+          "tableTo": "sub_accounts",
+          "columnsFrom": [
+            "sub_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "home_use_allocations_ratio": {
+          "name": "home_use_allocations_ratio",
+          "value": "\"home_use_allocations\".\"business_ratio\" BETWEEN 0 AND 10000"
+        },
+        "home_use_allocations_basis": {
+          "name": "home_use_allocations_basis",
+          "value": "length(\"home_use_allocations\".\"basis\") > 0"
+        }
+      }
+    },
+    "import_account_mappings": {
+      "name": "import_account_mappings",
+      "columns": {
+        "source_name": {
+          "name": "source_name",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sub_account_id": {
+          "name": "sub_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sub_account_name": {
+          "name": "sub_account_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "import_account_mappings_account_id_accounts_id_fk": {
+          "name": "import_account_mappings_account_id_accounts_id_fk",
+          "tableFrom": "import_account_mappings",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "import_account_mappings_sub_account_id_sub_accounts_id_fk": {
+          "name": "import_account_mappings_sub_account_id_sub_accounts_id_fk",
+          "tableFrom": "import_account_mappings",
+          "tableTo": "sub_accounts",
+          "columnsFrom": [
+            "sub_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "import_account_mappings_sub_account": {
+          "name": "import_account_mappings_sub_account",
+          "value": "\"import_account_mappings\".\"sub_account_id\" IS NULL OR \"import_account_mappings\".\"sub_account_name\" IS NULL"
+        }
+      }
+    },
+    "import_batches": {
+      "name": "import_batches",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_name": {
+          "name": "file_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_sha256": {
+          "name": "file_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "imported_at": {
+          "name": "imported_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "period_from": {
+          "name": "period_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "period_to": {
+          "name": "period_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fiscal_years_json": {
+          "name": "fiscal_years_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "count_new": {
+          "name": "count_new",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "count_already": {
+          "name": "count_already",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "count_excluded": {
+          "name": "count_excluded",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "count_rejected": {
+          "name": "count_rejected",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "count_warnings": {
+          "name": "count_warnings",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "voided_at": {
+          "name": "voided_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "void_reason": {
+          "name": "void_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "import_batches_source": {
+          "name": "import_batches_source",
+          "value": "\"import_batches\".\"source\" IN ('freee_journal')"
+        },
+        "import_batches_sha256": {
+          "name": "import_batches_sha256",
+          "value": "length(\"import_batches\".\"file_sha256\") = 64 AND \"import_batches\".\"file_sha256\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "import_batches_period": {
+          "name": "import_batches_period",
+          "value": "\"import_batches\".\"period_from\" <= \"import_batches\".\"period_to\""
+        },
+        "import_batches_count_new": {
+          "name": "import_batches_count_new",
+          "value": "\"import_batches\".\"count_new\" >= 1"
+        },
+        "import_batches_counts": {
+          "name": "import_batches_counts",
+          "value": "\"import_batches\".\"count_already\" >= 0 AND \"import_batches\".\"count_excluded\" >= 0 AND \"import_batches\".\"count_rejected\" >= 0 AND \"import_batches\".\"count_warnings\" >= 0"
+        },
+        "import_batches_status": {
+          "name": "import_batches_status",
+          "value": "\"import_batches\".\"status\" IN ('active', 'voided')"
+        },
+        "import_batches_void": {
+          "name": "import_batches_void",
+          "value": "\"import_batches\".\"status\" = 'active' OR (\"import_batches\".\"voided_at\" IS NOT NULL AND \"import_batches\".\"void_reason\" IS NOT NULL)"
+        }
+      }
+    },
+    "import_journal_refs": {
+      "name": "import_journal_refs",
+      "columns": {
+        "journal_id": {
+          "name": "journal_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "batch_id": {
+          "name": "batch_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "freee_journal_id": {
+          "name": "freee_journal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "freee_journal_no": {
+          "name": "freee_journal_no",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "freee_date": {
+          "name": "freee_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "snapshot_json": {
+          "name": "snapshot_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "import_journal_refs_active_freee_id": {
+          "name": "import_journal_refs_active_freee_id",
+          "columns": [
+            "freee_journal_id"
+          ],
+          "isUnique": true,
+          "where": "revoked_at IS NULL"
+        },
+        "import_journal_refs_batch": {
+          "name": "import_journal_refs_batch",
+          "columns": [
+            "batch_id"
+          ],
+          "isUnique": false
+        },
+        "import_journal_refs_freee_date": {
+          "name": "import_journal_refs_freee_date",
+          "columns": [
+            "freee_date"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "import_journal_refs_journal_id_journals_id_fk": {
+          "name": "import_journal_refs_journal_id_journals_id_fk",
+          "tableFrom": "import_journal_refs",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "import_journal_refs_batch_id_import_batches_id_fk": {
+          "name": "import_journal_refs_batch_id_import_batches_id_fk",
+          "tableFrom": "import_journal_refs",
+          "tableTo": "import_batches",
+          "columnsFrom": [
+            "batch_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "import_tax_mappings": {
+      "name": "import_tax_mappings",
+      "columns": {
+        "source_name": {
+          "name": "source_name",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tax_category": {
+          "name": "tax_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "import_tax_mappings_tax_category_tax_categories_code_fk": {
+          "name": "import_tax_mappings_tax_category_tax_categories_code_fk",
+          "tableFrom": "import_tax_mappings",
+          "tableTo": "tax_categories",
+          "columnsFrom": [
+            "tax_category"
+          ],
+          "columnsTo": [
+            "code"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "inference_rule_history": {
+      "name": "inference_rule_history",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rule_id": {
+          "name": "rule_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "before_json": {
+          "name": "before_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "after_json": {
+          "name": "after_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "statement_id": {
+          "name": "statement_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "at": {
+          "name": "at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "inference_rule_history_rule": {
+          "name": "inference_rule_history_rule",
+          "columns": [
+            "rule_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "inference_rule_history_rule_id_inference_rules_id_fk": {
+          "name": "inference_rule_history_rule_id_inference_rules_id_fk",
+          "tableFrom": "inference_rule_history",
+          "tableTo": "inference_rules",
+          "columnsFrom": [
+            "rule_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "inference_rule_history_statement_id_statements_id_fk": {
+          "name": "inference_rule_history_statement_id_statements_id_fk",
+          "tableFrom": "inference_rule_history",
+          "tableTo": "statements",
+          "columnsFrom": [
+            "statement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "inference_rule_history_action": {
+          "name": "inference_rule_history_action",
+          "value": "\"inference_rule_history\".\"action\" IN ('create', 'update', 'pause', 'resume', 'edit')"
+        }
+      }
+    },
+    "inference_rules": {
+      "name": "inference_rules",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_content": {
+          "name": "normalized_content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "statement_account_id": {
+          "name": "statement_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "counter_account_id": {
+          "name": "counter_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "counter_sub_account_id": {
+          "name": "counter_sub_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "partner_id": {
+          "name": "partner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "tax_category": {
+          "name": "tax_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description_template": {
+          "name": "description_template",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hits": {
+          "name": "hits",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "overrides": {
+          "name": "overrides",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "managed_by": {
+          "name": "managed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'auto'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "inference_rules_statement_account_id_statement_accounts_id_fk": {
+          "name": "inference_rules_statement_account_id_statement_accounts_id_fk",
+          "tableFrom": "inference_rules",
+          "tableTo": "statement_accounts",
+          "columnsFrom": [
+            "statement_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "inference_rules_counter_account_id_accounts_id_fk": {
+          "name": "inference_rules_counter_account_id_accounts_id_fk",
+          "tableFrom": "inference_rules",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "counter_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "inference_rules_counter_sub_account_id_sub_accounts_id_fk": {
+          "name": "inference_rules_counter_sub_account_id_sub_accounts_id_fk",
+          "tableFrom": "inference_rules",
+          "tableTo": "sub_accounts",
+          "columnsFrom": [
+            "counter_sub_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "inference_rules_partner_id_partners_id_fk": {
+          "name": "inference_rules_partner_id_partners_id_fk",
+          "tableFrom": "inference_rules",
+          "tableTo": "partners",
+          "columnsFrom": [
+            "partner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "inference_rules_tax_category_tax_categories_code_fk": {
+          "name": "inference_rules_tax_category_tax_categories_code_fk",
+          "tableFrom": "inference_rules",
+          "tableTo": "tax_categories",
+          "columnsFrom": [
+            "tax_category"
+          ],
+          "columnsTo": [
+            "code"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "inference_rules_purpose": {
+          "name": "inference_rules_purpose",
+          "value": "\"inference_rules\".\"purpose\" IN ('business', 'private')"
+        },
+        "inference_rules_status": {
+          "name": "inference_rules_status",
+          "value": "\"inference_rules\".\"status\" IN ('active', 'paused')"
+        },
+        "inference_rules_origin": {
+          "name": "inference_rules_origin",
+          "value": "\"inference_rules\".\"origin\" IN ('approval', 'seed')"
+        },
+        "inference_rules_managed_by": {
+          "name": "inference_rules_managed_by",
+          "value": "\"inference_rules\".\"managed_by\" IN ('auto', 'user')"
+        },
+        "inference_rules_hits": {
+          "name": "inference_rules_hits",
+          "value": "\"inference_rules\".\"hits\" >= 0"
+        },
+        "inference_rules_overrides": {
+          "name": "inference_rules_overrides",
+          "value": "\"inference_rules\".\"overrides\" >= 0"
+        }
+      }
+    },
+    "invoice_items": {
+      "name": "invoice_items",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "line_no": {
+          "name": "line_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity_halves": {
+          "name": "quantity_halves",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "unit": {
+          "name": "unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "unit_price": {
+          "name": "unit_price",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tax_category": {
+          "name": "tax_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tax_rate": {
+          "name": "tax_rate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "invoice_items_invoice_line": {
+          "name": "invoice_items_invoice_line",
+          "columns": [
+            "invoice_id",
+            "line_no"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "invoice_items_invoice_id_invoices_id_fk": {
+          "name": "invoice_items_invoice_id_invoices_id_fk",
+          "tableFrom": "invoice_items",
+          "tableTo": "invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "invoice_items_tax_category_tax_categories_code_fk": {
+          "name": "invoice_items_tax_category_tax_categories_code_fk",
+          "tableFrom": "invoice_items",
+          "tableTo": "tax_categories",
+          "columnsFrom": [
+            "tax_category"
+          ],
+          "columnsTo": [
+            "code"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "invoice_items_line_no": {
+          "name": "invoice_items_line_no",
+          "value": "\"invoice_items\".\"line_no\" BETWEEN 1 AND 5"
+        },
+        "invoice_items_name": {
+          "name": "invoice_items_name",
+          "value": "length(\"invoice_items\".\"name\") > 0"
+        },
+        "invoice_items_quantity": {
+          "name": "invoice_items_quantity",
+          "value": "\"invoice_items\".\"quantity_halves\" IS NULL OR \"invoice_items\".\"quantity_halves\" > 0"
+        },
+        "invoice_items_unit_price": {
+          "name": "invoice_items_unit_price",
+          "value": "\"invoice_items\".\"unit_price\" IS NULL OR \"invoice_items\".\"unit_price\" > 0"
+        },
+        "invoice_items_amount": {
+          "name": "invoice_items_amount",
+          "value": "\"invoice_items\".\"amount\" > 0 AND \"invoice_items\".\"amount\" < 1000000000000"
+        },
+        "invoice_items_amount_match": {
+          "name": "invoice_items_amount_match",
+          "value": "\"invoice_items\".\"quantity_halves\" IS NULL OR \"invoice_items\".\"unit_price\" IS NULL OR \"invoice_items\".\"amount\" = (\"invoice_items\".\"quantity_halves\" * \"invoice_items\".\"unit_price\") / 2"
+        }
+      }
+    },
+    "invoice_payments": {
+      "name": "invoice_payments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "received_on": {
+          "name": "received_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fee_amount": {
+          "name": "fee_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deposit_account_id": {
+          "name": "deposit_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deposit_sub_account_id": {
+          "name": "deposit_sub_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "journal_id": {
+          "name": "journal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "voided_at": {
+          "name": "voided_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "void_reason": {
+          "name": "void_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "void_journal_id": {
+          "name": "void_journal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "invoice_payments_journal_id_unique": {
+          "name": "invoice_payments_journal_id_unique",
+          "columns": [
+            "journal_id"
+          ],
+          "isUnique": true
+        },
+        "invoice_payments_invoice": {
+          "name": "invoice_payments_invoice",
+          "columns": [
+            "invoice_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "invoice_payments_invoice_id_invoices_id_fk": {
+          "name": "invoice_payments_invoice_id_invoices_id_fk",
+          "tableFrom": "invoice_payments",
+          "tableTo": "invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "invoice_payments_deposit_account_id_accounts_id_fk": {
+          "name": "invoice_payments_deposit_account_id_accounts_id_fk",
+          "tableFrom": "invoice_payments",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "deposit_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "invoice_payments_deposit_sub_account_id_sub_accounts_id_fk": {
+          "name": "invoice_payments_deposit_sub_account_id_sub_accounts_id_fk",
+          "tableFrom": "invoice_payments",
+          "tableTo": "sub_accounts",
+          "columnsFrom": [
+            "deposit_sub_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "invoice_payments_journal_id_journals_id_fk": {
+          "name": "invoice_payments_journal_id_journals_id_fk",
+          "tableFrom": "invoice_payments",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "invoice_payments_void_journal_id_journals_id_fk": {
+          "name": "invoice_payments_void_journal_id_journals_id_fk",
+          "tableFrom": "invoice_payments",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "void_journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "invoice_payments_amount": {
+          "name": "invoice_payments_amount",
+          "value": "\"invoice_payments\".\"amount\" > 0"
+        },
+        "invoice_payments_fee": {
+          "name": "invoice_payments_fee",
+          "value": "\"invoice_payments\".\"fee_amount\" >= 0"
+        },
+        "invoice_payments_void": {
+          "name": "invoice_payments_void",
+          "value": "(\"invoice_payments\".\"voided_at\" IS NULL) = (\"invoice_payments\".\"void_reason\" IS NULL)"
+        }
+      }
+    },
+    "invoice_settings": {
+      "name": "invoice_settings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issuer_name": {
+          "name": "issuer_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "trade_name": {
+          "name": "trade_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "contact": {
+          "name": "contact",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bank_account": {
+          "name": "bank_account",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "registration_number": {
+          "name": "registration_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "tax_display": {
+          "name": "tax_display",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'inclusive_only'"
+        },
+        "next_seq": {
+          "name": "next_seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "invoice_settings_single": {
+          "name": "invoice_settings_single",
+          "value": "\"invoice_settings\".\"id\" = 1"
+        },
+        "invoice_settings_registration": {
+          "name": "invoice_settings_registration",
+          "value": "\"invoice_settings\".\"registration_number\" GLOB 'T[0-9]*' AND length(\"invoice_settings\".\"registration_number\") = 14"
+        },
+        "invoice_settings_tax_display": {
+          "name": "invoice_settings_tax_display",
+          "value": "\"invoice_settings\".\"tax_display\" IN ('separate', 'inclusive_only')"
+        },
+        "invoice_settings_next_seq": {
+          "name": "invoice_settings_next_seq",
+          "value": "\"invoice_settings\".\"next_seq\" >= 1"
+        }
+      }
+    },
+    "invoices": {
+      "name": "invoices",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "invoice_no": {
+          "name": "invoice_no",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "seq": {
+          "name": "seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "partner_id": {
+          "name": "partner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_month": {
+          "name": "target_month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issue_date": {
+          "name": "issue_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sales_date": {
+          "name": "sales_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "due_date": {
+          "name": "due_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recipient_name": {
+          "name": "recipient_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recipient_honorific": {
+          "name": "recipient_honorific",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issuer_json": {
+          "name": "issuer_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "price_mode": {
+          "name": "price_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'inclusive'"
+        },
+        "tax_display": {
+          "name": "tax_display",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "total": {
+          "name": "total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "journal_id": {
+          "name": "journal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "voided_at": {
+          "name": "voided_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "void_reason": {
+          "name": "void_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "void_journal_id": {
+          "name": "void_journal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "invoices_invoice_no_unique": {
+          "name": "invoices_invoice_no_unique",
+          "columns": [
+            "invoice_no"
+          ],
+          "isUnique": true
+        },
+        "invoices_seq_unique": {
+          "name": "invoices_seq_unique",
+          "columns": [
+            "seq"
+          ],
+          "isUnique": true
+        },
+        "invoices_journal_id_unique": {
+          "name": "invoices_journal_id_unique",
+          "columns": [
+            "journal_id"
+          ],
+          "isUnique": true
+        },
+        "invoices_partner_month": {
+          "name": "invoices_partner_month",
+          "columns": [
+            "partner_id",
+            "target_month"
+          ],
+          "isUnique": false
+        },
+        "invoices_due_date": {
+          "name": "invoices_due_date",
+          "columns": [
+            "due_date"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "invoices_partner_id_partners_id_fk": {
+          "name": "invoices_partner_id_partners_id_fk",
+          "tableFrom": "invoices",
+          "tableTo": "partners",
+          "columnsFrom": [
+            "partner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "invoices_journal_id_journals_id_fk": {
+          "name": "invoices_journal_id_journals_id_fk",
+          "tableFrom": "invoices",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "invoices_void_journal_id_journals_id_fk": {
+          "name": "invoices_void_journal_id_journals_id_fk",
+          "tableFrom": "invoices",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "void_journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "invoices_seq": {
+          "name": "invoices_seq",
+          "value": "\"invoices\".\"seq\" >= 1"
+        },
+        "invoices_month": {
+          "name": "invoices_month",
+          "value": "\"invoices\".\"target_month\" GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'"
+        },
+        "invoices_recipient_name": {
+          "name": "invoices_recipient_name",
+          "value": "length(\"invoices\".\"recipient_name\") > 0"
+        },
+        "invoices_honorific": {
+          "name": "invoices_honorific",
+          "value": "\"invoices\".\"recipient_honorific\" IN ('様', '御中')"
+        },
+        "invoices_tax_display": {
+          "name": "invoices_tax_display",
+          "value": "\"invoices\".\"tax_display\" IN ('separate', 'inclusive_only')"
+        },
+        "invoices_price_mode": {
+          "name": "invoices_price_mode",
+          "value": "\"invoices\".\"price_mode\" IN ('inclusive', 'exclusive')"
+        },
+        "invoices_total": {
+          "name": "invoices_total",
+          "value": "\"invoices\".\"total\" > 0 AND \"invoices\".\"total\" < 1000000000000"
+        },
+        "invoices_void": {
+          "name": "invoices_void",
+          "value": "(\"invoices\".\"voided_at\" IS NULL) = (\"invoices\".\"void_reason\" IS NULL)"
+        }
+      }
+    },
+    "invoicing_audit_log": {
+      "name": "invoicing_audit_log",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "before_json": {
+          "name": "before_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "after_json": {
+          "name": "after_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "invoicing_audit_log_target": {
+          "name": "invoicing_audit_log_target",
+          "columns": [
+            "target_type",
+            "target_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "invoicing_audit_log_target_type": {
+          "name": "invoicing_audit_log_target_type",
+          "value": "\"invoicing_audit_log\".\"target_type\" IN ('invoice_settings', 'billing_terms', 'work_hours', 'invoice', 'payment', 'recurring_journal', 'recurring_run')"
+        },
+        "invoicing_audit_log_action": {
+          "name": "invoicing_audit_log_action",
+          "value": "\"invoicing_audit_log\".\"action\" IN ('create', 'update', 'void', 'pause', 'resume', 'skip', 'acknowledge')"
+        }
+      }
+    },
+    "journal_drafts": {
+      "name": "journal_drafts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "journal_drafts_singleton": {
+          "name": "journal_drafts_singleton",
+          "value": "\"journal_drafts\".\"id\" = 1"
+        }
+      }
+    },
+    "journal_line_tags": {
+      "name": "journal_line_tags",
+      "columns": {
+        "journal_line_id": {
+          "name": "journal_line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tag_id": {
+          "name": "tag_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "journal_line_tags_journal_line_id_journal_lines_id_fk": {
+          "name": "journal_line_tags_journal_line_id_journal_lines_id_fk",
+          "tableFrom": "journal_line_tags",
+          "tableTo": "journal_lines",
+          "columnsFrom": [
+            "journal_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "journal_line_tags_tag_id_tags_id_fk": {
+          "name": "journal_line_tags_tag_id_tags_id_fk",
+          "tableFrom": "journal_line_tags",
+          "tableTo": "tags",
+          "columnsFrom": [
+            "tag_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "journal_line_tags_journal_line_id_tag_id_pk": {
+          "columns": [
+            "journal_line_id",
+            "tag_id"
+          ],
+          "name": "journal_line_tags_journal_line_id_tag_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "journal_lines": {
+      "name": "journal_lines",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "journal_id": {
+          "name": "journal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "line_no": {
+          "name": "line_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "side": {
+          "name": "side",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sub_account_id": {
+          "name": "sub_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tax_category": {
+          "name": "tax_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tax_amount": {
+          "name": "tax_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "partner_id": {
+          "name": "partner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "journal_lines_account": {
+          "name": "journal_lines_account",
+          "columns": [
+            "account_id"
+          ],
+          "isUnique": false
+        },
+        "journal_lines_partner": {
+          "name": "journal_lines_partner",
+          "columns": [
+            "partner_id"
+          ],
+          "isUnique": false
+        },
+        "journal_lines_journal_line_no": {
+          "name": "journal_lines_journal_line_no",
+          "columns": [
+            "journal_id",
+            "line_no"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "journal_lines_journal_id_journals_id_fk": {
+          "name": "journal_lines_journal_id_journals_id_fk",
+          "tableFrom": "journal_lines",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "journal_lines_account_id_accounts_id_fk": {
+          "name": "journal_lines_account_id_accounts_id_fk",
+          "tableFrom": "journal_lines",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "journal_lines_sub_account_id_sub_accounts_id_fk": {
+          "name": "journal_lines_sub_account_id_sub_accounts_id_fk",
+          "tableFrom": "journal_lines",
+          "tableTo": "sub_accounts",
+          "columnsFrom": [
+            "sub_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "journal_lines_tax_category_tax_categories_code_fk": {
+          "name": "journal_lines_tax_category_tax_categories_code_fk",
+          "tableFrom": "journal_lines",
+          "tableTo": "tax_categories",
+          "columnsFrom": [
+            "tax_category"
+          ],
+          "columnsTo": [
+            "code"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "journal_lines_partner_id_partners_id_fk": {
+          "name": "journal_lines_partner_id_partners_id_fk",
+          "tableFrom": "journal_lines",
+          "tableTo": "partners",
+          "columnsFrom": [
+            "partner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "journal_lines_side": {
+          "name": "journal_lines_side",
+          "value": "\"journal_lines\".\"side\" IN ('debit', 'credit')"
+        },
+        "journal_lines_amount": {
+          "name": "journal_lines_amount",
+          "value": "\"journal_lines\".\"amount\" > 0 AND \"journal_lines\".\"amount\" < 1000000000000"
+        },
+        "journal_lines_tax_amount": {
+          "name": "journal_lines_tax_amount",
+          "value": "\"journal_lines\".\"tax_amount\" >= 0"
+        }
+      }
+    },
+    "journals": {
+      "name": "journals",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "journal_no": {
+          "name": "journal_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fiscal_period_id": {
+          "name": "fiscal_period_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "memo": {
+          "name": "memo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "corrects_journal_id": {
+          "name": "corrects_journal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'manual'"
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "journals_journal_no_unique": {
+          "name": "journals_journal_no_unique",
+          "columns": [
+            "journal_no"
+          ],
+          "isUnique": true
+        },
+        "journals_date": {
+          "name": "journals_date",
+          "columns": [
+            "date"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "journals_fiscal_period_id_fiscal_periods_id_fk": {
+          "name": "journals_fiscal_period_id_fiscal_periods_id_fk",
+          "tableFrom": "journals",
+          "tableTo": "fiscal_periods",
+          "columnsFrom": [
+            "fiscal_period_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "journals_corrects_journal_id_journals_id_fk": {
+          "name": "journals_corrects_journal_id_journals_id_fk",
+          "tableFrom": "journals",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "corrects_journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "journals_status": {
+          "name": "journals_status",
+          "value": "\"journals\".\"status\" IN ('active', 'voided')"
+        },
+        "journals_version": {
+          "name": "journals_version",
+          "value": "\"journals\".\"version\" >= 1"
+        }
+      }
+    },
+    "opening_balances": {
+      "name": "opening_balances",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fiscal_period_id": {
+          "name": "fiscal_period_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sub_account_id": {
+          "name": "sub_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "side": {
+          "name": "side",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "opening_balances_key": {
+          "name": "opening_balances_key",
+          "columns": [
+            "fiscal_period_id",
+            "account_id",
+            "sub_account_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "opening_balances_fiscal_period_id_fiscal_periods_id_fk": {
+          "name": "opening_balances_fiscal_period_id_fiscal_periods_id_fk",
+          "tableFrom": "opening_balances",
+          "tableTo": "fiscal_periods",
+          "columnsFrom": [
+            "fiscal_period_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "opening_balances_account_id_accounts_id_fk": {
+          "name": "opening_balances_account_id_accounts_id_fk",
+          "tableFrom": "opening_balances",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "opening_balances_sub_account_id_sub_accounts_id_fk": {
+          "name": "opening_balances_sub_account_id_sub_accounts_id_fk",
+          "tableFrom": "opening_balances",
+          "tableTo": "sub_accounts",
+          "columnsFrom": [
+            "sub_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "opening_balances_side": {
+          "name": "opening_balances_side",
+          "value": "\"opening_balances\".\"side\" IN ('debit', 'credit')"
+        },
+        "opening_balances_amount": {
+          "name": "opening_balances_amount",
+          "value": "\"opening_balances\".\"amount\" > 0 AND \"opening_balances\".\"amount\" < 1000000000000"
+        }
+      }
+    },
+    "partner_billing_terms": {
+      "name": "partner_billing_terms",
+      "columns": {
+        "partner_id": {
+          "name": "partner_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "billing_type": {
+          "name": "billing_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "price_mode": {
+          "name": "price_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'inclusive'"
+        },
+        "tax_rate": {
+          "name": "tax_rate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": -1
+        },
+        "unit_price": {
+          "name": "unit_price",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "monthly_amount": {
+          "name": "monthly_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "due_months_after": {
+          "name": "due_months_after",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "due_day": {
+          "name": "due_day",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 31
+        },
+        "default_item_name": {
+          "name": "default_item_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "billing_name": {
+          "name": "billing_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "partner_billing_terms_partner_id_partners_id_fk": {
+          "name": "partner_billing_terms_partner_id_partners_id_fk",
+          "tableFrom": "partner_billing_terms",
+          "tableTo": "partners",
+          "columnsFrom": [
+            "partner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "partner_billing_terms_type": {
+          "name": "partner_billing_terms_type",
+          "value": "\"partner_billing_terms\".\"billing_type\" IN ('hourly', 'monthly')"
+        },
+        "partner_billing_terms_price_mode": {
+          "name": "partner_billing_terms_price_mode",
+          "value": "\"partner_billing_terms\".\"price_mode\" IN ('inclusive', 'exclusive')"
+        },
+        "partner_billing_terms_tax_rate": {
+          "name": "partner_billing_terms_tax_rate",
+          "value": "\"partner_billing_terms\".\"tax_rate\" IS NULL OR \"partner_billing_terms\".\"tax_rate\" IN (-1, 8, 10)"
+        },
+        "partner_billing_terms_amounts": {
+          "name": "partner_billing_terms_amounts",
+          "value": "(\"partner_billing_terms\".\"billing_type\" = 'hourly' AND \"partner_billing_terms\".\"unit_price\" IS NOT NULL AND \"partner_billing_terms\".\"unit_price\" > 0 AND \"partner_billing_terms\".\"monthly_amount\" IS NULL) OR (\"partner_billing_terms\".\"billing_type\" = 'monthly' AND \"partner_billing_terms\".\"monthly_amount\" IS NOT NULL AND \"partner_billing_terms\".\"monthly_amount\" > 0 AND \"partner_billing_terms\".\"unit_price\" IS NULL)"
+        },
+        "partner_billing_terms_due_months": {
+          "name": "partner_billing_terms_due_months",
+          "value": "\"partner_billing_terms\".\"due_months_after\" BETWEEN 0 AND 12"
+        },
+        "partner_billing_terms_due_day": {
+          "name": "partner_billing_terms_due_day",
+          "value": "\"partner_billing_terms\".\"due_day\" BETWEEN 1 AND 28 OR \"partner_billing_terms\".\"due_day\" = 31"
+        },
+        "partner_billing_terms_item_name": {
+          "name": "partner_billing_terms_item_name",
+          "value": "length(\"partner_billing_terms\".\"default_item_name\") > 0"
+        }
+      }
+    },
+    "partners": {
+      "name": "partners",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "honorific": {
+          "name": "honorific",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "memo": {
+          "name": "memo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "partners_name_unique": {
+          "name": "partners_name_unique",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "partners_honorific": {
+          "name": "partners_honorific",
+          "value": "\"partners\".\"honorific\" IS NULL OR \"partners\".\"honorific\" IN ('様', '御中')"
+        }
+      }
+    },
+    "receipt_audit_log": {
+      "name": "receipt_audit_log",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "receipt_id": {
+          "name": "receipt_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "before_json": {
+          "name": "before_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "after_json": {
+          "name": "after_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "receipt_audit_log_target": {
+          "name": "receipt_audit_log_target",
+          "columns": [
+            "target_type",
+            "target_id"
+          ],
+          "isUnique": false
+        },
+        "receipt_audit_log_receipt": {
+          "name": "receipt_audit_log_receipt",
+          "columns": [
+            "receipt_id",
+            "occurred_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "receipt_audit_log_receipt_id_receipts_id_fk": {
+          "name": "receipt_audit_log_receipt_id_receipts_id_fk",
+          "tableFrom": "receipt_audit_log",
+          "tableTo": "receipts",
+          "columnsFrom": [
+            "receipt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "receipt_audit_log_target_type": {
+          "name": "receipt_audit_log_target_type",
+          "value": "\"receipt_audit_log\".\"target_type\" IN ('receipt', 'receipt_link', 'receipt_reading')"
+        },
+        "receipt_audit_log_action": {
+          "name": "receipt_audit_log_action",
+          "value": "\"receipt_audit_log\".\"action\" IN ('create', 'update', 'replace_file', 'delete', 'link', 'unlink', 'read')"
+        }
+      }
+    },
+    "receipt_files": {
+      "name": "receipt_files",
+      "columns": {
+        "sha256": {
+          "name": "sha256",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "receipt_id": {
+          "name": "receipt_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_version": {
+          "name": "file_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "media_type": {
+          "name": "media_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "size_bytes": {
+          "name": "size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "original_name": {
+          "name": "original_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "width": {
+          "name": "width",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "height": {
+          "name": "height",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "full_color": {
+          "name": "full_color",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "added_at": {
+          "name": "added_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "receipt_files_version": {
+          "name": "receipt_files_version",
+          "columns": [
+            "receipt_id",
+            "file_version"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "receipt_files_receipt_id_receipts_id_fk": {
+          "name": "receipt_files_receipt_id_receipts_id_fk",
+          "tableFrom": "receipt_files",
+          "tableTo": "receipts",
+          "columnsFrom": [
+            "receipt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "receipt_files_sha256": {
+          "name": "receipt_files_sha256",
+          "value": "length(\"receipt_files\".\"sha256\") = 64 AND \"receipt_files\".\"sha256\" NOT GLOB '*[^0-9a-f]*'"
+        },
+        "receipt_files_version_min": {
+          "name": "receipt_files_version_min",
+          "value": "\"receipt_files\".\"file_version\" >= 1"
+        },
+        "receipt_files_media_type": {
+          "name": "receipt_files_media_type",
+          "value": "\"receipt_files\".\"media_type\" IN ('image/jpeg', 'image/png', 'image/heic', 'application/pdf')"
+        },
+        "receipt_files_size": {
+          "name": "receipt_files_size",
+          "value": "\"receipt_files\".\"size_bytes\" > 0 AND \"receipt_files\".\"size_bytes\" <= 20971520"
+        },
+        "receipt_files_width": {
+          "name": "receipt_files_width",
+          "value": "\"receipt_files\".\"width\" IS NULL OR \"receipt_files\".\"width\" > 0"
+        },
+        "receipt_files_height": {
+          "name": "receipt_files_height",
+          "value": "\"receipt_files\".\"height\" IS NULL OR \"receipt_files\".\"height\" > 0"
+        },
+        "receipt_files_full_color": {
+          "name": "receipt_files_full_color",
+          "value": "\"receipt_files\".\"full_color\" IS NULL OR \"receipt_files\".\"full_color\" IN (0, 1)"
+        },
+        "receipt_files_channel": {
+          "name": "receipt_files_channel",
+          "value": "\"receipt_files\".\"channel\" IN ('local', 'remote')"
+        }
+      }
+    },
+    "receipt_links": {
+      "name": "receipt_links",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "receipt_id": {
+          "name": "receipt_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "journal_id": {
+          "name": "journal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "linked_at": {
+          "name": "linked_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "unlinked_at": {
+          "name": "unlinked_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "unlink_reason": {
+          "name": "unlink_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "receipt_links_active": {
+          "name": "receipt_links_active",
+          "columns": [
+            "receipt_id"
+          ],
+          "isUnique": true,
+          "where": "unlinked_at IS NULL"
+        },
+        "receipt_links_journal": {
+          "name": "receipt_links_journal",
+          "columns": [
+            "journal_id"
+          ],
+          "isUnique": false,
+          "where": "unlinked_at IS NULL"
+        }
+      },
+      "foreignKeys": {
+        "receipt_links_receipt_id_receipts_id_fk": {
+          "name": "receipt_links_receipt_id_receipts_id_fk",
+          "tableFrom": "receipt_links",
+          "tableTo": "receipts",
+          "columnsFrom": [
+            "receipt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "receipt_links_journal_id_journals_id_fk": {
+          "name": "receipt_links_journal_id_journals_id_fk",
+          "tableFrom": "receipt_links",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "receipt_links_unlinked": {
+          "name": "receipt_links_unlinked",
+          "value": "(\"receipt_links\".\"unlinked_at\" IS NULL) = (\"receipt_links\".\"unlink_reason\" IS NULL)"
+        }
+      }
+    },
+    "receipt_readings": {
+      "name": "receipt_readings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "receipt_id": {
+          "name": "receipt_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_sha256": {
+          "name": "file_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cand_date": {
+          "name": "cand_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cand_amount": {
+          "name": "cand_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cand_partner": {
+          "name": "cand_partner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cand_account_code": {
+          "name": "cand_account_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cand_tax_category": {
+          "name": "cand_tax_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "compared_at": {
+          "name": "compared_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "date_match": {
+          "name": "date_match",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "amount_match": {
+          "name": "amount_match",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "partner_match": {
+          "name": "partner_match",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "account_match": {
+          "name": "account_match",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "tax_match": {
+          "name": "tax_match",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "receipt_readings_receipt": {
+          "name": "receipt_readings_receipt",
+          "columns": [
+            "receipt_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "receipt_readings_receipt_id_receipts_id_fk": {
+          "name": "receipt_readings_receipt_id_receipts_id_fk",
+          "tableFrom": "receipt_readings",
+          "tableTo": "receipts",
+          "columnsFrom": [
+            "receipt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "receipt_readings_file_sha256_receipt_files_sha256_fk": {
+          "name": "receipt_readings_file_sha256_receipt_files_sha256_fk",
+          "tableFrom": "receipt_readings",
+          "tableTo": "receipt_files",
+          "columnsFrom": [
+            "file_sha256"
+          ],
+          "columnsTo": [
+            "sha256"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "receipt_readings_status": {
+          "name": "receipt_readings_status",
+          "value": "\"receipt_readings\".\"status\" IN ('succeeded', 'invalid', 'failed', 'timeout')"
+        },
+        "receipt_readings_error_code": {
+          "name": "receipt_readings_error_code",
+          "value": "\"receipt_readings\".\"status\" <> 'succeeded' OR \"receipt_readings\".\"error_code\" IS NULL"
+        },
+        "receipt_readings_candidates": {
+          "name": "receipt_readings_candidates",
+          "value": "\"receipt_readings\".\"status\" = 'succeeded' OR (\"receipt_readings\".\"cand_date\" IS NULL AND \"receipt_readings\".\"cand_amount\" IS NULL AND \"receipt_readings\".\"cand_partner\" IS NULL AND \"receipt_readings\".\"cand_account_code\" IS NULL AND \"receipt_readings\".\"cand_tax_category\" IS NULL AND \"receipt_readings\".\"confidence\" IS NULL)"
+        },
+        "receipt_readings_confidence": {
+          "name": "receipt_readings_confidence",
+          "value": "\"receipt_readings\".\"confidence\" IS NULL OR \"receipt_readings\".\"confidence\" BETWEEN 0 AND 100"
+        },
+        "receipt_readings_matches": {
+          "name": "receipt_readings_matches",
+          "value": "(\"receipt_readings\".\"date_match\" IS NULL OR \"receipt_readings\".\"date_match\" IN (0, 1)) AND (\"receipt_readings\".\"amount_match\" IS NULL OR \"receipt_readings\".\"amount_match\" IN (0, 1)) AND (\"receipt_readings\".\"partner_match\" IS NULL OR \"receipt_readings\".\"partner_match\" IN (0, 1)) AND (\"receipt_readings\".\"account_match\" IS NULL OR \"receipt_readings\".\"account_match\" IN (0, 1)) AND (\"receipt_readings\".\"tax_match\" IS NULL OR \"receipt_readings\".\"tax_match\" IN (0, 1))"
+        }
+      }
+    },
+    "receipts": {
+      "name": "receipts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "current_sha256": {
+          "name": "current_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "transaction_date": {
+          "name": "transaction_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "partner_name": {
+          "name": "partner_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "partner_key": {
+          "name": "partner_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "memo": {
+          "name": "memo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deleted_reason": {
+          "name": "deleted_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "receipts_search_date": {
+          "name": "receipts_search_date",
+          "columns": [
+            "deleted_at",
+            "transaction_date"
+          ],
+          "isUnique": false
+        },
+        "receipts_amount": {
+          "name": "receipts_amount",
+          "columns": [
+            "amount"
+          ],
+          "isUnique": false
+        },
+        "receipts_received": {
+          "name": "receipts_received",
+          "columns": [
+            "received_at",
+            "id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "receipts_current_sha256_receipt_files_sha256_fk": {
+          "name": "receipts_current_sha256_receipt_files_sha256_fk",
+          "tableFrom": "receipts",
+          "tableTo": "receipt_files",
+          "columnsFrom": [
+            "current_sha256"
+          ],
+          "columnsTo": [
+            "sha256"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "receipts_channel": {
+          "name": "receipts_channel",
+          "value": "\"receipts\".\"channel\" IN ('local', 'remote')"
+        },
+        "receipts_category": {
+          "name": "receipts_category",
+          "value": "\"receipts\".\"category\" IN ('paper_scan', 'electronic')"
+        },
+        "receipts_amount_range": {
+          "name": "receipts_amount_range",
+          "value": "\"receipts\".\"amount\" IS NULL OR (\"receipts\".\"amount\" > 0 AND \"receipts\".\"amount\" < 1000000000000)"
+        },
+        "receipts_partner_name": {
+          "name": "receipts_partner_name",
+          "value": "\"receipts\".\"partner_name\" IS NULL OR (length(trim(\"receipts\".\"partner_name\")) > 0 AND length(\"receipts\".\"partner_name\") <= 100)"
+        },
+        "receipts_partner_key": {
+          "name": "receipts_partner_key",
+          "value": "(\"receipts\".\"partner_name\" IS NULL) = (\"receipts\".\"partner_key\" IS NULL)"
+        },
+        "receipts_memo": {
+          "name": "receipts_memo",
+          "value": "\"receipts\".\"memo\" IS NULL OR length(\"receipts\".\"memo\") <= 500"
+        },
+        "receipts_deleted": {
+          "name": "receipts_deleted",
+          "value": "(\"receipts\".\"deleted_at\" IS NULL) = (\"receipts\".\"deleted_reason\" IS NULL)"
+        },
+        "receipts_version": {
+          "name": "receipts_version",
+          "value": "\"receipts\".\"version\" >= 1"
+        }
+      }
+    },
+    "recurring_journal_lines": {
+      "name": "recurring_journal_lines",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recurring_id": {
+          "name": "recurring_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "line_no": {
+          "name": "line_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "side": {
+          "name": "side",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sub_account_id": {
+          "name": "sub_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tax_category": {
+          "name": "tax_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "partner_id": {
+          "name": "partner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "recurring_journal_lines_line": {
+          "name": "recurring_journal_lines_line",
+          "columns": [
+            "recurring_id",
+            "line_no"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "recurring_journal_lines_recurring_id_recurring_journals_id_fk": {
+          "name": "recurring_journal_lines_recurring_id_recurring_journals_id_fk",
+          "tableFrom": "recurring_journal_lines",
+          "tableTo": "recurring_journals",
+          "columnsFrom": [
+            "recurring_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "recurring_journal_lines_account_id_accounts_id_fk": {
+          "name": "recurring_journal_lines_account_id_accounts_id_fk",
+          "tableFrom": "recurring_journal_lines",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "recurring_journal_lines_sub_account_id_sub_accounts_id_fk": {
+          "name": "recurring_journal_lines_sub_account_id_sub_accounts_id_fk",
+          "tableFrom": "recurring_journal_lines",
+          "tableTo": "sub_accounts",
+          "columnsFrom": [
+            "sub_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "recurring_journal_lines_tax_category_tax_categories_code_fk": {
+          "name": "recurring_journal_lines_tax_category_tax_categories_code_fk",
+          "tableFrom": "recurring_journal_lines",
+          "tableTo": "tax_categories",
+          "columnsFrom": [
+            "tax_category"
+          ],
+          "columnsTo": [
+            "code"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "recurring_journal_lines_partner_id_partners_id_fk": {
+          "name": "recurring_journal_lines_partner_id_partners_id_fk",
+          "tableFrom": "recurring_journal_lines",
+          "tableTo": "partners",
+          "columnsFrom": [
+            "partner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "recurring_journal_lines_side": {
+          "name": "recurring_journal_lines_side",
+          "value": "\"recurring_journal_lines\".\"side\" IN ('debit', 'credit')"
+        },
+        "recurring_journal_lines_amount": {
+          "name": "recurring_journal_lines_amount",
+          "value": "\"recurring_journal_lines\".\"amount\" > 0 AND \"recurring_journal_lines\".\"amount\" < 1000000000000"
+        }
+      }
+    },
+    "recurring_journals": {
+      "name": "recurring_journals",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "memo": {
+          "name": "memo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "day_of_month": {
+          "name": "day_of_month",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_month": {
+          "name": "start_month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_month": {
+          "name": "end_month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "recurring_journals_name": {
+          "name": "recurring_journals_name",
+          "value": "length(\"recurring_journals\".\"name\") > 0"
+        },
+        "recurring_journals_day": {
+          "name": "recurring_journals_day",
+          "value": "\"recurring_journals\".\"day_of_month\" BETWEEN 1 AND 28 OR \"recurring_journals\".\"day_of_month\" = 31"
+        },
+        "recurring_journals_start_month": {
+          "name": "recurring_journals_start_month",
+          "value": "\"recurring_journals\".\"start_month\" GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'"
+        },
+        "recurring_journals_end_month": {
+          "name": "recurring_journals_end_month",
+          "value": "\"recurring_journals\".\"end_month\" IS NULL OR (\"recurring_journals\".\"end_month\" GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]' AND \"recurring_journals\".\"end_month\" >= \"recurring_journals\".\"start_month\")"
+        },
+        "recurring_journals_status": {
+          "name": "recurring_journals_status",
+          "value": "\"recurring_journals\".\"status\" IN ('active', 'paused')"
+        },
+        "recurring_journals_version": {
+          "name": "recurring_journals_version",
+          "value": "\"recurring_journals\".\"version\" >= 1"
+        }
+      }
+    },
+    "recurring_runs": {
+      "name": "recurring_runs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recurring_id": {
+          "name": "recurring_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_month": {
+          "name": "target_month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "journal_id": {
+          "name": "journal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "skip_reason": {
+          "name": "skip_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "acknowledged_at": {
+          "name": "acknowledged_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "recurring_runs_journal_id_unique": {
+          "name": "recurring_runs_journal_id_unique",
+          "columns": [
+            "journal_id"
+          ],
+          "isUnique": true
+        },
+        "recurring_runs_recurring_month": {
+          "name": "recurring_runs_recurring_month",
+          "columns": [
+            "recurring_id",
+            "target_month"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "recurring_runs_recurring_id_recurring_journals_id_fk": {
+          "name": "recurring_runs_recurring_id_recurring_journals_id_fk",
+          "tableFrom": "recurring_runs",
+          "tableTo": "recurring_journals",
+          "columnsFrom": [
+            "recurring_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "recurring_runs_journal_id_journals_id_fk": {
+          "name": "recurring_runs_journal_id_journals_id_fk",
+          "tableFrom": "recurring_runs",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "recurring_runs_month": {
+          "name": "recurring_runs_month",
+          "value": "\"recurring_runs\".\"target_month\" GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'"
+        },
+        "recurring_runs_status": {
+          "name": "recurring_runs_status",
+          "value": "\"recurring_runs\".\"status\" IN ('posted', 'skipped')"
+        },
+        "recurring_runs_shape": {
+          "name": "recurring_runs_shape",
+          "value": "(\"recurring_runs\".\"status\" = 'posted' AND \"recurring_runs\".\"journal_id\" IS NOT NULL) OR (\"recurring_runs\".\"status\" = 'skipped' AND \"recurring_runs\".\"journal_id\" IS NULL AND \"recurring_runs\".\"skip_reason\" IS NOT NULL)"
+        }
+      }
+    },
+    "rent_details": {
+      "name": "rent_details",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fiscal_year": {
+          "name": "fiscal_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payee": {
+          "name": "payee",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "property": {
+          "name": "property",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "annual_rent": {
+          "name": "annual_rent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deductible_amount": {
+          "name": "deductible_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "rent_details_year": {
+          "name": "rent_details_year",
+          "columns": [
+            "fiscal_year"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "rent_details_payee": {
+          "name": "rent_details_payee",
+          "value": "length(\"rent_details\".\"payee\") > 0"
+        },
+        "rent_details_property": {
+          "name": "rent_details_property",
+          "value": "length(\"rent_details\".\"property\") > 0"
+        },
+        "rent_details_annual_rent": {
+          "name": "rent_details_annual_rent",
+          "value": "\"rent_details\".\"annual_rent\" >= 0"
+        },
+        "rent_details_deductible": {
+          "name": "rent_details_deductible",
+          "value": "\"rent_details\".\"deductible_amount\" >= 0 AND \"rent_details\".\"deductible_amount\" <= \"rent_details\".\"annual_rent\""
+        }
+      }
+    },
+    "statement_accounts": {
+      "name": "statement_accounts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "usage": {
+          "name": "usage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sub_account_id": {
+          "name": "sub_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "statement_accounts_name_unique": {
+          "name": "statement_accounts_name_unique",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "statement_accounts_account_id_accounts_id_fk": {
+          "name": "statement_accounts_account_id_accounts_id_fk",
+          "tableFrom": "statement_accounts",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "statement_accounts_sub_account_id_sub_accounts_id_fk": {
+          "name": "statement_accounts_sub_account_id_sub_accounts_id_fk",
+          "tableFrom": "statement_accounts",
+          "tableTo": "sub_accounts",
+          "columnsFrom": [
+            "sub_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "statement_accounts_usage": {
+          "name": "statement_accounts_usage",
+          "value": "\"statement_accounts\".\"usage\" IN ('business', 'mixed', 'private')"
+        },
+        "statement_accounts_kind": {
+          "name": "statement_accounts_kind",
+          "value": "\"statement_accounts\".\"kind\" IN ('bank', 'card', 'cash', 'other')"
+        },
+        "statement_accounts_account": {
+          "name": "statement_accounts_account",
+          "value": "(\"statement_accounts\".\"usage\" = 'private' AND \"statement_accounts\".\"account_id\" IS NULL AND \"statement_accounts\".\"sub_account_id\" IS NULL) OR (\"statement_accounts\".\"usage\" <> 'private' AND \"statement_accounts\".\"account_id\" IS NOT NULL)"
+        }
+      }
+    },
+    "statement_audit_log": {
+      "name": "statement_audit_log",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "before_json": {
+          "name": "before_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "after_json": {
+          "name": "after_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "statement_audit_log_target": {
+          "name": "statement_audit_log_target",
+          "columns": [
+            "target_type",
+            "target_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "statement_audit_log_target_type": {
+          "name": "statement_audit_log_target_type",
+          "value": "\"statement_audit_log\".\"target_type\" IN ('statement_batch', 'statement', 'statement_link', 'statement_account', 'inference_rule', 'statement_settings', 'statement_source')"
+        },
+        "statement_audit_log_action": {
+          "name": "statement_audit_log_action",
+          "value": "\"statement_audit_log\".\"action\" IN ('create', 'update', 'exclude', 'unexclude', 'acknowledge', 'unlink', 'revoke', 'pause', 'resume', 'edit', 'seed', 'delete')"
+        }
+      }
+    },
+    "statement_batches": {
+      "name": "statement_batches",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_name": {
+          "name": "source_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "input_sha256": {
+          "name": "input_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "period_from": {
+          "name": "period_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "period_to": {
+          "name": "period_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "count_new": {
+          "name": "count_new",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "count_existing": {
+          "name": "count_existing",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "count_unreadable": {
+          "name": "count_unreadable",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "statement_batches_origin": {
+          "name": "statement_batches_origin",
+          "value": "\"statement_batches\".\"origin\" IN ('paste', 'file')"
+        },
+        "statement_batches_count_new": {
+          "name": "statement_batches_count_new",
+          "value": "\"statement_batches\".\"count_new\" >= 0"
+        },
+        "statement_batches_count_existing": {
+          "name": "statement_batches_count_existing",
+          "value": "\"statement_batches\".\"count_existing\" >= 0"
+        },
+        "statement_batches_count_unreadable": {
+          "name": "statement_batches_count_unreadable",
+          "value": "\"statement_batches\".\"count_unreadable\" >= 0"
+        }
+      }
+    },
+    "statement_candidates": {
+      "name": "statement_candidates",
+      "columns": {
+        "statement_id": {
+          "name": "statement_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "method": {
+          "name": "method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "draft_json": {
+          "name": "draft_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rule_id": {
+          "name": "rule_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "statement_candidates_statement_id_statements_id_fk": {
+          "name": "statement_candidates_statement_id_statements_id_fk",
+          "tableFrom": "statement_candidates",
+          "tableTo": "statements",
+          "columnsFrom": [
+            "statement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "statement_candidates_rule_id_inference_rules_id_fk": {
+          "name": "statement_candidates_rule_id_inference_rules_id_fk",
+          "tableFrom": "statement_candidates",
+          "tableTo": "inference_rules",
+          "columnsFrom": [
+            "rule_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "statement_candidates_method": {
+          "name": "statement_candidates_method",
+          "value": "\"statement_candidates\".\"method\" IN ('match', 'transfer', 'rule', 'local_ai', 'external_ai', 'none')"
+        },
+        "statement_candidates_purpose": {
+          "name": "statement_candidates_purpose",
+          "value": "\"statement_candidates\".\"purpose\" IN ('business', 'private')"
+        },
+        "statement_candidates_confidence": {
+          "name": "statement_candidates_confidence",
+          "value": "\"statement_candidates\".\"confidence\" BETWEEN 0 AND 100"
+        },
+        "statement_candidates_shape": {
+          "name": "statement_candidates_shape",
+          "value": "(\"statement_candidates\".\"method\" = 'none' AND \"statement_candidates\".\"purpose\" IS NULL AND \"statement_candidates\".\"confidence\" IS NULL AND \"statement_candidates\".\"draft_json\" IS NULL) OR (\"statement_candidates\".\"method\" <> 'none' AND \"statement_candidates\".\"purpose\" IS NOT NULL AND \"statement_candidates\".\"confidence\" IS NOT NULL)"
+        }
+      }
+    },
+    "statement_links": {
+      "name": "statement_links",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "statement_id": {
+          "name": "statement_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "journal_id": {
+          "name": "journal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "journal_line_id": {
+          "name": "journal_line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revoked_reason": {
+          "name": "revoked_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "statement_links_active_statement": {
+          "name": "statement_links_active_statement",
+          "columns": [
+            "statement_id"
+          ],
+          "isUnique": true,
+          "where": "revoked_at IS NULL"
+        },
+        "statement_links_active_line": {
+          "name": "statement_links_active_line",
+          "columns": [
+            "journal_line_id"
+          ],
+          "isUnique": true,
+          "where": "revoked_at IS NULL"
+        },
+        "statement_links_journal": {
+          "name": "statement_links_journal",
+          "columns": [
+            "journal_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "statement_links_statement_id_statements_id_fk": {
+          "name": "statement_links_statement_id_statements_id_fk",
+          "tableFrom": "statement_links",
+          "tableTo": "statements",
+          "columnsFrom": [
+            "statement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "statement_links_journal_id_journals_id_fk": {
+          "name": "statement_links_journal_id_journals_id_fk",
+          "tableFrom": "statement_links",
+          "tableTo": "journals",
+          "columnsFrom": [
+            "journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "statement_links_journal_line_id_journal_lines_id_fk": {
+          "name": "statement_links_journal_line_id_journal_lines_id_fk",
+          "tableFrom": "statement_links",
+          "tableTo": "journal_lines",
+          "columnsFrom": [
+            "journal_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "statement_links_kind": {
+          "name": "statement_links_kind",
+          "value": "\"statement_links\".\"kind\" IN ('created', 'matched')"
+        }
+      }
+    },
+    "statement_settings": {
+      "name": "statement_settings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bulk_threshold": {
+          "name": "bulk_threshold",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 80
+        },
+        "external_threshold": {
+          "name": "external_threshold",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 60
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "statement_settings_single": {
+          "name": "statement_settings_single",
+          "value": "\"statement_settings\".\"id\" = 1"
+        },
+        "statement_settings_bulk": {
+          "name": "statement_settings_bulk",
+          "value": "\"statement_settings\".\"bulk_threshold\" BETWEEN 0 AND 100"
+        },
+        "statement_settings_external": {
+          "name": "statement_settings_external",
+          "value": "\"statement_settings\".\"external_threshold\" BETWEEN 0 AND 100"
+        }
+      }
+    },
+    "statement_sources": {
+      "name": "statement_sources",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fixed_account_name": {
+          "name": "fixed_account_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "header_signature": {
+          "name": "header_signature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "mapping_json": {
+          "name": "mapping_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "statement_sources_name_unique": {
+          "name": "statement_sources_name_unique",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "statement_sources_name": {
+          "name": "statement_sources_name",
+          "value": "length(\"statement_sources\".\"name\") BETWEEN 1 AND 100"
+        }
+      }
+    },
+    "statements": {
+      "name": "statements",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "batch_id": {
+          "name": "batch_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "statement_account_id": {
+          "name": "statement_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "stable_key": {
+          "name": "stable_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "external_id": {
+          "name": "external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalized_content": {
+          "name": "normalized_content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category_major": {
+          "name": "category_major",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "category_minor": {
+          "name": "category_minor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "memo": {
+          "name": "memo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "transfer_flag": {
+          "name": "transfer_flag",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "changed_json": {
+          "name": "changed_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "changed_ack_at": {
+          "name": "changed_ack_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "excluded_at": {
+          "name": "excluded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "excluded_reason": {
+          "name": "excluded_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "statements_stable_key_unique": {
+          "name": "statements_stable_key_unique",
+          "columns": [
+            "stable_key"
+          ],
+          "isUnique": true
+        },
+        "statements_external_id": {
+          "name": "statements_external_id",
+          "columns": [
+            "external_id"
+          ],
+          "isUnique": true,
+          "where": "external_id IS NOT NULL"
+        },
+        "statements_account_date": {
+          "name": "statements_account_date",
+          "columns": [
+            "statement_account_id",
+            "date"
+          ],
+          "isUnique": false
+        },
+        "statements_batch": {
+          "name": "statements_batch",
+          "columns": [
+            "batch_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "statements_batch_id_statement_batches_id_fk": {
+          "name": "statements_batch_id_statement_batches_id_fk",
+          "tableFrom": "statements",
+          "tableTo": "statement_batches",
+          "columnsFrom": [
+            "batch_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "statements_statement_account_id_statement_accounts_id_fk": {
+          "name": "statements_statement_account_id_statement_accounts_id_fk",
+          "tableFrom": "statements",
+          "tableTo": "statement_accounts",
+          "columnsFrom": [
+            "statement_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "statements_amount": {
+          "name": "statements_amount",
+          "value": "abs(\"statements\".\"amount\") < 1000000000000"
+        },
+        "statements_transfer_flag": {
+          "name": "statements_transfer_flag",
+          "value": "\"statements\".\"transfer_flag\" IN (0, 1)"
+        }
+      }
+    },
+    "straight_line_rates": {
+      "name": "straight_line_rates",
+      "columns": {
+        "useful_life_years": {
+          "name": "useful_life_years",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effective_to": {
+          "name": "effective_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rate_permille": {
+          "name": "rate_permille",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_url": {
+          "name": "source_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "straight_line_rates_useful_life_years_effective_from_pk": {
+          "columns": [
+            "useful_life_years",
+            "effective_from"
+          ],
+          "name": "straight_line_rates_useful_life_years_effective_from_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "straight_line_rates_years": {
+          "name": "straight_line_rates_years",
+          "value": "\"straight_line_rates\".\"useful_life_years\" BETWEEN 2 AND 50"
+        },
+        "straight_line_rates_rate": {
+          "name": "straight_line_rates_rate",
+          "value": "\"straight_line_rates\".\"rate_permille\" BETWEEN 1 AND 1000"
+        }
+      }
+    },
+    "sub_accounts": {
+      "name": "sub_accounts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "sub_accounts_account_name": {
+          "name": "sub_accounts_account_name",
+          "columns": [
+            "account_id",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "sub_accounts_account_id_accounts_id_fk": {
+          "name": "sub_accounts_account_id_accounts_id_fk",
+          "tableFrom": "sub_accounts",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tags": {
+      "name": "tags",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tags_name_unique": {
+          "name": "tags_name_unique",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tax_categories": {
+      "name": "tax_categories",
+      "columns": {
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "tax_categories_kind": {
+          "name": "tax_categories_kind",
+          "value": "\"tax_categories\".\"kind\" IS NULL OR \"tax_categories\".\"kind\" IN ('sales', 'purchase')"
+        }
+      }
+    },
+    "tax_parameters": {
+      "name": "tax_parameters",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effective_to": {
+          "name": "effective_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_url": {
+          "name": "source_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "tax_parameters_key_effective_from_pk": {
+          "columns": [
+            "key",
+            "effective_from"
+          ],
+          "name": "tax_parameters_key_effective_from_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "tax_parameters_key": {
+          "name": "tax_parameters_key",
+          "value": "\"tax_parameters\".\"key\" IN ('SMALL_ASSET_THRESHOLD', 'SMALL_ASSET_ANNUAL_LIMIT', 'BLUE_DEDUCTION_MAX', 'BLUE_DEDUCTION_STANDARD', 'BLUE_DEDUCTION_BASIC', 'LUMP_SUM_COST_MIN', 'LUMP_SUM_COST_MAX', 'LUMP_SUM_YEARS', 'OPENING_COST_AMORTIZATION_MONTHS', 'RECEIPT_INPUT_CYCLE_MONTHS', 'RECEIPT_INPUT_GRACE_BUSINESS_DAYS', 'RECEIPT_SCAN_MIN_LONG_PX', 'RECEIPT_SCAN_MIN_SHORT_PX')"
+        },
+        "tax_parameters_value": {
+          "name": "tax_parameters_value",
+          "value": "\"tax_parameters\".\"value\" > 0"
+        }
+      }
+    },
+    "tax_rates": {
+      "name": "tax_rates",
+      "columns": {
+        "category_code": {
+          "name": "category_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rate": {
+          "name": "rate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_url": {
+          "name": "source_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tax_rates_category_code_tax_categories_code_fk": {
+          "name": "tax_rates_category_code_tax_categories_code_fk",
+          "tableFrom": "tax_rates",
+          "tableTo": "tax_categories",
+          "columnsFrom": [
+            "category_code"
+          ],
+          "columnsTo": [
+            "code"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "tax_rates_category_code_effective_from_pk": {
+          "columns": [
+            "category_code",
+            "effective_from"
+          ],
+          "name": "tax_rates_category_code_effective_from_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "tax_rates_rate": {
+          "name": "tax_rates_rate",
+          "value": "\"tax_rates\".\"rate\" BETWEEN 0 AND 100"
+        }
+      }
+    },
+    "work_hours": {
+      "name": "work_hours",
+      "columns": {
+        "partner_id": {
+          "name": "partner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_month": {
+          "name": "target_month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "half_hours": {
+          "name": "half_hours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "work_hours_partner_id_partners_id_fk": {
+          "name": "work_hours_partner_id_partners_id_fk",
+          "tableFrom": "work_hours",
+          "tableTo": "partners",
+          "columnsFrom": [
+            "partner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "work_hours_partner_id_target_month_pk": {
+          "columns": [
+            "partner_id",
+            "target_month"
+          ],
+          "name": "work_hours_partner_id_target_month_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "work_hours_month": {
+          "name": "work_hours_month",
+          "value": "\"work_hours\".\"target_month\" GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'"
+        },
+        "work_hours_half_hours": {
+          "name": "work_hours_half_hours",
+          "value": "\"work_hours\".\"half_hours\" >= 0"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

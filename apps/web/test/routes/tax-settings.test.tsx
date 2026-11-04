@@ -2,6 +2,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TaxSetting } from "@/features/entities/api";
+import { ACCOUNTING_METHOD_HELP, TAXPAYER_STATUS_HELP } from "@/features/entities/tax-help";
 import { Route } from "@/routes/e/$entityId/tax-settings";
 import { apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
@@ -43,6 +44,31 @@ afterEach(() => {
 });
 
 describe("消費税の設定の画面", () => {
+  it("課税区分と経理方式の説明を出す（既定の税区分・税額の計算・税抜は登録できない・簡易と 2 割特例は本則と同じ）", async () => {
+    mockApi({ [`GET ${PATH}`]: () => ok({ taxSettings: [s2024] }) });
+    renderTaxSettings();
+    await screen.findByRole("table");
+
+    const help = screen.getByRole("region", { name: "課税区分と経理方式の説明" });
+    for (const term of ["免税", "課税（本則）", "課税（簡易）", "課税（2割特例）"]) {
+      expect(within(help).getByRole("heading", { name: term })).toBeInTheDocument();
+    }
+    expect(within(help).getByRole("heading", { name: "税込経理" })).toBeInTheDocument();
+    expect(within(help).getByRole("heading", { name: "税抜経理" })).toBeInTheDocument();
+    expect(within(help).getAllByText(/対象外/).length).toBeGreaterThan(0);
+    expect(within(help).getByText(/売上は課税売上 10%/)).toBeInTheDocument();
+    expect(within(help).getAllByText(/本則と同じ/)).toHaveLength(4);
+    expect(within(help).getByText(/税抜経理の期間の仕訳は登録できません/)).toBeInTheDocument();
+    expect(within(help).getAllByText(/TAX_METHOD_UNSUPPORTED/).length).toBeGreaterThan(0);
+  });
+
+  it("説明の文は features/entities/tax-help.ts の 1 か所から出す", () => {
+    expect(TAXPAYER_STATUS_HELP.exempt.defaultCategory).toContain("対象外");
+    expect(TAXPAYER_STATUS_HELP.simplified.calculation).toContain("本則と同じ");
+    expect(TAXPAYER_STATUS_HELP.two_tenths.calculation).toContain("本則と同じ");
+    expect(ACCOUNTING_METHOD_HELP.tax_excluded.calculation).toContain("TAX_METHOD_UNSUPPORTED");
+  });
+
   it("適用開始日の順に並べ、次の設定の前日を適用終了日として表示する（うるう年・最後は空欄）", async () => {
     mockApi({ [`GET ${PATH}`]: () => ok({ taxSettings: [s2027, s2024, s2024mar] }) });
     renderTaxSettings();

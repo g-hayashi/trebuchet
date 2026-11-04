@@ -36,6 +36,7 @@ function sale(
     journalNo: seq,
     date,
     memo: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
     status: "active" as const,
     lineNo,
     side: s,
