@@ -95,6 +95,7 @@ export function createAiRuntime(options: AiRuntimeOptions): AiRuntime {
   const local = createOpenAiProvider({
     fetch: options.fetch,
     timeoutMs: LOCAL_TIMEOUT_MS,
+    responseFormat: false,
     available: localAvailable,
     endpoint: localEndpoint,
   });

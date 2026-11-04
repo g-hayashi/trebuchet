@@ -32,6 +32,11 @@ export type AiProviderOptions = {
   available(): Promise<boolean>;
   /** 呼ぶたびに引く（設定の変更がすぐ効く）。使えなければ undefined */
   endpoint(): Promise<AiEndpoint | undefined>;
+  /**
+   * `response_format`（json_schema）を送るか。既定は送る。端末内の `fm serve` には false を渡す
+   * （json_schema つきの推定の要求に 90〜180 秒応答しない。2026-11-04 の T050。出力は呼び出し側が検証する）
+   */
+  responseFormat?: boolean | undefined;
 };
 
 type Failure = { message: string; timeout?: boolean };
@@ -176,7 +181,7 @@ export function createOpenAiProvider(options: AiProviderOptions): SuggestionProv
           { role: "system", content: prompt.system },
           { role: "user", content: prompt.user },
         ],
-        responseFormat: responseFormat(context),
+        responseFormat: options.responseFormat === false ? undefined : responseFormat(context),
       });
     },
   };

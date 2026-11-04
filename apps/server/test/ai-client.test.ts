@@ -149,6 +149,20 @@ describe("createOpenAiProvider: 要求", () => {
     expect(new Headers(calls[0]?.init.headers).has("authorization")).toBe(false);
   });
 
+  it("responseFormat: false（端末内の fm）なら response_format を送らない（fm serve は json_schema つきに応答しない。2026-11-04）", async () => {
+    const { fn, calls } = fakeFetch(completion(SUGGESTION_TEXT));
+    const result = await createOpenAiProvider({
+      fetch: fn,
+      timeoutMs: 1000,
+      responseFormat: false,
+      available: async () => true,
+      endpoint: async () => ({ baseUrl: "http://127.0.0.1:18790", model: "system" }),
+    }).suggest(PAYLOAD, CONTEXT);
+    expect(result).toEqual({ ok: true, value: SUGGESTION_TEXT });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.body).not.toHaveProperty("response_format");
+  });
+
   it("時間切れの既定は端末内 30 秒・外部 60 秒", () => {
     expect(LOCAL_TIMEOUT_MS).toBe(30_000);
     expect(EXTERNAL_TIMEOUT_MS).toBe(60_000);

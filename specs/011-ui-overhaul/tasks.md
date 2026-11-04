@@ -209,10 +209,13 @@ description: "Task list for 011-ui-overhaul"
 
 ## Phase 15: 利用者の端末での確認（メイン・利用者。値・取引先名は書かない）
 
-- [ ] T050 利用者の端末で `pnpm --filter @trebuchet/web e2e`（既存 5 本 + `mobile.spec.ts`）、`pnpm bench:reports`（SC-003）、`pnpm eval:statements` を T018・T042 の前（T019・T020 を T018 より先に行い、T020 の直後のコミットを基準にする）と後で実行して比べる（憲法 IV。明細の場面のルール・AI の精度が下がらないこと。`journal_entry` の場面は前の版にないので、後の値を初めての基準値として記録する）。結果（通った・落ちた、件数と割合だけ）をこの行の下に記録する
+- [X] T050 利用者の端末で `pnpm --filter @trebuchet/web e2e`（既存 5 本 + `mobile.spec.ts`）、`pnpm bench:reports`（SC-003）、`pnpm eval:statements` を T018・T042 の前（T019・T020 を T018 より先に行い、T020 の直後のコミットを基準にする）と後で実行して比べる（憲法 IV。明細の場面のルール・AI の精度が下がらないこと。`journal_entry` の場面は前の版にないので、後の値を初めての基準値として記録する）。結果（通った・落ちた、件数と割合だけ）をこの行の下に記録する
   - 2026-11-04 `pnpm bench:reports`: すべて OK（SC-004 帳票 10 件、003/SC-006 決算書、011/SC-003 `GET /home` 最大 10.2 ms、009/SC-005、010/SC-002）
   - e2e: 2026-11-04 初回は 6 本とも落ちた（011 の画面の変更に未追随、事業体 1 件で作成の画面へ行けない、成功の知らせが StrictMode で 2 つ出る、請求書の印刷が白紙、仕訳帳がスマホ幅で横にはみ出す）。直して 6 本すべて通過
-  - eval:statements: 未完了。端末内（`fm serve`）が `response_format` の `json_schema` つきの要求に 90〜180 秒応答せず `local timeout`（付けなければ 2 秒前後、初回 46 秒。`json_object` は 400）。011 の前から同じ経路で、`.tmp/eval-statements/` に成功の記録がない。直し方（端末内だけ形式を外す、時間切れを延ばす等）は推定の経路の変更になるので利用者の判断待ち
+  - eval:statements: 端末内（`fm serve`）が `response_format` の `json_schema` つきの要求に 90〜180 秒応答せず `local timeout` だった（011 の前から）。利用者の判断（2026-11-04）で、端末内の明細・仕訳の推定には `response_format` を送らない（`createOpenAiProvider` の `responseFormat: false`。出力は今どおり `AiSuggestion` で検証。列の案は json_schema つきでも応答するので変えない）。外部 AI 無効で、T020 の直後（`ce44dad` に同じ修正を当てた）と 011 の後を比べた:
+    - 前: statement 16 件、counterAccount 25.0%・taxCategory 31.3%・partner 31.3%・purpose 25.0%、rule 4 件（全項目一致 100.0%）・local_ai 1 件（0.0%）・none 11 件。端末内の呼び出し 12 件・接続失敗 0 件
+    - 後: statement は前と同じ値（下がらない）。journal_entry 32 件（初めての基準値）: counterAccount 3.1%・taxCategory 3.1%・partner 15.6%・purpose 9.4%、local_ai 5 件（0.0%）・none 27 件。端末内の呼び出し 44 件・接続失敗 0 件
+    - 端末内の AI の精度は低い（多くが「候補なし」）。外部 AI を有効にした比較は利用者の端末で行う
 - [ ] T051 Q: §3 の手動の確認（SC-011、Mac とスマホ）。要望ごとに日付と OK／NG と理由をこの行の下に記録する
 
 ---

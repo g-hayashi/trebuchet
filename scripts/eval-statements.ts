@@ -140,6 +140,7 @@ try {
   const local = createOpenAiProvider({
     fetch: (...args) => globalThis.fetch(...args),
     timeoutMs: LOCAL_TIMEOUT_MS,
+    responseFormat: false,
     available: () => fm.available(),
     endpoint: async () => ({ baseUrl, model: LOCAL_AI_MODEL }),
   });
