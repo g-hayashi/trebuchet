@@ -372,35 +372,46 @@ export type PartnerDraft = {
   isActive?: boolean | undefined;
 };
 
-/** partnerId を渡すと更新、渡さなければ追加。名前は事業体内で重複しない */
-export function upsertPartner(
-  deps: MasterDeps,
+/**
+ * 取引先を追加・更新する（`MasterRepository` の `transaction` の中、または UnitOfWork の `masters` で呼ぶ）。
+ * partnerId を渡すと更新、渡さなければ追加。名前は事業体内で重複しない
+ */
+export function writePartner(
+  tx: MasterRepository,
+  ids: IdGenerator,
   draft: PartnerDraft,
   partnerId?: string,
 ): Result<Partner> {
   const name = validName(draft.name, "name");
   if (!name.ok) return name;
   const memo = draft.memo?.trim() || null;
-  return deps.repo.transaction((tx) => {
-    const partners = tx.listPartners();
-    const current = partnerId === undefined ? undefined : partners.find((p) => p.id === partnerId);
-    if (partnerId !== undefined && current === undefined) {
-      return err(domainError("VALIDATION", "取引先が見つかりません", { partnerId }));
-    }
-    if (partners.some((p) => p.id !== partnerId && p.name === name.value)) {
-      return err(domainError("VALIDATION", "同じ名前の取引先があります", { name: name.value }));
-    }
-    const partner: Partner = {
-      id: current?.id ?? deps.ids.next(),
-      name: name.value,
-      honorific: draft.honorific,
-      memo,
-      isActive: draft.isActive ?? current?.isActive ?? true,
-    };
-    if (current === undefined) tx.insertPartner(partner);
-    else tx.updatePartner(partner);
-    return ok(partner);
-  });
+  const partners = tx.listPartners();
+  const current = partnerId === undefined ? undefined : partners.find((p) => p.id === partnerId);
+  if (partnerId !== undefined && current === undefined) {
+    return err(domainError("VALIDATION", "取引先が見つかりません", { partnerId }));
+  }
+  if (partners.some((p) => p.id !== partnerId && p.name === name.value)) {
+    return err(domainError("VALIDATION", "同じ名前の取引先があります", { name: name.value }));
+  }
+  const partner: Partner = {
+    id: current?.id ?? ids.next(),
+    name: name.value,
+    honorific: draft.honorific,
+    memo,
+    isActive: draft.isActive ?? current?.isActive ?? true,
+  };
+  if (current === undefined) tx.insertPartner(partner);
+  else tx.updatePartner(partner);
+  return ok(partner);
+}
+
+/** partnerId を渡すと更新、渡さなければ追加。名前は事業体内で重複しない */
+export function upsertPartner(
+  deps: MasterDeps,
+  draft: PartnerDraft,
+  partnerId?: string,
+): Result<Partner> {
+  return deps.repo.transaction((tx) => writePartner(tx, deps.ids, draft, partnerId));
 }
 
 export function addTag(deps: MasterDeps, rawName: string): Result<Tag> {

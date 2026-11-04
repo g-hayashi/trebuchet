@@ -18,8 +18,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { type BillingTermsRow, billingTermsQuery } from "@/features/invoicing/api";
+import { billingTermsQuery } from "@/features/invoicing/api";
 import { BillingTermsForm } from "@/features/invoicing/BillingTermsForm";
+import { billingSummary } from "@/features/invoicing/display";
 import {
   masterKeys,
   type Partner,
@@ -27,7 +28,6 @@ import {
   patchPartner,
   postPartner,
 } from "@/features/masters/api";
-import { formatYen } from "@/lib/format";
 
 export const Route = createFileRoute("/e/$entityId/partners")({
   component: PartnersPage,
@@ -169,14 +169,6 @@ function PartnersPage() {
       </Card>
     </main>
   );
-}
-
-/** 一覧の「請求」の欄。条件がなければ「未設定」 */
-function billingSummary(terms: BillingTermsRow | undefined): string {
-  if (terms === undefined) return "未設定";
-  return terms.billingType === "hourly"
-    ? `時間単価 ${formatYen(terms.unitPrice ?? 0)} 円`
-    : `月額 ${formatYen(terms.monthlyAmount ?? 0)} 円`;
 }
 
 type PartnerFormInput = z.input<typeof PartnerInput>;

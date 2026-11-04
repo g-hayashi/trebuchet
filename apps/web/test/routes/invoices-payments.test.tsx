@@ -77,6 +77,7 @@ function setupDetail(detail: unknown = REMAINING_DETAIL, extra = {}) {
 }
 
 afterEach(() => {
+  localStorage.clear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -202,7 +203,7 @@ describe("消し込みの入力（詳細。FR-017〜019）", () => {
   ])("%s の請求書には入力を出さない", async (_name, over) => {
     setupDetail({ ...REMAINING_DETAIL, ...over });
     await screen.findByRole("heading", { name: /請求書/ });
-    await screen.findByText("株式会社A 御中");
+    await screen.findAllByText("株式会社A 御中");
     expect(screen.queryByRole("form", { name: "入金の消し込み" })).not.toBeInTheDocument();
   });
 });

@@ -103,10 +103,13 @@ export function InvoiceDraftEditor({
   entityId,
   draft,
   partnerName,
+  existing,
 }: {
   entityId: string;
   draft: InvoiceDraftView;
   partnerName: string;
+  /** 同じ取引先・対象月の発行済み（未取消）の請求書。あれば「追加で作る」を選ぶまで発行できない（011 FR-033） */
+  existing?: { id: string; invoiceNo: string } | undefined;
 }) {
   const id = useId();
   const queryClient = useQueryClient();
@@ -137,7 +140,9 @@ export function InvoiceDraftEditor({
   });
 
   const duplicate =
-    duplicateSeen || draft.warnings.some((w) => w.code === "INVOICE_DUPLICATE_MONTH");
+    existing !== undefined ||
+    duplicateSeen ||
+    draft.warnings.some((w) => w.code === "INVOICE_DUPLICATE_MONTH");
   const built = buildItems(rows);
   const validInput = InvoiceInput.omit({ partnerId: true }).safeParse({
     targetMonth: draft.targetMonth,
@@ -400,15 +405,32 @@ export function InvoiceDraftEditor({
             </p>
           )}
 
-          {duplicate && (
-            <div className="flex items-center gap-2">
-              <input
-                id={`${id}-confirm`}
-                type="checkbox"
-                checked={confirmed}
-                onChange={(e) => setConfirmed(e.target.checked)}
-              />
-              <Label htmlFor={`${id}-confirm`}>それでも発行する</Label>
+          {duplicate && issued === undefined && (
+            <div className="flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 text-sm">
+              <span className="font-medium">
+                {existing === undefined ? "発行済み" : `発行済み（${existing.invoiceNo}）`}
+              </span>
+              {existing !== undefined && (
+                <Link
+                  to="/e/$entityId/invoices/$invoiceId"
+                  params={{ entityId, invoiceId: existing.id }}
+                  className="underline underline-offset-4"
+                >
+                  取り消す
+                </Link>
+              )}
+              <Button
+                type="button"
+                variant={confirmed ? "default" : "outline"}
+                size="sm"
+                aria-pressed={confirmed}
+                onClick={() => setConfirmed((prev) => !prev)}
+              >
+                追加で作る
+              </Button>
+              <span className="text-muted-foreground">
+                取り消すか、追加で作るかを選ぶと発行できます。
+              </span>
             </div>
           )}
         </fieldset>

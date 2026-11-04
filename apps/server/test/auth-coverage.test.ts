@@ -51,6 +51,16 @@ describe("INV-29 全ルートの保護", () => {
       });
     }
   });
+  it("取引先の一括の保存（011 T025）が保護対象", () => {
+    expect(protectedRoutes()).toContainEqual({
+      method: "POST",
+      path: "/api/entities/:entityId/partners/profile",
+    });
+    expect(protectedRoutes()).toContainEqual({
+      method: "PUT",
+      path: "/api/entities/:entityId/partners/:partnerId/profile",
+    });
+  });
   it("列挙したルートの数が下限を下回らない（列挙が空で素通りしない）", () => {
     expect(listRoutes().length).toBeGreaterThanOrEqual(40);
     expect(protectedRoutes().length).toBeGreaterThanOrEqual(35);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BillingTermsInput } from "./invoicing.ts";
 import {
   AccountCategory,
   AccountingMethod,
@@ -44,8 +45,17 @@ export const PartnerInput = z.object({
   name: Name,
   honorific: z.enum(["様", "御中"]).nullable(),
   memo: z.string().max(1000).optional(),
+  /** 使用停止にするとき false（省略は今の値のまま。新規は有効。011 R15） */
+  isActive: z.boolean().optional(),
 });
 export type PartnerInput = z.infer<typeof PartnerInput>;
+
+/** POST /partners/profile・PUT /partners/:partnerId/profile（011 R15）。billingTerms が null なら請求の条件を消す */
+export const PartnerProfileInput = z.object({
+  partner: PartnerInput,
+  billingTerms: BillingTermsInput.nullable(),
+});
+export type PartnerProfileInput = z.infer<typeof PartnerProfileInput>;
 
 export const TagCreate = z.object({ name: z.string().trim().min(1).max(TAG_NAME_MAX) });
 export type TagCreate = z.infer<typeof TagCreate>;

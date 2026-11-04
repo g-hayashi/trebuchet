@@ -104,6 +104,17 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
     }),
   "GET /invoice-settings": () => ok({ settings: null, minimumNextSeq: 1 }),
   "GET /billing-terms": () => ok({ terms: [] }),
+  // 請求の画面の取引先の登録・編集（011 US5）。名前と敬称だけを返す
+  "POST /partners/profile": ({ body }) =>
+    ok(
+      {
+        partner: { id: "p-new", ...(body as { partner: object }).partner, memo: null },
+        billingTerms: null,
+      },
+      201,
+    ),
+  "PUT /partners/:id/profile": ({ body }) =>
+    ok({ partner: { id: "p-1", ...(body as { partner: object }).partner }, billingTerms: null }),
   // 工数・請求書の一覧（US1）。仕訳の詳細は出所を読む（`:id` は 1 つのパスの区切り）
   "GET /work-hours": () => ok({ entries: [] }),
   "GET /invoices": () => ok({ invoices: [], outstandingByPartner: [] }),

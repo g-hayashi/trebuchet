@@ -1,17 +1,19 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { InvoiceListQuery } from "@trebuchet/schema";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { InvoiceListQuery, InvoiceListStatus } from "@trebuchet/schema";
+import { z } from "zod";
+import { InvoiceFlow } from "@/features/invoicing/InvoiceFlow";
 import { InvoiceList } from "@/features/invoicing/InvoiceList";
+import { InvoicePartners } from "@/features/invoicing/InvoicePartners";
 
-/** URL の絞り込み（取引先・対象月・状態） */
-const InvoiceSearch = InvoiceListQuery;
+/** URL の絞り込み（取引先・対象月・状態）。状態の省略は既定（未回収）、`all` はすべて */
+const InvoiceSearch = InvoiceListQuery.extend({
+  status: z.union([InvoiceListStatus, z.literal("all")]).optional(),
+});
 
 export const Route = createFileRoute("/e/$entityId/invoices/")({
   validateSearch: InvoiceSearch,
   component: InvoicesPage,
 });
-
-const linkButton =
-  "inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium shadow-xs hover:bg-accent";
 
 function InvoicesPage() {
   const { entityId } = Route.useParams();
@@ -20,24 +22,8 @@ function InvoicesPage() {
 
   return (
     <main className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold">請求書</h1>
-        <div className="flex flex-wrap gap-2">
-          <Link to="/e/$entityId/work-hours" params={{ entityId }} className={linkButton}>
-            工数の入力
-          </Link>
-          <Link
-            to="/e/$entityId/invoices/new"
-            params={{ entityId }}
-            className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90"
-          >
-            請求書を作る
-          </Link>
-          <Link to="/e/$entityId/invoice-settings" params={{ entityId }} className={linkButton}>
-            請求の設定
-          </Link>
-        </div>
-      </div>
+      <h1 className="text-xl font-semibold">請求書</h1>
+      <InvoiceFlow entityId={entityId} filters={search} />
       <InvoiceList
         entityId={entityId}
         filters={search}
@@ -51,6 +37,7 @@ function InvoicesPage() {
           })
         }
       />
+      <InvoicePartners entityId={entityId} />
     </main>
   );
 }

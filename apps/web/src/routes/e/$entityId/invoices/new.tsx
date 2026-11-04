@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type InvoiceDraftResult, postInvoiceDrafts } from "@/features/invoicing/api";
+import {
+  type InvoiceDraftResult,
+  invoiceListQuery,
+  postInvoiceDrafts,
+} from "@/features/invoicing/api";
 import { InvoiceDraftList } from "@/features/invoicing/InvoiceDraftList";
 import { partnersQuery } from "@/features/masters/api";
 import { previousMonth, thisMonth } from "@/lib/dates";
@@ -29,11 +33,27 @@ function NewInvoicesPage() {
     onSuccess: (result) => setMade({ month, result }),
   });
   const partnerNames = new Map(partners.data?.map((p) => [p.id, p.name]));
+  const inactivePartnerIds = new Set(
+    partners.data?.filter((p) => p.isActive === false).map((p) => p.id),
+  );
+  // 同じ取引先・対象月の発行済み（未取消）の請求書。あれば案の側で「発行済み」と示す
+  const issuedList = useQuery({
+    ...invoiceListQuery(entityId, { month }),
+    enabled: made !== undefined,
+  });
+  const issuedInvoices = new Map(
+    (issuedList.data?.invoices ?? [])
+      .filter((inv) => inv.status !== "voided")
+      .map((inv) => [
+        `${inv.partnerId}-${inv.targetMonth}`,
+        { id: inv.id, invoiceNo: inv.invoiceNo },
+      ]),
+  );
 
   return (
     <main className="grid gap-6">
       <div className="flex flex-wrap items-baseline gap-4">
-        <h1 className="text-xl font-semibold">請求書の発行</h1>
+        <h1 className="text-xl font-semibold">請求書を作る</h1>
         <Link
           to="/e/$entityId/invoices"
           params={{ entityId }}
@@ -72,12 +92,21 @@ function NewInvoicesPage() {
           />
         </div>
         <Button type="submit" disabled={create.isPending}>
-          案を作る
+          内容を確認する
         </Button>
       </form>
+      <p className="text-sm text-muted-foreground">
+        ここでは保存しません。発行すると請求書と仕訳ができます
+      </p>
       <ApiErrorMessage error={create.error ?? partners.error} />
       {made && made.month === month && partners.data && (
-        <InvoiceDraftList entityId={entityId} result={made.result} partnerNames={partnerNames} />
+        <InvoiceDraftList
+          entityId={entityId}
+          result={made.result}
+          partnerNames={partnerNames}
+          inactivePartnerIds={inactivePartnerIds}
+          issuedInvoices={issuedInvoices}
+        />
       )}
     </main>
   );

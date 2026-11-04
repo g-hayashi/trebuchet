@@ -61,8 +61,8 @@ afterEach(() => {
 });
 
 describe("請求書の一覧（US1。FR-020 の基本形）", () => {
-  it("番号・取引先・対象月・合計・状態・残額を出し、番号は詳細へのリンクにする", async () => {
-    setup();
+  it("番号・取引先・対象月・合計・状態・残額を出し、番号は詳細へのリンクにする（状態「すべて」）", async () => {
+    setup("/e/e1/invoices?status=all");
 
     const table = await screen.findByRole("table", { name: "請求書の一覧" });
     const row1 = within(table).getByRole("row", { name: /2026-0001/ });

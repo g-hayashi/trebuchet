@@ -19,6 +19,7 @@ import {
   type JournalOrigin,
   MAX_INVOICE_ITEMS,
   type OutstandingByPartner,
+  type PartnerProfileInput,
   type PaymentInput,
   type PaymentView,
   type WorkHoursEntry,
@@ -40,7 +41,13 @@ import { formatInvoiceNo } from "../invoicing/number.ts";
 import { invoiceStatus } from "../invoicing/status.ts";
 import { effectiveTaxDisplay, invoiceSalesTaxCategory, itemTaxRate } from "../invoicing/tax.ts";
 import { checkPeriod } from "../journal.ts";
-import type { Clock, IdGenerator, InvoicingStore, InvoicingUnitOfWork } from "../ports.ts";
+import type {
+  Clock,
+  IdGenerator,
+  InvoicingStore,
+  InvoicingUnitOfWork,
+  MasterRepository,
+} from "../ports.ts";
 import { resolveTaxSetting } from "../tax-settings.ts";
 import {
   domainError,
@@ -56,6 +63,7 @@ import {
 } from "../types.ts";
 import { createJournal, loadContext } from "./create-journal.ts";
 import { checkReason, type LedgerDeps } from "./journal-edit.ts";
+import { writePartner } from "./masters.ts";
 import { voidJournal } from "./void-journal.ts";
 
 /** 請求書（005）のユースケースの依存。読み取りも UnitOfWork 越しに行う（同じ接続・トランザクション） */
@@ -184,6 +192,76 @@ export function listBillingTerms(
   });
 }
 
+type BillingTermsTx = { invoicing: InvoicingStore; masters: MasterRepository };
+
+/**
+ * 請求の条件の検証と書き込み（`saveBillingTerms`・`savePartnerProfile` で共通）。
+ * UnitOfWork の `run` の中で呼ぶ。取引先がなければ `VALIDATION`（`details.field = "partnerId"`）
+ */
+function writeBillingTerms(
+  deps: InvoicingSettingsDeps,
+  { invoicing, masters }: BillingTermsTx,
+  partnerId: string,
+  input: BillingTermsInput,
+): Result<BillingTerms> {
+  const mismatch = amountMismatch(input);
+  if (mismatch !== null) return err(mismatch);
+  if (!masters.listPartners().some((p) => p.id === partnerId)) {
+    return err(
+      domainError("VALIDATION", "取引先が見つかりません", {
+        field: "partnerId",
+        partnerId,
+      }),
+    );
+  }
+  const before = invoicing.getBillingTerms(partnerId);
+  const now = deps.clock.now();
+  const saved: BillingTerms = {
+    partnerId,
+    billingType: input.billingType,
+    priceMode: input.priceMode ?? "inclusive",
+    ...(input.taxRate === undefined ? {} : { taxRate: input.taxRate }),
+    unitPrice: input.billingType === "hourly" ? (input.unitPrice ?? null) : null,
+    monthlyAmount: input.billingType === "monthly" ? (input.monthlyAmount ?? null) : null,
+    dueMonthsAfter: input.dueMonthsAfter,
+    dueDay: input.dueDay,
+    defaultItemName: input.defaultItemName,
+    billingName: emptyToNull(input.billingName),
+    updatedAt: now,
+  };
+  invoicing.upsertBillingTerms(saved);
+  invoicing.appendInvoicingAudit(
+    auditEntry(deps, {
+      targetType: "billing_terms",
+      targetId: partnerId,
+      action: before === null ? "create" : "update",
+      before,
+      after: saved,
+      at: now,
+    }),
+  );
+  return ok(saved);
+}
+
+/** 請求の条件を外す書き込み（`deleteBillingTerms`・`savePartnerProfile` で共通）。条件がなければ何もしない */
+function removeBillingTerms(
+  deps: InvoicingSettingsDeps,
+  invoicing: InvoicingStore,
+  partnerId: string,
+): void {
+  const before = invoicing.getBillingTerms(partnerId);
+  if (before === null) return;
+  invoicing.deleteBillingTerms(partnerId);
+  invoicing.appendInvoicingAudit(
+    auditEntry(deps, {
+      targetType: "billing_terms",
+      targetId: partnerId,
+      action: "void",
+      before,
+    }),
+  );
+}
+
 /**
  * 取引先の請求の条件を保存する（時間単価型は `unitPrice`、月額定額型は `monthlyAmount` だけ。FR-001・FR-002）。
  * 取引先がなければ `VALIDATION`（`details.field = "partnerId"`）。変更は記録に残す
@@ -193,44 +271,28 @@ export function saveBillingTerms(
   partnerId: string,
   input: BillingTermsInput,
 ): Result<BillingTerms> {
-  const mismatch = amountMismatch(input);
-  if (mismatch !== null) return err(mismatch);
-  return deps.uow.run(({ invoicing, masters }) => {
-    if (!masters.listPartners().some((p) => p.id === partnerId)) {
-      return err(
-        domainError("VALIDATION", "取引先が見つかりません", {
-          field: "partnerId",
-          partnerId,
-        }),
-      );
+  return deps.uow.run((tx) => writeBillingTerms(deps, tx, partnerId, input));
+}
+
+/**
+ * 取引先と請求の条件を 1 つの `run` で保存する（011 R15。`partnerId` があれば更新、なければ追加）。
+ * `billingTerms` が null なら条件を外す。どれかが失敗すれば取引先の書き込みも巻き戻る
+ */
+export function savePartnerProfile(
+  deps: InvoicingSettingsDeps,
+  input: PartnerProfileInput,
+  partnerId?: string,
+): Result<{ partner: Partner; billingTerms: BillingTerms | null }> {
+  return deps.uow.run((tx): Result<{ partner: Partner; billingTerms: BillingTerms | null }> => {
+    const partner = writePartner(tx.masters, deps.ids, input.partner, partnerId);
+    if (!partner.ok) return partner;
+    if (input.billingTerms === null) {
+      removeBillingTerms(deps, tx.invoicing, partner.value.id);
+      return ok({ partner: partner.value, billingTerms: null });
     }
-    const before = invoicing.getBillingTerms(partnerId);
-    const now = deps.clock.now();
-    const saved: BillingTerms = {
-      partnerId,
-      billingType: input.billingType,
-      priceMode: input.priceMode ?? "inclusive",
-      ...(input.taxRate === undefined ? {} : { taxRate: input.taxRate }),
-      unitPrice: input.billingType === "hourly" ? (input.unitPrice ?? null) : null,
-      monthlyAmount: input.billingType === "monthly" ? (input.monthlyAmount ?? null) : null,
-      dueMonthsAfter: input.dueMonthsAfter,
-      dueDay: input.dueDay,
-      defaultItemName: input.defaultItemName,
-      billingName: emptyToNull(input.billingName),
-      updatedAt: now,
-    };
-    invoicing.upsertBillingTerms(saved);
-    invoicing.appendInvoicingAudit(
-      auditEntry(deps, {
-        targetType: "billing_terms",
-        targetId: partnerId,
-        action: before === null ? "create" : "update",
-        before,
-        after: saved,
-        at: now,
-      }),
-    );
-    return ok(saved);
+    const terms = writeBillingTerms(deps, tx, partner.value.id, input.billingTerms);
+    if (!terms.ok) return terms;
+    return ok({ partner: partner.value, billingTerms: terms.value });
   });
 }
 
@@ -240,17 +302,7 @@ export function saveBillingTerms(
  */
 export function deleteBillingTerms(deps: InvoicingSettingsDeps, partnerId: string): Result<null> {
   return deps.uow.run(({ invoicing }) => {
-    const before = invoicing.getBillingTerms(partnerId);
-    if (before === null) return ok(null);
-    invoicing.deleteBillingTerms(partnerId);
-    invoicing.appendInvoicingAudit(
-      auditEntry(deps, {
-        targetType: "billing_terms",
-        targetId: partnerId,
-        action: "void",
-        before,
-      }),
-    );
+    removeBillingTerms(deps, invoicing, partnerId);
     return ok(null);
   });
 }

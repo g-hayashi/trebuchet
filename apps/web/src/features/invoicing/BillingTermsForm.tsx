@@ -1,13 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { BillingTermsInput, YEN_LIMIT } from "@trebuchet/schema";
+import type { BillingTermsInput } from "@trebuchet/schema";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
-import { Input, NativeSelect } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SaveNotice } from "@/components/ui/save-notice";
 import { masterKeys, type Partner } from "@/features/masters/api";
-import { parseWholeYen } from "@/lib/format";
 import {
   type BillingTermsRow,
   deleteBillingTerms,
@@ -15,83 +14,23 @@ import {
   patchPartnerHonorific,
   putBillingTerms,
 } from "./api";
+import {
+  type BillingErrors,
+  BillingTermsFields,
+  type BillingValues,
+  billingValuesOf,
+  toBillingInput,
+} from "./BillingTermsFields";
 
 type Honorific = "様" | "御中" | "";
 
-type Values = {
-  priceMode: "inclusive" | "exclusive";
-  taxRate: string;
-  billingType: "hourly" | "monthly";
-  amount: string;
-  dueMonthsAfter: string;
-  dueDay: string;
-  defaultItemName: string;
-  billingName: string;
-  honorific: Honorific;
-};
+type Values = BillingValues & { honorific: Honorific };
+type Errors = BillingErrors;
 
 const valuesOf = (partner: Partner, terms: BillingTermsRow | null): Values => ({
-  priceMode: terms?.priceMode ?? "inclusive",
-  taxRate:
-    terms === null
-      ? "10"
-      : terms.taxRate === undefined
-        ? "default"
-        : terms.taxRate === null
-          ? "none"
-          : String(terms.taxRate),
-  billingType: terms?.billingType ?? "hourly",
-  amount: String((terms?.billingType === "monthly" ? terms.monthlyAmount : terms?.unitPrice) ?? ""),
-  dueMonthsAfter: String(terms?.dueMonthsAfter ?? 1),
-  dueDay: String(terms?.dueDay ?? 31),
-  defaultItemName: terms?.defaultItemName ?? "",
-  billingName: terms?.billingName ?? "",
+  ...billingValuesOf(terms),
   honorific: partner.honorific ?? "",
 });
-
-/** 支払期限の月の選択肢（0〜12 か月後） */
-const MONTH_OPTIONS = Array.from({ length: 13 }, (_, n) => ({
-  value: String(n),
-  label: n === 0 ? "当月" : n === 1 ? "翌月" : `${n} か月後`,
-}));
-
-/** 支払期限の日の選択肢（1〜28 と末日 = 31。29・30 は選べない。R8） */
-const DAY_OPTIONS = [
-  ...Array.from({ length: 28 }, (_, i) => ({ value: String(i + 1), label: `${i + 1} 日` })),
-  { value: "31", label: "末日" },
-];
-
-type Errors = { amount?: string; defaultItemName?: string; form?: string };
-
-function toInput(
-  values: Values,
-): { input: BillingTermsInput; errors?: undefined } | { input?: undefined; errors: Errors } {
-  const errors: Errors = {};
-  const amount = parseWholeYen(values.amount, { min: 1 });
-  const label = values.billingType === "hourly" ? "単価" : "月額";
-  if (amount === null || amount >= YEN_LIMIT) {
-    errors.amount = `${label}は 1 円以上の整数で入力してください`;
-  }
-  const defaultItemName = values.defaultItemName.trim();
-  if (defaultItemName === "") errors.defaultItemName = "既定の品名を入力してください";
-  if (errors.amount || errors.defaultItemName || amount === null) return { errors };
-
-  const billingName = values.billingName.trim();
-  const parsed = BillingTermsInput.safeParse({
-    priceMode: values.priceMode,
-    ...(values.taxRate === "default"
-      ? {}
-      : { taxRate: values.taxRate === "none" ? null : Number(values.taxRate) }),
-    billingType: values.billingType,
-    ...(values.billingType === "hourly" ? { unitPrice: amount } : { monthlyAmount: amount }),
-    dueMonthsAfter: Number(values.dueMonthsAfter),
-    dueDay: Number(values.dueDay),
-    defaultItemName,
-    ...(billingName === "" ? {} : { billingName }),
-  });
-  if (parsed.success) return { input: parsed.data };
-  return { errors: { form: parsed.error.issues[0]?.message ?? "入力が正しくありません" } };
-}
 
 /**
  * 取引先の請求の条件の編集（FR-001・FR-002）。型の切り替え（時間単価型・月額定額型）、
@@ -148,21 +87,15 @@ export function BillingTermsForm({
       setNotice("");
       setValues((prev) => ({ ...prev, [key]: value }));
     };
-  const text = (key: "amount" | "defaultItemName" | "billingName") => ({
-    value: values[key],
-    onChange: (e: { target: { value: string } }) => set(key)(e.target.value),
-  });
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     setNotice("");
     save.reset();
-    const result = toInput(values);
+    const result = toBillingInput(values);
     setErrors(result.errors ?? {});
     if (result.input) save.mutate(result.input);
   };
-
-  const amountLabel = values.billingType === "hourly" ? "時間単価（円）" : "月額（円）";
 
   return (
     <form
@@ -171,101 +104,15 @@ export function BillingTermsForm({
       className="grid gap-4 md:grid-cols-2"
       onSubmit={onSubmit}
     >
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-mode`}>金額の入力方法</Label>
-        <NativeSelect
-          id={`${id}-mode`}
-          value={values.priceMode}
-          onChange={(e) => set("priceMode")(e.target.value as Values["priceMode"])}
-        >
-          <option value="inclusive">税込入力（消費税を加算しない）</option>
-          <option value="exclusive">税抜入力（消費税を加算する）</option>
-        </NativeSelect>
-        <p className="text-sm text-muted-foreground">
-          {values.priceMode === "exclusive"
-            ? "単価・月額は税抜の金額を入力します。"
-            : "単価・月額は税込の金額を入力します。"}
-        </p>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-rate`}>請求税率</Label>
-        <NativeSelect
-          id={`${id}-rate`}
-          value={values.taxRate}
-          onChange={(e) => set("taxRate")(e.target.value)}
-        >
-          <option value="10">10%</option>
-          <option value="8">8%</option>
-          <option value="none">加算なし</option>
-          <option value="default">既定の税区分に従う</option>
-        </NativeSelect>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-type`}>請求の型</Label>
-        <NativeSelect
-          id={`${id}-type`}
-          value={values.billingType}
-          onChange={(e) => set("billingType")(e.target.value as Values["billingType"])}
-        >
-          <option value="hourly">時間単価型（工数 × 単価）</option>
-          <option value="monthly">月額定額型</option>
-        </NativeSelect>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-amount`}>{amountLabel}</Label>
-        <Input
-          id={`${id}-amount`}
-          inputMode="numeric"
-          autoComplete="off"
-          aria-invalid={errors.amount ? true : undefined}
-          aria-describedby={`${id}-amount-error`}
-          {...text("amount")}
-        />
-        <FieldError id={`${id}-amount-error`} message={errors.amount} />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-months`}>支払期限（月）</Label>
-        <NativeSelect
-          id={`${id}-months`}
-          value={values.dueMonthsAfter}
-          onChange={(e) => set("dueMonthsAfter")(e.target.value)}
-        >
-          {MONTH_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </NativeSelect>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-day`}>支払期限（日）</Label>
-        <NativeSelect
-          id={`${id}-day`}
-          value={values.dueDay}
-          onChange={(e) => set("dueDay")(e.target.value)}
-        >
-          {DAY_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </NativeSelect>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-item`}>既定の品名</Label>
-        <Input
-          id={`${id}-item`}
-          autoComplete="off"
-          aria-invalid={errors.defaultItemName ? true : undefined}
-          aria-describedby={`${id}-item-error`}
-          {...text("defaultItemName")}
-        />
-        <FieldError id={`${id}-item-error`} message={errors.defaultItemName} />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-name`}>宛名（空なら取引先名）</Label>
-        <Input id={`${id}-name`} autoComplete="off" {...text("billingName")} />
-      </div>
+      <BillingTermsFields
+        id={id}
+        values={values}
+        errors={errors}
+        onChange={(k, v) => {
+          setNotice("");
+          setValues((prev) => ({ ...prev, [k]: v }));
+        }}
+      />
       <div className="grid gap-2">
         <Label htmlFor={`${id}-honorific`}>請求書の敬称</Label>
         <NativeSelect

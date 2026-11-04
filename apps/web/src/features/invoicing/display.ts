@@ -1,4 +1,14 @@
 import type { InvoiceDetail } from "@trebuchet/schema";
+import { formatYen } from "@/lib/format";
+import type { BillingTermsRow } from "./api";
+
+/** 取引先の一覧の「請求」の欄。条件がなければ「未設定」 */
+export function billingSummary(terms: BillingTermsRow | undefined): string {
+  if (terms === undefined) return "未設定";
+  return terms.billingType === "hourly"
+    ? `時間単価 ${formatYen(terms.unitPrice ?? 0)} 円`
+    : `月額 ${formatYen(terms.monthlyAmount ?? 0)} 円`;
+}
 
 /** 取引先の宛名（敬称つき） */
 export const recipientOf = (invoice: Pick<InvoiceDetail, "recipientName" | "recipientHonorific">) =>

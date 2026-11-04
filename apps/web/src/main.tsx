@@ -6,6 +6,7 @@ import { z } from "zod";
 import { queryClient } from "./lib/api";
 import { routeTree } from "./routeTree.gen";
 import "./index.css";
+import "./print.css";
 
 // 共有スキーマで個別の文言を指定していない検証エラー（範囲外の数値など）を日本語にする
 z.config(z.locales.ja());

@@ -36,30 +36,29 @@ describe("請求書の詳細（US1。FR-010〜014）", () => {
     });
     await screen.findByRole("heading", { name: "請求書 2026-0001" });
     expect(screen.getByRole("columnheader", { name: "単価（税抜）" })).toBeInTheDocument();
-    expect(screen.getByText("小計（税抜）405,000 円")).toBeInTheDocument();
-    expect(screen.getByText("消費税相当額 40,500 円")).toBeInTheDocument();
+    // 同じ文は印刷用の請求書（data-print-root。画面では隠れる）にもあるので、画面の側（先頭）を見る
+    expect(screen.getAllByText("小計（税抜）405,000 円")[0]).toBeVisible();
+    expect(screen.getAllByText("消費税相当額 40,500 円")[0]).toBeVisible();
   });
   it("番号・宛名・日付・明細・合計・状態・残額を出し、売上の仕訳と印刷にリンクする", async () => {
     setup();
 
     expect(await screen.findByRole("heading", { name: "請求書 2026-0001" })).toBeInTheDocument();
-    expect(screen.getByText("株式会社A 御中")).toBeInTheDocument();
+    expect(screen.getAllByText("株式会社A 御中")[0]).toBeVisible();
     expect(screen.getByText("未入金")).toBeInTheDocument();
-    expect(screen.getByText(/支払期限 2026-11-30/)).toBeInTheDocument();
+    expect(screen.getAllByText(/支払期限 2026-11-30/)[0]).toBeVisible();
     expect(screen.getByText(/売上の計上日 2026-10-31/)).toBeInTheDocument();
     const table = screen.getByRole("table", { name: "明細" });
     expect(within(table).getByText("システム開発")).toBeInTheDocument();
     expect(within(table).getByText("405,000")).toBeInTheDocument();
-    expect(screen.getByText("合計 405,000 円")).toBeInTheDocument();
+    expect(screen.getAllByText("合計 405,000 円")[0]).toBeVisible();
     expect(screen.getByText("残額 405,000 円")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "売上の仕訳を開く" })).toHaveAttribute(
       "href",
       expect.stringContaining("/e/e1/journals/j1"),
     );
-    expect(screen.getByRole("link", { name: "印刷・PDF に保存" })).toHaveAttribute(
-      "href",
-      expect.stringContaining("/e/e1/invoices/inv1/print"),
-    );
+    expect(screen.getByRole("button", { name: "印刷・PDF に保存" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "印刷・PDF に保存" })).not.toBeInTheDocument();
   });
 
   it("取り消すと理由を POST し、取消済みの表示と取消の仕訳へのリンクに変わる", async () => {

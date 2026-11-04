@@ -1,9 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import type { InvoiceListStatus } from "@trebuchet/schema";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -15,11 +24,23 @@ import {
 import { partnersQuery } from "@/features/masters/api";
 import { formatYen } from "@/lib/format";
 import { type InvoiceFilters, invoiceListQuery } from "./api";
+import { PaymentForm } from "./PaymentForm";
 import { INVOICE_LIST_STATUS_LABELS, INVOICE_LIST_STATUSES, INVOICE_STATUS_LABELS } from "./status";
 
+/** URL の状態の絞り込み。省略は既定（未入金・一部入金 = 未回収。期限切れはこの中にある）、`all` はすべて */
+export type ListStatus = InvoiceListStatus | "all";
+export type ListFilters = Omit<InvoiceFilters, "status"> & { status?: ListStatus | undefined };
+
+/** サーバーへ送る絞り込み（`all` は status を送らない） */
+export const toQueryFilters = (filters: ListFilters): InvoiceFilters => ({
+  ...filters,
+  status: filters.status === "all" ? undefined : filters.status,
+});
+
 /**
- * 請求書の一覧（FR-020・022）。番号・取引先・対象月・発行日・合計・状態・残額と、取引先・対象月・状態の絞り込み。
- * 期限切れの請求書には印を付け、取引先ごとの未回収の残額（うち期限切れ）を表で示す
+ * 請求書の一覧（FR-020・022、011 FR-035）。番号・取引先・対象月・発行日・合計・状態・残額と、取引先・対象月・状態の絞り込み。
+ * 既定の表示は未入金・期限切れ（未回収）。期限切れの請求書には印を付け、取引先ごとの未回収の残額（うち期限切れ）を表で示す。
+ * 未回収の行から入金を記録できる（パネル）
  */
 export function InvoiceList({
   entityId,
@@ -27,12 +48,22 @@ export function InvoiceList({
   onFiltersChange,
 }: {
   entityId: string;
-  filters: InvoiceFilters;
-  onFiltersChange: (filters: InvoiceFilters) => void;
+  filters: ListFilters;
+  onFiltersChange: (filters: ListFilters) => void;
 }) {
   const partners = useQuery(partnersQuery(entityId));
-  const invoices = useQuery(invoiceListQuery(entityId, filters));
+  // 既定と「すべて」は status を送らず、既定のときだけ画面で未回収に絞る
+  const invoices = useQuery(invoiceListQuery(entityId, toQueryFilters(filters)));
   const error = invoices.error ?? partners.error;
+  const [paying, setPaying] = useState<{
+    id: string;
+    invoiceNo: string;
+    remaining: number;
+  } | null>(null);
+  const rows =
+    invoices.data?.invoices.filter(
+      (i) => filters.status !== undefined || i.status === "unpaid" || i.status === "partial",
+    ) ?? [];
 
   return (
     <div className="grid gap-4">
@@ -71,16 +102,20 @@ export function InvoiceList({
             onChange={(e) =>
               onFiltersChange({
                 ...filters,
-                status: INVOICE_LIST_STATUSES.find((s) => s === e.target.value),
+                status:
+                  e.target.value === "all"
+                    ? "all"
+                    : INVOICE_LIST_STATUSES.find((s) => s === e.target.value),
               })
             }
           >
-            <option value="">すべて</option>
+            <option value="">未回収（未入金・期限切れ）</option>
             {INVOICE_LIST_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {INVOICE_LIST_STATUS_LABELS[s]}
               </option>
             ))}
+            <option value="all">すべて</option>
           </NativeSelect>
         </div>
         {(filters.partnerId !== undefined ||
@@ -119,8 +154,12 @@ export function InvoiceList({
         </section>
       )}
       {invoices.data &&
-        (invoices.data.invoices.length === 0 ? (
-          <p className="text-sm text-muted-foreground">請求書はありません。</p>
+        (rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {filters.status === undefined
+              ? "未入金・期限切れの請求書はありません。"
+              : "請求書はありません。"}
+          </p>
         ) : (
           <Table aria-label="請求書の一覧">
             <TableHeader>
@@ -132,10 +171,11 @@ export function InvoiceList({
                 <TableHead className="text-right">合計</TableHead>
                 <TableHead>状態</TableHead>
                 <TableHead className="text-right">残額</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {invoices.data.invoices.map((invoice) => (
+              {rows.map((invoice) => (
                 <TableRow key={invoice.id}>
                   <TableCell>
                     <Link
@@ -163,11 +203,47 @@ export function InvoiceList({
                   <TableCell className="text-right tabular-nums">
                     {formatYen(invoice.remaining)}
                   </TableCell>
+                  <TableCell className="text-right">
+                    {invoice.status !== "voided" && invoice.remaining > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label={`入金（${invoice.invoiceNo}）`}
+                        onClick={() =>
+                          setPaying({
+                            id: invoice.id,
+                            invoiceNo: invoice.invoiceNo,
+                            remaining: invoice.remaining,
+                          })
+                        }
+                      >
+                        入金
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         ))}
+      <Sheet open={paying !== null} onOpenChange={(open) => !open && setPaying(null)}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>{`入金の記録（${paying?.invoiceNo ?? ""}）`}</SheetTitle>
+            <SheetDescription>
+              入金先は前回使った科目が既定です。消し込むと請求書の残額と仕訳に反映されます。
+            </SheetDescription>
+          </SheetHeader>
+          {paying !== null && (
+            <PaymentForm
+              key={paying.id}
+              entityId={entityId}
+              invoice={paying}
+              onPaid={() => setPaying(null)}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

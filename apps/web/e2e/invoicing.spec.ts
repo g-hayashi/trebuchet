@@ -109,17 +109,20 @@ test("発行者の設定から、工数・請求書の発行・印刷用の画�
     await expect(page.getByRole("link", { name: "売上の仕訳を開く" })).toBeVisible();
   });
 
-  await test.step("印刷用の画面の title が請求番号になる", async () => {
-    await page.getByRole("link", { name: "印刷・PDF に保存" }).click();
-    await expect(page).toHaveURL(/\/invoices\/[0-9a-f-]{36}\/print$/);
+  await test.step("詳細から直接印刷でき、印刷の title が請求番号になる", async () => {
+    // 別のページへ移らない。印刷用の請求書は画面では隠してあり、印刷（print メディア）のときだけ出る
+    await expect(page.getByRole("button", { name: "印刷・PDF に保存" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "印刷・PDF に保存" })).toHaveCount(0);
+    await expect(page).toHaveURL(/\/invoices\/[0-9a-f-]{36}$/);
+    await expect(page).toHaveTitle(invoiceNo);
+    await page.emulateMedia({ media: "print" });
     const sheet = page.getByRole("article", { name: `請求書 ${invoiceNo}` });
     await expect(sheet).toBeVisible();
     await expect(sheet).toContainText("山田 太郎");
     await expect(sheet).toContainText("ご請求金額 202,500 円");
     await expect(sheet).toContainText("テスト銀行 本店 普通 1234567");
-    await expect(page).toHaveTitle(invoiceNo);
-
-    await page.getByRole("link", { name: "請求書の詳細へ戻る" }).click();
+    await expect(page.getByRole("heading", { name: `請求書 ${invoiceNo}` })).toBeHidden();
+    await page.emulateMedia({ media: "screen" });
     await expect(page.getByRole("heading", { name: `請求書 ${invoiceNo}` })).toBeVisible();
   });
 
