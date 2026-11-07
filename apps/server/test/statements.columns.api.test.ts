@@ -33,6 +33,12 @@ const GOOD = {
   confidence: 77,
 };
 
+/** AI を使えない・失敗したときは、列の中身から推定した案を理由つきで返す（007/R16。confidence は 0） */
+const contentOnly = (unavailable: string) => ({
+  suggestion: { columns: { date: 0, content: 1, amount: 2 }, amountSign: null, confidence: 0 },
+  unavailable,
+});
+
 const completion = (content: unknown) =>
   new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
 
@@ -129,7 +135,7 @@ describe("POST /statements/imports/column-suggestion", () => {
     const t = await setup({ localEnabled: false });
     const { status, body } = await t.suggest(CUSTOM);
     expect(status).toBe(200);
-    expect(body).toEqual({ suggestion: null, unavailable: "disabled" });
+    expect(body).toEqual(contentOnly("disabled"));
     expect(t.fetchFn).not.toHaveBeenCalled();
   });
 
@@ -144,14 +150,14 @@ describe("POST /statements/imports/column-suggestion", () => {
     });
     const { status, body } = await t.suggest(CUSTOM);
     expect(status).toBe(200);
-    expect(body).toEqual({ suggestion: null, unavailable: "disabled" });
+    expect(body).toEqual(contentOnly("disabled"));
     expect(t.fetchFn).not.toHaveBeenCalled();
   });
 
   it("端末内は有効でも fm が使えなければ unavailable", async () => {
     const t = await setup({ fmAvailable: false });
     const { body } = await t.suggest(CUSTOM);
-    expect(body).toEqual({ suggestion: null, unavailable: "unavailable" });
+    expect(body).toEqual(contentOnly("unavailable"));
     expect(t.fetchFn).not.toHaveBeenCalled();
   });
 
@@ -163,7 +169,7 @@ describe("POST /statements/imports/column-suggestion", () => {
     });
     const { status, body } = await t.suggest(CUSTOM);
     expect(status).toBe(200);
-    expect(body).toEqual({ suggestion: null, unavailable: "timeout" });
+    expect(body).toEqual(contentOnly("timeout"));
   });
 
   it("接続の失敗・HTTP エラーは unavailable", async () => {
@@ -172,15 +178,9 @@ describe("POST /statements/imports/column-suggestion", () => {
         throw new TypeError("fetch failed");
       },
     });
-    expect((await down.suggest(CUSTOM)).body).toEqual({
-      suggestion: null,
-      unavailable: "unavailable",
-    });
+    expect((await down.suggest(CUSTOM)).body).toEqual(contentOnly("unavailable"));
     const http = await setup({ reply: async () => new Response("", { status: 500 }) });
-    expect((await http.suggest(CUSTOM)).body).toEqual({
-      suggestion: null,
-      unavailable: "unavailable",
-    });
+    expect((await http.suggest(CUSTOM)).body).toEqual(contentOnly("unavailable"));
   });
 
   it("形の誤り（JSON でない・役割の数が列数と違う・必須の役割が足りない）は invalid", async () => {
@@ -193,7 +193,7 @@ describe("POST /statements/imports/column-suggestion", () => {
       }),
     ]) {
       const t = await setup({ reply: async () => completion(content) });
-      expect((await t.suggest(CUSTOM)).body).toEqual({ suggestion: null, unavailable: "invalid" });
+      expect((await t.suggest(CUSTOM)).body).toEqual(contentOnly("invalid"));
     }
   });
 

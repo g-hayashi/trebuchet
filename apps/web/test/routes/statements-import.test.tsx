@@ -342,6 +342,37 @@ describe("列の対応（US1-2・3・4・5。FR-003〜007）", () => {
     );
   });
 
+  it("見出しから決まる符号の案（suggestedAmountSign。カードのご利用額）を、符号の初期値にする", async () => {
+    mockApi({
+      ...baseRoutes,
+      [`POST ${LAYOUT_PATH}`]: () =>
+        ok({
+          ...LAYOUT,
+          header: ["日付", "内容", "ご利用額", "保有金融機関"],
+          suggestedAmountSign: "outflow_positive",
+        }),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+
+    expect(within(region).getByRole("radio", { name: "正の値は出金" })).toBeChecked();
+    expect(within(region).getByRole("radio", { name: "正の値は入金" })).not.toBeChecked();
+    // 案は変えられる。選び直しても確認へ進める
+    expect(confirmButton()).toBeEnabled();
+    await chooseSign(u, "正の値は入金");
+    expect(within(region).getByRole("radio", { name: "正の値は入金" })).toBeChecked();
+  });
+
+  it("符号の案がなければ、符号は選ばれていない（利用者が選ぶ）", async () => {
+    mockApi(baseRoutes);
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(u);
+    expect(within(region).getByRole("radio", { name: "正の値は出金" })).not.toBeChecked();
+    expect(within(region).getByRole("radio", { name: "正の値は入金" })).not.toBeChecked();
+  });
+
   it("同じ役割を 2 つの列に選ぶと、確認へ進めない", async () => {
     mockApi(baseRoutes);
     const u = userEvent.setup();
@@ -1758,6 +1789,36 @@ describe("AI の案（US4。FR-016〜019）", () => {
       unmount();
       vi.unstubAllGlobals();
     }
+  });
+
+  it("AI を使えず、列の中身からの推定だけのときは「AI の案」と言わず、推定として示して列に入れる", async () => {
+    mockApi(
+      customRoutes(() =>
+        ok({
+          suggestion: {
+            columns: { date: 0, content: 1, amount: 2 },
+            amountSign: null,
+            confidence: 0,
+          },
+          unavailable: "disabled",
+        }),
+      ),
+    );
+    const u = userEvent.setup();
+    renderImport();
+    const region = await readPaste(
+      u,
+      "発生日\t取引の内容\t増減額\t整理番号\n2026/10/01\tテスト商事\t100\t1",
+    );
+    expect(
+      await within(region).findByText(/列の中身から推定した案/, { exact: false }),
+    ).toBeInTheDocument();
+    expect(within(region).getByText(/端末内の AI は無効です/)).toBeInTheDocument();
+    expect(within(region).queryByText(/AI の案（確信度/)).not.toBeInTheDocument();
+    expect(within(region).getByLabelText("「発生日」の役割")).toHaveValue("date");
+    expect(within(region).getByLabelText("「増減額」の役割")).toHaveValue("amount");
+    // 推定でも、符号は自動では選ばない
+    expect(within(region).getByRole("radio", { name: "正の値は入金" })).not.toBeChecked();
   });
 
   it("要求が失敗（サーバーの 500）しても、案なしで列を選べる", async () => {

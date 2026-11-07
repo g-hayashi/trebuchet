@@ -189,6 +189,8 @@ export const StatementTableLayout = z.object({
   sampleRows: z.array(z.array(z.string())).max(10),
   needsYear: z.boolean(),
   suggestedColumns: StatementColumnIndexes,
+  /** 金額の列の見出しから決まる符号の案（カードの「ご利用額」など。決まらなければ省く。007/R16） */
+  suggestedAmountSign: StatementAmountSign.optional(),
   match: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("none") }),
     z.object({ kind: z.literal("one"), source: StatementSource }),
@@ -236,7 +238,7 @@ export const STATEMENT_COLUMN_UNAVAILABLE = [
   "invalid",
 ] as const;
 
-/** POST /statements/imports/column-suggestion の応答（contracts §4.1）。`unavailable` は案がないときだけ付く */
+/** POST /statements/imports/column-suggestion の応答（contracts §4.1）。`unavailable` は AI の案がないときだけ付く。案と一緒に付くときは、AI を使えず列の中身から推定しただけの案（confidence は 0。007/R16） */
 export const StatementColumnSuggestionResponse = z.object({
   suggestion: z
     .object({
