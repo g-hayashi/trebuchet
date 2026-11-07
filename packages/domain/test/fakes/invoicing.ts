@@ -186,6 +186,22 @@ export class InMemoryInvoicingStore implements InvoicingStore {
     return structuredClone(this.state.payments.filter((p) => p.invoiceId === invoiceId));
   }
 
+  listWithheldPayments(from: string, to: string): PaymentRecord[] {
+    return structuredClone(
+      this.state.payments
+        .map((p, index) => ({ p, index }))
+        .filter(
+          ({ p }) =>
+            p.voidedAt === null &&
+            p.withholdingAmount > 0 &&
+            p.receivedOn >= from &&
+            p.receivedOn <= to,
+        )
+        .sort((x, y) => x.p.receivedOn.localeCompare(y.p.receivedOn) || x.index - y.index)
+        .map(({ p }) => p),
+    );
+  }
+
   insertPayment(payment: PaymentRecord): void {
     const dup = this.state.payments.some(
       (p) => p.id === payment.id || p.journalId === payment.journalId,

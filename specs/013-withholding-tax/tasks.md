@@ -53,9 +53,9 @@ description: "Task list for 013 源泉徴収"
 
 **Independent Test**: 2026 年の入金 2 件と 2027 年 1 月の入金 1 件のうち、2026 年の一覧に 2 件だけが取引先ごとに集計され、合計が仕訳の事業主貸の合計と一致すること
 
-- [ ] T009 [US3] 集計の domain と db（R7、contracts §4 の型、INV-75、FR-013・014）。先に `packages/domain/test/invoicing/withholding-summary.property.test.ts`（INV-75: 任意の消し込み・取消の列で、一覧の合計 = その暦年の取消でない `source = "payment"` の仕訳の事業主貸の借方の合計。年またぎ・取消・`withholdingAmount = 0` を除く）と `packages/db/test/invoicing-payments.test.ts` の集計の問い合わせを足して赤を確かめる。実装: `packages/schema/src/invoicing.ts` の `WithholdingSummary`、`packages/domain/src/usecases/invoicing.ts` の `withholdingSummary(deps, year)`、db のリポジトリの問い合わせ
-- [ ] T010 [US3] server（contracts §4）。先に `apps/server/test/invoicing.withholding.api.test.ts`（新規。集計・空の年・4 桁でない年）と `apps/server/test/auth-coverage.test.ts`（INV-29）に足して赤を確かめる。実装: `GET /withholding/:year`（`validate("param", FiscalYearParam)`）
-- [ ] T011 [US3] web（R8）。先に `apps/web/test/routes/invoices-withholding.test.tsx`（新規。年の選択、取引先ごとの行、行を開くと明細、合計）を足して赤を確かめる。実装: `apps/web/src/routes/e/$entityId/invoices/withholding.tsx`（`?year=`、既定は今年）、`features/invoicing/api.ts` の `withholdingSummaryQuery`、請求の画面からのリンク、`mock-api.ts`。`pnpm --filter @trebuchet/web build` で `routeTree.gen.ts` を再生成
+- [X] T009 [US3] 集計の domain と db（R7、contracts §4 の型、INV-75、FR-013・014）。先に `packages/domain/test/invoicing/withholding-summary.property.test.ts`（INV-75: 任意の消し込み・取消の列で、一覧の合計 = その暦年の取消でない `source = "payment"` の仕訳の事業主貸の借方の合計。年またぎ・取消・`withholdingAmount = 0` を除く）と `packages/db/test/invoicing-payments.test.ts` の集計の問い合わせを足して赤を確かめる。実装: `packages/schema/src/invoicing.ts` の `WithholdingSummary`、`packages/domain/src/usecases/invoicing.ts` の `withholdingSummary(deps, year)`、db のリポジトリの問い合わせ
+- [X] T010 [US3] server（contracts §4）。先に `apps/server/test/invoicing.withholding.api.test.ts`（新規。集計・空の年・4 桁でない年）と `apps/server/test/auth-coverage.test.ts`（INV-29）に足して赤を確かめる。実装: `GET /withholding/:year`（`validate("param", FiscalYearParam)`）
+- [X] T011 [US3] web（R8）。先に `apps/web/test/routes/invoices-withholding.test.tsx`（新規。年の選択、取引先ごとの行、行を開くと明細、合計）を足して赤を確かめる。実装: `apps/web/src/routes/e/$entityId/invoices/withholding.tsx`（`?year=`、既定は今年）、`features/invoicing/api.ts` の `withholdingSummaryQuery`、請求の画面からのリンク、`mock-api.ts`。`pnpm --filter @trebuchet/web build` で `routeTree.gen.ts` を再生成
 
 ## Phase 5: Polish & Cross-Cutting
 

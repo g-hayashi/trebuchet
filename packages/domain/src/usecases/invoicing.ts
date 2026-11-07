@@ -22,6 +22,7 @@ import {
   type PartnerProfileInput,
   type PaymentInput,
   type PaymentView,
+  type WithholdingSummary,
   type WorkHoursEntry,
   type WorkHoursInput,
   YEN_LIMIT,
@@ -1113,6 +1114,66 @@ export function listInvoices(
       outstandingByPartner: [...totals.values()].sort((x, y) =>
         x.partnerName < y.partnerName ? -1 : x.partnerName > y.partnerName ? 1 : 0,
       ),
+    });
+  });
+}
+
+// ---- 年間の源泉徴収（013 US3。R7・contracts §4） ----
+
+/**
+ * 暦年 `year` の源泉徴収の一覧。対象は取消でない消し込みのうち源泉徴収税額が 0 より大きく、入金日がその年のもの
+ * （INV-75: 合計はその年の入金の仕訳の事業主貸の借方の合計と一致する）。取引先名の順。
+ * 会計期間がない年もエラーにせず、空の一覧を返す
+ */
+export function withholdingSummary(
+  deps: Pick<InvoicingDeps, "uow">,
+  year: number,
+): Result<WithholdingSummary> {
+  const label = String(year).padStart(4, "0");
+  return deps.uow.run(({ invoicing, masters }) => {
+    const partnerNames = new Map(masters.listPartners().map((p) => [p.id, p.name]));
+    const invoiceCache = new Map<string, InvoiceRecord | null>();
+    const invoiceOf = (id: string) => {
+      if (!invoiceCache.has(id)) invoiceCache.set(id, invoicing.getInvoice(id));
+      return invoiceCache.get(id) ?? null;
+    };
+
+    const byPartner = new Map<string, WithholdingSummary["partners"][number]>();
+    for (const payment of invoicing.listWithheldPayments(`${label}-01-01`, `${label}-12-31`)) {
+      const invoice = invoiceOf(payment.invoiceId);
+      if (invoice === null) continue; // 外部キーで起きない
+      const applied = payment.amount + payment.feeAmount + payment.withholdingAmount;
+      const entry = byPartner.get(invoice.partnerId) ?? {
+        partnerId: invoice.partnerId,
+        partnerName: partnerNames.get(invoice.partnerId) ?? invoice.recipientName,
+        paymentCount: 0,
+        appliedTotal: 0,
+        withholdingTotal: 0,
+        payments: [],
+      };
+      entry.paymentCount += 1;
+      entry.appliedTotal += applied;
+      entry.withholdingTotal += payment.withholdingAmount;
+      entry.payments.push({
+        paymentId: payment.id,
+        invoiceId: invoice.id,
+        invoiceNo: invoice.invoiceNo,
+        receivedOn: payment.receivedOn,
+        applied,
+        withholdingAmount: payment.withholdingAmount,
+      });
+      byPartner.set(invoice.partnerId, entry);
+    }
+
+    const partners = [...byPartner.values()].sort(
+      (x, y) =>
+        x.partnerName.localeCompare(y.partnerName) || x.partnerId.localeCompare(y.partnerId),
+    );
+    return ok({
+      year,
+      partners,
+      appliedTotal: partners.reduce((sum, p) => sum + p.appliedTotal, 0),
+      withholdingTotal: partners.reduce((sum, p) => sum + p.withholdingTotal, 0),
     });
   });
 }

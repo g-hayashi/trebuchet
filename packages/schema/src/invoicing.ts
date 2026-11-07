@@ -450,6 +450,40 @@ export const PaymentRecordedResponse = z.object({
 });
 export type PaymentRecordedResponse = z.infer<typeof PaymentRecordedResponse>;
 
+// ---- 年間の源泉徴収（013 contracts §4） ----
+
+const Yen0 = z.number().int().nonnegative();
+
+/** 年間の一覧の消し込み 1 件。`applied` = 入金額 + 差額 + 源泉徴収税額 */
+export const WithholdingSummaryPayment = z.object({
+  paymentId: Id,
+  invoiceId: Id,
+  invoiceNo: z.string(),
+  receivedOn: DateString,
+  applied: Yen0,
+  withholdingAmount: Yen,
+});
+export type WithholdingSummaryPayment = z.infer<typeof WithholdingSummaryPayment>;
+
+/** GET /withholding/:year の 200。取消でない源泉徴収つきの消し込みを、入金日の暦年で取引先ごとに集計する */
+export const WithholdingSummary = z.object({
+  year: z.number().int(),
+  /** 取引先名の順。該当がなければ空 */
+  partners: z.array(
+    z.object({
+      partnerId: Id,
+      partnerName: z.string(),
+      paymentCount: Yen0,
+      appliedTotal: Yen0,
+      withholdingTotal: Yen0,
+      payments: z.array(WithholdingSummaryPayment),
+    }),
+  ),
+  appliedTotal: Yen0,
+  withholdingTotal: Yen0,
+});
+export type WithholdingSummary = z.infer<typeof WithholdingSummary>;
+
 // ---- 仕訳との相互参照（§6.1） ----
 
 export const JournalOrigin = z.discriminatedUnion("kind", [

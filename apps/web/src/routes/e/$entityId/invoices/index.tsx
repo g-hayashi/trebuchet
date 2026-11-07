@@ -7,6 +7,9 @@ import { InvoiceList } from "@/features/invoicing/InvoiceList";
 const primaryLink =
   "inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90";
 
+const secondaryLink =
+  "inline-flex h-9 items-center rounded-md border bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground";
+
 /** URL の絞り込み（取引先・対象月・状態）。状態の省略は既定（未回収）、`all` はすべて */
 const InvoiceSearch = InvoiceListQuery.extend({
   status: z.union([InvoiceListStatus, z.literal("all")]).optional(),
@@ -26,9 +29,18 @@ function InvoicesPage() {
     <main className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">請求書</h1>
-        <Link to="/e/$entityId/invoices/new" params={{ entityId }} className={primaryLink}>
-          請求書を作る
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/e/$entityId/invoices/withholding"
+            params={{ entityId }}
+            className={secondaryLink}
+          >
+            源泉徴収の一覧
+          </Link>
+          <Link to="/e/$entityId/invoices/new" params={{ entityId }} className={primaryLink}>
+            請求書を作る
+          </Link>
+        </div>
       </div>
       <InvoiceFlow entityId={entityId} filters={search} />
       <InvoiceList

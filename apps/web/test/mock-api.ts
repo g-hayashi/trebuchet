@@ -123,6 +123,14 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 工数・請求書の一覧（US1）。仕訳の詳細は出所を読む（`:id` は 1 つのパスの区切り）
   "GET /work-hours": () => ok({ entries: [] }),
   "GET /invoices": () => ok({ invoices: [], outstandingByPartner: [] }),
+  // 源泉徴収の一覧（013 US3）。該当なし
+  "GET /withholding/:year": ({ path }) =>
+    ok({
+      year: Number(path.split("/").pop()),
+      partners: [],
+      appliedTotal: 0,
+      withholdingTotal: 0,
+    }),
   "POST /invoices/calculate": ({ body }) => {
     const input = body as {
       priceMode: string;
