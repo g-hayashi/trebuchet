@@ -681,6 +681,9 @@ export type InvoiceRecord = {
   priceMode?: InvoicePriceMode | undefined;
   taxDisplay: InvoiceTaxDisplay;
   total: number;
+  /** 発行時に固定する源泉徴収の対象額と税額（013）。設定「なし」は 0・0 */
+  withholdingBase: number;
+  withholdingTax: number;
   journalId: string;
   createdAt: string;
   voidedAt: string | null;

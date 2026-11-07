@@ -40,6 +40,7 @@ import {
 import { formatInvoiceNo } from "../invoicing/number.ts";
 import { invoiceStatus } from "../invoicing/status.ts";
 import { effectiveTaxDisplay, invoiceSalesTaxCategory, itemTaxRate } from "../invoicing/tax.ts";
+import { invoiceWithholding } from "../invoicing/withholding.ts";
 import { checkPeriod } from "../journal.ts";
 import type {
   Clock,
@@ -76,13 +77,31 @@ export type InvoicingSettingsDeps = {
 /** 請求書のユースケース全般の依存（設定・工数・案・発行・取消・一覧） */
 export type InvoicingDeps = InvoicingSettingsDeps;
 
-/** 保存せずに請求額を計算する。計算後の合計も金額の上限を守る。 */
+/**
+ * 保存せずに請求額を計算する。計算後の合計も金額の上限を守る。
+ * `partnerId` があり取引先が「源泉徴収あり」なら、源泉徴収の対象額・税額を発行日（省略は `today`）の
+ * 税制の値で計算する（なければ `WITHHOLDING_RATE_MISSING`。013）。ほかは 0・0
+ */
 export function previewInvoiceCalculation(
+  deps: Pick<InvoicingDeps, "uow">,
   input: InvoiceCalculationInput,
+  today: string,
 ): Result<InvoiceCalculationResponse> {
   const amounts = calculateInvoiceAmounts(input.items, input.priceMode);
   if (amounts.total >= YEN_LIMIT) return validation("合計が大きすぎます", { field: "items" });
-  return ok(amounts);
+  return deps.uow.run(({ invoicing }) => {
+    const terms = input.partnerId === undefined ? null : invoicing.getBillingTerms(input.partnerId);
+    const withholding = invoiceWithholding({
+      enabled: terms?.withholding === true,
+      amounts,
+      // 設定がなければ税込のみ（`effectiveTaxDisplay` と同じ。計上日はまだない）
+      taxDisplay: invoicing.getInvoiceSettings()?.taxDisplay ?? "inclusive_only",
+      date: input.issueDate ?? today,
+      params: terms?.withholding === true ? invoicing.listTaxParameters() : [],
+    });
+    if (!withholding.ok) return withholding;
+    return ok({ ...amounts, ...withholding.value });
+  });
 }
 
 export type InvoiceSettingsView = {
@@ -227,6 +246,7 @@ function writeBillingTerms(
     dueDay: input.dueDay,
     defaultItemName: input.defaultItemName,
     billingName: emptyToNull(input.billingName),
+    withholding: input.withholding,
     updatedAt: now,
   };
   invoicing.upsertBillingTerms(saved);
@@ -454,6 +474,7 @@ export function draftInvoices(
     const hours = new Map(
       invoicing.listWorkHours(request.month).map((w) => [w.partnerId, w.halfHours]),
     );
+    const taxParameters = invoicing.listTaxParameters();
     const drafts: InvoiceDraft[] = [];
     const skipped: InvoiceDraftResponse["skipped"] = [];
     for (const partner of targets) {
@@ -468,7 +489,9 @@ export function draftInvoices(
         today,
         activeInvoices: invoicing.listActiveInvoices(partner.id, request.month),
         ctx,
+        taxParameters,
       });
+      if (outcome.kind === "error") return err(outcome.error);
       if (outcome.kind === "draft") drafts.push(outcome.draft);
       else skipped.push({ partnerId: partner.id, reason: outcome.reason });
     }
@@ -604,8 +627,19 @@ export function issueInvoice(
         taxRate: item.taxRate === undefined ? derivedRate : item.taxRate,
       });
     }
-    const { total } = calculateInvoiceAmounts(records, priceMode);
+    const amounts = calculateInvoiceAmounts(records, priceMode);
+    const { total } = amounts;
     if (total >= YEN_LIMIT) return validation("合計が大きすぎます", { field: "items" });
+    const taxDisplay = effectiveTaxDisplay(settings.taxDisplay, salesDate, ctx.taxSettings);
+    // 源泉徴収は発行日の税制の値で決め、写しに固定する（013 R5）。値がなければ何も書かずに拒む
+    const withholding = invoiceWithholding({
+      enabled: terms.withholding,
+      amounts,
+      taxDisplay,
+      date: issueDate,
+      params: terms.withholding ? invoicing.listTaxParameters() : [],
+    });
+    if (!withholding.ok) return withholding;
 
     const seq = settings.nextSeq;
     const maxSeq = invoicing.maxInvoiceSeq();
@@ -655,8 +689,10 @@ export function issueInvoice(
         registrationNumber: exempt ? null : settings.registrationNumber,
       },
       priceMode,
-      taxDisplay: effectiveTaxDisplay(settings.taxDisplay, salesDate, ctx.taxSettings),
+      taxDisplay,
       total,
+      withholdingBase: withholding.value.withholdingBase,
+      withholdingTax: withholding.value.withholdingTax,
       journalId: journal.id,
       createdAt: now,
       voidedAt: null,

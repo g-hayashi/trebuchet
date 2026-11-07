@@ -101,6 +101,12 @@ export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
         <p className="text-base font-semibold tabular-nums">{`合計 ${formatYen(invoice.total)} 円${
           invoice.taxDisplay === "inclusive_only" ? "（税込）" : ""
         }`}</p>
+        {invoice.withholdingTax > 0 && (
+          <div className="grid justify-items-end gap-1 tabular-nums">
+            <p>{`源泉徴収税額 ${formatYen(invoice.withholdingTax)} 円`}</p>
+            <p className="text-base font-semibold">{`差引請求額 ${formatYen(invoice.netAmount)} 円`}</p>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-1">

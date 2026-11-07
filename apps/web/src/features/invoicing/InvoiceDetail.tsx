@@ -143,6 +143,12 @@ export function InvoiceDetail({
                   {`${b.rate}% 対象 税抜 ${formatYen(b.exclusive)} 円 ／ ${summary.taxLabel} ${formatYen(b.tax)} 円`}
                 </p>
               ))}
+            {invoice.withholdingTax > 0 && (
+              <>
+                <p>{`源泉徴収税額 ${formatYen(invoice.withholdingTax)} 円`}</p>
+                <p className="text-base font-semibold">{`差引請求額 ${formatYen(invoice.netAmount)} 円`}</p>
+              </>
+            )}
             <p className="text-sm">{`入金 ${formatYen(invoice.paid)} 円`}</p>
             <p className="text-sm">{`残額 ${formatYen(invoice.remaining)} 円`}</p>
           </div>

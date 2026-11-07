@@ -1,8 +1,8 @@
 {
-  "id": "f8939a72-22d8-4821-b541-e56987605176",
-  "prevId": "52828d27-cc8e-4812-a1bf-669eff2a4712",
   "version": "6",
   "dialect": "sqlite",
+  "id": "f8939a72-22d8-4821-b541-e56987605176",
+  "prevId": "52828d27-cc8e-4812-a1bf-669eff2a4712",
   "tables": {
     "accounts": {
       "name": "accounts",
@@ -171,54 +171,54 @@
         "adjustment_journal_refs_journal_id_journals_id_fk": {
           "name": "adjustment_journal_refs_journal_id_journals_id_fk",
           "tableFrom": "adjustment_journal_refs",
+          "tableTo": "journals",
           "columnsFrom": [
             "journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "adjustment_journal_refs_allocation_id_home_use_allocations_id_fk": {
           "name": "adjustment_journal_refs_allocation_id_home_use_allocations_id_fk",
           "tableFrom": "adjustment_journal_refs",
+          "tableTo": "home_use_allocations",
           "columnsFrom": [
             "allocation_id"
           ],
-          "tableTo": "home_use_allocations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "adjustment_journal_refs_asset_id_fixed_assets_id_fk": {
           "name": "adjustment_journal_refs_asset_id_fixed_assets_id_fk",
           "tableFrom": "adjustment_journal_refs",
+          "tableTo": "fixed_assets",
           "columnsFrom": [
             "asset_id"
           ],
-          "tableTo": "fixed_assets",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "adjustment_journal_refs_deferred_asset_id_deferred_assets_id_fk": {
           "name": "adjustment_journal_refs_deferred_asset_id_deferred_assets_id_fk",
           "tableFrom": "adjustment_journal_refs",
+          "tableTo": "deferred_assets",
           "columnsFrom": [
             "deferred_asset_id"
           ],
-          "tableTo": "deferred_assets",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -616,28 +616,28 @@
         "deferred_amortizations_deferred_asset_id_deferred_assets_id_fk": {
           "name": "deferred_amortizations_deferred_asset_id_deferred_assets_id_fk",
           "tableFrom": "deferred_amortizations",
+          "tableTo": "deferred_assets",
           "columnsFrom": [
             "deferred_asset_id"
           ],
-          "tableTo": "deferred_assets",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "deferred_amortizations_fiscal_year_fiscal_periods_fiscal_year_fk": {
           "name": "deferred_amortizations_fiscal_year_fiscal_periods_fiscal_year_fk",
           "tableFrom": "deferred_amortizations",
+          "tableTo": "fiscal_periods",
           "columnsFrom": [
             "fiscal_year"
           ],
-          "tableTo": "fiscal_periods",
           "columnsTo": [
             "fiscal_year"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -737,15 +737,15 @@
         "deferred_assets_account_id_accounts_id_fk": {
           "name": "deferred_assets_account_id_accounts_id_fk",
           "tableFrom": "deferred_assets",
+          "tableTo": "accounts",
           "columnsFrom": [
             "account_id"
           ],
-          "tableTo": "accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1028,28 +1028,28 @@
         "fixed_assets_asset_account_id_accounts_id_fk": {
           "name": "fixed_assets_asset_account_id_accounts_id_fk",
           "tableFrom": "fixed_assets",
+          "tableTo": "accounts",
           "columnsFrom": [
             "asset_account_id"
           ],
-          "tableTo": "accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "fixed_assets_linked_journal_id_journals_id_fk": {
           "name": "fixed_assets_linked_journal_id_journals_id_fk",
           "tableFrom": "fixed_assets",
+          "tableTo": "journals",
           "columnsFrom": [
             "linked_journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1167,8 +1167,8 @@
             "fiscal_year",
             "account_id"
           ],
-          "where": "sub_account_id IS NULL",
-          "isUnique": true
+          "isUnique": true,
+          "where": "sub_account_id IS NULL"
         },
         "home_use_allocations_key": {
           "name": "home_use_allocations_key",
@@ -1184,41 +1184,41 @@
         "home_use_allocations_fiscal_year_fiscal_periods_fiscal_year_fk": {
           "name": "home_use_allocations_fiscal_year_fiscal_periods_fiscal_year_fk",
           "tableFrom": "home_use_allocations",
+          "tableTo": "fiscal_periods",
           "columnsFrom": [
             "fiscal_year"
           ],
-          "tableTo": "fiscal_periods",
           "columnsTo": [
             "fiscal_year"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "home_use_allocations_account_id_accounts_id_fk": {
           "name": "home_use_allocations_account_id_accounts_id_fk",
           "tableFrom": "home_use_allocations",
+          "tableTo": "accounts",
           "columnsFrom": [
             "account_id"
           ],
-          "tableTo": "accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "home_use_allocations_sub_account_id_sub_accounts_id_fk": {
           "name": "home_use_allocations_sub_account_id_sub_accounts_id_fk",
           "tableFrom": "home_use_allocations",
+          "tableTo": "sub_accounts",
           "columnsFrom": [
             "sub_account_id"
           ],
-          "tableTo": "sub_accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1278,28 +1278,28 @@
         "import_account_mappings_account_id_accounts_id_fk": {
           "name": "import_account_mappings_account_id_accounts_id_fk",
           "tableFrom": "import_account_mappings",
+          "tableTo": "accounts",
           "columnsFrom": [
             "account_id"
           ],
-          "tableTo": "accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "import_account_mappings_sub_account_id_sub_accounts_id_fk": {
           "name": "import_account_mappings_sub_account_id_sub_accounts_id_fk",
           "tableFrom": "import_account_mappings",
+          "tableTo": "sub_accounts",
           "columnsFrom": [
             "sub_account_id"
           ],
-          "tableTo": "sub_accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1521,8 +1521,8 @@
           "columns": [
             "freee_journal_id"
           ],
-          "where": "revoked_at IS NULL",
-          "isUnique": true
+          "isUnique": true,
+          "where": "revoked_at IS NULL"
         },
         "import_journal_refs_batch": {
           "name": "import_journal_refs_batch",
@@ -1543,28 +1543,28 @@
         "import_journal_refs_journal_id_journals_id_fk": {
           "name": "import_journal_refs_journal_id_journals_id_fk",
           "tableFrom": "import_journal_refs",
+          "tableTo": "journals",
           "columnsFrom": [
             "journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "import_journal_refs_batch_id_import_batches_id_fk": {
           "name": "import_journal_refs_batch_id_import_batches_id_fk",
           "tableFrom": "import_journal_refs",
+          "tableTo": "import_batches",
           "columnsFrom": [
             "batch_id"
           ],
-          "tableTo": "import_batches",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1601,15 +1601,15 @@
         "import_tax_mappings_tax_category_tax_categories_code_fk": {
           "name": "import_tax_mappings_tax_category_tax_categories_code_fk",
           "tableFrom": "import_tax_mappings",
+          "tableTo": "tax_categories",
           "columnsFrom": [
             "tax_category"
           ],
-          "tableTo": "tax_categories",
           "columnsTo": [
             "code"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1682,28 +1682,28 @@
         "inference_rule_history_rule_id_inference_rules_id_fk": {
           "name": "inference_rule_history_rule_id_inference_rules_id_fk",
           "tableFrom": "inference_rule_history",
+          "tableTo": "inference_rules",
           "columnsFrom": [
             "rule_id"
           ],
-          "tableTo": "inference_rules",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "inference_rule_history_statement_id_statements_id_fk": {
           "name": "inference_rule_history_statement_id_statements_id_fk",
           "tableFrom": "inference_rule_history",
+          "tableTo": "statements",
           "columnsFrom": [
             "statement_id"
           ],
-          "tableTo": "statements",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1839,67 +1839,67 @@
         "inference_rules_statement_account_id_statement_accounts_id_fk": {
           "name": "inference_rules_statement_account_id_statement_accounts_id_fk",
           "tableFrom": "inference_rules",
+          "tableTo": "statement_accounts",
           "columnsFrom": [
             "statement_account_id"
           ],
-          "tableTo": "statement_accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "inference_rules_counter_account_id_accounts_id_fk": {
           "name": "inference_rules_counter_account_id_accounts_id_fk",
           "tableFrom": "inference_rules",
+          "tableTo": "accounts",
           "columnsFrom": [
             "counter_account_id"
           ],
-          "tableTo": "accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "inference_rules_counter_sub_account_id_sub_accounts_id_fk": {
           "name": "inference_rules_counter_sub_account_id_sub_accounts_id_fk",
           "tableFrom": "inference_rules",
+          "tableTo": "sub_accounts",
           "columnsFrom": [
             "counter_sub_account_id"
           ],
-          "tableTo": "sub_accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "inference_rules_partner_id_partners_id_fk": {
           "name": "inference_rules_partner_id_partners_id_fk",
           "tableFrom": "inference_rules",
+          "tableTo": "partners",
           "columnsFrom": [
             "partner_id"
           ],
-          "tableTo": "partners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "inference_rules_tax_category_tax_categories_code_fk": {
           "name": "inference_rules_tax_category_tax_categories_code_fk",
           "tableFrom": "inference_rules",
+          "tableTo": "tax_categories",
           "columnsFrom": [
             "tax_category"
           ],
-          "tableTo": "tax_categories",
           "columnsTo": [
             "code"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2019,28 +2019,28 @@
         "invoice_items_invoice_id_invoices_id_fk": {
           "name": "invoice_items_invoice_id_invoices_id_fk",
           "tableFrom": "invoice_items",
+          "tableTo": "invoices",
           "columnsFrom": [
             "invoice_id"
           ],
-          "tableTo": "invoices",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "invoice_items_tax_category_tax_categories_code_fk": {
           "name": "invoice_items_tax_category_tax_categories_code_fk",
           "tableFrom": "invoice_items",
+          "tableTo": "tax_categories",
           "columnsFrom": [
             "tax_category"
           ],
-          "tableTo": "tax_categories",
           "columnsTo": [
             "code"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2109,6 +2109,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "withholding_amount": {
+          "name": "withholding_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         },
         "deposit_account_id": {
           "name": "deposit_account_id",
@@ -2180,67 +2188,67 @@
         "invoice_payments_invoice_id_invoices_id_fk": {
           "name": "invoice_payments_invoice_id_invoices_id_fk",
           "tableFrom": "invoice_payments",
+          "tableTo": "invoices",
           "columnsFrom": [
             "invoice_id"
           ],
-          "tableTo": "invoices",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "invoice_payments_deposit_account_id_accounts_id_fk": {
           "name": "invoice_payments_deposit_account_id_accounts_id_fk",
           "tableFrom": "invoice_payments",
+          "tableTo": "accounts",
           "columnsFrom": [
             "deposit_account_id"
           ],
-          "tableTo": "accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "invoice_payments_deposit_sub_account_id_sub_accounts_id_fk": {
           "name": "invoice_payments_deposit_sub_account_id_sub_accounts_id_fk",
           "tableFrom": "invoice_payments",
+          "tableTo": "sub_accounts",
           "columnsFrom": [
             "deposit_sub_account_id"
           ],
-          "tableTo": "sub_accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "invoice_payments_journal_id_journals_id_fk": {
           "name": "invoice_payments_journal_id_journals_id_fk",
           "tableFrom": "invoice_payments",
+          "tableTo": "journals",
           "columnsFrom": [
             "journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "invoice_payments_void_journal_id_journals_id_fk": {
           "name": "invoice_payments_void_journal_id_journals_id_fk",
           "tableFrom": "invoice_payments",
+          "tableTo": "journals",
           "columnsFrom": [
             "void_journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2253,6 +2261,10 @@
         "invoice_payments_fee": {
           "name": "invoice_payments_fee",
           "value": "\"invoice_payments\".\"fee_amount\" >= 0"
+        },
+        "invoice_payments_withholding": {
+          "name": "invoice_payments_withholding",
+          "value": "\"invoice_payments\".\"withholding_amount\" >= 0"
         },
         "invoice_payments_void": {
           "name": "invoice_payments_void",
@@ -2461,6 +2473,22 @@
           "notNull": true,
           "autoincrement": false
         },
+        "withholding_base": {
+          "name": "withholding_base",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "withholding_tax": {
+          "name": "withholding_tax",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
         "journal_id": {
           "name": "journal_id",
           "type": "text",
@@ -2539,41 +2567,41 @@
         "invoices_partner_id_partners_id_fk": {
           "name": "invoices_partner_id_partners_id_fk",
           "tableFrom": "invoices",
+          "tableTo": "partners",
           "columnsFrom": [
             "partner_id"
           ],
-          "tableTo": "partners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "invoices_journal_id_journals_id_fk": {
           "name": "invoices_journal_id_journals_id_fk",
           "tableFrom": "invoices",
+          "tableTo": "journals",
           "columnsFrom": [
             "journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "invoices_void_journal_id_journals_id_fk": {
           "name": "invoices_void_journal_id_journals_id_fk",
           "tableFrom": "invoices",
+          "tableTo": "journals",
           "columnsFrom": [
             "void_journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2606,6 +2634,10 @@
         "invoices_total": {
           "name": "invoices_total",
           "value": "\"invoices\".\"total\" > 0 AND \"invoices\".\"total\" < 1000000000000"
+        },
+        "invoices_withholding": {
+          "name": "invoices_withholding",
+          "value": "\"invoices\".\"withholding_tax\" >= 0 AND \"invoices\".\"withholding_tax\" <= \"invoices\".\"withholding_base\" AND \"invoices\".\"withholding_base\" <= \"invoices\".\"total\""
         },
         "invoices_void": {
           "name": "invoices_void",
@@ -2756,28 +2788,28 @@
         "journal_line_tags_journal_line_id_journal_lines_id_fk": {
           "name": "journal_line_tags_journal_line_id_journal_lines_id_fk",
           "tableFrom": "journal_line_tags",
+          "tableTo": "journal_lines",
           "columnsFrom": [
             "journal_line_id"
           ],
-          "tableTo": "journal_lines",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "journal_line_tags_tag_id_tags_id_fk": {
           "name": "journal_line_tags_tag_id_tags_id_fk",
           "tableFrom": "journal_line_tags",
+          "tableTo": "tags",
           "columnsFrom": [
             "tag_id"
           ],
-          "tableTo": "tags",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2901,67 +2933,67 @@
         "journal_lines_journal_id_journals_id_fk": {
           "name": "journal_lines_journal_id_journals_id_fk",
           "tableFrom": "journal_lines",
+          "tableTo": "journals",
           "columnsFrom": [
             "journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "journal_lines_account_id_accounts_id_fk": {
           "name": "journal_lines_account_id_accounts_id_fk",
           "tableFrom": "journal_lines",
+          "tableTo": "accounts",
           "columnsFrom": [
             "account_id"
           ],
-          "tableTo": "accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "journal_lines_sub_account_id_sub_accounts_id_fk": {
           "name": "journal_lines_sub_account_id_sub_accounts_id_fk",
           "tableFrom": "journal_lines",
+          "tableTo": "sub_accounts",
           "columnsFrom": [
             "sub_account_id"
           ],
-          "tableTo": "sub_accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "journal_lines_tax_category_tax_categories_code_fk": {
           "name": "journal_lines_tax_category_tax_categories_code_fk",
           "tableFrom": "journal_lines",
+          "tableTo": "tax_categories",
           "columnsFrom": [
             "tax_category"
           ],
-          "tableTo": "tax_categories",
           "columnsTo": [
             "code"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "journal_lines_partner_id_partners_id_fk": {
           "name": "journal_lines_partner_id_partners_id_fk",
           "tableFrom": "journal_lines",
+          "tableTo": "partners",
           "columnsFrom": [
             "partner_id"
           ],
-          "tableTo": "partners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3084,28 +3116,28 @@
         "journals_fiscal_period_id_fiscal_periods_id_fk": {
           "name": "journals_fiscal_period_id_fiscal_periods_id_fk",
           "tableFrom": "journals",
+          "tableTo": "fiscal_periods",
           "columnsFrom": [
             "fiscal_period_id"
           ],
-          "tableTo": "fiscal_periods",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "journals_corrects_journal_id_journals_id_fk": {
           "name": "journals_corrects_journal_id_journals_id_fk",
           "tableFrom": "journals",
+          "tableTo": "journals",
           "columnsFrom": [
             "corrects_journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3182,41 +3214,41 @@
         "opening_balances_fiscal_period_id_fiscal_periods_id_fk": {
           "name": "opening_balances_fiscal_period_id_fiscal_periods_id_fk",
           "tableFrom": "opening_balances",
+          "tableTo": "fiscal_periods",
           "columnsFrom": [
             "fiscal_period_id"
           ],
-          "tableTo": "fiscal_periods",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "opening_balances_account_id_accounts_id_fk": {
           "name": "opening_balances_account_id_accounts_id_fk",
           "tableFrom": "opening_balances",
+          "tableTo": "accounts",
           "columnsFrom": [
             "account_id"
           ],
-          "tableTo": "accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "opening_balances_sub_account_id_sub_accounts_id_fk": {
           "name": "opening_balances_sub_account_id_sub_accounts_id_fk",
           "tableFrom": "opening_balances",
+          "tableTo": "sub_accounts",
           "columnsFrom": [
             "sub_account_id"
           ],
-          "tableTo": "sub_accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3264,6 +3296,14 @@
           "notNull": false,
           "autoincrement": false,
           "default": -1
+        },
+        "withholding": {
+          "name": "withholding",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "unit_price": {
           "name": "unit_price",
@@ -3322,15 +3362,15 @@
         "partner_billing_terms_partner_id_partners_id_fk": {
           "name": "partner_billing_terms_partner_id_partners_id_fk",
           "tableFrom": "partner_billing_terms",
+          "tableTo": "partners",
           "columnsFrom": [
             "partner_id"
           ],
-          "tableTo": "partners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3343,6 +3383,10 @@
         "partner_billing_terms_price_mode": {
           "name": "partner_billing_terms_price_mode",
           "value": "\"partner_billing_terms\".\"price_mode\" IN ('inclusive', 'exclusive')"
+        },
+        "partner_billing_terms_withholding": {
+          "name": "partner_billing_terms_withholding",
+          "value": "\"partner_billing_terms\".\"withholding\" IN (0, 1)"
         },
         "partner_billing_terms_tax_rate": {
           "name": "partner_billing_terms_tax_rate",
@@ -3513,15 +3557,15 @@
         "receipt_audit_log_receipt_id_receipts_id_fk": {
           "name": "receipt_audit_log_receipt_id_receipts_id_fk",
           "tableFrom": "receipt_audit_log",
+          "tableTo": "receipts",
           "columnsFrom": [
             "receipt_id"
           ],
-          "tableTo": "receipts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3632,15 +3676,15 @@
         "receipt_files_receipt_id_receipts_id_fk": {
           "name": "receipt_files_receipt_id_receipts_id_fk",
           "tableFrom": "receipt_files",
+          "tableTo": "receipts",
           "columnsFrom": [
             "receipt_id"
           ],
-          "tableTo": "receipts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3732,44 +3776,44 @@
           "columns": [
             "receipt_id"
           ],
-          "where": "unlinked_at IS NULL",
-          "isUnique": true
+          "isUnique": true,
+          "where": "unlinked_at IS NULL"
         },
         "receipt_links_journal": {
           "name": "receipt_links_journal",
           "columns": [
             "journal_id"
           ],
-          "where": "unlinked_at IS NULL",
-          "isUnique": false
+          "isUnique": false,
+          "where": "unlinked_at IS NULL"
         }
       },
       "foreignKeys": {
         "receipt_links_receipt_id_receipts_id_fk": {
           "name": "receipt_links_receipt_id_receipts_id_fk",
           "tableFrom": "receipt_links",
+          "tableTo": "receipts",
           "columnsFrom": [
             "receipt_id"
           ],
-          "tableTo": "receipts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "receipt_links_journal_id_journals_id_fk": {
           "name": "receipt_links_journal_id_journals_id_fk",
           "tableFrom": "receipt_links",
+          "tableTo": "journals",
           "columnsFrom": [
             "journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3931,28 +3975,28 @@
         "receipt_readings_receipt_id_receipts_id_fk": {
           "name": "receipt_readings_receipt_id_receipts_id_fk",
           "tableFrom": "receipt_readings",
+          "tableTo": "receipts",
           "columnsFrom": [
             "receipt_id"
           ],
-          "tableTo": "receipts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "receipt_readings_file_sha256_receipt_files_sha256_fk": {
           "name": "receipt_readings_file_sha256_receipt_files_sha256_fk",
           "tableFrom": "receipt_readings",
+          "tableTo": "receipt_files",
           "columnsFrom": [
             "file_sha256"
           ],
-          "tableTo": "receipt_files",
           "columnsTo": [
             "sha256"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4119,15 +4163,15 @@
         "receipts_current_sha256_receipt_files_sha256_fk": {
           "name": "receipts_current_sha256_receipt_files_sha256_fk",
           "tableFrom": "receipts",
+          "tableTo": "receipt_files",
           "columnsFrom": [
             "current_sha256"
           ],
-          "tableTo": "receipt_files",
           "columnsTo": [
             "sha256"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4255,67 +4299,67 @@
         "recurring_journal_lines_recurring_id_recurring_journals_id_fk": {
           "name": "recurring_journal_lines_recurring_id_recurring_journals_id_fk",
           "tableFrom": "recurring_journal_lines",
+          "tableTo": "recurring_journals",
           "columnsFrom": [
             "recurring_id"
           ],
-          "tableTo": "recurring_journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "recurring_journal_lines_account_id_accounts_id_fk": {
           "name": "recurring_journal_lines_account_id_accounts_id_fk",
           "tableFrom": "recurring_journal_lines",
+          "tableTo": "accounts",
           "columnsFrom": [
             "account_id"
           ],
-          "tableTo": "accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "recurring_journal_lines_sub_account_id_sub_accounts_id_fk": {
           "name": "recurring_journal_lines_sub_account_id_sub_accounts_id_fk",
           "tableFrom": "recurring_journal_lines",
+          "tableTo": "sub_accounts",
           "columnsFrom": [
             "sub_account_id"
           ],
-          "tableTo": "sub_accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "recurring_journal_lines_tax_category_tax_categories_code_fk": {
           "name": "recurring_journal_lines_tax_category_tax_categories_code_fk",
           "tableFrom": "recurring_journal_lines",
+          "tableTo": "tax_categories",
           "columnsFrom": [
             "tax_category"
           ],
-          "tableTo": "tax_categories",
           "columnsTo": [
             "code"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "recurring_journal_lines_partner_id_partners_id_fk": {
           "name": "recurring_journal_lines_partner_id_partners_id_fk",
           "tableFrom": "recurring_journal_lines",
+          "tableTo": "partners",
           "columnsFrom": [
             "partner_id"
           ],
-          "tableTo": "partners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4517,28 +4561,28 @@
         "recurring_runs_recurring_id_recurring_journals_id_fk": {
           "name": "recurring_runs_recurring_id_recurring_journals_id_fk",
           "tableFrom": "recurring_runs",
+          "tableTo": "recurring_journals",
           "columnsFrom": [
             "recurring_id"
           ],
-          "tableTo": "recurring_journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "recurring_runs_journal_id_journals_id_fk": {
           "name": "recurring_runs_journal_id_journals_id_fk",
           "tableFrom": "recurring_runs",
+          "tableTo": "journals",
           "columnsFrom": [
             "journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4715,28 +4759,28 @@
         "statement_accounts_account_id_accounts_id_fk": {
           "name": "statement_accounts_account_id_accounts_id_fk",
           "tableFrom": "statement_accounts",
+          "tableTo": "accounts",
           "columnsFrom": [
             "account_id"
           ],
-          "tableTo": "accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "statement_accounts_sub_account_id_sub_accounts_id_fk": {
           "name": "statement_accounts_sub_account_id_sub_accounts_id_fk",
           "tableFrom": "statement_accounts",
+          "tableTo": "sub_accounts",
           "columnsFrom": [
             "sub_account_id"
           ],
-          "tableTo": "sub_accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5009,28 +5053,28 @@
         "statement_candidates_statement_id_statements_id_fk": {
           "name": "statement_candidates_statement_id_statements_id_fk",
           "tableFrom": "statement_candidates",
+          "tableTo": "statements",
           "columnsFrom": [
             "statement_id"
           ],
-          "tableTo": "statements",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "statement_candidates_rule_id_inference_rules_id_fk": {
           "name": "statement_candidates_rule_id_inference_rules_id_fk",
           "tableFrom": "statement_candidates",
+          "tableTo": "inference_rules",
           "columnsFrom": [
             "rule_id"
           ],
-          "tableTo": "inference_rules",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5120,16 +5164,16 @@
           "columns": [
             "statement_id"
           ],
-          "where": "revoked_at IS NULL",
-          "isUnique": true
+          "isUnique": true,
+          "where": "revoked_at IS NULL"
         },
         "statement_links_active_line": {
           "name": "statement_links_active_line",
           "columns": [
             "journal_line_id"
           ],
-          "where": "revoked_at IS NULL",
-          "isUnique": true
+          "isUnique": true,
+          "where": "revoked_at IS NULL"
         },
         "statement_links_journal": {
           "name": "statement_links_journal",
@@ -5143,41 +5187,41 @@
         "statement_links_statement_id_statements_id_fk": {
           "name": "statement_links_statement_id_statements_id_fk",
           "tableFrom": "statement_links",
+          "tableTo": "statements",
           "columnsFrom": [
             "statement_id"
           ],
-          "tableTo": "statements",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "statement_links_journal_id_journals_id_fk": {
           "name": "statement_links_journal_id_journals_id_fk",
           "tableFrom": "statement_links",
+          "tableTo": "journals",
           "columnsFrom": [
             "journal_id"
           ],
-          "tableTo": "journals",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "statement_links_journal_line_id_journal_lines_id_fk": {
           "name": "statement_links_journal_line_id_journal_lines_id_fk",
           "tableFrom": "statement_links",
+          "tableTo": "journal_lines",
           "columnsFrom": [
             "journal_line_id"
           ],
-          "tableTo": "journal_lines",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5464,8 +5508,8 @@
           "columns": [
             "external_id"
           ],
-          "where": "external_id IS NOT NULL",
-          "isUnique": true
+          "isUnique": true,
+          "where": "external_id IS NOT NULL"
         },
         "statements_account_date": {
           "name": "statements_account_date",
@@ -5487,28 +5531,28 @@
         "statements_batch_id_statement_batches_id_fk": {
           "name": "statements_batch_id_statement_batches_id_fk",
           "tableFrom": "statements",
+          "tableTo": "statement_batches",
           "columnsFrom": [
             "batch_id"
           ],
-          "tableTo": "statement_batches",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "statements_statement_account_id_statement_accounts_id_fk": {
           "name": "statements_statement_account_id_statement_accounts_id_fk",
           "tableFrom": "statements",
+          "tableTo": "statement_accounts",
           "columnsFrom": [
             "statement_account_id"
           ],
-          "tableTo": "statement_accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5632,15 +5676,15 @@
         "sub_accounts_account_id_accounts_id_fk": {
           "name": "sub_accounts_account_id_accounts_id_fk",
           "tableFrom": "sub_accounts",
+          "tableTo": "accounts",
           "columnsFrom": [
             "account_id"
           ],
-          "tableTo": "accounts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5769,7 +5813,7 @@
       "checkConstraints": {
         "tax_parameters_key": {
           "name": "tax_parameters_key",
-          "value": "\"tax_parameters\".\"key\" IN ('SMALL_ASSET_THRESHOLD', 'SMALL_ASSET_ANNUAL_LIMIT', 'BLUE_DEDUCTION_MAX', 'BLUE_DEDUCTION_STANDARD', 'BLUE_DEDUCTION_BASIC', 'LUMP_SUM_COST_MIN', 'LUMP_SUM_COST_MAX', 'LUMP_SUM_YEARS', 'OPENING_COST_AMORTIZATION_MONTHS', 'RECEIPT_INPUT_CYCLE_MONTHS', 'RECEIPT_INPUT_GRACE_BUSINESS_DAYS', 'RECEIPT_SCAN_MIN_LONG_PX', 'RECEIPT_SCAN_MIN_SHORT_PX')"
+          "value": "\"tax_parameters\".\"key\" IN ('SMALL_ASSET_THRESHOLD', 'SMALL_ASSET_ANNUAL_LIMIT', 'BLUE_DEDUCTION_MAX', 'BLUE_DEDUCTION_STANDARD', 'BLUE_DEDUCTION_BASIC', 'LUMP_SUM_COST_MIN', 'LUMP_SUM_COST_MAX', 'LUMP_SUM_YEARS', 'OPENING_COST_AMORTIZATION_MONTHS', 'RECEIPT_INPUT_CYCLE_MONTHS', 'RECEIPT_INPUT_GRACE_BUSINESS_DAYS', 'RECEIPT_SCAN_MIN_LONG_PX', 'RECEIPT_SCAN_MIN_SHORT_PX', 'WITHHOLDING_THRESHOLD', 'WITHHOLDING_RATE_LOW', 'WITHHOLDING_RATE_HIGH')"
         },
         "tax_parameters_value": {
           "name": "tax_parameters_value",
@@ -5814,15 +5858,15 @@
         "tax_rates_category_code_tax_categories_code_fk": {
           "name": "tax_rates_category_code_tax_categories_code_fk",
           "tableFrom": "tax_rates",
+          "tableTo": "tax_categories",
           "columnsFrom": [
             "category_code"
           ],
-          "tableTo": "tax_categories",
           "columnsTo": [
             "code"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -5879,15 +5923,15 @@
         "work_hours_partner_id_partners_id_fk": {
           "name": "work_hours_partner_id_partners_id_fk",
           "tableFrom": "work_hours",
+          "tableTo": "partners",
           "columnsFrom": [
             "partner_id"
           ],
-          "tableTo": "partners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -5915,9 +5959,9 @@
   "views": {},
   "enums": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
+    "tables": {},
+    "columns": {}
   },
   "internal": {
     "indexes": {}

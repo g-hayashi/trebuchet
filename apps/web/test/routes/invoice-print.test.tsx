@@ -175,3 +175,32 @@ describe("全体の印刷用の CSS（src/print.css。FR-036）", () => {
     expect(css).toMatch(/padding:/);
   });
 });
+
+describe("源泉徴収（013 R8・FR-005）", () => {
+  const WITH_WITHHOLDING = {
+    ...INVOICE_DETAIL,
+    total: 330_000,
+    taxBreakdown: [{ rate: 10, exclusive: 300_000, tax: 30_000, inclusive: 330_000 }],
+    withholdingBase: 300_000,
+    withholdingTax: 30_630,
+    netAmount: 299_370,
+  };
+
+  it("源泉徴収税額があるとき、合計の後に「源泉徴収税額」「差引請求額」の 2 行を出す", async () => {
+    renderDetail(WITH_WITHHOLDING);
+    const sheet = await findSheet();
+    const total = within(sheet).getByText("合計 330,000 円");
+    const tax = within(sheet).getByText("源泉徴収税額 30,630 円");
+    const net = within(sheet).getByText("差引請求額 299,370 円");
+    expect(total.compareDocumentPosition(tax) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tax.compareDocumentPosition(net) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("源泉徴収税額が 0 なら、源泉徴収の行を出さない", async () => {
+    renderDetail(INVOICE_DETAIL);
+    const sheet = await findSheet();
+    expect(within(sheet).getByText("合計 405,000 円")).toBeInTheDocument();
+    expect(within(sheet).queryByText(/源泉徴収税額/)).not.toBeInTheDocument();
+    expect(within(sheet).queryByText(/差引請求額/)).not.toBeInTheDocument();
+  });
+});

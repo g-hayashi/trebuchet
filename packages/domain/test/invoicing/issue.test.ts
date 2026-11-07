@@ -1,6 +1,11 @@
 import type { InvoiceInput } from "@trebuchet/schema";
 import { describe, expect, it } from "vitest";
-import { getInvoiceDetail, getJournalOrigin, issueInvoice } from "../../src/usecases/invoicing.ts";
+import {
+  getInvoiceDetail,
+  getJournalOrigin,
+  issueInvoice,
+  previewInvoiceCalculation,
+} from "../../src/usecases/invoicing.ts";
 import { invoiceRecord, setupInvoicing } from "../invoicing-setup.ts";
 import { TODAY } from "../test-dates.ts";
 
@@ -345,5 +350,150 @@ describe("getInvoiceDetail・getJournalOrigin", () => {
     });
     const missing = getJournalOrigin(t.deps, "nope");
     expect(!missing.ok && missing.error.code).toBe("JOURNAL_NOT_FOUND");
+  });
+});
+
+// 013 US1: 源泉徴収（R3・R5、FR-001〜007、contracts §2）
+describe("源泉徴収（013）", () => {
+  const withholdingReady = (taxable: boolean, taxDisplay: "separate" | "inclusive_only") => {
+    const t = ready({ taxable });
+    t.setSettings({ nextSeq: 43, taxDisplay });
+    t.setTerms(t.partner.id, { withholding: true });
+    return t;
+  };
+
+  it("US1-1: 別記（税抜）なら対象額は 300,000 円・税額 30,630 円・差引 299,370 円。仕訳は合計の 1 件だけ", () => {
+    const t = withholdingReady(true, "separate");
+    const r = issueInvoice(
+      t.deps,
+      t.input({ items: [{ name: "業務", amount: 330_000, taxCategory: "SALES_10" }] }),
+      TODAY,
+    );
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.invoice).toMatchObject({
+      total: 330_000,
+      withholdingBase: 300_000,
+      withholdingTax: 30_630,
+      netAmount: 299_370,
+    });
+    expect(t.ledger.journals.filter((j) => j.source === "invoice")).toHaveLength(1);
+    expect(r.value.journal.lines.map((l) => [l.side, l.amount])).toEqual([
+      ["debit", 330_000],
+      ["credit", 330_000],
+    ]);
+  });
+
+  it("US1-2: 区分しない表示なら対象額は税込の 1,205,000 円・税額 143,961 円", () => {
+    const t = withholdingReady(false, "inclusive_only");
+    const r = issueInvoice(t.deps, t.input(), TODAY);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.invoice).toMatchObject({
+      total: 1_205_000,
+      withholdingBase: 1_205_000,
+      withholdingTax: 143_961,
+      netAmount: 1_061_039,
+    });
+    expect(r.value.journal.lines.map((l) => [l.side, l.amount])).toEqual([
+      ["debit", 1_205_000],
+      ["credit", 1_205_000],
+    ]);
+  });
+
+  it("US1-3: 「なし」の取引先は 0・0 で、差引は合計と同じ（税制の値がなくても発行できる）", () => {
+    const t = ready();
+    t.invoicing.state.taxParameters = [];
+    const r = issueInvoice(t.deps, t.input(), TODAY);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.invoice).toMatchObject({
+      withholdingBase: 0,
+      withholdingTax: 0,
+      netAmount: 1_205_000,
+    });
+  });
+
+  it("US1-4: 発行時に固定し、取引先の設定を後で変えても詳細・保存した写しは変わらない", () => {
+    const t = withholdingReady(false, "inclusive_only");
+    const r = issueInvoice(t.deps, t.input(), TODAY);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    t.setTerms(t.partner.id, { withholding: false });
+    t.invoicing.state.taxParameters = [];
+    const detail = getInvoiceDetail(t.deps, r.value.invoice.id, TODAY);
+    expect(detail.ok && detail.value).toEqual(r.value.invoice);
+    expect(t.invoicing.getInvoice(r.value.invoice.id)).toMatchObject({
+      withholdingBase: 1_205_000,
+      withholdingTax: 143_961,
+    });
+  });
+
+  it("発行の記録（監査）の after の請求書に源泉徴収の対象額・税額が入る", () => {
+    const t = withholdingReady(false, "inclusive_only");
+    const r = issueInvoice(t.deps, t.input(), TODAY);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    const after = JSON.parse(t.invoicing.audits.at(-1)?.afterJson ?? "null");
+    expect(after.invoice).toMatchObject({ withholdingBase: 1_205_000, withholdingTax: 143_961 });
+  });
+
+  it("発行日に税制の値がなければ WITHHOLDING_RATE_MISSING（details.date は発行日）。何も書かない", () => {
+    const t = withholdingReady(false, "inclusive_only");
+    t.invoicing.state.taxParameters = [];
+    const r = issueInvoice(t.deps, t.input({ issueDate: "2026-11-05" }), TODAY);
+    expect(r).toMatchObject({
+      ok: false,
+      error: { code: "WITHHOLDING_RATE_MISSING", details: { date: "2026-11-05" } },
+    });
+    expect(t.ledger.journals).toEqual([]);
+    expect(t.invoicing.state.invoices).toEqual([]);
+    expect(t.invoicing.getInvoiceSettings()?.nextSeq).toBe(43);
+  });
+
+  it("計算（プレビュー）: partnerId の設定を引き、発行日（省略は今日）の値で計算する。partnerId なしは 0・0", () => {
+    const t = withholdingReady(false, "inclusive_only");
+    const items = [{ amount: 1_205_000, taxRate: null }];
+    const withHolding = previewInvoiceCalculation(
+      t.deps,
+      { priceMode: "inclusive", items, partnerId: t.partner.id },
+      TODAY,
+    );
+    expect(withHolding).toMatchObject({
+      ok: true,
+      value: {
+        total: 1_205_000,
+        withholdingBase: 1_205_000,
+        withholdingTax: 143_961,
+        netAmount: 1_061_039,
+      },
+    });
+    const without = previewInvoiceCalculation(t.deps, { priceMode: "inclusive", items }, TODAY);
+    expect(without).toMatchObject({
+      ok: true,
+      value: { withholdingBase: 0, withholdingTax: 0, netAmount: 1_205_000 },
+    });
+    t.invoicing.state.taxParameters = [];
+    const missing = previewInvoiceCalculation(
+      t.deps,
+      { priceMode: "inclusive", items, partnerId: t.partner.id, issueDate: "2026-11-05" },
+      TODAY,
+    );
+    expect(missing).toMatchObject({
+      ok: false,
+      error: { code: "WITHHOLDING_RATE_MISSING", details: { date: "2026-11-05" } },
+    });
+  });
+
+  it("計算（プレビュー）: 別記（税抜）の対象額は合計から消費税相当額を引いた額", () => {
+    const t = withholdingReady(true, "separate");
+    const r = previewInvoiceCalculation(
+      t.deps,
+      {
+        priceMode: "inclusive",
+        items: [{ amount: 330_000, taxRate: 10 }],
+        partnerId: t.partner.id,
+      },
+      TODAY,
+    );
+    expect(r).toMatchObject({
+      ok: true,
+      value: { withholdingBase: 300_000, withholdingTax: 30_630, netAmount: 299_370 },
+    });
   });
 });

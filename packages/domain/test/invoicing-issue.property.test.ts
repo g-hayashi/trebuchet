@@ -265,6 +265,7 @@ describe("INV-38: 発行済みの請求書の写しは、設定・条件・工�
                 dueMonthsAfter: 3,
                 dueDay: change.dueDay,
                 defaultItemName: change.defaultItemName,
+                withholding: false,
                 ...(change.billingName === undefined ? {} : { billingName: change.billingName }),
               });
               break;

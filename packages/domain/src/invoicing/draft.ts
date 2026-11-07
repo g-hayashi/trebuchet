@@ -7,14 +7,17 @@ import type {
 } from "@trebuchet/schema";
 import { monthEnd } from "../dates.ts";
 import type { JournalContext } from "../journal.ts";
-import type { InvoiceRecord, Partner } from "../types.ts";
+import type { DomainError, InvoiceRecord, Partner, TaxParameter } from "../types.ts";
 import { calculateInvoiceAmounts, itemAmount } from "./amounts.ts";
 import { dueDate } from "./due-date.ts";
 import { effectiveTaxDisplay, invoiceSalesTaxCategory, itemTaxRate } from "./tax.ts";
+import { invoiceWithholding } from "./withholding.ts";
 
 export type DraftOutcome =
   | { kind: "draft"; draft: InvoiceDraft }
-  | { kind: "skipped"; reason: InvoiceDraftSkipReason };
+  | { kind: "skipped"; reason: InvoiceDraftSkipReason }
+  /** 源泉徴収の税制の値が発行日にない（`WITHHOLDING_RATE_MISSING`。013） */
+  | { kind: "error"; error: DomainError };
 
 export type BuildInvoiceDraftInput = {
   terms: BillingTerms;
@@ -30,6 +33,8 @@ export type BuildInvoiceDraftInput = {
   /** 同じ取引先・対象月の取消でない請求書（重複の警告に使う。FR-016） */
   activeInvoices: readonly Pick<InvoiceRecord, "invoiceNo">[];
   ctx: Pick<JournalContext, "taxSettings" | "taxRates">;
+  /** 税制の値。源泉徴収あり（`terms.withholding`）の取引先の案でだけ使う（013）。省略は空 */
+  taxParameters?: readonly TaxParameter[] | undefined;
 };
 
 /**
@@ -68,6 +73,15 @@ export function buildInvoiceDraft(input: BuildInvoiceDraftInput): DraftOutcome {
   if (taxRate === null || taxRate === 8 || taxRate === 10) item.taxRate = taxRate;
   const priceMode = terms.priceMode ?? "inclusive";
   const amounts = calculateInvoiceAmounts([{ amount: item.amount, taxRate }], priceMode);
+  const taxDisplay = effectiveTaxDisplay(input.settings?.taxDisplay, salesDate, ctx.taxSettings);
+  const withholding = invoiceWithholding({
+    enabled: terms.withholding,
+    amounts,
+    taxDisplay,
+    date: today,
+    params: input.taxParameters ?? [],
+  });
+  if (!withholding.ok) return { kind: "error", error: withholding.error };
   const warnings: InvoiceDraft["warnings"] =
     input.activeInvoices.length === 0
       ? []
@@ -92,8 +106,9 @@ export function buildInvoiceDraft(input: BuildInvoiceDraftInput): DraftOutcome {
       dueDate: dueDate(month, terms.dueMonthsAfter, terms.dueDay),
       items: [item],
       total: amounts.total,
-      taxDisplay: effectiveTaxDisplay(input.settings?.taxDisplay, salesDate, ctx.taxSettings),
+      taxDisplay,
       taxBreakdown: amounts.taxBreakdown,
+      ...withholding.value,
       warnings,
     },
   };

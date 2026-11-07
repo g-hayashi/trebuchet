@@ -43,6 +43,9 @@ describe("請求の計算契約", () => {
         subtotal: 100,
         total: 110,
         taxBreakdown: [{ rate: 10, inclusive: 110, exclusive: 100, tax: 10 }],
+        withholdingBase: 0,
+        withholdingTax: 0,
+        netAmount: 110,
       }).success,
     ).toBe(true);
     expect(
@@ -50,8 +53,32 @@ describe("請求の計算契約", () => {
         subtotal: 999999999999,
         total: 1e12,
         taxBreakdown: [],
+        withholdingBase: 0,
+        withholdingTax: 0,
+        netAmount: 1e12,
       }).success,
     ).toBe(false);
+  });
+  it("源泉徴収（013）: 請求の条件の withholding は既定 false、計算の入力は partnerId・issueDate を任意で取る", () => {
+    const terms = {
+      billingType: "monthly",
+      monthlyAmount: 100,
+      dueMonthsAfter: 1,
+      dueDay: 31,
+      defaultItemName: "業務",
+    };
+    expect(BillingTermsInput.parse(terms).withholding).toBe(false);
+    expect(BillingTermsInput.parse({ ...terms, withholding: true }).withholding).toBe(true);
+    expect(BillingTermsInput.safeParse({ ...terms, withholding: "yes" }).success).toBe(false);
+    const calc = { priceMode: "inclusive", items: [{ amount: 100, taxRate: null }] };
+    expect(InvoiceCalculationInput.safeParse(calc).success).toBe(true);
+    expect(
+      InvoiceCalculationInput.safeParse({ ...calc, partnerId: ID, issueDate: "2026-11-05" })
+        .success,
+    ).toBe(true);
+    expect(InvoiceCalculationInput.safeParse({ ...calc, issueDate: "2026-13-05" }).success).toBe(
+      false,
+    );
   });
   it("条件と明細は方式と税率を保持し、無効な値を拒否する", () => {
     const terms = {

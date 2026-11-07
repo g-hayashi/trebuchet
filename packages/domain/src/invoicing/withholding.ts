@@ -40,3 +40,29 @@ export function withholdingTax(
     Math.floor((Math.min(base, threshold) * low + Math.max(0, base - threshold) * high) / 10000),
   );
 }
+
+/** 請求書・案・計算の源泉徴収の 3 項目（`netAmount = total − withholdingTax`。保存するのは前の 2 つ） */
+export type InvoiceWithholding = {
+  withholdingBase: number;
+  withholdingTax: number;
+  netAmount: number;
+};
+
+/**
+ * 請求書の源泉徴収（R3・R5）。設定が「なし」なら 0・0（税制の値は引かない）。
+ * 「あり」なら対象額（`withholdingBase`）と税額（`withholdingTax`）を `date`（発行日）の値で計算する。
+ */
+export function invoiceWithholding(input: {
+  enabled: boolean;
+  amounts: { total: number; taxBreakdown: readonly TaxBreakdownEntry[] };
+  taxDisplay: InvoiceTaxDisplay;
+  date: string;
+  params: readonly TaxParameter[];
+}): Result<InvoiceWithholding> {
+  const { total } = input.amounts;
+  if (!input.enabled) return ok({ withholdingBase: 0, withholdingTax: 0, netAmount: total });
+  const base = withholdingBase(input.amounts, input.taxDisplay);
+  const tax = withholdingTax(base, input.date, input.params);
+  if (!tax.ok) return tax;
+  return ok({ withholdingBase: base, withholdingTax: tax.value, netAmount: total - tax.value });
+}

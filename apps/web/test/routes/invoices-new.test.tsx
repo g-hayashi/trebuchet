@@ -170,6 +170,8 @@ describe("請求書の案と発行（US1。FR-006〜016）", () => {
       expect(calls.findLast((c) => c.path === `${BASE}/invoices/calculate`)?.body).toEqual({
         priceMode: "exclusive",
         items: [{ amount: 100000, taxRate: null }],
+        partnerId: "p2",
+        issueDate: "2026-11-05",
       }),
     );
   });
@@ -589,5 +591,53 @@ describe("請求書を作る画面（011 US5。FR-032・033）", () => {
     await screen.findByRole("region", { name: "請求書の案（株式会社A）" });
     expect(screen.queryByRole("region", { name: "請求書の案（C 社）" })).not.toBeInTheDocument();
     expect(screen.queryByText(/C 社/)).not.toBeInTheDocument();
+  });
+});
+
+describe("源泉徴収（013 R8・FR-005）", () => {
+  const WITHHOLDING_CALC = {
+    subtotal: 330_000,
+    total: 330_000,
+    taxBreakdown: [{ rate: 10, exclusive: 300_000, tax: 30_000, inclusive: 330_000 }],
+    withholdingBase: 300_000,
+    withholdingTax: 30_630,
+    netAmount: 299_370,
+  };
+
+  it("源泉徴収税額がある案は、合計の後に源泉徴収税額と差引請求額を出し、計算に取引先と発行日を渡す", async () => {
+    const calls = setup(
+      [
+        hourlyDraft({
+          items: [{ name: "業務", amount: 330_000, taxCategory: "SALES_10", taxRate: 10 }],
+          total: 330_000,
+          withholdingBase: 300_000,
+          withholdingTax: 30_630,
+          netAmount: 299_370,
+        }),
+      ],
+      { [`POST ${BASE}/invoices/calculate`]: () => ok(WITHHOLDING_CALC) },
+    );
+    await makeDrafts(user());
+    const region = await screen.findByRole("region", { name: "請求書の案（株式会社A）" });
+    const total = await within(region).findByText("合計 330,000 円");
+    const tax = within(region).getByText("源泉徴収税額 30,630 円");
+    const net = within(region).getByText("差引請求額 299,370 円");
+    expect(total.compareDocumentPosition(tax) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tax.compareDocumentPosition(net) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() =>
+      expect(calls.findLast((c) => c.path === `${BASE}/invoices/calculate`)?.body).toMatchObject({
+        partnerId: "p1",
+        issueDate: "2026-11-05",
+      }),
+    );
+  });
+
+  it("源泉徴収税額が 0 なら、源泉徴収の行を出さない", async () => {
+    setup([hourlyDraft()]);
+    await makeDrafts(user());
+    const region = await screen.findByRole("region", { name: "請求書の案（株式会社A）" });
+    expect(await within(region).findByText("合計 405,000 円")).toBeInTheDocument();
+    expect(within(region).queryByText(/源泉徴収税額/)).not.toBeInTheDocument();
+    expect(within(region).queryByText(/差引請求額/)).not.toBeInTheDocument();
   });
 });

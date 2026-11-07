@@ -5,6 +5,7 @@ import type {
   InvoicingStore,
   InvoicingUnitOfWork,
   PaymentRecord,
+  TaxParameter,
   WorkHoursRow,
 } from "@trebuchet/domain";
 import type {
@@ -24,6 +25,7 @@ import {
   partnerBillingTerms,
   recurringJournals,
   recurringRuns,
+  taxParameters,
   workHours,
 } from "./schema/tenant.ts";
 import { drizzleUnitOfWork } from "./unit-of-work.ts";
@@ -36,8 +38,7 @@ function toInvoiceRecord(row: typeof invoices.$inferSelect): InvoiceRecord {
 
 /** -1 は請求税率の自動導出、NULL は明示した税率なし。入力の省略と区別する。 */
 function toBillingTerms(row: typeof partnerBillingTerms.$inferSelect): BillingTerms {
-  // withholding（013）は BillingTerms に載せる T003 まで読み出さない
-  const { taxRate, withholding: _withholding, ...rest } = row;
+  const { taxRate, ...rest } = row;
   if (taxRate === -1) return rest;
   if (taxRate !== null && taxRate !== 8 && taxRate !== 10) {
     throw new Error("保存した請求税率が不正です");
@@ -63,6 +64,14 @@ export class DrizzleInvoicingStore implements InvoicingStore {
 
   appendInvoicingAudit(entry: InvoicingAuditEntry): void {
     appendInvoicingAuditRow(this.db, entry);
+  }
+
+  listTaxParameters(): TaxParameter[] {
+    return this.db
+      .select()
+      .from(taxParameters)
+      .orderBy(asc(taxParameters.key), asc(taxParameters.effectiveFrom))
+      .all();
   }
 
   // ---- 発行者の設定 ----

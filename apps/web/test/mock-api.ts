@@ -129,7 +129,14 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
       items: { amount: number; taxRate: number | null }[];
     };
     const subtotal = input.items.reduce((sum, item) => sum + item.amount, 0);
-    return ok({ subtotal, total: subtotal, taxBreakdown: [] });
+    return ok({
+      subtotal,
+      total: subtotal,
+      taxBreakdown: [],
+      withholdingBase: 0,
+      withholdingTax: 0,
+      netAmount: subtotal,
+    });
   },
   "GET /journals/:id/origin": () => ok({ origin: null }),
   // 仕訳の入力への AI の候補（011 US11）。既定は候補なし（外部の AI は既定で無効なので普通は呼ばれない）

@@ -143,3 +143,20 @@ describe("PUT /partners/:partnerId/profile", () => {
     expect((await errorOf(res)).code).toBe("VALIDATION");
   });
 });
+
+describe("源泉徴収（013。contracts §1）", () => {
+  it("POST・PUT の billingTerms の withholding を保存して返す。省略は false", async () => {
+    const created = await post(body({}, hourly({ withholding: true })));
+    expect(created.status).toBe(201);
+    if (created.status !== 201) return;
+    const json = await created.json();
+    expect(json.billingTerms?.withholding).toBe(true);
+    expect((await listTerms())[0]?.withholding).toBe(true);
+
+    const updated = await put(json.partner.id, body({}, hourly()));
+    expect(updated.status).toBe(200);
+    if (updated.status !== 200) return;
+    expect((await updated.json()).billingTerms?.withholding).toBe(false);
+    expect((await listTerms())[0]?.withholding).toBe(false);
+  });
+});

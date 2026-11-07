@@ -15,6 +15,8 @@ export type BillingValues = {
   dueDay: string;
   defaultItemName: string;
   billingName: string;
+  /** 源泉徴収あり（013）。発行時に源泉徴収税額を計算する */
+  withholding: boolean;
 };
 
 export const billingValuesOf = (terms: BillingTermsRow | null): BillingValues => ({
@@ -33,6 +35,7 @@ export const billingValuesOf = (terms: BillingTermsRow | null): BillingValues =>
   dueDay: String(terms?.dueDay ?? 31),
   defaultItemName: terms?.defaultItemName ?? "",
   billingName: terms?.billingName ?? "",
+  withholding: terms?.withholding === true,
 });
 
 /** 支払期限の月の選択肢（0〜12 か月後） */
@@ -75,6 +78,7 @@ export function toBillingInput(
     dueDay: Number(values.dueDay),
     defaultItemName,
     ...(billingName === "" ? {} : { billingName }),
+    withholding: values.withholding,
   });
   if (parsed.success) return { input: parsed.data };
   return { errors: { form: parsed.error.issues[0]?.message ?? "入力が正しくありません" } };
@@ -198,6 +202,21 @@ export function BillingTermsFields({
       <div className="grid gap-2">
         <Label htmlFor={`${id}-name`}>宛名（空なら取引先名）</Label>
         <Input id={`${id}-name`} autoComplete="off" {...text("billingName")} />
+      </div>
+      <div className="grid gap-1">
+        <div className="flex items-center gap-2">
+          <input
+            id={`${id}-withholding`}
+            type="checkbox"
+            checked={values.withholding}
+            aria-describedby={`${id}-withholding-hint`}
+            onChange={(e) => onChange("withholding", e.target.checked)}
+          />
+          <Label htmlFor={`${id}-withholding`}>源泉徴収あり</Label>
+        </div>
+        <p id={`${id}-withholding-hint`} className="text-sm text-muted-foreground">
+          報酬・料金から所得税が源泉徴収される取引先です。請求書に源泉徴収税額と差引請求額が載ります。
+        </p>
       </div>
     </>
   );

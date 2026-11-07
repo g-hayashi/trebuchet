@@ -322,6 +322,8 @@ export type ClosingUnitOfWork = TenantUnitOfWork<{ closing: ClosingStore }>;
  */
 export interface InvoicingStore {
   appendInvoicingAudit(entry: InvoicingAuditEntry): void;
+  /** 税制の値の全件（013 の源泉徴収の率を発行日で引く。`ClosingStore.listTaxParameters` と同じ内容） */
+  listTaxParameters(): TaxParameter[];
   /** 発行者の設定（`invoice_settings` の 1 行）。なければ null */
   getInvoiceSettings(): InvoiceSettings | null;
   upsertInvoiceSettings(row: InvoiceSettings): void;

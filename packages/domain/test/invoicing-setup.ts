@@ -41,6 +41,7 @@ export function setupInvoicing(options: { taxable?: boolean } = {}) {
       dueDay: 31,
       defaultItemName: "業務委託",
       billingName: null,
+      withholding: false,
       updatedAt: NOW,
       ...over,
     };
@@ -110,6 +111,8 @@ export function invoiceRecord(over: Partial<InvoiceRecord> = {}): InvoiceRecord 
     },
     taxDisplay: "inclusive_only",
     total: 110_000,
+    withholdingBase: 0,
+    withholdingTax: 0,
     journalId: "journal-1",
     createdAt: NOW,
     voidedAt: null,

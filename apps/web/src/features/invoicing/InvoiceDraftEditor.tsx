@@ -166,6 +166,9 @@ export function InvoiceDraftEditor({
     ...invoiceCalculationQuery(entityId, {
       priceMode,
       items: rows.map((row) => ({ amount: amountOf(row), taxRate: row.taxRate })),
+      // 源泉徴収あり（013）の取引先は、発行日の税制の値で税額を計算する
+      partnerId: draft.partnerId,
+      issueDate,
     }),
     enabled: validInput.success && issue.data === undefined,
   });
@@ -391,6 +394,12 @@ export function InvoiceDraftEditor({
                 <p>{`加算する消費税相当額 ${formatYen(calculation.data.total - calculation.data.subtotal)} 円`}</p>
               )}
               <p className="text-base font-semibold">{`合計 ${formatYen(total ?? 0)} 円`}</p>
+              {calculation.data.withholdingTax > 0 && (
+                <>
+                  <p>{`源泉徴収税額 ${formatYen(calculation.data.withholdingTax)} 円`}</p>
+                  <p className="text-base font-semibold">{`差引請求額 ${formatYen(calculation.data.netAmount)} 円`}</p>
+                </>
+              )}
             </div>
           ) : (
             <p className="text-right text-sm text-muted-foreground">

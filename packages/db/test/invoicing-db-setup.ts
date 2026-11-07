@@ -69,6 +69,7 @@ export function setupInvoicingDb(options: { taxable?: boolean } = {}) {
       dueDay: 31,
       defaultItemName: "業務委託",
       billingName: null,
+      withholding: false,
       updatedAt: NOW,
       ...over,
     };
@@ -123,6 +124,8 @@ export function setupInvoicingDb(options: { taxable?: boolean } = {}) {
       },
       taxDisplay: "inclusive_only",
       total,
+      withholdingBase: 0,
+      withholdingTax: 0,
       journalId: posted.value.journal.id,
       createdAt: NOW,
       voidedAt: null,

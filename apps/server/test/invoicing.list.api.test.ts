@@ -88,3 +88,38 @@ describe("GET /invoices（§3.5 の基本形）", () => {
     expect((await errorOf(res)).code).toBe("VALIDATION");
   });
 });
+
+describe("源泉徴収の 3 項目（013。contracts §2）", () => {
+  it("一覧と詳細に withholdingBase・withholdingTax・netAmount が載る（なしは 0・0・合計）", async () => {
+    await ctx.setTerms(b, {
+      billingType: "monthly",
+      unitPrice: undefined,
+      monthlyAmount: 200_000,
+      withholding: true,
+    });
+    const ia = await issue(a, "2026-10", 100_000, "2026-10-31");
+    const ib = await issue(b, "2026-10", 200_000, "2026-10-31");
+    expect(ib).toMatchObject({
+      withholdingBase: 200_000,
+      withholdingTax: 20_420,
+      netAmount: 179_580,
+    });
+
+    const body = await okBody(await list());
+    const byId = new Map(body.invoices.map((i) => [i.id, i]));
+    expect(byId.get(ia.id)).toMatchObject({
+      withholdingBase: 0,
+      withholdingTax: 0,
+      netAmount: 100_000,
+    });
+    expect(byId.get(ib.id)).toMatchObject({
+      withholdingBase: 200_000,
+      withholdingTax: 20_420,
+      netAmount: 179_580,
+    });
+    const detail = await okBody(
+      await ctx.e.invoices[":invoiceId"].$get({ param: { ...ctx.param, invoiceId: ib.id } }),
+    );
+    expect(detail).toEqual(ib);
+  });
+});

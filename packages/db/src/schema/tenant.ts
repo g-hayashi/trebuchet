@@ -769,7 +769,7 @@ export const partnerBillingTerms = sqliteTable(
       .default("inclusive"),
     taxRate: integer("tax_rate").default(-1),
     // 013: 源泉徴収あり（0 か 1）。1 なら発行時に源泉徴収税額を計算する（data-model §1.2）
-    withholding: integer("withholding").notNull().default(0),
+    withholding: integer("withholding", { mode: "boolean" }).notNull().default(false),
     unitPrice: integer("unit_price"),
     monthlyAmount: integer("monthly_amount"),
     dueMonthsAfter: integer("due_months_after").notNull().default(1),

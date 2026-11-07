@@ -94,6 +94,8 @@ const BillingTermsFields = z.object({
   dueDay: DayOfMonthOrEnd,
   defaultItemName: z.string().min(1, "既定の品名を入力してください").max(200),
   billingName: z.string().min(1).max(200).optional(),
+  /** 源泉徴収あり（013）。発行時に源泉徴収税額を計算する。既定は「なし」 */
+  withholding: z.boolean().default(false),
 });
 
 /** PUT /partners/:partnerId/billing-terms。型に合わない金額は拒否（`hourly` は単価だけ、`monthly` は月額だけ） */
@@ -139,6 +141,7 @@ export const BillingTerms = z.object({
   dueDay: DayOfMonthOrEnd,
   defaultItemName: z.string(),
   billingName: z.string().nullable(),
+  withholding: z.boolean(),
   updatedAt: Timestamp,
 });
 export type BillingTerms = z.infer<typeof BillingTerms>;
@@ -259,13 +262,25 @@ export const InvoiceCalculationInput = z.object({
     .array(z.object({ amount: Yen, taxRate: InvoiceTaxRate }))
     .min(1)
     .max(MAX_INVOICE_ITEMS),
+  /** 取引先の源泉徴収の設定を引く（013）。省略は源泉徴収なし */
+  partnerId: Id.optional(),
+  /** 源泉徴収の税制の値を引く日。省略は今日 */
+  issueDate: DateString.optional(),
 });
 export type InvoiceCalculationInput = z.infer<typeof InvoiceCalculationInput>;
+
+/** 源泉徴収（013）。`withholdingBase` が 0 なら源泉徴収なし。`netAmount = total − withholdingTax` */
+const WithholdingAmounts = {
+  withholdingBase: z.number().int().nonnegative(),
+  withholdingTax: z.number().int().nonnegative(),
+  netAmount: Yen,
+};
 
 export const InvoiceCalculationResponse = z.object({
   subtotal: Yen,
   total: Yen,
   taxBreakdown: z.array(TaxBreakdownEntry),
+  ...WithholdingAmounts,
 });
 export type InvoiceCalculationResponse = z.infer<typeof InvoiceCalculationResponse>;
 
@@ -287,6 +302,7 @@ export const InvoiceDraft = z.object({
   total: Yen,
   taxDisplay: InvoiceTaxDisplay,
   taxBreakdown: z.array(TaxBreakdownEntry),
+  ...WithholdingAmounts,
   warnings: z.array(InvoiceDraftWarning),
 });
 export type InvoiceDraft = z.infer<typeof InvoiceDraft>;
@@ -327,6 +343,7 @@ export const InvoiceSummary = z.object({
   issueDate: DateString,
   dueDate: DateString,
   total: Yen,
+  ...WithholdingAmounts,
   paid: z.number().int().nonnegative(),
   remaining: z.number().int().nonnegative(),
   status: InvoiceStatus,

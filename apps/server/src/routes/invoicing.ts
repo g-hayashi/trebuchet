@@ -115,7 +115,11 @@ export function invoicingRoutes({ clock }: RouteOptions) {
 
       // ---- 発行・詳細（US1。§3.4・§3.6） ----
       .post("/invoices/calculate", validate("json", InvoiceCalculationInput), (c) => {
-        const result = previewInvoiceCalculation(c.req.valid("json"));
+        const result = previewInvoiceCalculation(
+          deps(c.var.db),
+          c.req.valid("json"),
+          todayOf(clock),
+        );
         return respond(c, result, (amounts) => c.json(amounts, 200));
       })
       .post("/invoices", validate("json", InvoiceInput), (c) => {
