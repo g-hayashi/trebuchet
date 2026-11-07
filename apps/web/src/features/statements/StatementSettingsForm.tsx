@@ -87,8 +87,8 @@ function Fields({
     >
       {field(
         "bulk",
-        "まとめて承認のしきい値",
-        "確信度がこの値以上の候補を、まとめて承認の対象にします（0〜100）。",
+        "確信度の高い行のしきい値",
+        "確信度がこの値以上の行を、確認の画面の「確信度の高い行を選択」で選びます（0〜100）。選ぶだけで、承認は行を選んでから行います。",
       )}
       {field(
         "external",
@@ -106,7 +106,7 @@ function Fields({
   );
 }
 
-/** 明細の設定（H:§6.3。FR-018・027）: まとめて承認と外部へ送るしきい値。事業体ごと */
+/** 明細の設定（H:§6.3。FR-018・027）: 「確信度の高い行を選択」と外部へ送るしきい値。事業体ごと */
 export function StatementSettingsForm({ entityId }: { entityId: string }) {
   const settings = useQuery(statementSettingsQuery(entityId));
   return (

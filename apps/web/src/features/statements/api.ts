@@ -195,12 +195,28 @@ export const postApprove = async (entityId: string, statementId: string, json: A
 export const postInfer = async (entityId: string, statementIds: string[]) =>
   unwrap(await entityApi.statements.infer.$post({ param: { entityId }, json: { statementIds } }));
 
-/** まとめて承認（§4.5）。`statementIds` を省くと、設定のしきい値以上の未処理すべて */
-export const postApproveBulk = async (entityId: string, statementIds: string[]) =>
+/** 選んだ行の承認（§4.5。007/R17）。各 item は候補のまま、または `draft`・`match` つき */
+export const postApproveBulk = async (
+  entityId: string,
+  items: { statementId: string; draft?: JournalInput | undefined; match?: ApproveBody["match"] }[],
+) =>
   unwrap(
     await entityApi.statements["approve-bulk"].$post({
       param: { entityId },
-      json: { statementIds },
+      json: { items },
+    }),
+  );
+
+/** 選んだ行の除外（§4.5a。007/R17）。理由は任意で、選んだ全部に同じものを残す。明細ごとに別のトランザクション */
+export const postExcludeBulk = async (
+  entityId: string,
+  statementIds: string[],
+  reason?: string | undefined,
+) =>
+  unwrap(
+    await entityApi.statements["exclude-bulk"].$post({
+      param: { entityId },
+      json: { statementIds, ...(reason === undefined ? {} : { reason }) },
     }),
   );
 

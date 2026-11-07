@@ -6,12 +6,14 @@ import {
   type StatementTableLayout,
 } from "@trebuchet/schema";
 import type { ColumnSuggestionProvider } from "../ports.ts";
+import { dropMismatchedColumns, inferMissingColumns } from "../statements/column-content.ts";
 import {
   buildColumnPrompt,
   type ColumnSuggestion,
   hasRequiredColumns,
   parseColumnSuggestion,
 } from "../statements/column-prompt.ts";
+import { suggestAmountSign } from "../statements/columns.ts";
 import { perMille } from "../statements/evals.ts";
 
 // 端末内の AI による列の対応の案（007/R10、FR-016・FR-018、contracts §4.1）。値は帳簿に書かない（案を返すだけ）
@@ -24,7 +26,10 @@ export type ColumnSuggestionUnavailable = "disabled" | "unavailable" | "timeout"
 
 export type ColumnSuggestionResult = {
   suggestion: ColumnSuggestion | null;
-  /** 案がないときだけ付く。AI を呼ぶ必要がなかったとき（辞書の案か保存した対応で足りる）は付かない */
+  /**
+   * AI の案がないときだけ付く。AI を呼ぶ必要がなかったとき（辞書の案か保存した対応で足りる）は付かない。
+   * 案（`suggestion`）と一緒に付くときは、AI を使えず、列の中身から推定しただけの案（`confidence` は 0。R16）
+   */
   unavailable?: ColumnSuggestionUnavailable;
 };
 
@@ -57,20 +62,98 @@ export async function suggestStatementColumns(
     return { suggestion: null };
   }
   const { provider } = deps;
-  if (provider === undefined) return none("disabled");
+  if (provider === undefined) return contentOnly(layout, "disabled");
 
   let response: Awaited<ReturnType<ColumnSuggestionProvider["suggestColumns"]>>;
   try {
-    if (!(await provider.available())) return none("unavailable");
+    if (!(await provider.available())) return contentOnly(layout, "unavailable");
     response = await provider.suggestColumns(buildColumnPrompt(layout));
   } catch {
-    return none("unavailable");
+    return contentOnly(layout, "unavailable");
   }
   if (!response.ok) {
-    return none(response.error.details?.timeout === true ? "timeout" : "unavailable");
+    return contentOnly(
+      layout,
+      response.error.details?.timeout === true ? "timeout" : "unavailable",
+    );
   }
   const parsed = parseColumnSuggestion(response.value, layout.columnCount);
-  return parsed.ok ? { suggestion: parsed.value } : none("invalid");
+  if (!parsed.ok) return contentOnly(layout, "invalid");
+  const checked = checkAgainstSamples(parsed.value, layout);
+  return checked === null ? contentOnly(layout, "invalid") : { suggestion: checked };
+}
+
+/** 見本の行は列数が表と同じ行だけ（前置きなどの幅が違う行は除く。なければ全部） */
+function sampleRowsOf(layout: ColumnSuggestionLayout): string[][] {
+  const sameWidth = layout.sampleRows.filter((row) => row.length === layout.columnCount);
+  return sameWidth.length > 0 ? sameWidth : layout.sampleRows;
+}
+
+/**
+ * AI を呼ばない・使えない・失敗したときの案: 辞書の案にない日付・金額・内容だけを、列の中身から推定して返す（007/R16）。
+ * 辞書の案は変えない（辞書の列・役割は取らない）。AI の案ではないので、`confidence` は 0 で、`unavailable`（AI を使えなかった理由）を
+ * 付けたまま返す。画面は、案と `unavailable` が両方あれば「中身からの推定」と示す。推定できる列がなければ案なし
+ */
+function contentOnly(
+  layout: ColumnSuggestionLayout,
+  reason: ColumnSuggestionUnavailable,
+): ColumnSuggestionResult {
+  const columns = inferMissingColumns(
+    layout.suggestedColumns,
+    sampleRowsOf(layout),
+    layout.columnCount,
+  );
+  if (Object.keys(columns).length === 0) return none(reason);
+  const sign =
+    columns.amount === undefined ? undefined : suggestAmountSign(layout.header, columns.amount);
+  return {
+    suggestion: { columns, amountSign: sign ?? null, confidence: 0 },
+    unavailable: reason,
+  };
+}
+
+/** 役割を「別の役割の列は取らない」ことで守る列（中身から推定した列に、これ以外の役割の列は譲る） */
+const KEPT_ROLES: readonly StatementColumnRole[] = [
+  "date",
+  "content",
+  "amount",
+  "outflow",
+  "inflow",
+];
+
+/**
+ * AI の案を、見本の行の値で確かめる（007/R16。AI のプロンプトは変えない）。
+ * 1. 値と合わない役割（日付が日付でない、金額が金額でない）を捨てる（`dropMismatchedColumns`）
+ * 2. 辞書の案にも AI の案にもない日付・金額（1 列のとき）・内容を、中身から推定して足す（`inferMissingColumns`）。
+ *    推定した列に付いていた、日付・内容・金額・出金・入金以外の役割（大項目など）は外す
+ * 3. 符号の案: 金額の列の見出しがカードの利用額なら出金が正（AI の案より優先）。そうでなければ、AI が選んだ金額の列のときだけ AI の案
+ * 見本の行は列数が表と同じ行だけ（前置きなどの幅が違う行は除く。なければ全部）。何も残らなければ null
+ */
+function checkAgainstSamples(
+  suggestion: ColumnSuggestion,
+  layout: ColumnSuggestionLayout,
+): ColumnSuggestion | null {
+  const rows = sampleRowsOf(layout);
+  const kept = dropMismatchedColumns(suggestion.columns, rows);
+  const inferred = inferMissingColumns(
+    { ...layout.suggestedColumns, ...kept },
+    rows,
+    layout.columnCount,
+  );
+  const taken = new Set(Object.values(inferred));
+  const columns: StatementColumnIndexes = {};
+  for (const [role, index] of Object.entries(kept) as [StatementColumnRole, number][]) {
+    if (KEPT_ROLES.includes(role) || !taken.has(index)) columns[role] = index;
+  }
+  Object.assign(columns, inferred);
+  if (Object.keys(columns).length === 0) return null;
+
+  let amountSign: StatementAmountSign | null = null;
+  if (columns.amount !== undefined) {
+    const fromAi = kept.amount === columns.amount ? suggestion.amountSign : null;
+    amountSign = suggestAmountSign(layout.header, columns.amount) ?? fromAi;
+  }
+  return { columns, amountSign, confidence: suggestion.confidence };
 }
 
 // 列の案の評価（007/R15、Constitution IV）。合成の例で、案の精度を前後で比べる。純関数（AI は provider で受け取る）
@@ -130,7 +213,7 @@ export async function evaluateColumnSuggestions(
   let signMatched = 0;
 
   for (const c of cases) {
-    const { suggestion, unavailable: reason } = await suggestStatementColumns(
+    const { suggestion: answer, unavailable: reason } = await suggestStatementColumns(
       { provider },
       {
         header: c.header,
@@ -140,6 +223,8 @@ export async function evaluateColumnSuggestions(
         match: { kind: "none" },
       },
     );
+    // 理由（unavailable）つきの案は、AI の案ではなく中身からの推定なので、評価では案なしに数える
+    const suggestion = reason === undefined ? answer : null;
     if (suggestion === null) {
       noSuggestion += 1;
       if (reason !== undefined) unavailable[reason] += 1;

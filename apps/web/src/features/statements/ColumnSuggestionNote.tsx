@@ -73,6 +73,15 @@ export function ColumnSuggestionNote({
   if (query.isError) {
     return <p className="text-sm text-muted-foreground">AI の案を作れませんでした</p>;
   }
+  if (suggestion && query.data?.unavailable !== undefined) {
+    // 案と理由が両方あるのは、AI を使えず、列の中身から推定しただけのとき（AI の案ではない。007/R16）
+    return (
+      <p className="text-sm text-muted-foreground">
+        {UNAVAILABLE_MESSAGES[query.data.unavailable]}
+        列の中身から推定した案を、選んでいない列に入れました。確かめてから進んでください。
+      </p>
+    );
+  }
   if (suggestion) {
     return (
       <p className="text-sm text-muted-foreground">

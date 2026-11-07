@@ -430,12 +430,10 @@ describe("初期作成（H:§5.2）", () => {
 });
 
 describe("明細の一覧から", () => {
-  it("明細の一覧にルールの画面へのリンクがある", async () => {
+  it("明細の一覧にルールの画面へのリンクは置かない（左のメニューの「ルール」から開く。007/R17）", async () => {
     mockApi({});
     renderRoute(StatementsRoute, { path: "/e/$entityId/statements/", url: "/e/e1/statements" });
-    expect(await screen.findByRole("link", { name: "推定のルール" })).toHaveAttribute(
-      "href",
-      "/e/e1/statements/rules",
-    );
+    await screen.findByText("該当する明細はありません。");
+    expect(screen.queryByRole("link", { name: "推定のルール" })).not.toBeInTheDocument();
   });
 });

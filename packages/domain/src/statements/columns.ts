@@ -1,4 +1,8 @@
-import type { StatementColumnIndexes, StatementColumnRole } from "@trebuchet/schema";
+import type {
+  StatementAmountSign,
+  StatementColumnIndexes,
+  StatementColumnRole,
+} from "@trebuchet/schema";
 
 /**
  * 明細の表の見出しの辞書と、列の案（007/R4）。辞書は 1 か所の一覧なので、新しい取込元の見出しに出会ったらここだけを足す。
@@ -6,7 +10,18 @@ import type { StatementColumnIndexes, StatementColumnRole } from "@trebuchet/sch
  * 「お支払金額」と「お支払」を取り違えるため）。残高（「残高」「差引残高」）は役割に持たない（読まない）
  */
 export const COLUMN_ROLE_NAMES = {
-  date: ["日付", "利用日", "ご利用日", "取引日", "お取引日", "年月日", "取扱日", "計上日", "Date"],
+  date: [
+    "日付",
+    "利用日",
+    "ご利用日",
+    "ご利用年月日",
+    "取引日",
+    "お取引日",
+    "年月日",
+    "取扱日",
+    "計上日",
+    "Date",
+  ],
   content: [
     "内容",
     "摘要",
@@ -16,10 +31,22 @@ export const COLUMN_ROLE_NAMES = {
     "ご利用店名",
     "ご利用先",
     "利用先",
+    "ご利用箇所",
+    "利用箇所",
     "明細",
     "Description",
   ],
-  amount: ["金額", "利用金額", "ご利用金額", "支払金額", "お支払金額", "取引金額", "Amount"],
+  amount: [
+    "金額",
+    "利用金額",
+    "ご利用金額",
+    "利用額",
+    "ご利用額",
+    "支払金額",
+    "お支払金額",
+    "取引金額",
+    "Amount",
+  ],
   outflow: [
     "出金",
     "出金額",
@@ -40,11 +67,15 @@ export const COLUMN_ROLE_NAMES = {
   transferFlag: ["振替"],
 } as const satisfies Record<StatementColumnRole, readonly string[]>;
 
-/** 見出しの名前を比べる形にする: NFKC、空白の除去、括弧書きの除去、英字の小文字化 */
+/**
+ * 見出しの名前を比べる形にする: NFKC、括弧の中身の除去（全角の括弧は NFKC で半角になる）、注記の記号（`※`・`*`・`＊`）の除去、
+ * 空白（改行を含む）の除去、英字の小文字化。ブラウザの表のコピーで見出しのセルが改行でつながっても、改行を除いて比べる（R16）
+ */
 export function normalizeHeaderName(name: string): string {
   return name
     .normalize("NFKC")
     .replace(/\([^)]*\)/g, "")
+    .replace(/[※*＊]/g, "")
     .replace(/\s+/g, "")
     .toLowerCase();
 }
@@ -57,6 +88,26 @@ const ROLE_OF_NAME: ReadonlyMap<string, StatementColumnRole> = new Map(
     ]),
   ),
 );
+
+/** 見出しが「利用額」の系統（カードの利用額）の金額の列。正の値が出金（利用）なので、符号の案は出金が正（R16） */
+const OUTFLOW_POSITIVE_AMOUNT_NAMES: ReadonlySet<string> = new Set(
+  ["ご利用金額", "ご利用額", "利用金額", "利用額"].map(normalizeHeaderName),
+);
+
+/**
+ * 金額の列（`amountIndex`）の見出しから、符号の案を作る。カードの利用額の見出しなら `outflow_positive`、
+ * それ以外（銀行の「金額」など向きが見出しで決まらないもの・見出しなし）は undefined（利用者が選ぶ。FR-004）
+ */
+export function suggestAmountSign(
+  header: readonly string[] | null,
+  amountIndex: number | undefined,
+): StatementAmountSign | undefined {
+  if (header === null || amountIndex === undefined) return undefined;
+  const cell = header[amountIndex];
+  return cell !== undefined && OUTFLOW_POSITIVE_AMOUNT_NAMES.has(normalizeHeaderName(cell))
+    ? "outflow_positive"
+    : undefined;
+}
 
 /**
  * 見出しのセルから、役割ごとの列の番号（0 起点）の案を作る。辞書に当たらない列は案にしない。

@@ -26,7 +26,7 @@ import { createJournal } from "./create-journal.ts";
 import { learnFromApproval } from "./inference-rules.ts";
 import { checkReason } from "./journal-edit.ts";
 import { loadStatementStates, type StatementState } from "./statement-candidates.ts";
-import { getStatementSettings, type StatementTx, statementViewsInTx } from "./statements.ts";
+import { type StatementTx, statementViewsInTx } from "./statements.ts";
 
 // 承認・除外・結びつきの取消（006 US2。R5〜R7・R15・R16、§1.5、FR-014〜018・020・021・021a）。
 // 書き込みは UnitOfWork の中だけ（INV-47）。fn が `err` を返すか例外を投げれば、失効した結びつきも含めて全部巻き戻る
@@ -429,88 +429,52 @@ function approveMatch(
 
 // ---- まとめて承認（FR-018） ----
 
-export type BulkApproveInput = {
-  statementIds?: readonly string[] | undefined;
-  /** 省略で設定の `bulk_threshold` */
-  threshold?: number | undefined;
+/** 一覧で選んだ 1 行。`draft`・`match` の規則は `ApproveStatementInput` と同じ（どちらもなければ候補のまま） */
+export type BulkApproveItem = {
+  statementId: string;
+  draft?: JournalDraft | undefined;
+  match?: { journalId: string; lineId: string } | undefined;
 };
+
+export type BulkApproveInput = { items: readonly BulkApproveItem[] };
+
+export type BulkFailure = { statementId: string; code: string; message: string };
 
 export type BulkApproved = {
   /** 承認した明細（振替の対の相手を含む） */
   approved: string[];
-  failed: { statementId: string; code: string; message: string }[];
+  failed: BulkFailure[];
 };
 
 /**
- * 確信度がしきい値以上の候補（`none` を除く）をまとめて承認する。明細ごとに 1 つの UnitOfWork で、
- * 失敗は理由つきで `failed` に残して続ける。`statementIds` を渡すと対象をその明細に絞り、
- * 候補がない・しきい値未満の明細も `failed`（`VALIDATION`）に残す。日付の古い順に承認し、
- * 振替の対の相手は対と一緒に承認される（二重に数えない）
+ * 利用者が選んだ行だけをまとめて承認する（007/R17）。しきい値では拒まない。明細ごとに
+ * `approveCandidate` で 1 つの UnitOfWork を使い、失敗は理由つきで `failed` に残して続ける
+ * （候補がなく `draft` もない行は `VALIDATION`）。渡した順に承認し、同じ明細は 1 回だけ。
+ * 振替の対の相手は対と一緒に承認され（二重に数えない）、相手の item はとばす
  */
-export function approveBulk(
-  deps: ApprovalDeps,
-  input: BulkApproveInput = {},
-): Result<BulkApproved> {
-  const threshold =
-    input.threshold ??
-    (() => {
-      const settings = getStatementSettings(deps);
-      return settings.ok ? settings.value.bulkThreshold : 80;
-    })();
-
-  const read = deps.uow.run((tx) =>
-    ok({
-      states: loadStatementStates(tx),
-      candidates: new Map(tx.statements.listStatementCandidates().map((c) => [c.statementId, c])),
-    }),
-  );
-  if (!read.ok) return read;
-  const { states, candidates } = read.value;
-
-  const eligible = (id: string): string | undefined => {
-    const c = candidates.get(id);
-    if (c === undefined || c.method === "none") return "承認できる候補がありません";
-    if ((c.confidence ?? 0) < threshold) {
-      return `確信度（${c.confidence}）がしきい値（${threshold}）未満です`;
-    }
-    return undefined;
-  };
-
+export function approveBulk(deps: ApprovalDeps, input: BulkApproveInput): Result<BulkApproved> {
   const approved: string[] = [];
-  const failed: BulkApproved["failed"] = [];
-  const done = new Set<string>();
-  const known = new Map(states.map((s) => [s.record.id, s]));
-
-  let order: string[];
-  if (input.statementIds === undefined) {
-    order = states
-      .filter((s) => s.status === "unprocessed" && eligible(s.record.id) === undefined)
-      .sort((a, b) => a.record.date.localeCompare(b.record.date))
-      .map((s) => s.record.id);
-  } else {
-    order = [...new Set(input.statementIds)];
-  }
-
-  for (const id of order) {
-    if (done.has(id)) continue;
-    const state = known.get(id);
-    if (input.statementIds !== undefined && state !== undefined) {
-      const reason = eligible(id);
-      if (reason !== undefined && state.status === "unprocessed") {
-        failed.push({ statementId: id, code: "VALIDATION", message: reason });
-        continue;
-      }
-    }
-    const r = approveCandidate(deps, id);
+  const failed: BulkFailure[] = [];
+  const seen = new Set<string>();
+  for (const item of input.items) {
+    if (seen.has(item.statementId)) continue;
+    seen.add(item.statementId);
+    const r = approveCandidate(deps, item.statementId, {
+      draft: item.draft,
+      match: item.match,
+    });
     if (!r.ok) {
-      failed.push({ statementId: id, code: r.error.code, message: r.error.message });
+      failed.push({
+        statementId: item.statementId,
+        code: r.error.code,
+        message: r.error.message,
+      });
       continue;
     }
-    approved.push(id);
-    done.add(id);
+    approved.push(item.statementId);
     if (r.value.pairLink !== null) {
       approved.push(r.value.pairLink.statementId);
-      done.add(r.value.pairLink.statementId);
+      seen.add(r.value.pairLink.statementId);
     }
   }
   return ok({ approved, failed });
@@ -559,6 +523,30 @@ export function excludeStatement(
     );
     return ok(viewOf(tx, statementId));
   });
+}
+
+export type BulkExcluded = {
+  /** 除外した明細（もともと除外済みのものを含む） */
+  excluded: string[];
+  failed: BulkFailure[];
+};
+
+/**
+ * 選んだ明細をまとめて除外する（FR-017、007/R17）。明細ごとに `excludeStatement`（別の UnitOfWork）。
+ * 失敗（登録済み・不明）は理由つきで `failed` に残して続ける。同じ明細は 1 回だけ。理由は全部に同じもの
+ */
+export function excludeBulk(
+  deps: ApprovalDeps,
+  input: { statementIds: readonly string[]; reason?: string | undefined },
+): Result<BulkExcluded> {
+  const excluded: string[] = [];
+  const failed: BulkFailure[] = [];
+  for (const statementId of new Set(input.statementIds)) {
+    const r = excludeStatement(deps, statementId, { reason: input.reason });
+    if (r.ok) excluded.push(statementId);
+    else failed.push({ statementId, code: r.error.code, message: r.error.message });
+  }
+  return ok({ excluded, failed });
 }
 
 /** 除外を取り消す（FR-017）。理由は必須（`REASON_REQUIRED`）。除外していない明細は `VALIDATION` */

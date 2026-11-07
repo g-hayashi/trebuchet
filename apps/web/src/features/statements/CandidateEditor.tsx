@@ -5,7 +5,7 @@ import {
   type Purpose,
   type StatementAccount,
 } from "@trebuchet/schema";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { NativeSelect } from "@/components/ui/input";
@@ -230,8 +230,18 @@ export function CandidateEditor({
   const ready =
     accounts.data && partners.data && tags.data && taxSettings.data && taxCategories.data;
 
+  // 開いたとき、画面の外にあれば見える位置へ動かす（jsdom などで未実装のときは何もしない）
+  const sectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    sectionRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, []);
+
   return (
-    <section aria-label="候補の確認" className="grid gap-4 rounded-md border px-4 py-4">
+    <section
+      ref={sectionRef}
+      aria-label="候補の確認"
+      className="grid gap-4 rounded-md border px-4 py-4"
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="grid gap-1">
           <h2 className="font-medium">

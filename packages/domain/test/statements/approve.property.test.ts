@@ -74,7 +74,7 @@ function runOp(ctx: StatementsCtx, op: Op): void {
       if (target !== undefined) approveCandidate(ctx.deps, target.id);
       return;
     case "approveBulk":
-      approveBulk(ctx.deps, { threshold: 0 });
+      approveBulk(ctx.deps, { items: ctx.statements().map((s) => ({ statementId: s.id })) });
       return;
     case "void": {
       const link = target === undefined ? undefined : ctx.activeLinks(target.id)[0];

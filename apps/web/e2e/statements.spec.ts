@@ -24,11 +24,12 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
   page,
 }) => {
   const menu = page.getByRole("navigation", { name: "事業体のメニュー" });
+  // 未処理は確認の表（未処理の明細）、ほかの状態は一覧の表（明細の一覧）
   const statementRow = (content: string) =>
     page
-      .getByRole("table", { name: "明細の一覧", exact: true })
+      .getByRole("table", { name: /^(明細の一覧|未処理の明細)$/ })
       .getByRole("row")
-      .filter({ has: page.getByRole("cell", { name: content, exact: true }) });
+      .filter({ hasText: content });
   let journalNo = "";
 
   await test.step("設定または解錠する", async () => {
@@ -146,7 +147,10 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     ).toBeVisible();
     await expect(preview).toBeHidden();
 
-    // 取り込むと入力から始め直す。同じ形のファイルなので、保存した取込元が当てはまり、列の画面は出ない（007 US2）
+    // 取り込むと ④ の確認になり、入力の欄は隠れる。「入力し直す」で ① に戻る（007/R17）
+    await expect(input.getByLabel("明細のファイル", { exact: true })).toHaveCount(0);
+    await input.getByRole("button", { name: "入力し直す", exact: true }).click();
+    // 同じ形のファイルなので、保存した取込元が当てはまり、列の画面は出ない（007 US2）
     await readFile();
     await expect(summary).toBeVisible();
     await expect(columns).toHaveCount(0);
@@ -161,17 +165,17 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     await expect(importButton).toBeDisabled();
   });
 
-  await test.step("候補を作り、候補なしの明細を、科目を選んで承認する", async () => {
+  await test.step("一覧を開くと候補を自動で作り直す。候補なしの明細を、詳細で科目を選んで承認する", async () => {
     await openNav(page, "明細", "一覧と確認");
+    // 既定は未処理の確認の表。最初はどの行も選ばれていない
+    await expect(page.getByRole("table", { name: "未処理の明細", exact: true })).toBeVisible();
     await expect(statementRow(TARGET)).toBeVisible();
-    await expect(statementRow(TARGET)).toContainText("未処理");
-
-    await page.getByRole("button", { name: "候補をもう一度作る", exact: true }).click();
     await expect(
-      page.getByRole("status").filter({ hasText: /^候補を \d+ 件作りました/ }),
-    ).toBeVisible();
+      statementRow(TARGET).getByRole("checkbox", { name: `${TARGET} を選択`, exact: true }),
+    ).not.toBeChecked();
 
-    await statementRow(TARGET).getByRole("button", { name: "確認する", exact: true }).click();
+    // 「詳細」の確認は、その行のすぐ下に開く
+    await statementRow(TARGET).getByRole("button", { name: "詳細", exact: true }).click();
     const review = page.getByRole("region", { name: "候補の確認", exact: true });
     await expect(review).toBeVisible();
     await expect(
@@ -232,9 +236,10 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
     await openNav(page, "明細", "一覧と確認");
     // 既定の絞り込みは「未処理」
     await expect(page.getByLabel("状態", { exact: true })).toHaveValue("unprocessed");
-    await expect(statementRow(TARGET)).toContainText("未処理");
+    // 未処理の確認の表に戻る（取り消した仕訳の明細は、候補がまだ作り直されていなくても行に出る）
+    await expect(page.getByRole("table", { name: "未処理の明細", exact: true })).toBeVisible();
     await expect(
-      statementRow(TARGET).getByRole("button", { name: "確認する", exact: true }),
+      statementRow(TARGET).getByRole("button", { name: "詳細", exact: true }),
     ).toBeVisible();
   });
 });

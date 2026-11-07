@@ -515,6 +515,18 @@ describe("StatementEncoding・StatementSource・StatementTableLayout", () => {
     suggestedColumns: { date: 0, content: 1, amount: 2 },
     match: { kind: "none" },
   };
+  it("StatementTableLayout: suggestedAmountSign は省ける。入れるなら符号の 2 種だけ（007/R16）", () => {
+    expect(StatementTableLayout.safeParse(layout).success).toBe(true);
+    for (const sign of ["inflow_positive", "outflow_positive"]) {
+      expect(StatementTableLayout.safeParse({ ...layout, suggestedAmountSign: sign }).success).toBe(
+        true,
+      );
+    }
+    expect(StatementTableLayout.safeParse({ ...layout, suggestedAmountSign: "both" }).success).toBe(
+      false,
+    );
+  });
+
   it("StatementTableLayout: match の 3 種と headerDiff", () => {
     expect(StatementTableLayout.safeParse(layout).success).toBe(true);
     expect(

@@ -3,6 +3,7 @@ import { decodeText, parseDelimitedLines } from "../../src/import/csv.ts";
 import {
   COLUMN_ROLE_NAMES,
   normalizeHeaderName,
+  suggestAmountSign,
   suggestColumns,
 } from "../../src/statements/columns.ts";
 import { ALL_STATEMENT_FIXTURES, CUSTOM_HEADER } from "../fixtures/statements/expected.ts";
@@ -16,6 +17,51 @@ describe("normalizeHeaderName", () => {
     expect(normalizeHeaderName("　ご 利用 日 ")).toBe("ご利用日");
     expect(normalizeHeaderName("Ａｍｏｕｎｔ (JPY)")).toBe("amount");
     expect(normalizeHeaderName("ＩＤ")).toBe("id");
+  });
+
+  it("注記の記号（※ ＊ *）を除く", () => {
+    expect(normalizeHeaderName("ご利用店名 ※")).toBe("ご利用店名");
+    expect(normalizeHeaderName("ご利用店名＊")).toBe("ご利用店名");
+    expect(normalizeHeaderName("*金額*")).toBe("金額");
+  });
+
+  it("括弧の中身を除く（全角・半角とも。改行をはさんでも）", () => {
+    expect(normalizeHeaderName("ご利用額\n（割引後額）")).toBe("ご利用額");
+    expect(normalizeHeaderName("ご利用額\n(割引後額)")).toBe("ご利用額");
+    expect(normalizeHeaderName("（お支払い総額）")).toBe("");
+  });
+
+  it("改行でつながった見出しのセルは、改行を除いて比べる", () => {
+    expect(normalizeHeaderName("ご利用\n年月日")).toBe("ご利用年月日");
+  });
+});
+
+describe("カードの見出し（007/R16）", () => {
+  it("ご利用年月日・ご利用箇所・ご利用額・利用額を辞書に持つ", () => {
+    expect(suggestColumns(["ご利用\n年月日", "ご利用箇所", "ご利用額\n（割引後額）"])).toEqual({
+      date: 0,
+      content: 1,
+      amount: 2,
+    });
+    expect(suggestColumns(["利用箇所", "利用額"])).toEqual({ content: 0, amount: 1 });
+  });
+
+  it("お支払い総額・内手数料・支払区分は辞書に当てない", () => {
+    expect(suggestColumns(["（お支払い総額）", "（内手数料）\n現地通貨額", "支払区分"])).toEqual(
+      {},
+    );
+  });
+
+  it("金額の見出しがご利用金額・ご利用額・利用金額・利用額なら、符号の案は出金が正", () => {
+    for (const name of ["ご利用金額", "ご利用額\n（割引後額）", "利用金額", "利用額"]) {
+      expect(suggestAmountSign([name], 0), name).toBe("outflow_positive");
+    }
+    // 銀行の金額・お支払金額などは案を出さない（利用者が選ぶ）
+    for (const name of ["金額", "お支払金額", "取引金額"]) {
+      expect(suggestAmountSign([name], 0), name).toBeUndefined();
+    }
+    expect(suggestAmountSign(null, 0)).toBeUndefined();
+    expect(suggestAmountSign(["ご利用金額"], undefined)).toBeUndefined();
   });
 });
 

@@ -7,7 +7,7 @@ import {
 import { isValidDate } from "../dates.ts";
 import { type DelimitedLine, parseDelimitedLines } from "../import/csv.ts";
 import { domainError, err, ok, type Result } from "../types.ts";
-import { suggestColumns } from "./columns.ts";
+import { suggestAmountSign, suggestColumns } from "./columns.ts";
 
 /**
  * 明細の表（貼り付け・ファイル）の値の読み取り（007/R5・R6）。列の対応（`StatementColumnMapping`）で
@@ -81,7 +81,7 @@ const p2 = (n: string | number): string => String(n).padStart(2, "0");
 /**
  * 日付の書き方を行ごとに読む（R6）: `YYYY/MM/DD`・`YYYY-MM-DD`・`YYYY.MM.DD`・`YYYY年M月D日`・`YYYYMMDD`・
  * `MM/DD`（`(曜)` つき可。年は引数）・和暦（`令和N年M月D日`・`R N.M.D`・`RN/M/D`、平成も同じ。`元年`）。
- * 時刻は日付の部分だけを読む。読めなければ undefined（`DD/MM/YYYY` は読まない）
+ * 時刻は日付の部分だけを読む。`YY/MM/DD`（2 桁の年は 2000 年代。R16）も読む。読めなければ undefined（`DD/MM/YYYY` は読まない）
  */
 export function parseStatementDate(raw: string, year: number): string | undefined {
   const s = norm(raw)
@@ -103,6 +103,11 @@ function readDateParts(
   if (full !== null) {
     return ymd(full[1] as string, (full[2] ?? full[4]) as string, (full[3] ?? full[5]) as string);
   }
+  // 年が 2 桁の `YY/MM/DD`（カードの明細）は 2000 年代として読む（R16）。`DD/MM/YY` は読まない（`YY/MM/DD` と取り違える）
+  const shortYear = /^(\d{2})[/.-](\d{1,2})[/.-](\d{1,2})$/.exec(s);
+  if (shortYear !== null) {
+    return ymd(2000 + Number(shortYear[1]), shortYear[2] as string, shortYear[3] as string);
+  }
   const compact = /^(\d{4})(\d{2})(\d{2})$/.exec(s);
   if (compact !== null)
     return ymd(compact[1] as string, compact[2] as string, compact[3] as string);
@@ -119,6 +124,12 @@ function readDateParts(
   }
   return undefined;
 }
+
+/**
+ * セルの最初の行（前後の空白を除く）。セルの中の改行でつながった金額（`5,000` と、割引後額の `(5,000)`）は、
+ * 最初の行（割引前）を金額として読む（R16）
+ */
+export const firstLine = (cell: string): string => cell.trim().split(/[\r\n]+/)[0] ?? "";
 
 const optional = (cell: string | undefined): string | undefined => {
   const s = cell?.trim();
@@ -153,35 +164,183 @@ export type StatementLayoutOverride = {
   headerRow?: number | null | undefined;
 };
 
+/**
+ * 件にまとめた行。`headerGroup` は、見出しのセルの中の改行でばらけた物理行をまとめた見出しの行、
+ * `merged` は、複数の物理行をまとめた件（R16）
+ */
+type TableLine = DelimitedLine & { headerGroup?: true; merged?: true };
+
 const nonEmptyLines = (text: string, delimiter: string): DelimitedLine[] =>
   parseDelimitedLines(text, delimiter).filter((l) => l.cells.some((c) => c.trim() !== ""));
 
 /**
- * 列数の最頻値（2 列以上の行のうち。同数なら大きい方）。2 列以上の行がなければ全行の最頻値。
- * 先頭 `SCORE_ROW_COUNT` 行で数える。`count` はその列数の行の数、`considered` は数えた行の数
+ * 表の行（空行を除く）。タブ区切りでは、セルの中の改行（ブラウザの表のコピー）でばらけた物理行を件にまとめる
+ * （`foldCellNewlines`）。`detectTableLayout` と `readStatementTable` が同じ行を見るよう、どちらもここを通す（R16）
  */
-function modeWidth(lines: readonly DelimitedLine[]): {
-  width: number;
-  count: number;
-  considered: number;
-} {
-  const head = lines.slice(0, SCORE_ROW_COUNT);
+const tableLines = (text: string, delimiter: string): TableLine[] => {
+  const lines = nonEmptyLines(text, delimiter);
+  return delimiter === "\t" ? foldCellNewlines(lines) : lines;
+};
+
+/**
+ * 列数の最頻値（2 以上のうち。同数なら `tie` の方（既定は大きい方））。2 以上がなければ全体の最頻値。
+ * `count` はその列数の数
+ */
+function modeOfWidths(
+  widths: readonly number[],
+  tie: "larger" | "smaller" = "larger",
+): { width: number; count: number } {
   const tally = (minWidth: number): { width: number; count: number } => {
     const counts = new Map<number, number>();
-    for (const l of head) {
-      if (l.cells.length >= minWidth)
-        counts.set(l.cells.length, (counts.get(l.cells.length) ?? 0) + 1);
+    for (const w of widths) {
+      if (w >= minWidth) counts.set(w, (counts.get(w) ?? 0) + 1);
     }
     let best = { width: 0, count: 0 };
     for (const [width, count] of counts) {
-      if (count > best.count || (count === best.count && width > best.width)) {
+      const wins = tie === "larger" ? width > best.width : best.count === 0 || width < best.width;
+      if (count > best.count || (count === best.count && wins)) {
         best = { width, count };
       }
     }
     return best;
   };
   const multi = tally(2);
-  return { ...(multi.count > 0 ? multi : tally(1)), considered: head.length };
+  return multi.count > 0 ? multi : tally(1);
+}
+
+/**
+ * 列数の最頻値（2 列以上の行のうち。同数なら大きい方）。2 列以上の行がなければ全行の最頻値。
+ * 先頭 `SCORE_ROW_COUNT` 行で数える。`count` はその列数の行の数、`considered` は数えた行の数
+ */
+function modeWidth(lines: readonly TableLine[]): {
+  width: number;
+  count: number;
+  considered: number;
+} {
+  const head = lines.slice(0, SCORE_ROW_COUNT);
+  // まとめた見出し（headerGroup）は幅が広いことがあるので、最頻値には数えない（R16）
+  const widths = head.filter((l) => l.headerGroup !== true).map((l) => l.cells.length);
+  return { ...modeOfWidths(widths), considered: head.length };
+}
+
+/** 日付として読めるセルで始まる行か（件の始まり） */
+const startsWithDate = (l: DelimitedLine): boolean => {
+  const first = l.cells[0];
+  return first !== undefined && parseStatementDate(first, 2000) !== undefined;
+};
+
+/** 2 つの行を、境のセル（前の行の最後と次の行の最初）を改行でつないで 1 行にする。空のセルはそのまま相手を残す */
+function joinRows(a: readonly string[], b: readonly string[]): string[] {
+  const last = a[a.length - 1] ?? "";
+  const first = b[0] ?? "";
+  const boundary = last.trim() === "" ? first : first.trim() === "" ? last : `${last}\n${first}`;
+  return [...a.slice(0, -1), boundary, ...b.slice(1)];
+}
+
+/**
+ * 年だけの行（`2026` の 1 セル）の直後に年なしの日付で始まる行が来たら、2 つを `2026/10/09` で始まる 1 行にする。
+ * 行の番号は年の行（件の最初の物理行）
+ */
+function joinYearLines(lines: readonly DelimitedLine[]): TableLine[] {
+  const out: TableLine[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i] as DelimitedLine;
+    const next = lines[i + 1];
+    const year = l.cells.length === 1 ? /^\d{4}$/.exec(norm(l.cells[0] as string)) : null;
+    const nextFirst = next?.cells[0];
+    if (year !== null && next !== undefined && nextFirst !== undefined && isYearless(nextFirst)) {
+      const date = `${year[0]}/${nextFirst.trim().replace(/^(\d{1,2})-(\d{1,2})/, "$1/$2")}`;
+      out.push({ line: l.line, cells: [date, ...next.cells.slice(1)], merged: true });
+      i++;
+    } else {
+      out.push(l);
+    }
+  }
+  return out;
+}
+
+/**
+ * セルの中の改行を復元する（タブ区切り。R16）。ブラウザの表をコピーすると、セルの中の改行（`<br>`）が引用符なしの
+ * 改行になり、1 件・見出しが複数の物理行に分かれる。
+ * 1. 年だけの行と、その次の年なしの日付の行を 1 行にする（`joinYearLines`）
+ * 2. 最初の件より前の行（2 行以上）は、どの行も件の列数の最頻値を持たず（年の行がなければ、日付の行そのものの幅も持たず）、
+ *    まとめた行が見出しの辞書に日付として当たるときだけ、見出しの 1 行にまとめる（`headerGroup`）。それより前の行は前置き
+ * 3. 日付として読めるセルで始まる行を件の始まりとし、始まりでない行は前の件に続ける（境のセルを改行でつなぐ）。
+ *    ただし、件がすでに最頻値に達している、またはつなぐと最頻値を超える行は、つながず独立した行のまま
+ *    （合計の行や、日付のない行が金額を壊さない）。最頻値は、始まりでない行をすべて続けたと仮定した件の列数で数える
+ *    （同数なら小さい方。合計の行が 1 件だけを広げても、その幅にならない）。
+ *    件のまとめは、セルの中の改行の証拠（2 の見出し、1 の年の行）があるときだけ行う。日付で始まる 1 行 1 件の表で、
+ *    日付のない行（合計など）を前の件に続けて壊さないため
+ * 行の番号は件・見出しの最初の物理行。日付で始まる行がなければ何もしない（MF ME の貼り付けなど）
+ */
+function foldCellNewlines(lines: readonly DelimitedLine[]): TableLine[] {
+  const joined = joinYearLines(lines);
+  const firstStart = joined.findIndex(startsWithDate);
+  if (firstStart < 0) return joined;
+
+  const widths: number[] = [];
+  for (const l of joined.slice(firstStart)) {
+    if (startsWithDate(l)) widths.push(l.cells.length);
+    else widths[widths.length - 1] = (widths[widths.length - 1] as number) + l.cells.length - 1;
+  }
+  const { width: mode, count } = modeOfWidths(widths.slice(0, SCORE_ROW_COUNT), "smaller");
+  const yearJoined = joined.some((l) => l.merged === true);
+  // 最頻値の幅の件が 1 つしかない（日付のない行の分だけ広がった 1 件かもしれない）なら、年の行の証拠がない限りまとめない
+  if (count < 2 && !yearJoined) return joined;
+
+  const preface = joined.slice(0, firstStart);
+  let folded: TableLine[] = preface;
+  let evidence = yearJoined;
+  // 年の行の証拠がなければ、日付の行そのものと同じ幅の行（1 行の見出し・前置き・合計の行）がある表は、1 行 1 件とみなす
+  const physical = modeOfWidths(
+    joined
+      .slice(firstStart)
+      .filter(startsWithDate)
+      .map((l) => l.cells.length)
+      .slice(0, SCORE_ROW_COUNT),
+    "smaller",
+  ).width;
+  const blocksHeader = (l: DelimitedLine): boolean =>
+    l.cells.length === mode || (!yearJoined && l.cells.length === physical);
+  if (preface.length >= 2 && !preface.some(blocksHeader)) {
+    for (let k = 0; k <= preface.length - 2; k++) {
+      const group = preface.slice(k);
+      const cells = group.reduce<string[]>(
+        (acc, l, i) => (i === 0 ? [...l.cells] : joinRows(acc, l.cells)),
+        [],
+      );
+      if (suggestColumns(cells).date !== undefined) {
+        const head: TableLine = {
+          line: (group[0] as DelimitedLine).line,
+          cells,
+          headerGroup: true,
+        };
+        folded = [...preface.slice(0, k), head];
+        evidence = true;
+        break;
+      }
+    }
+  }
+  if (!evidence) return joined;
+
+  const items: TableLine[] = [];
+  let item: TableLine | undefined;
+  for (const l of joined.slice(firstStart)) {
+    if (startsWithDate(l)) {
+      item = { ...l };
+      items.push(item);
+    } else if (
+      item !== undefined &&
+      item.cells.length < mode &&
+      item.cells.length + l.cells.length - 1 <= mode
+    ) {
+      item.cells = joinRows(item.cells, l.cells);
+      item.merged = true;
+    } else {
+      items.push(l);
+    }
+  }
+  return [...folded, ...items];
 }
 
 /** 日付・金額として読めるセルか（年のない日付も含む） */
@@ -193,10 +352,12 @@ const looksLikeValue = (cell: string): boolean =>
  * ①セルが辞書に 1 つでも当たる最初の行、なければ ②すべてのセルが空でなく日付・金額として読めず、
  * 次の行に日付として読めるセルがある最初の行。どちらもなければ null（R2-2）
  */
-function findHeaderIndex(lines: readonly DelimitedLine[], width: number): number | null {
+function findHeaderIndex(lines: readonly TableLine[], width: number): number | null {
   const scan = lines.slice(0, HEADER_SCAN_ROW_COUNT);
   for (const [i, l] of scan.entries()) {
-    if (l.cells.length === width && Object.keys(suggestColumns(l.cells)).length > 0) return i;
+    // まとめた見出し（headerGroup）は、外貨の列などで件の最頻値より幅が広くてもよい（R16）
+    const fits = l.cells.length === width || l.headerGroup === true;
+    if (fits && Object.keys(suggestColumns(l.cells)).length > 0) return i;
   }
   for (const [i, l] of scan.entries()) {
     if (l.cells.length !== width) continue;
@@ -228,6 +389,21 @@ function hasYearlessDate(
 }
 
 /**
+ * 区切り文字の候補の採点（R2-1）: 空でない先頭 50 行のうち、2 列以上の行の列数の最頻値を持つ行の割合。
+ * セルの中の改行をまとめた表（`merged`・`headerGroup` の行がある）では、外貨の列などで最頻値より広い行も数える
+ * （桁区切りのカンマで割れた別の候補に、最頻値の行の割合だけで負けないため。R16）
+ */
+function delimiterScore(lines: readonly TableLine[]): number {
+  const { width, count, considered } = modeWidth(lines);
+  if (width < 2) return 0;
+  const folded = lines.some((l) => l.headerGroup === true || l.merged === true);
+  const matching = folded
+    ? lines.slice(0, SCORE_ROW_COUNT).filter((l) => l.cells.length >= width).length
+    : count;
+  return matching / considered;
+}
+
+/**
  * 表のテキストの区切り文字と見出しの行を判定する（007/R2）。値は読まない（日付・金額の読み取りは `readStatementTable`）。
  * 1. 区切り文字: タブ・カンマ・セミコロンの候補ごとに引用つきで分割し、空でない先頭 50 行のうち、2 列以上の行の列数の最頻値を持つ行の割合で採点する
  *    （同点はタブ → カンマ → セミコロン）。どの候補も 2 列以上の行がなければ、タブで返す（利用者が選び直せる）
@@ -243,16 +419,15 @@ export function detectTableLayout(
   override?: StatementLayoutOverride,
 ): Result<StatementTableDetection> {
   let delimiter: StatementDelimiter;
-  let lines: DelimitedLine[];
+  let lines: TableLine[];
   if (override?.delimiter !== undefined) {
     delimiter = override.delimiter;
-    lines = nonEmptyLines(text, delimiter);
+    lines = tableLines(text, delimiter);
   } else {
-    let best: { delimiter: StatementDelimiter; lines: DelimitedLine[]; score: number } | undefined;
+    let best: { delimiter: StatementDelimiter; lines: TableLine[]; score: number } | undefined;
     for (const candidate of DELIMITER_CANDIDATES) {
-      const candidateLines = nonEmptyLines(text, candidate);
-      const { width, count, considered } = modeWidth(candidateLines);
-      const score = width >= 2 ? count / considered : 0;
+      const candidateLines = tableLines(text, candidate);
+      const score = delimiterScore(candidateLines);
       if (best === undefined || score > best.score) {
         best = { delimiter: candidate, lines: candidateLines, score };
       }
@@ -306,7 +481,14 @@ export function detectTableLayout(
           ),
         )
       : lines.slice(headerIndex + 1);
-  const suggestedColumns = header === null ? {} : suggestColumns(header);
+  // まとめた見出しが件の最頻値より広いとき、表の列数の外の列は案にしない（画面に出ない列を案にしない）
+  const suggestedColumns: StatementColumnIndexes =
+    header === null
+      ? {}
+      : (Object.fromEntries(
+          Object.entries(suggestColumns(header)).filter(([, index]) => index < width),
+        ) as StatementColumnIndexes);
+  const suggestedAmountSign = suggestAmountSign(header, suggestedColumns.amount);
   return ok({
     delimiter,
     headerRow: headerLine === undefined ? null : headerLine.line - 1,
@@ -316,6 +498,7 @@ export function detectTableLayout(
     sampleRows: dataLines.slice(0, SAMPLE_ROW_COUNT).map((l) => l.cells),
     needsYear: hasYearlessDate(dataLines, suggestedColumns),
     suggestedColumns,
+    ...(suggestedAmountSign === undefined ? {} : { suggestedAmountSign }),
   });
 }
 
@@ -353,8 +536,8 @@ export function readStatementTable(
   }
 
   const headerRow = mapping.headerRow;
-  const lines = parseDelimitedLines(text, mapping.delimiter).filter(
-    (l) => (headerRow === null || l.line - 1 >= headerRow) && l.cells.some((x) => x.trim() !== ""),
+  const lines = tableLines(text, mapping.delimiter).filter(
+    (l) => headerRow === null || l.line - 1 >= headerRow,
   );
   const dataLines = headerRow === null ? lines : lines.filter((l) => l.line - 1 > headerRow);
 
@@ -438,7 +621,7 @@ export function readStatementTable(
 /** 金額のセル 1 つ: 値（0 は値なし = null）か、読めない理由 */
 function readCell(raw: string): { value: number | null } | string {
   if (raw.trim() === "") return { value: null };
-  const n = parseStatementAmount(raw);
+  const n = parseStatementAmount(firstLine(raw));
   if (n === undefined) return "金額を読めません";
   if (n === "large") return "金額が大きすぎます";
   return { value: n === 0 ? null : n };

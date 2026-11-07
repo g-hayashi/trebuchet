@@ -173,7 +173,8 @@ const renderStatements = (search = "") =>
   });
 
 const user = () => userEvent.setup();
-const table = async () => screen.findByRole("table", { name: "明細の一覧" });
+/** 未処理は確認の表（ReviewTable）、ほかの状態は一覧の表（StatementList） */
+const table = async () => screen.findByRole("table", { name: /^(明細の一覧|未処理の明細)$/ });
 const rowOf = async (text: RegExp | string) =>
   within(await table()).getByRole("row", { name: text });
 const editor = async () => screen.findByRole("region", { name: "候補の確認" });
@@ -195,12 +196,39 @@ afterEach(() => {
 });
 
 describe("明細の一覧（H:§4.1）", () => {
-  it("既定は未処理。日付・口座・内容・金額・状態・判定・確信度・根拠を出す", async () => {
+  it("既定は未処理で、確認の表（行を選んで承認・除外）を出す。一覧の表（状態・判定・根拠）は出さない", async () => {
+    const { all } = openApi([
+      statement(1, { candidate: transferCandidate, amount: -5000, content: "口座間の移動" }),
+    ]);
+    renderStatements();
+
+    expect(await screen.findByRole("table", { name: "未処理の明細" })).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "明細の一覧" })).not.toBeInTheDocument();
+    expect(calls(all, "GET", "/statements")[0]?.query).toEqual({ status: "unprocessed" });
+  });
+
+  it("未処理の確認の表にも、重複の疑いと変更ありの印を出す", async () => {
+    openApi([
+      statement(1, { content: "筆記具", duplicateOf: [uuid(2)] }),
+      statement(2, {
+        content: "書類",
+        changed: { before: { amount: -1200 }, after: { amount: -1300 } },
+      }),
+    ]);
+    renderStatements();
+    expect(await rowOf(/筆記具/)).toHaveTextContent("重複の疑い");
+    expect(await rowOf(/書類/)).toHaveTextContent("変更あり");
+  });
+
+  it("状態が未処理以外のとき（「すべて」）は一覧の表で、日付・口座・内容・金額・状態・判定・確信度・根拠を出す", async () => {
     const { all } = openApi([
       statement(1, { candidate: transferCandidate, amount: -5000, content: "口座間の移動" }),
       statement(2, { candidate: noneCandidate }),
     ]);
+    const u = user();
     renderStatements();
+    await u.selectOptions(await screen.findByLabelText("状態"), "すべて");
+    await screen.findByRole("table", { name: "明細の一覧" });
 
     const transfer = await rowOf(/口座間の移動/);
     expect(transfer).toHaveTextContent("2026-05-10");
@@ -281,7 +309,8 @@ describe("明細の一覧（H:§4.1）", () => {
       },
     );
     const u = user();
-    renderStatements();
+    // 「確認した」は一覧の表（変更ありの絞り込み）にある
+    renderStatements("?status=changed");
 
     expect(await rowOf(/筆記具/)).toHaveTextContent("重複の疑い");
     const row = await rowOf(/書類/);
@@ -305,27 +334,19 @@ describe("明細の一覧（H:§4.1）", () => {
   });
 });
 
-describe("候補をもう一度作る（H:§4.2。011 R9: 取込の後は自動。途中で画面を離れたとき用に控えめに残す）", () => {
-  it("POST して件数を知らせ、一覧を読み直す", async () => {
+describe("候補の作り直し（H:§4.2。007/R17: 一覧を開いたとき自動で 1 回。ボタンはない）", () => {
+  it("未処理があれば一覧を開いたときに POST して一覧を読み直す。「候補を作る」のボタンはない", async () => {
     const { all } = openApi([statement(1)], {
       [`POST ${BASE}/statements/candidates`]: () => ok({ built: 2, needsAi: [uuid(1)] }),
     });
-    const u = user();
     renderStatements();
     await table();
 
-    await u.click(screen.getByRole("button", { name: "候補をもう一度作る" }));
-    expect(await screen.findByText("候補を 2 件作りました（候補なし 1 件）。")).toBeInTheDocument();
+    await waitFor(() => expect(calls(all, "POST", "/statements/candidates")).toHaveLength(1));
     expect(calls(all, "POST", "/statements/candidates")[0]?.body).toEqual({});
     await waitFor(() => expect(calls(all, "GET", "/statements").length).toBeGreaterThan(1));
-  });
-
-  it("「候補を作る」の名前のボタンはなく、控えめな見た目（variant=default ではない）", async () => {
-    openApi([statement(1)]);
-    renderStatements();
-    await table();
     expect(screen.queryByRole("button", { name: "候補を作る" })).not.toBeInTheDocument();
-    expect(primaryButtons()).toEqual([]);
+    expect(screen.queryByRole("button", { name: "候補をもう一度作る" })).not.toBeInTheDocument();
   });
 });
 
@@ -352,7 +373,7 @@ describe("承認（H:§4.4）", () => {
     const { queryClient } = renderStatements();
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
 
-    await u.click(within(await rowOf(/口座間の移動/)).getByRole("button", { name: "確認する" }));
+    await u.click(within(await rowOf(/口座間の移動/)).getByRole("button", { name: "詳細" }));
     const panel = await editor();
     expect(within(panel).getByLabelText("1行目の勘定科目")).toHaveValue(CASH.id);
     expect(within(panel).getByLabelText("2行目の勘定科目")).toHaveValue(BANK.id);
@@ -386,7 +407,7 @@ describe("承認（H:§4.4）", () => {
     const u = user();
     renderStatements();
 
-    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "確認する" }));
+    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "詳細" }));
     const panel = await editor();
     // 出金 1,200 円: 貸方に明細の口座、借方に相手（科目は未選択）
     expect(within(panel).getByLabelText("1行目の貸借")).toHaveValue("debit");
@@ -416,7 +437,7 @@ describe("承認（H:§4.4）", () => {
     const u = user();
     renderStatements();
 
-    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "確認する" }));
+    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "詳細" }));
     const panel = await editor();
     await u.selectOptions(within(panel).getByLabelText("1行目の勘定科目"), "消耗品費");
     // 両方を 1,100 円にすると貸借は合うが、明細の口座の行が 1,200 円と違う
@@ -478,7 +499,7 @@ describe("承認（H:§4.4）", () => {
         [`POST ${BASE}/statements/${uuid(1)}/approve`]: () => approveReply(extra),
       });
     const openPanel = async (u: ReturnType<typeof user>) => {
-      await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "確認する" }));
+      await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "詳細" }));
       return editor();
     };
 
@@ -540,7 +561,7 @@ describe("承認（H:§4.4）", () => {
       );
       const u = user();
       renderStatements();
-      await u.click(within(await rowOf(/家賃/)).getByRole("button", { name: "確認する" }));
+      await u.click(within(await rowOf(/家賃/)).getByRole("button", { name: "詳細" }));
       const panel = await editor();
 
       expect(
@@ -562,7 +583,7 @@ describe("承認（H:§4.4）", () => {
     const u = user();
     renderStatements();
 
-    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "確認する" }));
+    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "詳細" }));
     const panel = await editor();
     await u.click(within(panel).getByRole("button", { name: "承認して登録" }));
     expect(await within(panel).findByText("2026 年度は締め済みです")).toBeInTheDocument();
@@ -580,7 +601,7 @@ describe("承認（H:§4.4）", () => {
     const u = user();
     renderStatements();
 
-    await u.click(within(await rowOf(/家賃/)).getByRole("button", { name: "確認する" }));
+    await u.click(within(await rowOf(/家賃/)).getByRole("button", { name: "詳細" }));
     const panel = await editor();
     expect(within(panel).getByRole("radio", { name: "既存の仕訳と結びつける" })).toBeChecked();
     const target = within(panel).getByRole("radio", { name: /仕訳 No\.3.*普通預金.*80,000/ });
@@ -611,7 +632,7 @@ describe("承認（H:§4.4）", () => {
     const u = user();
     renderStatements();
 
-    await u.click(within(await rowOf(/家賃/)).getByRole("button", { name: "確認する" }));
+    await u.click(within(await rowOf(/家賃/)).getByRole("button", { name: "詳細" }));
     const panel = await editor();
     expect(within(panel).getByRole("radio", { name: "仕訳を登録する" })).toBeChecked();
     await u.click(within(panel).getByRole("radio", { name: "既存の仕訳と結びつける" }));
@@ -634,7 +655,7 @@ describe("承認（H:§4.4）", () => {
     const u = user();
     renderStatements();
 
-    await u.click(within(await rowOf(/家賃/)).getByRole("button", { name: "確認する" }));
+    await u.click(within(await rowOf(/家賃/)).getByRole("button", { name: "詳細" }));
     const panel = await editor();
     await u.click(within(panel).getByRole("button", { name: "結びつけて承認" }));
     expect(
@@ -646,7 +667,7 @@ describe("承認（H:§4.4）", () => {
     openApi([statement(1, { candidate: transferCandidate })]);
     const u = user();
     renderStatements();
-    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "確認する" }));
+    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "詳細" }));
     await editor();
     await screen.findByRole("button", { name: "承認して登録" });
     expect(primaryButtons()).toEqual(["承認して登録"]);
@@ -656,73 +677,28 @@ describe("承認（H:§4.4）", () => {
     openApi([statement(1, { candidate: noneCandidate })]);
     const u = user();
     renderStatements();
-    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "確認する" }));
+    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "詳細" }));
     await u.click(within(await editor()).getByRole("button", { name: "閉じる" }));
     expect(screen.queryByRole("region", { name: "候補の確認" })).not.toBeInTheDocument();
   });
 });
 
-describe("まとめて承認（H:§4.5）", () => {
-  const three = () => [
-    statement(1, { content: "口座間の移動", candidate: transferCandidate }),
-    statement(2, { content: "高い確信", candidate: { ...transferCandidate, confidence: 85 } }),
-    statement(3, { content: "低い確信", candidate: { ...transferCandidate, confidence: 50 } }),
-    statement(4, { content: "候補なし", candidate: noneCandidate }),
-  ];
-
-  it("設定のしきい値以上の候補の件数を示し、その明細を承認する。失敗は理由つきで出す", async () => {
-    const { all } = openApi(three(), {
-      [`POST ${BASE}/statements/approve-bulk`]: () =>
-        ok({
-          approved: [uuid(1)],
-          failed: [
-            { statementId: uuid(2), code: "PERIOD_CLOSED", message: "2026 年度は締め済みです" },
-          ],
-        }),
-    });
-    const u = user();
+describe("しきい値の表示（011 FR-024。007/R17: 補助の「確信度の高い行を選択」だけ）", () => {
+  it("一覧の画面に、しきい値の数字・設定への案内は出さない（明細の設定にだけ置く）", async () => {
+    openApi([statement(1, { content: "口座間の移動", candidate: transferCandidate })]);
     renderStatements();
-
-    const region = await screen.findByRole("region", { name: "まとめて承認" });
-    // しきい値の数字は出さない（FR-024。変えるのは「明細の設定」だけ）
-    expect(await within(region).findByText("確信度の高い候補: 2 件")).toBeInTheDocument();
-    await u.click(within(region).getByRole("button", { name: "まとめて承認" }));
-
-    expect(await within(region).findByText("1 件を承認しました。")).toBeInTheDocument();
-    const failed = within(region).getByRole("list", { name: "承認できなかった明細" });
-    expect(failed).toHaveTextContent("高い確信");
-    expect(failed).toHaveTextContent("2026 年度は締め済みです");
-    expect(calls(all, "POST", "/statements/approve-bulk")[0]?.body).toEqual({
-      statementIds: [uuid(1), uuid(2)],
-    });
-    await waitFor(() => expect(calls(all, "GET", "/statements").length).toBeGreaterThan(1));
-  });
-
-  it("対象がなければボタンは押せない", async () => {
-    openApi([
-      statement(1, { content: "低い確信", candidate: { ...transferCandidate, confidence: 50 } }),
-    ]);
-    renderStatements();
-    const region = await screen.findByRole("region", { name: "まとめて承認" });
-    expect(await within(region).findByText("確信度の高い候補: 0 件")).toBeInTheDocument();
-    expect(within(region).getByRole("button", { name: "まとめて承認" })).toBeDisabled();
-  });
-
-  it("一覧の画面に、しきい値の数字・設定への案内は出さない（明細の設定にだけ置く。FR-024）", async () => {
-    openApi(three());
-    renderStatements();
-    await screen.findByText("確信度の高い候補: 2 件");
+    await screen.findByRole("button", { name: "確信度の高い行を選択" });
     expect(screen.queryByText(/しきい値/)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /しきい値/ })).not.toBeInTheDocument();
   });
 });
 
 describe("除外・除外の取消・結びつきを外す（H:§4.6・§4.7・§4.9）", () => {
-  it("除外は理由なしで送り、除外した明細は一覧から消える", async () => {
+  it("除外は理由なしで exclude-bulk に送り、除外した明細は一覧から消える", async () => {
     const { all, state } = openApi([statement(1)], {
-      [`POST ${BASE}/statements/${uuid(1)}/exclude`]: () => {
+      [`POST ${BASE}/statements/exclude-bulk`]: () => {
         state.statements = [];
-        return ok({ statement: statement(1, { status: "excluded" }) });
+        return ok({ excluded: [uuid(1)], failed: [] });
       },
     });
     const u = user();
@@ -730,7 +706,20 @@ describe("除外・除外の取消・結びつきを外す（H:§4.6・§4.7・�
 
     await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "除外" }));
     expect(await screen.findByText("該当する明細はありません。")).toBeInTheDocument();
-    expect(calls(all, "POST", `/statements/${uuid(1)}/exclude`)[0]?.body).toEqual({});
+    expect(calls(all, "POST", "/statements/exclude-bulk")[0]?.body).toEqual({
+      statementIds: [uuid(1)],
+    });
+  });
+
+  it("一覧の表（「すべて」）の未処理の行は、「確認する」で候補の確認を開ける", async () => {
+    openApi([statement(1, { candidate: noneCandidate })]);
+    const u = user();
+    renderStatements();
+    await u.selectOptions(await screen.findByLabelText("状態"), "すべて");
+    await screen.findByRole("table", { name: "明細の一覧" });
+
+    await u.click(within(await rowOf(/文房具/)).getByRole("button", { name: "確認する" }));
+    expect(await editor()).toBeInTheDocument();
   });
 
   it("除外の取消は理由を求め、理由つきで送る", async () => {
@@ -807,21 +796,13 @@ describe("メニュー", () => {
     expect(within(nav).queryByRole("link", { name: "一覧と確認" })).toBeNull();
   });
 
-  it("一覧から取込・1 件ずつの確認・推定のルールへ進める（どれも事業体の下）。しきい値の設定への導線は置かない", async () => {
+  it("一覧に「明細を取り込む」「推定のルール」「1 件ずつ確認する」「しきい値の設定」への導線は置かない（左のメニューから開く）", async () => {
     openApi([]);
     renderStatements();
-    expect(await screen.findByRole("link", { name: "明細を取り込む" })).toHaveAttribute(
-      "href",
-      "/e/e1/statements/import",
-    );
-    expect(screen.getByRole("link", { name: "1 件ずつ確認する" })).toHaveAttribute(
-      "href",
-      "/e/e1/statements/review",
-    );
+    await screen.findByText("該当する明細はありません。");
+    expect(screen.queryByRole("link", { name: "明細を取り込む" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "1 件ずつ確認する" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "しきい値の設定" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "推定のルール" })).toHaveAttribute(
-      "href",
-      "/e/e1/statements/rules",
-    );
+    expect(screen.queryByRole("link", { name: "推定のルール" })).not.toBeInTheDocument();
   });
 });

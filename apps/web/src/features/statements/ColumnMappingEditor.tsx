@@ -130,7 +130,10 @@ export function ColumnMappingEditor({
       ? "double"
       : "single",
   );
-  const [sign, setSign] = useState<StatementAmountSign | "">(base?.mapping.amountSign ?? "");
+  // 符号の初期値: 取込元の符号、なければ見出しから決まる案（カードの「ご利用額」は出金が正。007/R16）。案も取込元もなければ利用者が選ぶ
+  const [sign, setSign] = useState<StatementAmountSign | "">(
+    base?.mapping.amountSign ?? layout.suggestedAmountSign ?? "",
+  );
   const [year, setYear] = useState(String(initial?.year ?? thisYear()));
   const fixedOfBase = initial?.source.fixedAccountName ?? null;
   const [accountChoice, setAccountChoice] = useState(
