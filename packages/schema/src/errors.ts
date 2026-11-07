@@ -84,6 +84,8 @@ export const ErrorCode = z.enum([
   "INVOICE_SEQ_TOO_LOW",
   "JOURNAL_LINKED",
   "RECURRING_CONFIRM_REQUIRED",
+  // 013-withholding-tax（contracts §1）
+  "WITHHOLDING_RATE_MISSING",
   // 006-mfme-ai-journal（contracts/http-api.md §1）
   "STATEMENT_NOT_FOUND",
   "STATEMENT_ACCOUNT_NOT_FOUND",

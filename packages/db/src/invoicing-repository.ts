@@ -36,7 +36,8 @@ function toInvoiceRecord(row: typeof invoices.$inferSelect): InvoiceRecord {
 
 /** -1 は請求税率の自動導出、NULL は明示した税率なし。入力の省略と区別する。 */
 function toBillingTerms(row: typeof partnerBillingTerms.$inferSelect): BillingTerms {
-  const { taxRate, ...rest } = row;
+  // withholding（013）は BillingTerms に載せる T003 まで読み出さない
+  const { taxRate, withholding: _withholding, ...rest } = row;
   if (taxRate === -1) return rest;
   if (taxRate !== null && taxRate !== 8 && taxRate !== 10) {
     throw new Error("保存した請求税率が不正です");

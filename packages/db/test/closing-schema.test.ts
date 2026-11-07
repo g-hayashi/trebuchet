@@ -127,7 +127,7 @@ describe("003 の表（T007）", () => {
     const key = (r: { key: string; effectiveFrom: string }) => `${r.key}@${r.effectiveFrom}`;
     const sorted = (xs: readonly (typeof TAX_PARAMETERS)[number][]) =>
       [...xs].sort((a, b) => key(a).localeCompare(key(b)));
-    expect(rows).toHaveLength(14);
+    expect(rows).toHaveLength(20);
     expect(sorted(rows)).toEqual(sorted(TAX_PARAMETERS));
   });
 

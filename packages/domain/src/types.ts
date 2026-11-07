@@ -349,7 +349,11 @@ export type TaxParameterKey =
   | "RECEIPT_INPUT_CYCLE_MONTHS"
   | "RECEIPT_INPUT_GRACE_BUSINESS_DAYS"
   | "RECEIPT_SCAN_MIN_LONG_PX"
-  | "RECEIPT_SCAN_MIN_SHORT_PX";
+  | "RECEIPT_SCAN_MIN_SHORT_PX"
+  // 013: 報酬・料金の源泉徴収（境目の円、万分率の率。復興特別所得税を含む。data-model §1.1）
+  | "WITHHOLDING_THRESHOLD"
+  | "WITHHOLDING_RATE_LOW"
+  | "WITHHOLDING_RATE_HIGH";
 
 /** 税制の値（R3、§1.1）。effectiveTo が null なら期限なし */
 export type TaxParameter = {
