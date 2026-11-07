@@ -16,9 +16,11 @@ import {
   saveWorkHours,
   voidInvoice,
   voidPayment,
+  withholdingSummary,
 } from "@trebuchet/domain";
 import {
   BillingTermsInput,
+  FiscalYearParam,
   InvoiceCalculationInput,
   InvoiceDraftRequest,
   InvoiceInput,
@@ -115,7 +117,11 @@ export function invoicingRoutes({ clock }: RouteOptions) {
 
       // ---- 発行・詳細（US1。§3.4・§3.6） ----
       .post("/invoices/calculate", validate("json", InvoiceCalculationInput), (c) => {
-        const result = previewInvoiceCalculation(c.req.valid("json"));
+        const result = previewInvoiceCalculation(
+          deps(c.var.db),
+          c.req.valid("json"),
+          todayOf(clock),
+        );
         return respond(c, result, (amounts) => c.json(amounts, 200));
       })
       .post("/invoices", validate("json", InvoiceInput), (c) => {
@@ -167,6 +173,12 @@ export function invoicingRoutes({ clock }: RouteOptions) {
           return respond(c, result, (voided) => c.json(voided, 200));
         },
       )
+
+      // ---- 年間の源泉徴収（013 US3。contracts §4） ----
+      .get("/withholding/:year", validate("param", FiscalYearParam), (c) => {
+        const result = withholdingSummary(deps(c.var.db), c.req.valid("param").year);
+        return respond(c, result, (summary) => c.json(summary, 200));
+      })
 
       // ---- 仕訳の出所（§6.1） ----
       .get("/journals/:journalId/origin", (c) => {

@@ -5,7 +5,8 @@ import { invoiceTaxSummary, quantityOf, recipientOf } from "./display";
 /**
  * 印刷用の請求書（A4 縦 1 枚。FR-011・012）。発行時に写した値（`issuer`・明細）だけを使い、
  * 屋号と登録番号は設定されているときだけ（屋号が氏名と同じなら 1 回だけ。011 FR-037）、
- * 税率ごとの内訳は `tax_display = separate` のときだけ出す。
+ * 税率ごとの内訳は `tax_display = separate` のときだけ出す。見出しの「ご請求金額」は、源泉徴収税額があるとき
+ * （013）は差引請求額、ないときは合計。
  * 印刷の対象の絞り込みと余白は、全体の `src/print.css`（`[data-print-root]`）で行う
  */
 export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
@@ -32,7 +33,9 @@ export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
 
       <div className="flex items-end justify-between gap-6">
         <div className="grid gap-1">
-          <p className="text-lg font-semibold">{`ご請求金額 ${formatYen(invoice.total)} 円`}</p>
+          <p className="text-lg font-semibold">{`ご請求金額 ${formatYen(
+            invoice.withholdingTax > 0 ? invoice.netAmount : invoice.total,
+          )} 円`}</p>
           <p>{`支払期限 ${invoice.dueDate}`}</p>
         </div>
         <div className="grid gap-0.5 text-right">
@@ -101,6 +104,12 @@ export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
         <p className="text-base font-semibold tabular-nums">{`合計 ${formatYen(invoice.total)} 円${
           invoice.taxDisplay === "inclusive_only" ? "（税込）" : ""
         }`}</p>
+        {invoice.withholdingTax > 0 && (
+          <div className="grid justify-items-end gap-1 tabular-nums">
+            <p>{`源泉徴収税額 ${formatYen(invoice.withholdingTax)} 円`}</p>
+            <p className="text-base font-semibold">{`差引請求額 ${formatYen(invoice.netAmount)} 円`}</p>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-1">

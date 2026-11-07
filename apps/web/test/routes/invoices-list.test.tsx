@@ -127,6 +127,15 @@ describe("請求書の一覧（US1。FR-020 の基本形）", () => {
       expect.stringContaining("/e/e1/invoices/new"),
     );
   });
+
+  it("源泉徴収の一覧（013 US3）へのリンクを置く", async () => {
+    setup();
+    await screen.findByRole("table", { name: "請求書の一覧" });
+    expect(screen.getByRole("link", { name: "源泉徴収の一覧" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/e/e1/invoices/withholding"),
+    );
+  });
 });
 
 /** type="month" の入力は userEvent.type で打てないので、値の変更の発火で代える */

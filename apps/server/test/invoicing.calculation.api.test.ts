@@ -47,6 +47,9 @@ describe("POST /invoices/calculate", () => {
         { rate: 10, inclusive: 19, exclusive: 18, tax: 1 },
         { rate: 8, inclusive: 28, exclusive: 26, tax: 2 },
       ],
+      withholdingBase: 0,
+      withholdingTax: 0,
+      netAmount: 52,
     });
     expect(counts()).toEqual(before);
     expect(db.$client.prepare("SELECT next_seq FROM invoice_settings").get()).toEqual({
@@ -57,6 +60,47 @@ describe("POST /invoices/calculate", () => {
       json: { priceMode: "inclusive", items: [{ amount: 180000, taxRate: 10 }] },
     });
     expect(await okBody(inclusive)).toMatchObject({ subtotal: 180000, total: 180000 });
+  });
+  it("partnerId の取引先が「源泉徴収あり」なら、対象額・税額・差引を返す（013）", async () => {
+    await ctx.setSettings({ taxDisplay: "separate" });
+    const partnerId = await ctx.addPartner("合成取引先");
+    await ctx.setTerms(partnerId, { withholding: true });
+    const items = [{ amount: 330_000, taxRate: 10 as const }];
+    const res = await ctx.e.invoices.calculate.$post({
+      param: ctx.param,
+      json: { priceMode: "inclusive", items, partnerId },
+    });
+    expect(res.status).toBe(200);
+    expect(await okBody(res)).toMatchObject({
+      total: 330_000,
+      withholdingBase: 300_000,
+      withholdingTax: 30_630,
+      netAmount: 299_370,
+    });
+    // partnerId なしは源泉徴収なし
+    const none = await ctx.e.invoices.calculate.$post({
+      param: ctx.param,
+      json: { priceMode: "inclusive", items },
+    });
+    expect(await okBody(none)).toMatchObject({ withholdingBase: 0, withholdingTax: 0 });
+  });
+  it("422 WITHHOLDING_RATE_MISSING: 発行日に税制の値がない（013）", async () => {
+    await ctx.setSettings();
+    const partnerId = await ctx.addPartner("合成取引先");
+    await ctx.setTerms(partnerId, { withholding: true });
+    const res = await ctx.e.invoices.calculate.$post({
+      param: ctx.param,
+      json: {
+        priceMode: "inclusive",
+        items: [{ amount: 330_000, taxRate: 10 }],
+        partnerId,
+        issueDate: "2048-01-05",
+      },
+    });
+    expect(res.status).toBe(422);
+    const error = await errorOf(res);
+    expect(error.code).toBe("WITHHOLDING_RATE_MISSING");
+    expect(error.details).toMatchObject({ date: "2048-01-05" });
   });
   it("入力不正・合計上限超過は400 VALIDATION", async () => {
     const bad = await ctx.e.invoices.calculate.$post({

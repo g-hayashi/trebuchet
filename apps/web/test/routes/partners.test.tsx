@@ -71,6 +71,25 @@ describe("取引先の画面（011 FR-049）", () => {
     expect(within(rowC).getByText("使用停止")).toBeInTheDocument();
   });
 
+  it("請求の条件の欄は、源泉徴収ありのときだけ「・源泉徴収あり」を添える", async () => {
+    setup([
+      {
+        ...HOURLY,
+        billingType: "monthly",
+        unitPrice: null,
+        monthlyAmount: 1_205_000,
+        withholding: true,
+      },
+      { ...HOURLY, partnerId: "p2", partnerName: "B 商事", withholding: false },
+    ]);
+    const table = await screen.findByRole("table");
+    const rowA = within(table).getByRole("row", { name: /株式会社A/ });
+    expect(within(rowA).getByText("月額 1,205,000 円・源泉徴収あり")).toBeInTheDocument();
+    const rowB = within(table).getByRole("row", { name: /B 商事/ });
+    expect(within(rowB).getByText("時間単価 10,000 円")).toBeInTheDocument();
+    expect(within(rowB).queryByText(/源泉徴収あり/)).not.toBeInTheDocument();
+  });
+
   it("検索で名前とメモを絞り込み、見つからなければ知らせる", async () => {
     setup();
     const user = userEvent.setup();
@@ -261,5 +280,68 @@ describe("取引先の画面（011 FR-049）", () => {
     const form = within(await screen.findByRole("dialog")).getByRole("form");
     await user.click(within(form).getByRole("button", { name: "保存" }));
     expect(await within(form).findByRole("alert")).toBeInTheDocument();
+  });
+});
+
+describe("源泉徴収の設定（013 R8・FR-001）", () => {
+  it("請求の条件に「源泉徴収あり」のチェックがあり、既定は外れ。入れて保存すると withholding: true を送る", async () => {
+    const calls = setup([HOURLY], {
+      [`PUT ${BASE}/partners/p1/profile`]: () =>
+        ok({ partner: PARTNER_A, billingTerms: { ...HOURLY, withholding: true } }),
+    });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "取引先の編集（株式会社A）" }));
+    const form = within(await screen.findByRole("dialog")).getByRole("form");
+    const check = within(form).getByLabelText("源泉徴収あり");
+    expect(check).not.toBeChecked();
+    await user.click(check);
+    await user.click(within(form).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
+    expect(calls.find((c) => c.method === "PUT")?.body).toMatchObject({
+      billingTerms: { withholding: true },
+    });
+  });
+
+  it("保存済みの「源泉徴収あり」は入った状態で開き、そのまま保存しても true を送る。なしは false", async () => {
+    const calls = setup([{ ...HOURLY, withholding: true }], {
+      [`PUT ${BASE}/partners/p1/profile`]: () => ok({ partner: PARTNER_A, billingTerms: HOURLY }),
+    });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "取引先の編集（株式会社A）" }));
+    const form = within(await screen.findByRole("dialog")).getByRole("form");
+    expect(within(form).getByLabelText("源泉徴収あり")).toBeChecked();
+    await user.click(within(form).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
+    expect(calls.find((c) => c.method === "PUT")?.body).toMatchObject({
+      billingTerms: { withholding: true },
+    });
+  });
+
+  it("チェックを入れずに登録すると withholding: false を送る", async () => {
+    const calls = setup([], {
+      [`POST ${BASE}/partners/profile`]: () =>
+        ok(
+          {
+            partner: { id: "p9", name: "C 工業", honorific: null, memo: null, isActive: true },
+            billingTerms: { ...HOURLY, partnerId: "p9", unitPrice: 8000 },
+          },
+          201,
+        ),
+    });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "取引先を登録" }));
+    const form = within(await screen.findByRole("dialog")).getByRole("form", {
+      name: "取引先を登録",
+    });
+    await user.type(within(form).getByLabelText("名称"), "C 工業");
+    await user.click(within(form).getByLabelText("請求の条件を設定する"));
+    await user.type(within(form).getByLabelText("時間単価（円）"), "8000");
+    await user.type(within(form).getByLabelText("既定の品名"), "保守");
+    expect(within(form).getByLabelText("源泉徴収あり")).not.toBeChecked();
+    await user.click(within(form).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      billingTerms: { withholding: false },
+    });
   });
 });

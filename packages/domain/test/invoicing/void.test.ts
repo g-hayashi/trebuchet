@@ -150,6 +150,7 @@ describe("voidInvoice（検査）", () => {
       receivedOn: "2026-11-10",
       amount: 1_000,
       feeAmount: 0,
+      withholdingAmount: 0,
       depositAccountId: t.accountId("普通預金"),
       depositSubAccountId: null,
       journalId: `j-${id}`,

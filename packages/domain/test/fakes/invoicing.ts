@@ -1,10 +1,12 @@
 import type { BillingTerms, InvoiceSettings, JournalOrigin } from "@trebuchet/schema";
 import type { InvoicingStore } from "../../src/ports.ts";
+import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type {
   InvoiceItemRecord,
   InvoiceRecord,
   InvoicingAuditEntry,
   PaymentRecord,
+  TaxParameter,
   WorkHoursRow,
 } from "../../src/types.ts";
 import { InMemoryLedgerRepository } from "./ledger.ts";
@@ -21,6 +23,8 @@ type InvoicingState = {
   items: InvoiceItemRecord[];
   /** 消し込み。書き込みは US2（T017）で足すので、それまではテストが直接入れる */
   payments: PaymentRecord[];
+  /** 税制の値（013 の源泉徴収の率）。既定は seed の値。テストが差し替える */
+  taxParameters: TaxParameter[];
 };
 
 /**
@@ -38,10 +42,15 @@ export class InMemoryInvoicingStore implements InvoicingStore {
     invoices: [],
     items: [],
     payments: [],
+    taxParameters: structuredClone([...TAX_PARAMETERS]),
   };
 
   get audits(): InvoicingAuditEntry[] {
     return this.state.audits;
+  }
+
+  listTaxParameters(): TaxParameter[] {
+    return structuredClone(this.state.taxParameters);
   }
 
   /** 定期仕訳の起点（定期仕訳の表は US3 で足す）。請求・入金の起点は表から引く */
@@ -175,6 +184,22 @@ export class InMemoryInvoicingStore implements InvoicingStore {
 
   listPayments(invoiceId: string): PaymentRecord[] {
     return structuredClone(this.state.payments.filter((p) => p.invoiceId === invoiceId));
+  }
+
+  listWithheldPayments(from: string, to: string): PaymentRecord[] {
+    return structuredClone(
+      this.state.payments
+        .map((p, index) => ({ p, index }))
+        .filter(
+          ({ p }) =>
+            p.voidedAt === null &&
+            p.withholdingAmount > 0 &&
+            p.receivedOn >= from &&
+            p.receivedOn <= to,
+        )
+        .sort((x, y) => x.p.receivedOn.localeCompare(y.p.receivedOn) || x.index - y.index)
+        .map(({ p }) => p),
+    );
   }
 
   insertPayment(payment: PaymentRecord): void {

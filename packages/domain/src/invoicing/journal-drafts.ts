@@ -22,6 +22,8 @@ export const INVOICING_ACCOUNT_CODES = {
   sales: "4010",
   /** 支払手数料 */
   paymentFee: "5250",
+  /** 事業主貸（013。源泉徴収された所得税は事業主個人の税なので入金の仕訳で借方に計上する） */
+  ownerDrawing: "3090",
 } as const;
 
 export function findAccountByCode(
@@ -67,13 +69,16 @@ export type PaymentJournalSource = {
   amount: number;
   /** 支払手数料として扱った差額（0 ならなし） */
   feeAmount: number;
+  /** 源泉徴収された税額（013。省略・0 ならなし） */
+  withholdingAmount?: number | undefined;
   depositAccountId: string;
   depositSubAccountId?: string | null | undefined;
 };
 
 /**
  * 入金の消し込みの仕訳の案（R10・R14）。借方 入金先（補助科目つき）に入金額、手数料 > 0 なら借方 支払手数料、
- * 貸方 売掛金に充当額（入金額 + 手数料）。全行に取引先、摘要は `入金 <番号>`、日付は入金日
+ * 源泉徴収税額 > 0 なら借方 事業主貸（013 R6）、貸方 売掛金に充当額（入金額 + 手数料 + 源泉徴収税額）。
+ * 全行に取引先、摘要は `入金 <番号>`、日付は入金日
  */
 export function paymentJournalDraft(
   payment: PaymentJournalSource,
@@ -100,10 +105,21 @@ export function paymentJournalDraft(
       partnerId: payment.partnerId,
     });
   }
+  const withholding = payment.withholdingAmount ?? 0;
+  if (withholding > 0) {
+    const owner = findAccountByCode(accounts, INVOICING_ACCOUNT_CODES.ownerDrawing);
+    if (!owner.ok) return owner;
+    lines.push({
+      side: "debit",
+      accountId: owner.value,
+      amount: withholding,
+      partnerId: payment.partnerId,
+    });
+  }
   lines.push({
     side: "credit",
     accountId: receivable.value,
-    amount: payment.amount + payment.feeAmount,
+    amount: payment.amount + payment.feeAmount + withholding,
     partnerId: payment.partnerId,
   });
   return ok({ date: payment.receivedOn, memo: `入金 ${payment.invoiceNo}`, lines });

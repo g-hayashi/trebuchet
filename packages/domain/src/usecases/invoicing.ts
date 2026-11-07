@@ -22,6 +22,7 @@ import {
   type PartnerProfileInput,
   type PaymentInput,
   type PaymentView,
+  type WithholdingSummary,
   type WorkHoursEntry,
   type WorkHoursInput,
   YEN_LIMIT,
@@ -40,6 +41,7 @@ import {
 import { formatInvoiceNo } from "../invoicing/number.ts";
 import { invoiceStatus } from "../invoicing/status.ts";
 import { effectiveTaxDisplay, invoiceSalesTaxCategory, itemTaxRate } from "../invoicing/tax.ts";
+import { invoiceWithholding } from "../invoicing/withholding.ts";
 import { checkPeriod } from "../journal.ts";
 import type {
   Clock,
@@ -76,13 +78,31 @@ export type InvoicingSettingsDeps = {
 /** 請求書のユースケース全般の依存（設定・工数・案・発行・取消・一覧） */
 export type InvoicingDeps = InvoicingSettingsDeps;
 
-/** 保存せずに請求額を計算する。計算後の合計も金額の上限を守る。 */
+/**
+ * 保存せずに請求額を計算する。計算後の合計も金額の上限を守る。
+ * `partnerId` があり取引先が「源泉徴収あり」なら、源泉徴収の対象額・税額を発行日（省略は `today`）の
+ * 税制の値で計算する（なければ `WITHHOLDING_RATE_MISSING`。013）。ほかは 0・0
+ */
 export function previewInvoiceCalculation(
+  deps: Pick<InvoicingDeps, "uow">,
   input: InvoiceCalculationInput,
+  today: string,
 ): Result<InvoiceCalculationResponse> {
   const amounts = calculateInvoiceAmounts(input.items, input.priceMode);
   if (amounts.total >= YEN_LIMIT) return validation("合計が大きすぎます", { field: "items" });
-  return ok(amounts);
+  return deps.uow.run(({ invoicing }) => {
+    const terms = input.partnerId === undefined ? null : invoicing.getBillingTerms(input.partnerId);
+    const withholding = invoiceWithholding({
+      enabled: terms?.withholding === true,
+      amounts,
+      // 設定がなければ税込のみ（`effectiveTaxDisplay` と同じ。計上日はまだない）
+      taxDisplay: invoicing.getInvoiceSettings()?.taxDisplay ?? "inclusive_only",
+      date: input.issueDate ?? today,
+      params: terms?.withholding === true ? invoicing.listTaxParameters() : [],
+    });
+    if (!withholding.ok) return withholding;
+    return ok({ ...amounts, ...withholding.value });
+  });
 }
 
 export type InvoiceSettingsView = {
@@ -227,6 +247,7 @@ function writeBillingTerms(
     dueDay: input.dueDay,
     defaultItemName: input.defaultItemName,
     billingName: emptyToNull(input.billingName),
+    withholding: input.withholding,
     updatedAt: now,
   };
   invoicing.upsertBillingTerms(saved);
@@ -454,6 +475,7 @@ export function draftInvoices(
     const hours = new Map(
       invoicing.listWorkHours(request.month).map((w) => [w.partnerId, w.halfHours]),
     );
+    const taxParameters = invoicing.listTaxParameters();
     const drafts: InvoiceDraft[] = [];
     const skipped: InvoiceDraftResponse["skipped"] = [];
     for (const partner of targets) {
@@ -468,7 +490,9 @@ export function draftInvoices(
         today,
         activeInvoices: invoicing.listActiveInvoices(partner.id, request.month),
         ctx,
+        taxParameters,
       });
+      if (outcome.kind === "error") return err(outcome.error);
       if (outcome.kind === "draft") drafts.push(outcome.draft);
       else skipped.push({ partnerId: partner.id, reason: outcome.reason });
     }
@@ -604,8 +628,19 @@ export function issueInvoice(
         taxRate: item.taxRate === undefined ? derivedRate : item.taxRate,
       });
     }
-    const { total } = calculateInvoiceAmounts(records, priceMode);
+    const amounts = calculateInvoiceAmounts(records, priceMode);
+    const { total } = amounts;
     if (total >= YEN_LIMIT) return validation("合計が大きすぎます", { field: "items" });
+    const taxDisplay = effectiveTaxDisplay(settings.taxDisplay, salesDate, ctx.taxSettings);
+    // 源泉徴収は発行日の税制の値で決め、写しに固定する（013 R5）。値がなければ何も書かずに拒む
+    const withholding = invoiceWithholding({
+      enabled: terms.withholding,
+      amounts,
+      taxDisplay,
+      date: issueDate,
+      params: terms.withholding ? invoicing.listTaxParameters() : [],
+    });
+    if (!withholding.ok) return withholding;
 
     const seq = settings.nextSeq;
     const maxSeq = invoicing.maxInvoiceSeq();
@@ -655,8 +690,10 @@ export function issueInvoice(
         registrationNumber: exempt ? null : settings.registrationNumber,
       },
       priceMode,
-      taxDisplay: effectiveTaxDisplay(settings.taxDisplay, salesDate, ctx.taxSettings),
+      taxDisplay,
       total,
+      withholdingBase: withholding.value.withholdingBase,
+      withholdingTax: withholding.value.withholdingTax,
       journalId: journal.id,
       createdAt: now,
       voidedAt: null,
@@ -814,7 +851,8 @@ export type PaymentResult = { payment: PaymentView; invoice: InvoiceDetail; jour
  * 入金を消し込む。検査（請求書 → 取消済み `INVOICE_VOIDED` → 入金額・入金日 → 手数料 → 超過
  * `PAYMENT_EXCEEDS_BALANCE`）→ 入金の仕訳（`createJournal`、`source = payment`。001 の検査の `err` は
  * そのまま返す）→ 消し込み → 記録、の順に 1 トランザクションで書く（R9）。
- * `treatDifferenceAsFee` なら手数料 = 残額 − 入金額（0 以下は `VALIDATION`）。充当額 = 入金額 + 手数料
+ * `treatDifferenceAsFee` なら手数料 = 残額 − 入金額 − 源泉徴収税額（0 以下は `VALIDATION`）。
+ * 充当額 = 入金額 + 手数料 + 源泉徴収税額（013 R6。源泉徴収税額は借方 事業主貸）
  */
 export function recordPayment(
   deps: InvoicingDeps,
@@ -836,6 +874,16 @@ export function recordPayment(
         field: "amount",
       });
     }
+    const withholdingAmount = input.withholdingAmount ?? 0;
+    if (
+      !Number.isSafeInteger(withholdingAmount) ||
+      withholdingAmount < 0 ||
+      withholdingAmount >= YEN_LIMIT
+    ) {
+      return validation("源泉徴収税額は 0 円以上 1 兆円未満の整数で入力してください", {
+        field: "withholdingAmount",
+      });
+    }
     if (!isValidDate(input.receivedOn)) {
       return validation("入金日が正しい日付ではありません", { field: "receivedOn" });
     }
@@ -843,15 +891,15 @@ export function recordPayment(
     const { remaining } = invoiceStatus(invoice, payments);
     let feeAmount = 0;
     if (input.treatDifferenceAsFee === true) {
-      feeAmount = remaining - input.amount;
+      feeAmount = remaining - input.amount - withholdingAmount;
       if (feeAmount <= 0) {
-        return validation("手数料にできる差額がありません（入金額が残額より少ないときだけです）", {
-          field: "amount",
-          remaining,
-        });
+        return validation(
+          "手数料にできる差額がありません（入金額と源泉徴収税額の合計が残額より少ないときだけです）",
+          { field: "amount", remaining },
+        );
       }
     }
-    const applied = input.amount + feeAmount;
+    const applied = input.amount + feeAmount + withholdingAmount;
     if (applied > remaining) {
       return err(
         domainError("PAYMENT_EXCEEDS_BALANCE", "入金額が請求の残額を超えています", {
@@ -869,6 +917,7 @@ export function recordPayment(
         receivedOn: input.receivedOn,
         amount: input.amount,
         feeAmount,
+        withholdingAmount,
         depositAccountId: input.depositAccountId,
         depositSubAccountId: input.depositSubAccountId,
       },
@@ -893,6 +942,7 @@ export function recordPayment(
       receivedOn: input.receivedOn,
       amount: input.amount,
       feeAmount,
+      withholdingAmount,
       depositAccountId: input.depositAccountId,
       depositSubAccountId: input.depositSubAccountId ?? null,
       journalId: journal.id,
@@ -1064,6 +1114,66 @@ export function listInvoices(
       outstandingByPartner: [...totals.values()].sort((x, y) =>
         x.partnerName < y.partnerName ? -1 : x.partnerName > y.partnerName ? 1 : 0,
       ),
+    });
+  });
+}
+
+// ---- 年間の源泉徴収（013 US3。R7・contracts §4） ----
+
+/**
+ * 暦年 `year` の源泉徴収の一覧。対象は取消でない消し込みのうち源泉徴収税額が 0 より大きく、入金日がその年のもの
+ * （INV-75: 合計はその年の入金の仕訳の事業主貸の借方の合計と一致する）。取引先名の順。
+ * 会計期間がない年もエラーにせず、空の一覧を返す
+ */
+export function withholdingSummary(
+  deps: Pick<InvoicingDeps, "uow">,
+  year: number,
+): Result<WithholdingSummary> {
+  const label = String(year).padStart(4, "0");
+  return deps.uow.run(({ invoicing, masters }) => {
+    const partnerNames = new Map(masters.listPartners().map((p) => [p.id, p.name]));
+    const invoiceCache = new Map<string, InvoiceRecord | null>();
+    const invoiceOf = (id: string) => {
+      if (!invoiceCache.has(id)) invoiceCache.set(id, invoicing.getInvoice(id));
+      return invoiceCache.get(id) ?? null;
+    };
+
+    const byPartner = new Map<string, WithholdingSummary["partners"][number]>();
+    for (const payment of invoicing.listWithheldPayments(`${label}-01-01`, `${label}-12-31`)) {
+      const invoice = invoiceOf(payment.invoiceId);
+      if (invoice === null) continue; // 外部キーで起きない
+      const applied = payment.amount + payment.feeAmount + payment.withholdingAmount;
+      const entry = byPartner.get(invoice.partnerId) ?? {
+        partnerId: invoice.partnerId,
+        partnerName: partnerNames.get(invoice.partnerId) ?? invoice.recipientName,
+        paymentCount: 0,
+        appliedTotal: 0,
+        withholdingTotal: 0,
+        payments: [],
+      };
+      entry.paymentCount += 1;
+      entry.appliedTotal += applied;
+      entry.withholdingTotal += payment.withholdingAmount;
+      entry.payments.push({
+        paymentId: payment.id,
+        invoiceId: invoice.id,
+        invoiceNo: invoice.invoiceNo,
+        receivedOn: payment.receivedOn,
+        applied,
+        withholdingAmount: payment.withholdingAmount,
+      });
+      byPartner.set(invoice.partnerId, entry);
+    }
+
+    const partners = [...byPartner.values()].sort(
+      (x, y) =>
+        x.partnerName.localeCompare(y.partnerName) || x.partnerId.localeCompare(y.partnerId),
+    );
+    return ok({
+      year,
+      partners,
+      appliedTotal: partners.reduce((sum, p) => sum + p.appliedTotal, 0),
+      withholdingTotal: partners.reduce((sum, p) => sum + p.withholdingTotal, 0),
     });
   });
 }

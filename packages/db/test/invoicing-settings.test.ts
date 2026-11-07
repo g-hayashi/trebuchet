@@ -61,6 +61,7 @@ const hourly = (over: Partial<BillingTermsInput> = {}): BillingTermsInput => ({
   dueMonthsAfter: 1,
   dueDay: 31,
   defaultItemName: "システム開発",
+  withholding: false,
   ...over,
 });
 
@@ -207,6 +208,7 @@ describe("請求の条件（FR-001, FR-002）", () => {
       dueDay: 25,
       defaultItemName: "顧問料",
       billingName: "B 工業 経理部",
+      withholding: false,
     });
     if (!ra.ok || !rb.ok) throw new Error("expected ok");
     const list = listBillingTerms(deps);
@@ -232,6 +234,7 @@ describe("請求の条件（FR-001, FR-002）", () => {
       dueMonthsAfter: 1,
       dueDay: 31,
       defaultItemName: "顧問料",
+      withholding: false,
     });
     expect(r).toMatchObject({ ok: true, value: { unitPrice: null, monthlyAmount: 100_000 } });
     const list = listBillingTerms(deps);

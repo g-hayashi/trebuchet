@@ -1,6 +1,6 @@
 import type { BillingTermsInput } from "@trebuchet/schema";
 import { beforeEach, describe, expect, it } from "vitest";
-import { savePartnerProfile } from "../../src/usecases/invoicing.ts";
+import { saveBillingTerms, savePartnerProfile } from "../../src/usecases/invoicing.ts";
 import {
   type FakeInvoicingUnitOfWork,
   FixedClock,
@@ -33,6 +33,7 @@ const hourly = (over: Partial<BillingTermsInput> = {}): BillingTermsInput => ({
   dueMonthsAfter: 1,
   dueDay: 31,
   defaultItemName: "システム開発",
+  withholding: false,
   ...over,
 });
 
@@ -74,6 +75,7 @@ describe("savePartnerProfile（R15）", () => {
       dueDay: 31,
       defaultItemName: "旧",
       billingName: null,
+      withholding: false,
       updatedAt: "2026-10-01T00:00:00.000Z",
     });
     const r = savePartnerProfile(
@@ -109,6 +111,7 @@ describe("savePartnerProfile（R15）", () => {
       dueDay: 31,
       defaultItemName: "旧",
       billingName: null,
+      withholding: false,
       updatedAt: "2026-10-01T00:00:00.000Z",
     });
     const r = savePartnerProfile(
@@ -166,5 +169,30 @@ describe("savePartnerProfile（R15）", () => {
       error: { code: "VALIDATION", details: { partnerId: "no-such-partner" } },
     });
     expect(uow.invoicing.audits).toHaveLength(0);
+  });
+});
+
+// 013 US1: 請求の条件の withholding の保存と、記録の after（FR-001・015）
+describe("withholding（013）", () => {
+  it("savePartnerProfile: withholding を保存して読み戻し、条件の記録の after に入る", () => {
+    const r = savePartnerProfile(deps, {
+      partner: partner(),
+      billingTerms: hourly({ withholding: true }),
+    });
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.value.billingTerms?.withholding).toBe(true);
+    expect(uow.invoicing.getBillingTerms(r.value.partner.id)?.withholding).toBe(true);
+    const after = JSON.parse(uow.invoicing.audits.at(-1)?.afterJson ?? "null");
+    expect(after).toMatchObject({ withholding: true });
+  });
+
+  it("saveBillingTerms: 更新の記録は before が false・after が true", () => {
+    const first = saveBillingTerms(deps, EXISTING, hourly({ withholding: false }));
+    expect(first.ok && first.value.withholding).toBe(false);
+    const second = saveBillingTerms(deps, EXISTING, hourly({ withholding: true }));
+    expect(second.ok && second.value.withholding).toBe(true);
+    const last = uow.invoicing.audits.at(-1);
+    expect(JSON.parse(last?.beforeJson ?? "null")).toMatchObject({ withholding: false });
+    expect(JSON.parse(last?.afterJson ?? "null")).toMatchObject({ withholding: true });
   });
 });

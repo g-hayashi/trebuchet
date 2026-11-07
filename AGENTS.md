@@ -101,6 +101,7 @@ apps/server ──→ packages/schema
 | 010 証憑 | `docs/features/010-receipts.md` | 0014 |
 | 011 画面の作り直し（骨組み、ホーム、かんたん入力） | `docs/features/011-ui-overhaul.md` | — |
 | 012 アプリ内マニュアル | `docs/features/012-app-manual.md` | — |
+| 013 源泉徴収（請求書の源泉徴収税額、入金時に事業主貸、年間の一覧） | `docs/features/013-withholding-tax.md` | 0015 |
 
 ### 機能をまたいで守る規則
 

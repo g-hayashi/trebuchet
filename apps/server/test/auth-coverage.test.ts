@@ -61,6 +61,12 @@ describe("INV-29 全ルートの保護", () => {
       path: "/api/entities/:entityId/partners/:partnerId/profile",
     });
   });
+  it("年間の源泉徴収の一覧（013 T010）が保護対象", () => {
+    expect(protectedRoutes()).toContainEqual({
+      method: "GET",
+      path: "/api/entities/:entityId/withholding/:year",
+    });
+  });
   it("列挙したルートの数が下限を下回らない（列挙が空で素通りしない）", () => {
     expect(listRoutes().length).toBeGreaterThanOrEqual(40);
     expect(protectedRoutes().length).toBeGreaterThanOrEqual(35);

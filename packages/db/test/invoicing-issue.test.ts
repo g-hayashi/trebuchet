@@ -1,4 +1,12 @@
-import { getInvoiceDetail, getJournalOrigin, issueInvoice, voidInvoice } from "@trebuchet/domain";
+import {
+  draftInvoices,
+  getInvoiceDetail,
+  getJournalOrigin,
+  issueInvoice,
+  previewInvoiceCalculation,
+  saveBillingTerms,
+  voidInvoice,
+} from "@trebuchet/domain";
 import type { InvoiceInput } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type TempDataDir, TODAY, useTempDataDir } from "../src/testing.ts";
@@ -154,5 +162,110 @@ describe("issueInvoice（実 DB）", () => {
     expect(t.count("journals")).toBe(0);
     expect(t.count("invoices")).toBe(0);
     expect(nextSeq()).toBe(43);
+  });
+});
+
+// 013 US1: 源泉徴収の保存・固定・読み戻し（R4・R5、FR-001・006・015）
+describe("源泉徴収（013。実 DB）", () => {
+  const withholdingInput = (over: Partial<InvoiceInput> = {}) =>
+    input({ items: [{ name: "業務", amount: 330_000, taxCategory: "SALES_10" }], ...over });
+
+  it("請求の条件の withholding は boolean で保存・読み戻せる。既定は false", () => {
+    expect(t.store.getBillingTerms(partnerId)?.withholding).toBe(false);
+    t.setTerms(partnerId, { withholding: true });
+    expect(t.store.getBillingTerms(partnerId)?.withholding).toBe(true);
+    expect(t.store.listBillingTerms().map((x) => x.withholding)).toEqual([true]);
+    t.setTerms(partnerId, { withholding: false });
+    expect(t.store.getBillingTerms(partnerId)?.withholding).toBe(false);
+  });
+
+  it("saveBillingTerms の記録（after_json）に withholding が入る", () => {
+    const saved = saveBillingTerms(t.deps, partnerId, {
+      billingType: "hourly",
+      unitPrice: 10_000,
+      dueMonthsAfter: 1,
+      dueDay: 31,
+      defaultItemName: "業務委託",
+      withholding: true,
+    });
+    expect(saved.ok && saved.value.withholding).toBe(true);
+    const row = t.db.$client
+      .prepare(
+        "SELECT after_json FROM invoicing_audit_log WHERE target_type = 'billing_terms' ORDER BY rowid DESC LIMIT 1",
+      )
+      .get() as { after_json: string };
+    expect(JSON.parse(row.after_json)).toMatchObject({ withholding: true });
+  });
+
+  it("発行で対象額・税額を写しに固定し、DB から同じものが読み戻せる。仕訳は合計の 1 件", () => {
+    t.setTerms(partnerId, { withholding: true });
+    const r = issueInvoice(t.deps, withholdingInput(), TODAY);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    const { invoice, journal } = r.value;
+    expect(invoice).toMatchObject({
+      total: 330_000,
+      withholdingBase: 300_000,
+      withholdingTax: 30_630,
+      netAmount: 299_370,
+    });
+    expect(
+      t.db.$client
+        .prepare("SELECT withholding_base AS b, withholding_tax AS x FROM invoices WHERE id = ?")
+        .get(invoice.id),
+    ).toEqual({ b: 300_000, x: 30_630 });
+    expect(getInvoiceDetail(t.deps, invoice.id, TODAY)).toEqual({ ok: true, value: invoice });
+    expect(t.count("journals")).toBe(1);
+    expect(t.ledger.getJournal(journal.id)?.lines.map((l) => [l.side, l.amount])).toEqual([
+      ["debit", 330_000],
+      ["credit", 330_000],
+    ]);
+    const audit = t.db.$client
+      .prepare(
+        "SELECT after_json FROM invoicing_audit_log WHERE target_type = 'invoice' ORDER BY rowid DESC LIMIT 1",
+      )
+      .get() as { after_json: string };
+    expect(JSON.parse(audit.after_json).invoice).toMatchObject({
+      withholdingBase: 300_000,
+      withholdingTax: 30_630,
+    });
+
+    // 設定を後で変えても、発行済みの請求書は変わらない
+    t.setTerms(partnerId, { withholding: false });
+    expect(getInvoiceDetail(t.deps, invoice.id, TODAY)).toEqual({ ok: true, value: invoice });
+  });
+
+  it("「なし」の取引先は 0・0、差引は合計と同じ", () => {
+    const r = issueInvoice(t.deps, withholdingInput(), TODAY);
+    expect(r.ok && r.value.invoice).toMatchObject({
+      withholdingBase: 0,
+      withholdingTax: 0,
+      netAmount: 330_000,
+    });
+  });
+
+  it("税制の値がなければ WITHHOLDING_RATE_MISSING で、何も書かない（案・計算も同じ）", () => {
+    t.setTerms(partnerId, {
+      withholding: true,
+      billingType: "monthly",
+      unitPrice: null,
+      monthlyAmount: 330_000,
+    });
+    t.db.$client.exec("DELETE FROM tax_parameters WHERE key LIKE 'WITHHOLDING_%'");
+    const issued = issueInvoice(t.deps, withholdingInput(), TODAY);
+    expect(issued).toMatchObject({
+      ok: false,
+      error: { code: "WITHHOLDING_RATE_MISSING", details: { date: TODAY } },
+    });
+    expect(t.count("journals")).toBe(0);
+    expect(t.count("invoices")).toBe(0);
+    expect(nextSeq()).toBe(43);
+    const preview = previewInvoiceCalculation(
+      t.deps,
+      { priceMode: "inclusive", items: [{ amount: 330_000, taxRate: 10 }], partnerId },
+      TODAY,
+    );
+    expect(!preview.ok && preview.error.code).toBe("WITHHOLDING_RATE_MISSING");
+    const draft = draftInvoices(t.deps, { month: "2026-10" }, TODAY);
+    expect(!draft.ok && draft.error.code).toBe("WITHHOLDING_RATE_MISSING");
   });
 });

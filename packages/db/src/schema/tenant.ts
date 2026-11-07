@@ -439,6 +439,10 @@ export const taxParameters = sqliteTable(
         "RECEIPT_INPUT_GRACE_BUSINESS_DAYS",
         "RECEIPT_SCAN_MIN_LONG_PX",
         "RECEIPT_SCAN_MIN_SHORT_PX",
+        // 013: 報酬・料金の源泉徴収（data-model §1.1）
+        "WITHHOLDING_THRESHOLD",
+        "WITHHOLDING_RATE_LOW",
+        "WITHHOLDING_RATE_HIGH",
       ],
     }).notNull(),
     effectiveFrom: text("effective_from").notNull(),
@@ -450,7 +454,7 @@ export const taxParameters = sqliteTable(
     primaryKey({ columns: [t.key, t.effectiveFrom] }),
     check(
       "tax_parameters_key",
-      sql`${t.key} IN ('SMALL_ASSET_THRESHOLD', 'SMALL_ASSET_ANNUAL_LIMIT', 'BLUE_DEDUCTION_MAX', 'BLUE_DEDUCTION_STANDARD', 'BLUE_DEDUCTION_BASIC', 'LUMP_SUM_COST_MIN', 'LUMP_SUM_COST_MAX', 'LUMP_SUM_YEARS', 'OPENING_COST_AMORTIZATION_MONTHS', 'RECEIPT_INPUT_CYCLE_MONTHS', 'RECEIPT_INPUT_GRACE_BUSINESS_DAYS', 'RECEIPT_SCAN_MIN_LONG_PX', 'RECEIPT_SCAN_MIN_SHORT_PX')`,
+      sql`${t.key} IN ('SMALL_ASSET_THRESHOLD', 'SMALL_ASSET_ANNUAL_LIMIT', 'BLUE_DEDUCTION_MAX', 'BLUE_DEDUCTION_STANDARD', 'BLUE_DEDUCTION_BASIC', 'LUMP_SUM_COST_MIN', 'LUMP_SUM_COST_MAX', 'LUMP_SUM_YEARS', 'OPENING_COST_AMORTIZATION_MONTHS', 'RECEIPT_INPUT_CYCLE_MONTHS', 'RECEIPT_INPUT_GRACE_BUSINESS_DAYS', 'RECEIPT_SCAN_MIN_LONG_PX', 'RECEIPT_SCAN_MIN_SHORT_PX', 'WITHHOLDING_THRESHOLD', 'WITHHOLDING_RATE_LOW', 'WITHHOLDING_RATE_HIGH')`,
     ),
     check("tax_parameters_value", sql`${t.value} > 0`),
   ],
@@ -764,6 +768,8 @@ export const partnerBillingTerms = sqliteTable(
       .notNull()
       .default("inclusive"),
     taxRate: integer("tax_rate").default(-1),
+    // 013: 源泉徴収あり（0 か 1）。1 なら発行時に源泉徴収税額を計算する（data-model §1.2）
+    withholding: integer("withholding", { mode: "boolean" }).notNull().default(false),
     unitPrice: integer("unit_price"),
     monthlyAmount: integer("monthly_amount"),
     dueMonthsAfter: integer("due_months_after").notNull().default(1),
@@ -775,6 +781,7 @@ export const partnerBillingTerms = sqliteTable(
   (t) => [
     check("partner_billing_terms_type", sql`${t.billingType} IN ('hourly', 'monthly')`),
     check("partner_billing_terms_price_mode", sql`${t.priceMode} IN ('inclusive', 'exclusive')`),
+    check("partner_billing_terms_withholding", sql`${t.withholding} IN (0, 1)`),
     check(
       "partner_billing_terms_tax_rate",
       sql`${t.taxRate} IS NULL OR ${t.taxRate} IN (-1, 8, 10)`,
@@ -827,6 +834,9 @@ export const invoices = sqliteTable(
       .default("inclusive"),
     taxDisplay: text("tax_display", { enum: ["separate", "inclusive_only"] }).notNull(),
     total: integer("total").notNull(),
+    // 013: 発行時に固定する源泉徴収の対象額と税額。設定「なし」は 0・0（data-model §1.3）
+    withholdingBase: integer("withholding_base").notNull().default(0),
+    withholdingTax: integer("withholding_tax").notNull().default(0),
     journalId: text("journal_id")
       .notNull()
       .unique()
@@ -846,6 +856,10 @@ export const invoices = sqliteTable(
     check("invoices_tax_display", sql`${t.taxDisplay} IN ('separate', 'inclusive_only')`),
     check("invoices_price_mode", sql`${t.priceMode} IN ('inclusive', 'exclusive')`),
     check("invoices_total", sql`${t.total} > 0 AND ${t.total} < 1000000000000`),
+    check(
+      "invoices_withholding",
+      sql`${t.withholdingTax} >= 0 AND ${t.withholdingTax} <= ${t.withholdingBase} AND ${t.withholdingBase} <= ${t.total}`,
+    ),
     check("invoices_void", sql`(${t.voidedAt} IS NULL) = (${t.voidReason} IS NULL)`),
   ],
 );
@@ -893,6 +907,8 @@ export const invoicePayments = sqliteTable(
     receivedOn: text("received_on").notNull(),
     amount: integer("amount").notNull(),
     feeAmount: integer("fee_amount").notNull(),
+    // 013: 実際に差し引かれた源泉徴収税額（data-model §1.4）
+    withholdingAmount: integer("withholding_amount").notNull().default(0),
     depositAccountId: text("deposit_account_id")
       .notNull()
       .references(() => accounts.id),
@@ -910,6 +926,7 @@ export const invoicePayments = sqliteTable(
     index("invoice_payments_invoice").on(t.invoiceId),
     check("invoice_payments_amount", sql`${t.amount} > 0`),
     check("invoice_payments_fee", sql`${t.feeAmount} >= 0`),
+    check("invoice_payments_withholding", sql`${t.withholdingAmount} >= 0`),
     check("invoice_payments_void", sql`(${t.voidedAt} IS NULL) = (${t.voidReason} IS NULL)`),
   ],
 );

@@ -3,7 +3,7 @@ import type { InvoiceRecord, PaymentRecord } from "../types.ts";
 
 /**
  * 請求書の状態と残額（005 R14、INV-33）。状態は保存せず、取消の列と消し込みから導く。
- * 充当額 = 入金額 + 手数料。取消済みの消し込みは数えない
+ * 充当額 = 入金額 + 手数料 + 源泉徴収税額（013）。取消済みの消し込みは数えない
  */
 export type InvoiceStanding = {
   status: InvoiceStatus;
@@ -25,13 +25,30 @@ export function isOverdue(
   return invoice.voidedAt === null && remaining > 0 && today > invoice.dueDate;
 }
 
+/** 源泉徴収の残り（013 FR-008 の既定値）= `max(0, 請求書の源泉徴収税額 − 取消でない消し込みの源泉徴収税額の合計)` */
+export function withholdingStanding(
+  invoice: Pick<InvoiceRecord, "withholdingTax">,
+  payments: readonly Pick<PaymentRecord, "withholdingAmount" | "voidedAt">[],
+): { withholdingPaid: number; withholdingRemaining: number } {
+  let withholdingPaid = 0;
+  for (const p of payments) {
+    if (p.voidedAt === null) withholdingPaid += p.withholdingAmount;
+  }
+  return {
+    withholdingPaid,
+    withholdingRemaining: Math.max(0, invoice.withholdingTax - withholdingPaid),
+  };
+}
+
 export function invoiceStatus(
   invoice: Pick<InvoiceRecord, "total" | "voidedAt">,
-  payments: readonly Pick<PaymentRecord, "amount" | "feeAmount" | "voidedAt">[],
+  payments: readonly (Pick<PaymentRecord, "amount" | "feeAmount" | "voidedAt"> & {
+    withholdingAmount?: number | undefined;
+  })[],
 ): InvoiceStanding {
   let paid = 0;
   for (const p of payments) {
-    if (p.voidedAt === null) paid += p.amount + p.feeAmount;
+    if (p.voidedAt === null) paid += p.amount + p.feeAmount + (p.withholdingAmount ?? 0);
   }
   if (invoice.voidedAt !== null) return { status: "voided", paid, remaining: 0 };
   const remaining = Math.max(0, invoice.total - paid);

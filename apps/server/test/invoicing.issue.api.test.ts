@@ -265,3 +265,50 @@ describe("GET /journals/:journalId/origin（§6.1）", () => {
     });
   });
 });
+
+describe("源泉徴収（013。contracts §2）", () => {
+  const withholdingBody = (over: Record<string, unknown> = {}) =>
+    body({ items: [{ name: "業務", amount: 330_000, taxCategory: "SALES_10" }], ...over });
+
+  it("201: 別記（税抜）の対象額・税額・差引を写しに固定し、仕訳は合計の 1 件。詳細も同じ", async () => {
+    await ctx.makeTaxable();
+    await ctx.setTerms(partnerId, { withholding: true });
+    const res = await ctx.e.invoices.$post({ param: ctx.param, json: withholdingBody() });
+    expect(res.status).toBe(201);
+    const { invoice, journal } = await okBody(res);
+    expect(invoice).toMatchObject({
+      total: 330_000,
+      withholdingBase: 300_000,
+      withholdingTax: 30_630,
+      netAmount: 299_370,
+    });
+    expect(journal.lines.map((l) => [l.side, l.amount])).toEqual([
+      ["debit", 330_000],
+      ["credit", 330_000],
+    ]);
+    expect(await okBody(await detail(invoice.id))).toEqual(invoice);
+    // 設定を後で変えても写しは変わらない
+    await ctx.setTerms(partnerId, { withholding: false });
+    expect(await okBody(await detail(invoice.id))).toEqual(invoice);
+  });
+
+  it("「なし」の取引先は 0・0 で、差引は合計と同じ", async () => {
+    const res = await issue();
+    expect((await okBody(res)).invoice).toMatchObject({
+      withholdingBase: 0,
+      withholdingTax: 0,
+      netAmount: 1_205_000,
+    });
+  });
+
+  it("422 WITHHOLDING_RATE_MISSING（details.date）: 発行日に税制の値がない。何も書かない", async () => {
+    await ctx.setTerms(partnerId, { withholding: true });
+    const res = await issue({ issueDate: "2048-01-05" });
+    expect(res.status).toBe(422);
+    const error = await errorOf(res);
+    expect(error.code).toBe("WITHHOLDING_RATE_MISSING");
+    expect(error.details).toMatchObject({ date: "2048-01-05" });
+    expect(await journals()).toEqual([]);
+    expect(await nextSeq()).toBe(43);
+  });
+});

@@ -4,6 +4,7 @@ import type {
   InvoiceCalculationInput,
   InvoiceDetail,
   InvoiceListStatus,
+  WithholdingSummary,
 } from "@trebuchet/schema";
 import { api, unwrap } from "@/lib/api";
 
@@ -81,6 +82,9 @@ export const invoiceKeys = {
     ["entities", entityId, "invoices", "list", filters] as const,
   invoice: (entityId: string, invoiceId: string) =>
     ["entities", entityId, "invoices", "detail", invoiceId] as const,
+  /** 年間の源泉徴収の一覧（013）。請求の接頭辞の下なので、`invalidateLedger` で入金・取消のあとに読み直される */
+  withholding: (entityId: string, year: number) =>
+    ["entities", entityId, "invoices", "withholding", year] as const,
   journalOrigin: (entityId: string, journalId: string) =>
     ["entities", entityId, "journals", journalId, "origin"] as const,
 };
@@ -147,6 +151,18 @@ export const invoiceListQuery = (entityId: string, filters: InvoiceFilters) =>
             ...(filters.month === undefined ? {} : { month: filters.month }),
             ...(filters.status === undefined ? {} : { status: filters.status }),
           },
+        }),
+      ),
+  });
+
+/** 暦年の源泉徴収の一覧（013 contracts §4。入金日の暦年。取消でない源泉徴収つきの消し込み） */
+export const withholdingSummaryQuery = (entityId: string, year: number) =>
+  queryOptions({
+    queryKey: invoiceKeys.withholding(entityId, year),
+    queryFn: async (): Promise<WithholdingSummary> =>
+      unwrap(
+        await entityApi.withholding[":year"].$get({
+          param: { entityId, year: String(year) },
         }),
       ),
   });

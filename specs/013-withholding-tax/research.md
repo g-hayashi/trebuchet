@@ -1,4 +1,4 @@
-# Research: 源泉徴収と仮払税金（013）
+# Research: 源泉徴収（013）
 
 番号は 013 の中で振る（他の機能を指すときは `005/R27` の形）。
 
@@ -10,7 +10,7 @@
 
 ## R2 税率の持ち方（税制の値）
 
-- **Decision**: 003 の `tax_parameters` に key を 3 つ足す: `WITHHOLDING_THRESHOLD`（1,000,000）、`WITHHOLDING_RATE_LOW`（1021）、`WITHHOLDING_RATE_HIGH`（2042）。期間は 2013-01-01〜2037-12-31（復興特別所得税を含む率）。出典は国税庁タックスアンサー No.2795（報酬・料金等の源泉徴収）と No.2792 系の頁。URL は実装のタスクで開いて確かめてから書く。正本は `packages/domain/src/seed/tax-parameters.ts`、DB へは手書きのマイグレーションで `INSERT` し、key の CHECK は 0014 の例（`__old_tax_parameters` に写して作り直す）に倣う
+- **Decision**: 003 の `tax_parameters` に key を 3 つ足す: `WITHHOLDING_THRESHOLD`（1,000,000）、`WITHHOLDING_RATE_LOW`（1021）、`WITHHOLDING_RATE_HIGH`（2042）。期間は 2013-01-01〜2026-12-31 と 2027-01-01〜2047-12-31 の 2 期間（復興特別所得税を含む率）。出典は 2026 年分までが国税庁タックスアンサー No.2795（率と式。期間は頁に書かれていない）、2027 年分からが国税庁の防衛特別所得税の源泉徴収の Q&A（PDF。本文は読めず二次情報で据え置きを確かめた。確度 medium）。正本は `packages/domain/src/seed/tax-parameters.ts`、DB へは手書きのマイグレーションで `INSERT` し、key の CHECK は 0014 の例（`__old_tax_parameters` に写して作り直す）に倣う
 - **Rationale**: Constitution VI（税制はデータ、出典つき）。`resolveTaxParameter(key, date, params)` がそのまま使える。2038 年以降の行がなければ発行を `WITHHOLDING_RATE_MISSING` で拒む（spec の Edge Cases）
 - **Alternatives**: 専用の表を作る → 既存の表と解決の関数で足りる
 - **注意**: `packages/domain/test/blue-return/tax-parameters.test.ts` は行数を直接書いている（14）。行を足すと直す

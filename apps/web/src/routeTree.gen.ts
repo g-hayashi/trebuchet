@@ -36,6 +36,7 @@ import { Route as EEntityIdImportsReconcileRouteImport } from './routes/e/$entit
 import { Route as EEntityIdInvoicesIndexRouteImport } from './routes/e/$entityId/invoices/index'
 import { Route as EEntityIdInvoicesInvoiceIdRouteImport } from './routes/e/$entityId/invoices/$invoiceId'
 import { Route as EEntityIdInvoicesNewRouteImport } from './routes/e/$entityId/invoices/new'
+import { Route as EEntityIdInvoicesWithholdingRouteImport } from './routes/e/$entityId/invoices/withholding'
 import { Route as EEntityIdJournalsIndexRouteImport } from './routes/e/$entityId/journals/index'
 import { Route as EEntityIdJournalsJournalIdRouteImport } from './routes/e/$entityId/journals/$journalId'
 import { Route as EEntityIdJournalsNewRouteImport } from './routes/e/$entityId/journals/new'
@@ -202,6 +203,12 @@ const EEntityIdInvoicesNewRoute = EEntityIdInvoicesNewRouteImport.update({
   path: '/invoices/new',
   getParentRoute: () => EEntityIdRouteRoute,
 } as any)
+const EEntityIdInvoicesWithholdingRoute =
+  EEntityIdInvoicesWithholdingRouteImport.update({
+    id: '/invoices/withholding',
+    path: '/invoices/withholding',
+    getParentRoute: () => EEntityIdRouteRoute,
+  } as any)
 const EEntityIdJournalsIndexRoute = EEntityIdJournalsIndexRouteImport.update({
   id: '/journals/',
   path: '/journals/',
@@ -362,6 +369,7 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/imports/reconcile': typeof EEntityIdImportsReconcileRoute
   '/e/$entityId/invoices/$invoiceId': typeof EEntityIdInvoicesInvoiceIdRoute
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
+  '/e/$entityId/invoices/withholding': typeof EEntityIdInvoicesWithholdingRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
@@ -414,6 +422,7 @@ export interface FileRoutesByTo {
   '/e/$entityId/imports/reconcile': typeof EEntityIdImportsReconcileRoute
   '/e/$entityId/invoices/$invoiceId': typeof EEntityIdInvoicesInvoiceIdRoute
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
+  '/e/$entityId/invoices/withholding': typeof EEntityIdInvoicesWithholdingRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
@@ -468,6 +477,7 @@ export interface FileRoutesById {
   '/e/$entityId/imports/reconcile': typeof EEntityIdImportsReconcileRoute
   '/e/$entityId/invoices/$invoiceId': typeof EEntityIdInvoicesInvoiceIdRoute
   '/e/$entityId/invoices/new': typeof EEntityIdInvoicesNewRoute
+  '/e/$entityId/invoices/withholding': typeof EEntityIdInvoicesWithholdingRoute
   '/e/$entityId/journals/$journalId': typeof EEntityIdJournalsJournalIdRoute
   '/e/$entityId/journals/new': typeof EEntityIdJournalsNewRoute
   '/e/$entityId/receipts/$receiptId': typeof EEntityIdReceiptsReceiptIdRoute
@@ -523,6 +533,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/imports/reconcile'
     | '/e/$entityId/invoices/$invoiceId'
     | '/e/$entityId/invoices/new'
+    | '/e/$entityId/invoices/withholding'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/receipts/$receiptId'
@@ -575,6 +586,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/imports/reconcile'
     | '/e/$entityId/invoices/$invoiceId'
     | '/e/$entityId/invoices/new'
+    | '/e/$entityId/invoices/withholding'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/receipts/$receiptId'
@@ -628,6 +640,7 @@ export interface FileRouteTypes {
     | '/e/$entityId/imports/reconcile'
     | '/e/$entityId/invoices/$invoiceId'
     | '/e/$entityId/invoices/new'
+    | '/e/$entityId/invoices/withholding'
     | '/e/$entityId/journals/$journalId'
     | '/e/$entityId/journals/new'
     | '/e/$entityId/receipts/$receiptId'
@@ -858,6 +871,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EEntityIdInvoicesNewRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
+    '/e/$entityId/invoices/withholding': {
+      id: '/e/$entityId/invoices/withholding'
+      path: '/invoices/withholding'
+      fullPath: '/e/$entityId/invoices/withholding'
+      preLoaderRoute: typeof EEntityIdInvoicesWithholdingRouteImport
+      parentRoute: typeof EEntityIdRouteRoute
+    }
     '/e/$entityId/journals/': {
       id: '/e/$entityId/journals/'
       path: '/journals'
@@ -1061,6 +1081,7 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdImportsReconcileRoute: typeof EEntityIdImportsReconcileRoute
   EEntityIdInvoicesInvoiceIdRoute: typeof EEntityIdInvoicesInvoiceIdRoute
   EEntityIdInvoicesNewRoute: typeof EEntityIdInvoicesNewRoute
+  EEntityIdInvoicesWithholdingRoute: typeof EEntityIdInvoicesWithholdingRoute
   EEntityIdJournalsJournalIdRoute: typeof EEntityIdJournalsJournalIdRoute
   EEntityIdJournalsNewRoute: typeof EEntityIdJournalsNewRoute
   EEntityIdReceiptsReceiptIdRoute: typeof EEntityIdReceiptsReceiptIdRoute
@@ -1106,6 +1127,7 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdImportsReconcileRoute: EEntityIdImportsReconcileRoute,
   EEntityIdInvoicesInvoiceIdRoute: EEntityIdInvoicesInvoiceIdRoute,
   EEntityIdInvoicesNewRoute: EEntityIdInvoicesNewRoute,
+  EEntityIdInvoicesWithholdingRoute: EEntityIdInvoicesWithholdingRoute,
   EEntityIdJournalsJournalIdRoute: EEntityIdJournalsJournalIdRoute,
   EEntityIdJournalsNewRoute: EEntityIdJournalsNewRoute,
   EEntityIdReceiptsReceiptIdRoute: EEntityIdReceiptsReceiptIdRoute,

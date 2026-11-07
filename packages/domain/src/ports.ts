@@ -322,6 +322,8 @@ export type ClosingUnitOfWork = TenantUnitOfWork<{ closing: ClosingStore }>;
  */
 export interface InvoicingStore {
   appendInvoicingAudit(entry: InvoicingAuditEntry): void;
+  /** 税制の値の全件（013 の源泉徴収の率を発行日で引く。`ClosingStore.listTaxParameters` と同じ内容） */
+  listTaxParameters(): TaxParameter[];
   /** 発行者の設定（`invoice_settings` の 1 行）。なければ null */
   getInvoiceSettings(): InvoiceSettings | null;
   upsertInvoiceSettings(row: InvoiceSettings): void;
@@ -357,6 +359,11 @@ export interface InvoicingStore {
   ): void;
   /** 請求書の消し込み（取消済みを含む。登録の順） */
   listPayments(invoiceId: string): PaymentRecord[];
+  /**
+   * 源泉徴収税額のある（`withholdingAmount > 0`）取消でない消し込みのうち、入金日が `from`〜`to`（`YYYY-MM-DD`、
+   * 両端を含む）のもの。入金日、同じ日は登録の順（013 の年間の一覧）
+   */
+  listWithheldPayments(from: string, to: string): PaymentRecord[];
   /** 消し込みを保存する（入金の仕訳と同じトランザクションで呼ぶ。`journalId` は一意） */
   insertPayment(payment: PaymentRecord): void;
   /** 消し込みを取消済みにする（取消の列を NULL から一度だけ書く。写しは変えない） */

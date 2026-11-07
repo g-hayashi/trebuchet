@@ -247,3 +247,28 @@ describe("DELETE /partners/:partnerId/billing-terms（§2.5）", () => {
     expect((await partners.json()).partners.map((p) => p.id)).toContain(partnerId);
   });
 });
+
+describe("源泉徴収の設定（013。contracts §1）", () => {
+  it("withholding を保存して 200 { terms } で返し、GET /billing-terms でも読み戻せる。省略は false", async () => {
+    const a = await addPartner("A 商事");
+    const b = await addPartner("B 工業");
+    const withOn = await putTerms(a, hourly({ withholding: true }));
+    expect(withOn.status).toBe(200);
+    expect((await okBody(withOn)).terms.withholding).toBe(true);
+    const omitted = await putTerms(b, hourly());
+    expect((await okBody(omitted)).terms.withholding).toBe(false);
+
+    const list = await okBody(await e["billing-terms"].$get({ param: param() }));
+    expect(list.terms.map((t) => [t.partnerId, t.withholding])).toEqual([
+      [a, true],
+      [b, false],
+    ]);
+  });
+
+  it("400 VALIDATION: withholding が boolean でない", async () => {
+    const partnerId = await addPartner("株式会社A");
+    const res = await putTerms(partnerId, hourly({ withholding: "yes" }));
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).code).toBe("VALIDATION");
+  });
+});

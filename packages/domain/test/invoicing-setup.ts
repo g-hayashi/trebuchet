@@ -41,6 +41,7 @@ export function setupInvoicing(options: { taxable?: boolean } = {}) {
       dueDay: 31,
       defaultItemName: "業務委託",
       billingName: null,
+      withholding: false,
       updatedAt: NOW,
       ...over,
     };
@@ -68,21 +69,28 @@ export function setupInvoicing(options: { taxable?: boolean } = {}) {
  * 性質テスト用: 取引先 3 件（時間単価型・月額定額型・時間単価型）と、発行者の設定（次の通し番号は `initialSeq`）。
  * `makeUow` で UnitOfWork を差し替えられる（障害の注入）
  */
-export function setupScenario(options: { taxable: boolean; initialSeq: number }) {
+export function setupScenario(options: {
+  taxable: boolean;
+  initialSeq: number;
+  /** 取引先すべてを「源泉徴収あり」にする（013）。省略は なし */
+  withholding?: boolean;
+}) {
   const t = setupInvoicing({ taxable: options.taxable });
   const partners = [
     t.addPartner({ name: "取引先A", honorific: "御中" }),
     t.addPartner({ name: "取引先B", honorific: "様" }),
     t.addPartner({ name: "取引先C", honorific: null }),
   ];
-  t.setTerms(partners[0]?.id ?? "");
+  const withholding = options.withholding ?? false;
+  t.setTerms(partners[0]?.id ?? "", { withholding });
   t.setTerms(partners[1]?.id ?? "", {
     billingType: "monthly",
     unitPrice: null,
     monthlyAmount: 300_000,
     billingName: "B 社 経理部",
+    withholding,
   });
-  t.setTerms(partners[2]?.id ?? "", { dueMonthsAfter: 2, dueDay: 10 });
+  t.setTerms(partners[2]?.id ?? "", { dueMonthsAfter: 2, dueDay: 10, withholding });
   t.setSettings({ nextSeq: options.initialSeq });
   return { ...t, partnerIds: partners.map((p) => p.id) };
 }
@@ -110,6 +118,8 @@ export function invoiceRecord(over: Partial<InvoiceRecord> = {}): InvoiceRecord 
     },
     taxDisplay: "inclusive_only",
     total: 110_000,
+    withholdingBase: 0,
+    withholdingTax: 0,
     journalId: "journal-1",
     createdAt: NOW,
     voidedAt: null,

@@ -1,6 +1,6 @@
-# Implementation Plan: 源泉徴収と仮払税金
+# Implementation Plan: 源泉徴収
 
-**Branch**: `main`（機能ブランチは切っていない） | **Date**: 2026-11-07 | **Spec**: [spec.md](spec.md)
+**Branch**: `013-withholding-tax` | **Date**: 2026-11-07 | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `specs/013-withholding-tax/spec.md`
 

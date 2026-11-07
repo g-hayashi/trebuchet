@@ -123,13 +123,28 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   // 工数・請求書の一覧（US1）。仕訳の詳細は出所を読む（`:id` は 1 つのパスの区切り）
   "GET /work-hours": () => ok({ entries: [] }),
   "GET /invoices": () => ok({ invoices: [], outstandingByPartner: [] }),
+  // 源泉徴収の一覧（013 US3）。該当なし
+  "GET /withholding/:year": ({ path }) =>
+    ok({
+      year: Number(path.split("/").pop()),
+      partners: [],
+      appliedTotal: 0,
+      withholdingTotal: 0,
+    }),
   "POST /invoices/calculate": ({ body }) => {
     const input = body as {
       priceMode: string;
       items: { amount: number; taxRate: number | null }[];
     };
     const subtotal = input.items.reduce((sum, item) => sum + item.amount, 0);
-    return ok({ subtotal, total: subtotal, taxBreakdown: [] });
+    return ok({
+      subtotal,
+      total: subtotal,
+      taxBreakdown: [],
+      withholdingBase: 0,
+      withholdingTax: 0,
+      netAmount: subtotal,
+    });
   },
   "GET /journals/:id/origin": () => ok({ origin: null }),
   // 仕訳の入力への AI の候補（011 US11）。既定は候補なし（外部の AI は既定で無効なので普通は呼ばれない）

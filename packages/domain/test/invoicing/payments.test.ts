@@ -366,6 +366,242 @@ describe("voidPayment（Acceptance 6）", () => {
   });
 });
 
+// 013 US2: 源泉徴収された入金の消し込み（R6、data-model §2・§3、FR-008〜012・015）
+describe("源泉徴収つきの消し込み（013 US2）", () => {
+  /** 源泉徴収あり・税込のみ表示の取引先。合計 1,205,000 円、源泉徴収税額 143,961 円、差引請求額 1,061,039 円 */
+  function withholdingReady() {
+    const t = ready();
+    t.setSettings({ nextSeq: 1, taxDisplay: "inclusive_only" });
+    t.setTerms(t.partner.id, { withholding: true });
+    return { ...t, ownerDrawing: t.accountId("事業主貸") };
+  }
+  const lines = (j: Journal) => j.lines.map((l) => [l.side, l.accountId, l.amount, l.partnerId]);
+
+  it("Acceptance 1: 入金 1,061,039 円 + 源泉徴収税額 143,961 円。借方 入金先・事業主貸、貸方 売掛金 1,205,000 円の複合仕訳で入金済み", () => {
+    const t = withholdingReady();
+    const issued = t.issue();
+    expect(issued.invoice).toMatchObject({ withholdingTax: 143_961 });
+    const r = t.pay(issued.invoice.id, { amount: 1_061_039, withholdingAmount: 143_961 });
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+
+    expect(r.value.payment).toMatchObject({
+      amount: 1_061_039,
+      feeAmount: 0,
+      withholdingAmount: 143_961,
+    });
+    expect(r.value.invoice).toMatchObject({
+      status: "paid",
+      paid: 1_205_000,
+      remaining: 0,
+      withholdingPaid: 143_961,
+      withholdingRemaining: 0,
+    });
+    expect(r.value.journal).toMatchObject({ date: "2026-11-10", source: "payment" });
+    expect(lines(r.value.journal)).toEqual([
+      ["debit", t.deposit, 1_061_039, t.partner.id],
+      ["debit", t.ownerDrawing, 143_961, t.partner.id],
+      ["credit", t.accountId("売掛金"), 1_205_000, t.partner.id],
+    ]);
+    // 発行の仕訳は変わらず 1 件（売掛金／売上高 1,205,000 円）
+    expect(t.ledger.getJournal(issued.journal.id)?.lines.map((l) => l.amount)).toEqual([
+      1_205_000, 1_205_000,
+    ]);
+    // 消し込みの記録（FR-015）に withholdingAmount が入る
+    const audit = t.invoicing.audits.at(-1);
+    expect(audit).toMatchObject({ targetType: "payment", action: "create" });
+    expect(JSON.parse(audit?.afterJson ?? "null")).toMatchObject({ withholdingAmount: 143_961 });
+  });
+
+  it("Acceptance 2: 取引先の計算が違い 143,960 円に直しても受け付け、請求書の値と実際の額の両方が残る", () => {
+    const t = withholdingReady();
+    const issued = t.issue();
+    const r = t.pay(issued.invoice.id, { amount: 1_061_040, withholdingAmount: 143_960 });
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.invoice).toMatchObject({
+      status: "paid",
+      withholdingTax: 143_961,
+      withholdingPaid: 143_960,
+      withholdingRemaining: 1,
+    });
+    expect(r.value.payment.withholdingAmount).toBe(143_960);
+    expect(t.invoicing.listPayments(issued.invoice.id)[0]?.withholdingAmount).toBe(143_960);
+  });
+
+  it("Acceptance 3: 差額を手数料にすると fee = 残額 − 入金額 − 源泉徴収税額。借方 入金先・支払手数料・事業主貸、貸方 売掛金", () => {
+    const t = withholdingReady();
+    const issued = t.issue();
+    const r = t.pay(issued.invoice.id, {
+      amount: 1_060_000,
+      withholdingAmount: 143_961,
+      treatDifferenceAsFee: true,
+    });
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.payment).toMatchObject({ feeAmount: 1_039, withholdingAmount: 143_961 });
+    expect(r.value.invoice).toMatchObject({ status: "paid", remaining: 0 });
+    expect(lines(r.value.journal)).toEqual([
+      ["debit", t.deposit, 1_060_000, t.partner.id],
+      ["debit", t.accountId("支払手数料"), 1_039, t.partner.id],
+      ["debit", t.ownerDrawing, 143_961, t.partner.id],
+      ["credit", t.accountId("売掛金"), 1_205_000, t.partner.id],
+    ]);
+    // 入金額 + 源泉徴収税額が残額以上なら手数料にできる差額がない
+    const none = t.pay(issued.invoice.id, {
+      amount: 1_061_039,
+      withholdingAmount: 143_961,
+      treatDifferenceAsFee: true,
+    });
+    expect(!none.ok && none.error.code).toBe("VALIDATION");
+  });
+
+  it("Acceptance 4: 入金額 + 源泉徴収税額が残額を超えると PAYMENT_EXCEEDS_BALANCE（details.applied に源泉徴収税額を含む）。何も変わらない", () => {
+    const t = withholdingReady();
+    const issued = t.issue();
+    const before = structuredClone({ l: t.ledger.state, i: t.invoicing.state });
+    const r = t.pay(issued.invoice.id, { amount: 1_061_040, withholdingAmount: 143_961 });
+    expect(!r.ok && r.error.code).toBe("PAYMENT_EXCEEDS_BALANCE");
+    expect(!r.ok && r.error.details).toMatchObject({
+      invoiceId: issued.invoice.id,
+      remaining: 1_205_000,
+      applied: 1_205_001,
+    });
+    expect({ l: t.ledger.state, i: t.invoicing.state }).toEqual(before);
+    // 請求書の値より大きい源泉徴収税額でも、残額を超えなければ受け付ける
+    const ok = t.pay(issued.invoice.id, { amount: 1_061_038, withholdingAmount: 143_962 });
+    expect(ok.ok).toBe(true);
+  });
+
+  it("源泉徴収税額は 0 以上の整数（負・小数・1 兆円以上は VALIDATION）。省略と 0 は同じ", () => {
+    const t = withholdingReady();
+    const issued = t.issue();
+    for (const withholdingAmount of [-1, 1.5, 1_000_000_000_000]) {
+      const r = t.pay(issued.invoice.id, { amount: 1_000, withholdingAmount });
+      expect(!r.ok && r.error.code).toBe("VALIDATION");
+    }
+    expect(t.invoicing.listPayments(issued.invoice.id)).toEqual([]);
+    const r = t.pay(issued.invoice.id, { amount: 1_000, withholdingAmount: 0 });
+    expect(r.ok && r.value.payment.withholdingAmount).toBe(0);
+    expect(r.ok && r.value.journal.lines).toHaveLength(2);
+  });
+
+  it("一部入金の 2 回目: withholdingPaid・withholdingRemaining が消し込みごとに変わり、取消の消し込みは数えない", () => {
+    const t = withholdingReady();
+    const issued = t.issue();
+    const first = t.pay(issued.invoice.id, { amount: 500_000, withholdingAmount: 50_000 });
+    if (!first.ok) throw new Error(JSON.stringify(first.error));
+    expect(first.value.invoice).toMatchObject({
+      status: "partial",
+      paid: 550_000,
+      remaining: 655_000,
+      withholdingPaid: 50_000,
+      withholdingRemaining: 93_961,
+    });
+    const second = t.pay(issued.invoice.id, { amount: 561_039, withholdingAmount: 93_961 });
+    if (!second.ok) throw new Error(JSON.stringify(second.error));
+    expect(second.value.invoice).toMatchObject({
+      status: "paid",
+      withholdingPaid: 143_961,
+      withholdingRemaining: 0,
+    });
+    // 請求書の値を超えて差し引かれたときの残りは 0（負にならない）
+    const voided = voidPayment(
+      t.deps,
+      issued.invoice.id,
+      second.value.payment.id,
+      { reason: "x" },
+      TODAY,
+    );
+    expect(voided.ok && voided.value.invoice).toMatchObject({
+      status: "partial",
+      withholdingPaid: 50_000,
+      withholdingRemaining: 93_961,
+    });
+  });
+
+  it("Acceptance 5: 未締めの取消で仕訳が取り消され、源泉徴収税額も数えなくなる。消し込みの行には値が残る", () => {
+    const t = withholdingReady();
+    const issued = t.issue();
+    const paid = t.pay(issued.invoice.id, { amount: 1_061_039, withholdingAmount: 143_961 });
+    if (!paid.ok) throw new Error(JSON.stringify(paid.error));
+    const r = voidPayment(t.deps, issued.invoice.id, paid.value.payment.id, { reason: "x" }, TODAY);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.journal).toMatchObject({ id: paid.value.journal.id, status: "voided" });
+    expect(r.value.invoice).toMatchObject({
+      status: "unpaid",
+      remaining: 1_205_000,
+      withholdingPaid: 0,
+      withholdingRemaining: 143_961,
+    });
+    expect(r.value.payment.withholdingAmount).toBe(143_961);
+    const audit = t.invoicing.audits.at(-1);
+    expect(audit).toMatchObject({ action: "void" });
+    expect(JSON.parse(audit?.beforeJson ?? "null")).toMatchObject({ withholdingAmount: 143_961 });
+    expect(JSON.parse(audit?.afterJson ?? "null")).toMatchObject({ withholdingAmount: 143_961 });
+  });
+
+  it("Acceptance 5: 締め済みの取消は今日付の訂正仕訳で、事業主貸の行も逆になる", () => {
+    const t = withholdingReady();
+    const issued = t.issue({
+      targetMonth: "2025-12",
+      issueDate: "2025-12-28",
+      salesDate: "2025-12-31",
+    });
+    const paid = t.pay(issued.invoice.id, {
+      receivedOn: "2025-12-30",
+      amount: 1_061_039,
+      withholdingAmount: 143_961,
+    });
+    if (!paid.ok) throw new Error(JSON.stringify(paid.error));
+    t.closeYear(2025);
+    const r = voidPayment(t.deps, issued.invoice.id, paid.value.payment.id, { reason: "x" }, TODAY);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(net(r.value.journal, t.ownerDrawing)).toBe(-143_961);
+    expect(net(r.value.journal, t.accountId("売掛金"))).toBe(1_205_000);
+    expect(r.value.invoice).toMatchObject({ withholdingPaid: 0, withholdingRemaining: 143_961 });
+  });
+
+  it("Acceptance 6: 源泉徴収なしの請求書では withholdingAmount の省略は 0 で、005 と同じ 2 行の仕訳。残りは 0", () => {
+    const t = ready();
+    const issued = t.issue();
+    const r = t.pay(issued.invoice.id);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.payment.withholdingAmount).toBe(0);
+    expect(r.value.journal.lines).toHaveLength(2);
+    expect(r.value.invoice).toMatchObject({ withholdingPaid: 0, withholdingRemaining: 0 });
+  });
+
+  it("入金の仕訳は JOURNAL_LINKED で守られ、事業主貸の行があっても訂正・取消できない（FR-012）", () => {
+    const t = withholdingReady();
+    const issued = t.issue();
+    const paid = t.pay(issued.invoice.id, { amount: 1_061_039, withholdingAmount: 143_961 });
+    if (!paid.ok) throw new Error(JSON.stringify(paid.error));
+    const journal = t.ledger.getJournal(paid.value.journal.id) as Journal;
+    const direct = voidJournal(
+      { ledger: t.ledger, masters: t.masters, ids: t.ids, clock: t.clock },
+      journal.id,
+      { reason: "x", version: journal.version },
+    );
+    expect(!direct.ok && direct.error.code).toBe("JOURNAL_LINKED");
+  });
+});
+
+describe("invoiceStatus（013）: 充当額に源泉徴収税額を含める", () => {
+  it("paid = 入金額 + 手数料 + 源泉徴収税額。取消済みは数えない。withholdingAmount の省略は 0", () => {
+    const invoice = { total: 1_205_000, voidedAt: null };
+    expect(
+      invoiceStatus(invoice, [
+        { amount: 1_061_039, feeAmount: 0, withholdingAmount: 143_961, voidedAt: null },
+      ]),
+    ).toEqual({ status: "paid", paid: 1_205_000, remaining: 0 });
+    expect(
+      invoiceStatus(invoice, [
+        { amount: 500_000, feeAmount: 1_000, withholdingAmount: 50_000, voidedAt: null },
+        { amount: 100_000, feeAmount: 0, withholdingAmount: 20_000, voidedAt: "2026-11-11" },
+      ]),
+    ).toEqual({ status: "partial", paid: 551_000, remaining: 654_000 });
+    expect(invoiceStatus(invoice, [{ amount: 5, feeAmount: 0, voidedAt: null }]).paid).toBe(5);
+  });
+});
+
 describe("isOverdue（FR-020、R14）", () => {
   const invoice = { dueDate: "2026-11-30", voidedAt: null };
   it("残額 > 0 かつ 今日 > 支払期限。支払期限の当日は偽、翌日は真", () => {
@@ -434,8 +670,31 @@ describe("paymentJournalDraft", () => {
     ]);
   });
 
-  it("科目がなければ ACCOUNT_NOT_FOUND", () => {
+  it("源泉徴収税額 > 0 は借方 事業主貸（3090）を最後の借方に足し、貸方 売掛金は入金額 + 手数料 + 源泉徴収税額", () => {
+    const r = paymentJournalDraft(
+      { ...source, depositSubAccountId: null, feeAmount: 660, withholdingAmount: 300 },
+      [...accounts, { id: "a-owner", code: INVOICING_ACCOUNT_CODES.ownerDrawing }],
+    );
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(INVOICING_ACCOUNT_CODES.ownerDrawing).toBe("3090");
+    expect(r.value.lines).toEqual([
+      { side: "debit", accountId: "a-bank", amount: 1_000, partnerId: "p-1" },
+      { side: "debit", accountId: "a-fee", amount: 660, partnerId: "p-1" },
+      { side: "debit", accountId: "a-owner", amount: 300, partnerId: "p-1" },
+      { side: "credit", accountId: "a-recv", amount: 1_960, partnerId: "p-1" },
+    ]);
+  });
+
+  it("源泉徴収税額 0（省略を含む）は事業主貸の行を足さない", () => {
+    const r = paymentJournalDraft({ ...source, withholdingAmount: 0 }, accounts);
+    expect(r.ok && r.value.lines).toHaveLength(2);
+  });
+
+  it("科目がなければ ACCOUNT_NOT_FOUND（事業主貸は源泉徴収税額 > 0 のときだけ引く）", () => {
     const r = paymentJournalDraft({ ...source, feeAmount: 1 }, [accounts[0] as never]);
     expect(!r.ok && r.error.code).toBe("ACCOUNT_NOT_FOUND");
+    const owner = paymentJournalDraft({ ...source, withholdingAmount: 1 }, accounts);
+    expect(!owner.ok && owner.error.code).toBe("ACCOUNT_NOT_FOUND");
+    expect(!owner.ok && owner.error.details).toMatchObject({ code: "3090" });
   });
 });

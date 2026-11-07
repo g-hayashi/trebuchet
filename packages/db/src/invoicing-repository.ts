@@ -5,6 +5,7 @@ import type {
   InvoicingStore,
   InvoicingUnitOfWork,
   PaymentRecord,
+  TaxParameter,
   WorkHoursRow,
 } from "@trebuchet/domain";
 import type {
@@ -13,7 +14,7 @@ import type {
   InvoiceSettings,
   JournalOrigin,
 } from "@trebuchet/schema";
-import { and, asc, desc, eq, isNull, max, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNull, lte, max, or } from "drizzle-orm";
 import { rowidOf, type TenantConn } from "./internal.ts";
 import {
   invoiceItems,
@@ -24,6 +25,7 @@ import {
   partnerBillingTerms,
   recurringJournals,
   recurringRuns,
+  taxParameters,
   workHours,
 } from "./schema/tenant.ts";
 import { drizzleUnitOfWork } from "./unit-of-work.ts";
@@ -62,6 +64,14 @@ export class DrizzleInvoicingStore implements InvoicingStore {
 
   appendInvoicingAudit(entry: InvoicingAuditEntry): void {
     appendInvoicingAuditRow(this.db, entry);
+  }
+
+  listTaxParameters(): TaxParameter[] {
+    return this.db
+      .select()
+      .from(taxParameters)
+      .orderBy(asc(taxParameters.key), asc(taxParameters.effectiveFrom))
+      .all();
   }
 
   // ---- 発行者の設定 ----
@@ -243,6 +253,26 @@ export class DrizzleInvoicingStore implements InvoicingStore {
       .from(invoicePayments)
       .where(eq(invoicePayments.invoiceId, invoiceId))
       .orderBy(asc(invoicePayments.createdAt), asc(rowidOf(invoicePayments)))
+      .all();
+  }
+
+  listWithheldPayments(from: string, to: string): PaymentRecord[] {
+    return this.db
+      .select()
+      .from(invoicePayments)
+      .where(
+        and(
+          isNull(invoicePayments.voidedAt),
+          gt(invoicePayments.withholdingAmount, 0),
+          gte(invoicePayments.receivedOn, from),
+          lte(invoicePayments.receivedOn, to),
+        ),
+      )
+      .orderBy(
+        asc(invoicePayments.receivedOn),
+        asc(invoicePayments.createdAt),
+        asc(rowidOf(invoicePayments)),
+      )
       .all();
   }
 

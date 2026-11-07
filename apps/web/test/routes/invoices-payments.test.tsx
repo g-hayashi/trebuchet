@@ -43,6 +43,7 @@ const PAYMENT = {
   receivedOn: "2026-11-10",
   amount: 99_560,
   feeAmount: 440,
+  withholdingAmount: 0,
   depositAccountId: "acc1020",
   depositSubAccountId: null,
   journalId: "jp1",
@@ -205,6 +206,175 @@ describe("消し込みの入力（詳細。FR-017〜019）", () => {
     await screen.findByRole("heading", { name: /請求書/ });
     await screen.findAllByText("株式会社A 御中");
     expect(screen.queryByRole("form", { name: "入金の消し込み" })).not.toBeInTheDocument();
+  });
+});
+
+// 013 US2（R8、FR-008）: 源泉徴収税額の欄
+describe("源泉徴収税額の入力（013 US2）", () => {
+  const WITHHOLDING_DETAIL = {
+    ...INVOICE_DETAIL,
+    total: 1_205_000,
+    remaining: 1_205_000,
+    items: [{ ...INVOICE_DETAIL.items[0], amount: 1_205_000 }],
+    withholdingBase: 1_205_000,
+    withholdingTax: 143_961,
+    netAmount: 1_061_039,
+    withholdingPaid: 0,
+    withholdingRemaining: 143_961,
+  };
+  const postRoutes = {
+    [`POST ${BASE}/invoices/inv1/payments`]: () =>
+      ok({ payment: PAYMENT, invoice: WITHHOLDING_DETAIL, journal: { id: "jp1" } }, 201),
+  };
+  const openForm = async (user: ReturnType<typeof userEvent.setup>) => {
+    const form = await screen.findByRole("form", { name: "入金の消し込み" });
+    fireEvent.change(within(form).getByLabelText("入金日"), { target: { value: "2026-11-10" } });
+    await user.selectOptions(within(form).getByLabelText("入金先の科目"), "acc1020");
+    return form;
+  };
+  const postBody = (calls: ReturnType<typeof mockApi>) =>
+    calls.find((c) => c.method === "POST")?.body;
+
+  it("既定は請求書の源泉徴収の残り。入金額の既定は残額から源泉徴収の残りを引いた額で、そのまま POST できる", async () => {
+    const calls = setupDetail(WITHHOLDING_DETAIL, postRoutes);
+    const user = userEvent.setup();
+    const form = await openForm(user);
+    expect(within(form).getByLabelText("源泉徴収税額")).toHaveValue("143961");
+    expect(within(form).getByLabelText("入金額")).toHaveValue("1061039");
+    await user.click(within(form).getByRole("button", { name: "消し込む" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(postBody(calls)).toEqual({
+      receivedOn: "2026-11-10",
+      amount: 1_061_039,
+      depositAccountId: "acc1020",
+      withholdingAmount: 143_961,
+    });
+  });
+
+  it("取引先の計算が違うときは直せる。直した額を送る", async () => {
+    const calls = setupDetail(WITHHOLDING_DETAIL, postRoutes);
+    const user = userEvent.setup();
+    const form = await openForm(user);
+    const withholding = within(form).getByLabelText("源泉徴収税額");
+    await user.clear(withholding);
+    await user.type(withholding, "143960");
+    const amount = within(form).getByLabelText("入金額");
+    await user.clear(amount);
+    await user.type(amount, "1061040");
+    await user.click(within(form).getByRole("button", { name: "消し込む" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(postBody(calls)).toMatchObject({ amount: 1_061_040, withholdingAmount: 143_960 });
+  });
+
+  it("差額の扱いと併用: 振込手数料 = 残額 − 入金額 − 源泉徴収税額。両方を送る", async () => {
+    const calls = setupDetail(WITHHOLDING_DETAIL, postRoutes);
+    const user = userEvent.setup();
+    const form = await openForm(user);
+    const amount = within(form).getByLabelText("入金額");
+    await user.clear(amount);
+    await user.type(amount, "1060000");
+    await user.click(within(form).getByLabelText("差額を振込手数料として扱う"));
+    expect(within(form).getByText("振込手数料 1,039 円")).toBeInTheDocument();
+    await user.click(within(form).getByRole("button", { name: "消し込む" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(postBody(calls)).toEqual({
+      receivedOn: "2026-11-10",
+      amount: 1_060_000,
+      depositAccountId: "acc1020",
+      withholdingAmount: 143_961,
+      treatDifferenceAsFee: true,
+    });
+  });
+
+  it("一部入金の 2 回目の既定は、詳細の withholdingRemaining と、そこから逆算した入金額", async () => {
+    setupDetail({
+      ...WITHHOLDING_DETAIL,
+      status: "partial",
+      paid: 550_000,
+      remaining: 655_000,
+      withholdingPaid: 50_000,
+      withholdingRemaining: 93_961,
+    });
+    const form = await screen.findByRole("form", { name: "入金の消し込み" });
+    expect(within(form).getByLabelText("源泉徴収税額")).toHaveValue("93961");
+    expect(within(form).getByLabelText("入金額")).toHaveValue("561039");
+  });
+
+  it("源泉徴収なしの請求書でも欄を出し、既定は 0。0 のときは withholdingAmount を送らない。入金額の既定は残額", async () => {
+    const calls = setupDetail(REMAINING_DETAIL, postRoutes);
+    const user = userEvent.setup();
+    const form = await openForm(user);
+    expect(within(form).getByLabelText("源泉徴収税額")).toHaveValue("0");
+    expect(within(form).getByLabelText("入金額")).toHaveValue("100000");
+    await user.click(within(form).getByRole("button", { name: "消し込む" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(postBody(calls)).toEqual({
+      receivedOn: "2026-11-10",
+      amount: 100_000,
+      depositAccountId: "acc1020",
+    });
+  });
+
+  it("源泉徴収税額が 0 以上の整数でないときは送らずに知らせる（空欄は 0）", async () => {
+    const calls = setupDetail(WITHHOLDING_DETAIL, postRoutes);
+    const user = userEvent.setup();
+    const form = await openForm(user);
+    const withholding = within(form).getByLabelText("源泉徴収税額");
+    await user.clear(withholding);
+    await user.type(withholding, "-5");
+    await user.click(within(form).getByRole("button", { name: "消し込む" }));
+    expect(
+      await within(form).findByText("源泉徴収税額は 0 円以上の整数で入力してください"),
+    ).toBeVisible();
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    await user.clear(withholding);
+    await user.click(within(form).getByRole("button", { name: "消し込む" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(postBody(calls)).not.toHaveProperty("withholdingAmount");
+  });
+
+  it("消し込みの一覧の入金の記録: 源泉徴収のある請求書は詳細を読み、既定の源泉徴収税額を入れる", async () => {
+    const calls = mockApi({
+      ...accountRoutes,
+      [`GET ${BASE}/partners`]: () =>
+        ok({
+          partners: [{ id: P1, name: "株式会社A", honorific: "御中", memo: null, isActive: true }],
+        }),
+      [`GET ${BASE}/invoices`]: () =>
+        ok({
+          invoices: [
+            {
+              id: "inv1",
+              invoiceNo: "2026-0001",
+              partnerId: P1,
+              recipientName: "株式会社A",
+              targetMonth: "2026-10",
+              issueDate: "2026-10-31",
+              dueDate: "2026-11-30",
+              total: 1_205_000,
+              withholdingBase: 1_205_000,
+              withholdingTax: 143_961,
+              netAmount: 1_061_039,
+              paid: 0,
+              remaining: 1_205_000,
+              status: "unpaid",
+              overdue: false,
+            },
+          ],
+          outstandingByPartner: [],
+        }),
+      [`GET ${BASE}/invoices/inv1`]: () => ok(WITHHOLDING_DETAIL),
+    });
+    renderRoute(ListRoute, { path: "/e/$entityId/invoices/", url: "/e/e1/invoices" });
+    const user = userEvent.setup();
+    const table = await screen.findByRole("table", { name: "請求書の一覧" });
+    await user.click(within(table).getByRole("button", { name: "入金（2026-0001）" }));
+    const dialog = await screen.findByRole("dialog");
+    const form = await within(dialog).findByRole("form", { name: "入金の消し込み" });
+    expect(within(form).getByLabelText("源泉徴収税額")).toHaveValue("143961");
+    expect(within(form).getByLabelText("入金額")).toHaveValue("1061039");
+    expect(calls.some((c) => c.path === `${BASE}/invoices/inv1`)).toBe(true);
   });
 });
 

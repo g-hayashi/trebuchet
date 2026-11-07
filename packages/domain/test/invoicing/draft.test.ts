@@ -18,6 +18,7 @@ const hourly = (over: Partial<BillingTerms> = {}): BillingTerms => ({
   dueDay: 31,
   defaultItemName: "業務委託",
   billingName: null,
+  withholding: false,
   updatedAt: "2026-10-01T00:00:00.000Z",
   ...over,
 });
@@ -55,7 +56,7 @@ describe("buildInvoiceDraft（免税の事業者）", () => {
       ...over,
     });
   const draftOf = (outcome: ReturnType<typeof buildInvoiceDraft>): InvoiceDraft => {
-    if (outcome.kind !== "draft") throw new Error(`expected draft: ${outcome.reason}`);
+    if (outcome.kind !== "draft") throw new Error(`expected draft: ${JSON.stringify(outcome)}`);
     return outcome.draft;
   };
 
@@ -329,5 +330,74 @@ describe("draftInvoices（H:§3.3）", () => {
     // 別の月は警告なし
     const other = draftInvoices(t.deps, { month: "2026-11" }, TODAY);
     expect(other.ok && other.value.drafts[0]?.warnings).toEqual([]);
+  });
+});
+
+// 013 US1: 案の源泉徴収（R3、FR-002・003・004、contracts §2）
+describe("draftInvoices（源泉徴収。013）", () => {
+  const monthlyPartner = (
+    t: ReturnType<typeof setupInvoicing>,
+    over: Partial<BillingTerms>,
+    taxDisplay: "separate" | "inclusive_only" = "separate",
+  ) => {
+    t.setSettings({ taxDisplay });
+    const p = t.addPartner({ name: "A 社" });
+    t.setTerms(p.id, {
+      billingType: "monthly",
+      unitPrice: null,
+      monthlyAmount: 330_000,
+      ...over,
+    });
+    return p;
+  };
+
+  it("別記（税抜）の案: 対象額 300,000 円・税額 30,630 円・差引 299,370 円", () => {
+    const t = setupInvoicing({ taxable: true });
+    const p = monthlyPartner(t, { withholding: true });
+    const r = draftInvoices(t.deps, { month: "2026-10" }, TODAY);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.drafts).toHaveLength(1);
+    expect(r.value.drafts[0]).toMatchObject({
+      partnerId: p.id,
+      total: 330_000,
+      withholdingBase: 300_000,
+      withholdingTax: 30_630,
+      netAmount: 299_370,
+    });
+  });
+
+  it("税込のみの案: 対象額は合計の 1,205,000 円・税額 143,961 円", () => {
+    const t = setupInvoicing();
+    monthlyPartner(t, { withholding: true, monthlyAmount: 1_205_000 }, "inclusive_only");
+    const r = draftInvoices(t.deps, { month: "2026-10" }, TODAY);
+    expect(r.ok && r.value.drafts[0]).toMatchObject({
+      total: 1_205_000,
+      withholdingBase: 1_205_000,
+      withholdingTax: 143_961,
+      netAmount: 1_061_039,
+    });
+  });
+
+  it("「なし」の案は 0・0・差引は合計と同じ。税制の値がなくても作れる", () => {
+    const t = setupInvoicing({ taxable: true });
+    monthlyPartner(t, { withholding: false });
+    t.invoicing.state.taxParameters = [];
+    const r = draftInvoices(t.deps, { month: "2026-10" }, TODAY);
+    expect(r.ok && r.value.drafts[0]).toMatchObject({
+      withholdingBase: 0,
+      withholdingTax: 0,
+      netAmount: 330_000,
+    });
+  });
+
+  it("発行日（今日）に税制の値がなければ WITHHOLDING_RATE_MISSING（details.date）", () => {
+    const t = setupInvoicing({ taxable: true });
+    monthlyPartner(t, { withholding: true });
+    t.invoicing.state.taxParameters = [];
+    const r = draftInvoices(t.deps, { month: "2026-10" }, TODAY);
+    expect(r).toMatchObject({
+      ok: false,
+      error: { code: "WITHHOLDING_RATE_MISSING", details: { date: TODAY } },
+    });
   });
 });

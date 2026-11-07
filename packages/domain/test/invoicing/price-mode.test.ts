@@ -30,30 +30,37 @@ function ready(taxable = false) {
 
 describe("請求の入力方式と消費税相当額", () => {
   it("計算のプレビューは税込/税抜の合計を返し、合計上限をVALIDATIONにする", () => {
+    const { deps } = setupInvoicing();
     expect(
-      previewInvoiceCalculation({
-        priceMode: "exclusive",
-        items: [{ amount: 180000, taxRate: 10 }],
-      }),
+      previewInvoiceCalculation(
+        deps,
+        { priceMode: "exclusive", items: [{ amount: 180000, taxRate: 10 }] },
+        TODAY,
+      ),
     ).toEqual({
       ok: true,
       value: {
         subtotal: 180000,
         total: 198000,
         taxBreakdown: [{ rate: 10, inclusive: 198000, exclusive: 180000, tax: 18000 }],
+        withholdingBase: 0,
+        withholdingTax: 0,
+        netAmount: 198000,
       },
     });
     expect(
-      previewInvoiceCalculation({
-        priceMode: "inclusive",
-        items: [{ amount: 999999999999, taxRate: null }],
-      }),
+      previewInvoiceCalculation(
+        deps,
+        { priceMode: "inclusive", items: [{ amount: 999999999999, taxRate: null }] },
+        TODAY,
+      ),
     ).toMatchObject({ ok: true, value: { total: 999999999999 } });
     expect(
-      previewInvoiceCalculation({
-        priceMode: "exclusive",
-        items: [{ amount: 999999999999, taxRate: 10 }],
-      }),
+      previewInvoiceCalculation(
+        deps,
+        { priceMode: "exclusive", items: [{ amount: 999999999999, taxRate: 10 }] },
+        TODAY,
+      ),
     ).toMatchObject({ ok: false, error: { code: "VALIDATION" } });
   });
   it("税率ごとに合算して一度切り捨て、対象外も合計に含める", () => {
@@ -279,6 +286,7 @@ describe("請求の入力方式と消費税相当額", () => {
       defaultItemName: "業務",
       priceMode: "exclusive",
       taxRate: 8,
+      withholding: false,
     });
     expect(r.ok && r.value).toMatchObject({ priceMode: "exclusive", taxRate: 8 });
   });

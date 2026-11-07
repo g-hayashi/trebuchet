@@ -1,3 +1,4 @@
+import { openTenant } from "@trebuchet/db";
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { errorOf } from "./helpers.ts";
@@ -154,5 +155,56 @@ describe("POST /invoices/drafts（§3.3。FR-006・FR-016）", () => {
     expect((await errorOf(res)).code).toBe("BILLING_TERMS_MISSING");
 
     expect((await postDrafts({ month: "2026-1" })).status).toBe(400);
+  });
+});
+
+describe("源泉徴収（013。contracts §2）", () => {
+  it("案に withholdingBase・withholdingTax・netAmount が載る。なしは 0・0・合計", async () => {
+    await ctx.setSettings();
+    await ctx.makeTaxable();
+    const on = await ctx.addPartner("A 社");
+    const off = await ctx.addPartner("B 社");
+    await ctx.setTerms(on, {
+      billingType: "monthly",
+      unitPrice: undefined,
+      monthlyAmount: 330_000,
+      withholding: true,
+    });
+    await ctx.setTerms(off, {
+      billingType: "monthly",
+      unitPrice: undefined,
+      monthlyAmount: 330_000,
+    });
+    const { drafts } = await okBody(await postDrafts({ month: "2026-10" }));
+    const byPartner = new Map(drafts.map((d) => [d.partnerId, d]));
+    expect(byPartner.get(on)).toMatchObject({
+      withholdingBase: 300_000,
+      withholdingTax: 30_630,
+      netAmount: 299_370,
+    });
+    expect(byPartner.get(off)).toMatchObject({
+      withholdingBase: 0,
+      withholdingTax: 0,
+      netAmount: 330_000,
+    });
+  });
+
+  it("422 WITHHOLDING_RATE_MISSING: 今日（発行日の既定）に税制の値がない", async () => {
+    await ctx.setSettings();
+    const on = await ctx.addPartner("A 社");
+    await ctx.setTerms(on, {
+      billingType: "monthly",
+      unitPrice: undefined,
+      monthlyAmount: 330_000,
+      withholding: true,
+    });
+    openTenant(ctx.entityId).$client.exec(
+      "DELETE FROM tax_parameters WHERE key LIKE 'WITHHOLDING_%'",
+    );
+    const res = await postDrafts({ month: "2026-10" });
+    expect(res.status).toBe(422);
+    const error = await errorOf(res);
+    expect(error.code).toBe("WITHHOLDING_RATE_MISSING");
+    expect(error.details).toMatchObject({ date: TODAY });
   });
 });

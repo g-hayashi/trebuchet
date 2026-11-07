@@ -128,6 +128,12 @@ type PayOp = {
   year: 2025 | 2026;
   month: number;
   day: number;
+  /**
+   * 源泉徴収税額（013）。`none` = 0、`tax` = 請求書の源泉徴収の残り（FR-008 の既定値。残額以下）、
+   * `pct` = 残額の `wpct`%。入金額・差額は、残額から源泉徴収税額を引いた額に対して `mode` で決める
+   */
+  withholdingMode: "none" | "tax" | "pct";
+  wpct: number;
 };
 
 /** 消し込みの取消。`target` はそれまでに登録した消し込みの何番目か（剰余で選ぶ。取消済みも選びうる） */
@@ -150,6 +156,14 @@ const arbPayOp: fc.Arbitrary<PayOp> = fc.record({
   year: fc.constantFrom(2025 as const, 2025 as const, 2026 as const),
   month: fc.integer({ min: 1, max: 12 }),
   day: fc.integer({ min: 1, max: 28 }),
+  withholdingMode: fc.constantFrom(
+    "none" as const,
+    "tax" as const,
+    "tax" as const,
+    "pct" as const,
+    "pct" as const,
+  ),
+  wpct: fc.integer({ min: 0, max: 100 }),
 });
 
 const arbVoidPayOp: fc.Arbitrary<VoidPayOp> = fc.record({

@@ -139,3 +139,103 @@ describe("請求書の詳細（US1。FR-010〜014）", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("請求書が見つかりません");
   });
 });
+
+describe("源泉徴収（013 R8・FR-005）", () => {
+  it("源泉徴収税額があるとき、合計の後に「源泉徴収税額」「差引請求額」を出す", async () => {
+    setup({
+      ...DETAIL,
+      total: 330_000,
+      remaining: 330_000,
+      taxBreakdown: [{ rate: 10, exclusive: 300_000, tax: 30_000, inclusive: 330_000 }],
+      withholdingBase: 300_000,
+      withholdingTax: 30_630,
+      netAmount: 299_370,
+    });
+    await screen.findByRole("heading", { name: "請求書 2026-0001" });
+    const total = screen.getAllByText("合計 330,000 円")[0] as HTMLElement;
+    const tax = screen.getAllByText("源泉徴収税額 30,630 円")[0] as HTMLElement;
+    const net = screen.getAllByText("差引請求額 299,370 円")[0] as HTMLElement;
+    expect(tax).toBeVisible();
+    expect(net).toBeVisible();
+    expect(total.compareDocumentPosition(tax) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tax.compareDocumentPosition(net) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("源泉徴収税額が 0 なら、源泉徴収の行を出さない", async () => {
+    setup();
+    await screen.findByRole("heading", { name: "請求書 2026-0001" });
+    // 請求書の行（「源泉徴収税額 N 円」）を出さない。消し込みの入力の欄の名前（013 US2）は別
+    expect(screen.queryByText(/源泉徴収税額 [\d,]+ 円/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/差引請求額/)).not.toBeInTheDocument();
+  });
+});
+
+describe("源泉徴収の分かりやすさ（013）", () => {
+  const PAYMENT = {
+    id: "pay1",
+    receivedOn: "2026-11-20",
+    amount: 299_370,
+    feeAmount: 0,
+    withholdingAmount: 30_630,
+    depositAccountId: "a1",
+    depositSubAccountId: null,
+    journalId: "j3",
+    voidedAt: null,
+    voidReason: null,
+    voidJournalId: null,
+  };
+  const WITHHELD = {
+    ...DETAIL,
+    total: 330_000,
+    remaining: 330_000,
+    withholdingBase: 300_000,
+    withholdingTax: 30_630,
+    netAmount: 299_370,
+    withholdingRemaining: 30_630,
+  };
+  const NOTE =
+    "残額は源泉徴収前の額です。入金の消し込みで、振り込まれた額と源泉徴収税額を合わせて充てます。";
+
+  it("入金の表に「源泉徴収税額」の列を出し、入金ごとの額を入れる", async () => {
+    setup({
+      ...WITHHELD,
+      paid: 330_000,
+      remaining: 0,
+      status: "paid",
+      withholdingPaid: 30_630,
+      withholdingRemaining: 0,
+      payments: [PAYMENT],
+    });
+    const table = await screen.findByRole("table", { name: "消し込みの一覧" });
+    expect(within(table).getByRole("columnheader", { name: "源泉徴収税額" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "30,630" })).toBeInTheDocument();
+  });
+
+  it("請求書の源泉徴収税額も入金の源泉徴収税額も 0 なら、列を出さない", async () => {
+    setup({
+      ...DETAIL,
+      paid: 100_000,
+      remaining: 305_000,
+      payments: [{ ...PAYMENT, amount: 100_000, withholdingAmount: 0 }],
+    });
+    const table = await screen.findByRole("table", { name: "消し込みの一覧" });
+    expect(
+      within(table).queryByRole("columnheader", { name: "源泉徴収税額" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("源泉徴収税額があるとき、残額の後に「源泉徴収前の額」の説明を添える", async () => {
+    setup(WITHHELD);
+    await screen.findByRole("heading", { name: "請求書 2026-0001" });
+    const remaining = screen.getByText("残額 330,000 円");
+    const note = screen.getByText(NOTE);
+    expect(note).toBeVisible();
+    expect(remaining.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("源泉徴収税額が 0 なら、残額の説明を出さない", async () => {
+    setup();
+    await screen.findByRole("heading", { name: "請求書 2026-0001" });
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+});

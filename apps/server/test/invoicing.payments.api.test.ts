@@ -184,6 +184,175 @@ describe("POST /invoices/:invoiceId/payments/:paymentId/void（§4.2）", () => 
   });
 });
 
+// 013 US2: contracts §2（withholdingPaid・withholdingRemaining）・§3（withholdingAmount）
+describe("源泉徴収つきの消し込み（013 contracts §3）", () => {
+  let c: string;
+  /** 源泉徴収あり・税込のみ表示の取引先 C への請求書。合計 1,205,000 円、源泉徴収税額 143,961 円 */
+  const issueWithholding = async () => {
+    await ctx.setSettings({ nextSeq: 1, taxDisplay: "inclusive_only" });
+    c = await ctx.addPartner("C 社");
+    await ctx.setTerms(c, {
+      billingType: "monthly",
+      unitPrice: undefined,
+      monthlyAmount: 1_205_000,
+      withholding: true,
+    });
+    return issue(c, "2026-10", 1_205_000, "2026-10-31");
+  };
+
+  it("201: 入金額 + 源泉徴収税額で消し込み、借方 入金先・事業主貸、貸方 売掛金の仕訳。請求書は paid", async () => {
+    const inv = await issueWithholding();
+    expect(inv).toMatchObject({ withholdingTax: 143_961 });
+    const res = await pay(inv.id, { amount: 1_061_039, withholdingAmount: 143_961 });
+    expect(res.status).toBe(201);
+    const body = await okBody(res);
+    expect(body.payment).toMatchObject({
+      amount: 1_061_039,
+      feeAmount: 0,
+      withholdingAmount: 143_961,
+    });
+    expect(body.invoice).toMatchObject({ status: "paid", paid: 1_205_000, remaining: 0 });
+    expect(body.journal.lines.map((l) => [l.side, l.accountId, l.amount, l.partnerId])).toEqual([
+      ["debit", ctx.accountId("普通預金"), 1_061_039, c],
+      ["debit", ctx.accountId("事業主貸"), 143_961, c],
+      ["credit", ctx.accountId("売掛金"), 1_205_000, c],
+    ]);
+
+    const got = await detail(inv.id);
+    expect(got).toMatchObject({
+      status: "paid",
+      withholdingPaid: 143_961,
+      withholdingRemaining: 0,
+    });
+    expect(got.payments.map((p) => p.withholdingAmount)).toEqual([143_961]);
+  });
+
+  it("GET /invoices/:invoiceId: 消し込み前は withholdingPaid 0・withholdingRemaining = 請求書の値。一部入金と取消で変わる", async () => {
+    const inv = await issueWithholding();
+    expect(await detail(inv.id)).toMatchObject({
+      withholdingPaid: 0,
+      withholdingRemaining: 143_961,
+    });
+    const first = await okBody(await pay(inv.id, { amount: 500_000, withholdingAmount: 50_000 }));
+    expect(await detail(inv.id)).toMatchObject({
+      status: "partial",
+      withholdingPaid: 50_000,
+      withholdingRemaining: 93_961,
+    });
+    // 請求書の値より大きい源泉徴収税額でも、残額を超えなければ受け付け、残りは 0 にとどまる
+    const second = await pay(inv.id, { amount: 655_000 - 200_000, withholdingAmount: 200_000 });
+    expect(second.status).toBe(201);
+    expect(await detail(inv.id)).toMatchObject({
+      status: "paid",
+      withholdingPaid: 250_000,
+      withholdingRemaining: 0,
+    });
+    const voided = await voidPayment(inv.id, first.payment.id, "誤り");
+    expect(voided.status).toBe(200);
+    expect(await detail(inv.id)).toMatchObject({
+      withholdingPaid: 200_000,
+      withholdingRemaining: 0,
+    });
+  });
+
+  it("源泉徴収なしの請求書は withholdingAmount 省略で従来どおり。withholdingRemaining は 0", async () => {
+    const inv = await issue(a, "2026-10", 100_000, "2026-10-31");
+    const body = await okBody(await pay(inv.id, { amount: 100_000 }));
+    expect(body.payment.withholdingAmount).toBe(0);
+    expect(body.journal.lines).toHaveLength(2);
+    expect(await detail(inv.id)).toMatchObject({ withholdingPaid: 0, withholdingRemaining: 0 });
+  });
+
+  it("treatDifferenceAsFee と併用: fee = 残額 − 入金額 − 源泉徴収税額。借方 入金先・支払手数料・事業主貸", async () => {
+    const inv = await issueWithholding();
+    const res = await pay(inv.id, {
+      amount: 1_060_000,
+      withholdingAmount: 143_961,
+      treatDifferenceAsFee: true,
+    });
+    expect(res.status).toBe(201);
+    const body = await okBody(res);
+    expect(body.payment).toMatchObject({ feeAmount: 1_039, withholdingAmount: 143_961 });
+    expect(body.journal.lines.map((l) => [l.side, l.amount])).toEqual([
+      ["debit", 1_060_000],
+      ["debit", 1_039],
+      ["debit", 143_961],
+      ["credit", 1_205_000],
+    ]);
+    const bad = await pay(inv.id, {
+      amount: 1_061_039,
+      withholdingAmount: 143_961,
+      treatDifferenceAsFee: true,
+    });
+    expect((await errorOf(bad)).code).toBe("VALIDATION");
+  });
+
+  it("422 PAYMENT_EXCEEDS_BALANCE: details.applied に源泉徴収税額を含む。何も残らない", async () => {
+    const inv = await issueWithholding();
+    const res = await pay(inv.id, { amount: 1_061_040, withholdingAmount: 143_961 });
+    expect(res.status).toBe(422);
+    const error = await errorOf(res);
+    expect(error.code).toBe("PAYMENT_EXCEEDS_BALANCE");
+    expect(error.details).toMatchObject({ remaining: 1_205_000, applied: 1_205_001 });
+    expect((await detail(inv.id)).payments).toEqual([]);
+  });
+
+  it("withholdingAmount が負・小数・1 兆円以上は 400 VALIDATION", async () => {
+    const inv = await issueWithholding();
+    for (const withholdingAmount of [-1, 1.5, 1_000_000_000_000]) {
+      const res = await pay(inv.id, { amount: 1_000, withholdingAmount });
+      expect(res.status).toBe(400);
+      expect((await errorOf(res)).code).toBe("VALIDATION");
+    }
+    expect((await detail(inv.id)).payments).toEqual([]);
+  });
+
+  it("取消: 200。仕訳が取り消され、源泉徴収税額の記録は行に残るが残りに戻る", async () => {
+    const inv = await issueWithholding();
+    const paid = await okBody(await pay(inv.id, { amount: 1_061_039, withholdingAmount: 143_961 }));
+    const res = await voidPayment(inv.id, paid.payment.id, "入金の誤り");
+    expect(res.status).toBe(200);
+    const body = await okBody(res);
+    expect(body.payment).toMatchObject({ withholdingAmount: 143_961, voidReason: "入金の誤り" });
+    expect(body.journal).toMatchObject({ id: paid.journal.id, status: "voided" });
+    expect(body.invoice).toMatchObject({ status: "unpaid", remaining: 1_205_000 });
+    expect(await detail(inv.id)).toMatchObject({
+      withholdingPaid: 0,
+      withholdingRemaining: 143_961,
+    });
+  });
+
+  it("事業主貸の行を含む入金の仕訳の訂正・取消は 409 JOURNAL_LINKED（FR-012）", async () => {
+    const inv = await issueWithholding();
+    const paid = await okBody(await pay(inv.id, { amount: 1_061_039, withholdingAmount: 143_961 }));
+    const journalParam = { ...ctx.param, journalId: paid.journal.id };
+    const corrected = await ctx.e.journals[":journalId"].$put({
+      param: journalParam,
+      json: {
+        date: "2026-11-10",
+        lines: paid.journal.lines.map((l) => ({
+          side: l.side,
+          accountId: l.accountId,
+          amount: l.amount,
+        })),
+        reason: "訂正",
+        version: paid.journal.version,
+      },
+    });
+    expect(corrected.status).toBe(409);
+    expect(await errorOf(corrected)).toMatchObject({
+      code: "JOURNAL_LINKED",
+      details: { invoiceId: inv.id, paymentId: paid.payment.id },
+    });
+    const voided = await ctx.e.journals[":journalId"].void.$post({
+      param: journalParam,
+      json: { reason: "取消", version: paid.journal.version },
+    });
+    expect(voided.status).toBe(409);
+    expect((await errorOf(voided)).code).toBe("JOURNAL_LINKED");
+  });
+});
+
 describe("GET /invoices の期限切れ・status・未回収（§3.5）", () => {
   // 今日は 2026-10-31（偽の時計）。支払期限は発行日の翌月末
   const seed = async () => {

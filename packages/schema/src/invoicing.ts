@@ -6,6 +6,7 @@ import {
   Id,
   MonthString,
   TaxCategoryCode,
+  YEN_LIMIT,
   Yen,
 } from "./primitives.ts";
 
@@ -94,6 +95,8 @@ const BillingTermsFields = z.object({
   dueDay: DayOfMonthOrEnd,
   defaultItemName: z.string().min(1, "既定の品名を入力してください").max(200),
   billingName: z.string().min(1).max(200).optional(),
+  /** 源泉徴収あり（013）。発行時に源泉徴収税額を計算する。既定は「なし」 */
+  withholding: z.boolean().default(false),
 });
 
 /** PUT /partners/:partnerId/billing-terms。型に合わない金額は拒否（`hourly` は単価だけ、`monthly` は月額だけ） */
@@ -139,6 +142,7 @@ export const BillingTerms = z.object({
   dueDay: DayOfMonthOrEnd,
   defaultItemName: z.string(),
   billingName: z.string().nullable(),
+  withholding: z.boolean(),
   updatedAt: Timestamp,
 });
 export type BillingTerms = z.infer<typeof BillingTerms>;
@@ -259,13 +263,25 @@ export const InvoiceCalculationInput = z.object({
     .array(z.object({ amount: Yen, taxRate: InvoiceTaxRate }))
     .min(1)
     .max(MAX_INVOICE_ITEMS),
+  /** 取引先の源泉徴収の設定を引く（013）。省略は源泉徴収なし */
+  partnerId: Id.optional(),
+  /** 源泉徴収の税制の値を引く日。省略は今日 */
+  issueDate: DateString.optional(),
 });
 export type InvoiceCalculationInput = z.infer<typeof InvoiceCalculationInput>;
+
+/** 源泉徴収（013）。`withholdingBase` が 0 なら源泉徴収なし。`netAmount = total − withholdingTax` */
+const WithholdingAmounts = {
+  withholdingBase: z.number().int().nonnegative(),
+  withholdingTax: z.number().int().nonnegative(),
+  netAmount: Yen,
+};
 
 export const InvoiceCalculationResponse = z.object({
   subtotal: Yen,
   total: Yen,
   taxBreakdown: z.array(TaxBreakdownEntry),
+  ...WithholdingAmounts,
 });
 export type InvoiceCalculationResponse = z.infer<typeof InvoiceCalculationResponse>;
 
@@ -287,6 +303,7 @@ export const InvoiceDraft = z.object({
   total: Yen,
   taxDisplay: InvoiceTaxDisplay,
   taxBreakdown: z.array(TaxBreakdownEntry),
+  ...WithholdingAmounts,
   warnings: z.array(InvoiceDraftWarning),
 });
 export type InvoiceDraft = z.infer<typeof InvoiceDraft>;
@@ -327,6 +344,7 @@ export const InvoiceSummary = z.object({
   issueDate: DateString,
   dueDate: DateString,
   total: Yen,
+  ...WithholdingAmounts,
   paid: z.number().int().nonnegative(),
   remaining: z.number().int().nonnegative(),
   status: InvoiceStatus,
@@ -365,6 +383,8 @@ export const PaymentView = z.object({
   receivedOn: DateString,
   amount: Yen,
   feeAmount: z.number().int().nonnegative(),
+  /** 実際に差し引かれた源泉徴収税額（013）。0 は源泉徴収なし */
+  withholdingAmount: z.number().int().nonnegative(),
   depositAccountId: Id,
   depositSubAccountId: Id.nullable(),
   journalId: Id,
@@ -387,6 +407,10 @@ export const InvoiceDetail = InvoiceSummary.extend({
   voidedAt: Timestamp.nullable(),
   voidReason: z.string().nullable(),
   payments: z.array(PaymentView),
+  /** 取消でない消し込みの源泉徴収税額の合計（013） */
+  withholdingPaid: z.number().int().nonnegative(),
+  /** `max(0, withholdingTax − withholdingPaid)`。消し込みの源泉徴収税額の既定値 */
+  withholdingRemaining: z.number().int().nonnegative(),
 });
 export type InvoiceDetail = z.infer<typeof InvoiceDetail>;
 
@@ -413,6 +437,8 @@ export const PaymentInput = z.object({
   depositAccountId: Id,
   depositSubAccountId: Id.optional(),
   treatDifferenceAsFee: z.boolean().optional(),
+  /** 実際に差し引かれた源泉徴収税額（013）。0 以上の整数。省略は 0 */
+  withholdingAmount: z.number().int().nonnegative().lt(YEN_LIMIT).optional(),
 });
 export type PaymentInput = z.infer<typeof PaymentInput>;
 
@@ -423,6 +449,40 @@ export const PaymentRecordedResponse = z.object({
   journal: JournalOutput,
 });
 export type PaymentRecordedResponse = z.infer<typeof PaymentRecordedResponse>;
+
+// ---- 年間の源泉徴収（013 contracts §4） ----
+
+const Yen0 = z.number().int().nonnegative();
+
+/** 年間の一覧の消し込み 1 件。`applied` = 入金額 + 差額 + 源泉徴収税額 */
+export const WithholdingSummaryPayment = z.object({
+  paymentId: Id,
+  invoiceId: Id,
+  invoiceNo: z.string(),
+  receivedOn: DateString,
+  applied: Yen0,
+  withholdingAmount: Yen,
+});
+export type WithholdingSummaryPayment = z.infer<typeof WithholdingSummaryPayment>;
+
+/** GET /withholding/:year の 200。取消でない源泉徴収つきの消し込みを、入金日の暦年で取引先ごとに集計する */
+export const WithholdingSummary = z.object({
+  year: z.number().int(),
+  /** 取引先名の順。該当がなければ空 */
+  partners: z.array(
+    z.object({
+      partnerId: Id,
+      partnerName: z.string(),
+      paymentCount: Yen0,
+      appliedTotal: Yen0,
+      withholdingTotal: Yen0,
+      payments: z.array(WithholdingSummaryPayment),
+    }),
+  ),
+  appliedTotal: Yen0,
+  withholdingTotal: Yen0,
+});
+export type WithholdingSummary = z.infer<typeof WithholdingSummary>;
 
 // ---- 仕訳との相互参照（§6.1） ----
 

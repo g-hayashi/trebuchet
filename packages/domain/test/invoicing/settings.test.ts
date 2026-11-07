@@ -48,6 +48,7 @@ const hourly = (over: Partial<BillingTermsInput> = {}): BillingTermsInput => ({
   dueMonthsAfter: 1,
   dueDay: 31,
   defaultItemName: "システム開発",
+  withholding: false,
   ...over,
 });
 
@@ -57,6 +58,7 @@ const monthly = (over: Partial<BillingTermsInput> = {}): BillingTermsInput => ({
   dueMonthsAfter: 2,
   dueDay: 25,
   defaultItemName: "顧問料",
+  withholding: false,
   billingName: "A 社 経理部",
   ...over,
 });

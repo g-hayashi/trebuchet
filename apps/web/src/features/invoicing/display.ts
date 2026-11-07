@@ -5,9 +5,11 @@ import type { BillingTermsRow } from "./api";
 /** 取引先の一覧の「請求」の欄。条件がなければ「未設定」 */
 export function billingSummary(terms: BillingTermsRow | undefined): string {
   if (terms === undefined) return "未設定";
-  return terms.billingType === "hourly"
-    ? `時間単価 ${formatYen(terms.unitPrice ?? 0)} 円`
-    : `月額 ${formatYen(terms.monthlyAmount ?? 0)} 円`;
+  const base =
+    terms.billingType === "hourly"
+      ? `時間単価 ${formatYen(terms.unitPrice ?? 0)} 円`
+      : `月額 ${formatYen(terms.monthlyAmount ?? 0)} 円`;
+  return terms.withholding === true ? `${base}・源泉徴収あり` : base;
 }
 
 /** 取引先の宛名（敬称つき） */
