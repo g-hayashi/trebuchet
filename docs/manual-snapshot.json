@@ -116,7 +116,7 @@
         "article": "53f31cc2e51e8d8444c36c688fd5f3c3fc6de946b434f780d336eb60c19f08d3"
       },
       "images": {
-        "apps/web/public/manual/home.png": "5e2c903d38fb641dd528f988bbeecc97e9c6b9147770a89770f9eca8c7325b51"
+        "apps/web/public/manual/home.png": "744717cff434cd12f201123d5df02fe8204b84a3082c8e2c6019794b6a3665b9"
       }
     },
     "journals": {
@@ -135,7 +135,7 @@
       "images": {
         "apps/web/public/manual/journals.png": "5c2d8baead0fc5949230b46a91305ebadba21b7540b4aadb08362740893c7fad",
         "apps/web/public/manual/journals-detailed.png": "77fe4c2dc4c1860ee698fcfa502bfe4f153e663d207c3be1d9e662b017a4e676",
-        "apps/web/public/manual/journal-detail.png": "36112c138a07338416d6c2799b6b3a4af5ccd6d4937211fa71eabb5a4e241ca5"
+        "apps/web/public/manual/journal-detail.png": "f3a12b1eb7f467be7ee40584c07f02825b73238bf48bb469254ba8e203b0f9c5"
       }
     },
     "journal-detail": {
@@ -155,7 +155,7 @@
         "article": "7e3e6a35050fec796a323bfddf37c589bbe3364827c4467a9de2d678b34e0fc1"
       },
       "images": {
-        "apps/web/public/manual/journal-detail.png": "36112c138a07338416d6c2799b6b3a4af5ccd6d4937211fa71eabb5a4e241ca5"
+        "apps/web/public/manual/journal-detail.png": "f3a12b1eb7f467be7ee40584c07f02825b73238bf48bb469254ba8e203b0f9c5"
       }
     },
     "recurring": {
@@ -210,7 +210,7 @@
         "article": "6d0a1c94df721ac48ce4c0af9577e03de6e91cf5ffbf93bcc383de6b0426ded8"
       },
       "images": {
-        "apps/web/public/manual/statements-review.png": "54101f27a533fd23209053b8aa1074b1720012595d4f26e4b7bfec83c19bcc27"
+        "apps/web/public/manual/statements-review.png": "431d45c2a449e999f90c24c3bb18a323b9219810ddf5967a26f909c376e3c800"
       }
     },
     "statement-settings": {
@@ -228,7 +228,7 @@
         "article": "8f3f51293b22895ee7de62d644c4e0a3b58125f245d4c3c4c5350c9c397f9438"
       },
       "images": {
-        "apps/web/public/manual/statement-settings.png": "f7555ba9913577b3cc34a8d7d59e0f4928ef1087c5e26b47a813c53cba7b5100"
+        "apps/web/public/manual/statement-settings.png": "b74e8661845d79b02042ec207103c2d62408da5438317d074ca1785019b6800f"
       }
     },
     "receipts": {
@@ -268,7 +268,7 @@
     },
     "invoices": {
       "sources": {
-        "apps/web/src/features/invoicing": "a7c6dbb7e389a9e62b0cf4f509377b855970809c6e6c8e4c30df4fa409e2b1c7",
+        "apps/web/src/features/invoicing": "c8dbf378fe87ed5199eb92243b744077430008430a818245abbff5137738087c",
         "packages/domain/src/usecases/invoicing.ts": "0510fc1c95ec21f35e8e237c8ed10049b8211432a17e9bf64c77e55fea37094c",
         "apps/web/src/components/layout": "08a13412836c2c10668be14f818f6986d75b1242d6e3d5bda69446c27ec13141",
         "apps/web/src/components/ui": "b8abe85ce06d143e84d1120fb819d3c132514cc2f9d1d7346833ff240fa5d44b",
@@ -286,7 +286,7 @@
     },
     "payments": {
       "sources": {
-        "apps/web/src/features/invoicing/InvoiceDetail.tsx": "36787454acdd50d6f97323f47f16dfe8ea2f8156f13dc77da07031039c5f01c7",
+        "apps/web/src/features/invoicing/InvoiceDetail.tsx": "dc87aee92545ef6fb97024039302e6a7a236e6f37db4339688376241ef1d7e25",
         "apps/web/src/features/invoicing/PaymentForm.tsx": "f1f43489c3734b89514a826b271b603d3c676497b417c35aa1d9ffd9bbd34e29",
         "apps/web/src/features/invoicing/WithholdingList.tsx": "73a833a8ddb32092551dfbadd01a1c869429bc2e408a2c97107de1925412ed74",
         "packages/domain/src/usecases/invoicing.ts": "0510fc1c95ec21f35e8e237c8ed10049b8211432a17e9bf64c77e55fea37094c",
@@ -295,9 +295,9 @@
         "apps/web/src/index.css": "cc28a8965e1038e14eb21f6f764c85650cef190cbbe8b785f7daad7465f4a8d3",
         "apps/web/src/routes/__root.tsx": "0ff322d0d4828777806c6843606d20402c94355c60bacbb2f910f84c90a5ba42",
         "packages/schema/src": "d091abbedf5acc1947254a1188b2fa65fc449e0ee1297f85436e959ff6b19c62",
-        "apps/web/src/routes/e/$entityId/invoices/$invoiceId.tsx": "132760433d0a5e4996f731610fe629ea6e0a9a599f233f0db8401c671d8fc1e0",
+        "apps/web/src/routes/e/$entityId/invoices/$invoiceId.tsx": "f70a11e71701c4f91b8ec063f93508120369dd10d939cb3eb2d63e4ba82c647a",
         "apps/web/src/routes/e/$entityId/invoices/withholding.tsx": "433ca51f5d7b57eae2e7c5fd483c6edcd9728e496d759a2be0940a2db4a66a5a",
-        "article": "f33cb6ae33d98d39a08aac47013a4afe9be83b405652b90d773ef71b490ec38b"
+        "article": "8ef393527d7666f22fe79abca75226f4823a0260dd1dc0f5932d469e0e71c747"
       },
       "images": {
         "apps/web/public/manual/payments.png": "03a7bee344d927921f5cdfe1769fe82d6f7dbc1044c30389519ff4958d1122d4"
@@ -320,7 +320,7 @@
     },
     "invoice-settings": {
       "sources": {
-        "apps/web/src/features/invoicing": "a7c6dbb7e389a9e62b0cf4f509377b855970809c6e6c8e4c30df4fa409e2b1c7",
+        "apps/web/src/features/invoicing": "c8dbf378fe87ed5199eb92243b744077430008430a818245abbff5137738087c",
         "apps/web/src/routes/e/$entityId/invoice-settings.tsx": "39087796c2a6e098f4f4e49c49c58377e0fd7c13b9b5d3f60133b64012412565",
         "apps/web/src/components/layout": "08a13412836c2c10668be14f818f6986d75b1242d6e3d5bda69446c27ec13141",
         "apps/web/src/components/ui": "b8abe85ce06d143e84d1120fb819d3c132514cc2f9d1d7346833ff240fa5d44b",
@@ -435,10 +435,10 @@
         "apps/web/src/routes/__root.tsx": "0ff322d0d4828777806c6843606d20402c94355c60bacbb2f910f84c90a5ba42",
         "packages/schema/src": "d091abbedf5acc1947254a1188b2fa65fc449e0ee1297f85436e959ff6b19c62",
         "apps/web/src/routes/e/$entityId/accounts.tsx": "d36a8ec5bf4a8f315cb3209b69ccf4b8388a66e6e2116c907e44e9160f25f20a",
-        "apps/web/src/routes/e/$entityId/partners.tsx": "9cc4d2c2820bb3606d85fc787724ed50633dac5ddacb28f4289780e2d528853a",
+        "apps/web/src/routes/e/$entityId/partners.tsx": "52c0595aec616c23143a94ad7c1f5ad50f06ed119729a1513aa4c8422967d950",
         "apps/web/src/routes/e/$entityId/settings.tsx": "f6ff3dca2f0dd0d6e478201c050abe370ccd10fe4d6e62ba2fbd421e3a95a78a",
         "apps/web/src/routes/e/$entityId/tags.tsx": "9a15e3ebd3522b216943c98d7d89aeaa01d737eda150cfce430ee63e6c0cdf09",
-        "article": "19ad94b461e268a00a81e777443d4fa81b7b5263ac59fcfff1d1d25f2179db97"
+        "article": "2096fe3e49004916849c84bd6d562c32158834de9ecd7be89007a7ccf985deaf"
       },
       "images": {
         "apps/web/public/manual/masters.png": "13526ba1cd9f8bc915b57471014d8d5d1c3a08bcefe09c2f2cfae880ebf22182"
@@ -513,7 +513,7 @@
         "article": "f6a05b30be6eba03d68408bf199aeb1b48cdb35e60f973a41b482985e2b9fb67"
       },
       "images": {
-        "apps/web/public/manual/security.png": "2956833ec7c277a82def55fe0ac1654eb6ce233bb60558dcf97e0ee382c03db9"
+        "apps/web/public/manual/security.png": "5e4de488a38d600a6cbb73354a85cf39eec1685f53b2ba8d76dfe7c32f1acfb9"
       }
     },
     "backup": {
@@ -530,7 +530,7 @@
         "article": "a57fe0f819f7f571cbc786dc59cfc946d25a788cbb81dc02adff0fd433415cef"
       },
       "images": {
-        "apps/web/public/manual/backup.png": "4753d78808d9f4ccbf419aebde4ce8c4faa5094bef2ba186a2b7f89f28ba583e"
+        "apps/web/public/manual/backup.png": "f2557912acaaf41de72bf9d901b2eb650f19258496dc53617c24258b6c3f58e6"
       }
     },
     "ai": {
