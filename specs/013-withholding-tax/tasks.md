@@ -59,9 +59,9 @@ description: "Task list for 013 源泉徴収"
 
 ## Phase 5: Polish & Cross-Cutting
 
-- [ ] T012 文書（R9）: `docs/adr/0015-withholding-at-payment.md`（入金の時点で事業主貸に計上、対象額の規則、法人は範囲外）、`docs/features/013-withholding-tax.md`（層の表と固有の規則）と AGENTS.md の「機能ごとの文書」の表に 1 行、`docs/requirements.md` の FR-05 の状態（済 013）と、「仮払税金の処理」の文言を「源泉徴収税額は入金の時点で事業主貸に計上」に直す、`specs/INVARIANTS.md` に INV-73〜75（data-model §4）
-- [ ] T013 マニュアル（FR-016）: `apps/web/src/features/manual/content.ts` の `masters`・`invoices`・`payments` の記事に源泉徴収の設定・請求書の行・消し込みの欄・年間の一覧を足し、`pnpm manual:check` を通す（撮影は T015 で利用者の端末）
-- [ ] T014 最終の検証（メイン）: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`、`pnpm manual:check`
+- [X] T012 文書（R9）: `docs/adr/0015-withholding-at-payment.md`（入金の時点で事業主貸に計上、対象額の規則、法人は範囲外）、`docs/features/013-withholding-tax.md`（層の表と固有の規則）と AGENTS.md の「機能ごとの文書」の表に 1 行、`docs/requirements.md` の FR-05 の状態（済 013）と、「仮払税金の処理」の文言を「源泉徴収税額は入金の時点で事業主貸に計上」に直す、`specs/INVARIANTS.md` に INV-73〜75（data-model §4）
+- [X] T013 マニュアル（FR-016）: `apps/web/src/features/manual/content.ts` の `masters`・`invoices`・`payments` の記事に源泉徴収の設定・請求書の行・消し込みの欄・年間の一覧を足し、`pnpm manual:check` を通す（撮影は T015 で利用者の端末）
+- [X] T014 最終の検証（メイン）: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`、`pnpm manual:check`
 - [ ] T015 利用者の端末での確認: quickstart の 1〜5 と、`pnpm manual:capture` → 画像の確認 → `pnpm manual:record`（docs/features/012-app-manual.md）
 
 ## Dependencies & Execution Order
