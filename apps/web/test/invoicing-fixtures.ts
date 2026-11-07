@@ -44,4 +44,6 @@ export const INVOICE_DETAIL = {
   voidedAt: null,
   voidReason: null,
   payments: [],
+  withholdingPaid: 0,
+  withholdingRemaining: 0,
 };

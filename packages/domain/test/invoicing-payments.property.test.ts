@@ -40,10 +40,21 @@ function runOp(
     case "pay": {
       const target = invoices[op.target % Math.max(invoices.length, 1)];
       if (target === undefined) return null;
-      const remaining = invoiceStatus(target, s.invoicing.listPayments(target.id)).remaining;
-      const partial = Math.max(1, Math.floor((remaining * op.pct) / 100));
-      const amount =
-        op.mode === "full" ? remaining : op.mode === "over" ? remaining + op.extra : partial;
+      const payments = s.invoicing.listPayments(target.id);
+      const remaining = invoiceStatus(target, payments).remaining;
+      // 源泉徴収税額（013）。`tax` は web の既定値（請求書の値 − 入金済み。残額以下）
+      const withheld = payments
+        .filter((p) => p.voidedAt === null)
+        .reduce((a, p) => a + p.withholdingAmount, 0);
+      const withholdingAmount =
+        op.withholdingMode === "none"
+          ? 0
+          : op.withholdingMode === "tax"
+            ? Math.min(remaining, Math.max(0, target.withholdingTax - withheld))
+            : Math.floor((remaining * op.wpct) / 100);
+      const rest = remaining - withholdingAmount;
+      const partial = Math.max(1, Math.floor((rest * op.pct) / 100));
+      const amount = op.mode === "full" ? rest : op.mode === "over" ? rest + op.extra : partial;
       return toResult(
         recordPayment(
           deps,
@@ -52,6 +63,7 @@ function runOp(
             receivedOn: `${op.year}-${pad(op.month)}-${pad(op.day)}`,
             amount,
             depositAccountId: s.accountId("普通預金"),
+            ...(op.withholdingMode === "none" && op.wpct % 2 === 0 ? {} : { withholdingAmount }),
             ...(op.mode === "fee" ? { treatDifferenceAsFee: true } : {}),
           },
           TODAY,
@@ -80,18 +92,19 @@ const EXPECTED_ERRORS = [
 const sum = (lines: Journal["lines"]) =>
   lines.reduce((a, l) => a + (l.side === "debit" ? l.amount : -l.amount), 0);
 
-/** INV-33・INV-34 と、消し込み ⇔ 仕訳の対応 */
+/** INV-33・INV-34・INV-74 と、消し込み ⇔ 仕訳の対応 */
 function checkInvariants(s: Scenario) {
   const { invoices, payments } = s.invoicing.state;
   const journals = s.ledger.journals;
   const receivable = s.accountId("売掛金");
+  const ownerDrawing = s.accountId("事業主貸");
 
-  // INV-33: 取消でない消し込みの充当額の合計 ≤ total。状態は残額だけで決まる
+  // INV-33・INV-74: 取消でない消し込みの充当額（入金額 + 手数料 + 源泉徴収税額）の合計 ≤ total。状態は残額だけで決まる
   for (const inv of invoices) {
     const mine = payments.filter((p) => p.invoiceId === inv.id);
     const applied = mine
       .filter((p) => p.voidedAt === null)
-      .reduce((a, p) => a + p.amount + p.feeAmount, 0);
+      .reduce((a, p) => a + p.amount + p.feeAmount + p.withholdingAmount, 0);
     expect(applied).toBeLessThanOrEqual(inv.total);
     const standing = invoiceStatus(inv, mine);
     expect(standing.paid).toBe(applied);
@@ -140,7 +153,20 @@ function checkInvariants(s: Scenario) {
     const credit = original.lines.filter((l) => l.side === "credit");
     expect(credit).toHaveLength(1);
     expect(credit[0]?.accountId).toBe(receivable);
-    expect(credit[0]?.amount).toBe(p.amount + p.feeAmount);
+    // INV-74: 売掛金の貸方 = 充当額、事業主貸 3090 の借方 = withholdingAmount（0 なら行がない）
+    expect(credit[0]?.amount).toBe(p.amount + p.feeAmount + p.withholdingAmount);
+    const drawing = original.lines.filter((l) => l.accountId === ownerDrawing);
+    if (p.withholdingAmount > 0) {
+      expect(drawing.map((l) => [l.side, l.amount, l.partnerId])).toEqual([
+        ["debit", p.withholdingAmount, credit[0]?.partnerId],
+      ]);
+    } else {
+      expect(drawing).toEqual([]);
+    }
+    const debitTotal = original.lines
+      .filter((l) => l.side === "debit")
+      .reduce((a, l) => a + l.amount, 0);
+    expect(debitTotal).toBe(p.amount + p.feeAmount + p.withholdingAmount);
     owned.add(p.journalId);
     const reversals = journals.filter((j) => j.correctsJournalId === p.journalId);
     if (p.voidedAt === null) {
@@ -162,18 +188,20 @@ function checkInvariants(s: Scenario) {
   expect(journals.filter((j) => j.source === "payment").every((j) => owned.has(j.id))).toBe(true);
 }
 
-const seen = { paid: 0, fee: 0, voided: 0, reversed: 0 };
+const seen = { paid: 0, fee: 0, voided: 0, reversed: 0, withheld: 0, withheldAndFee: 0 };
 
-describe("INV-33・INV-34: 任意の発行・消し込み・取消の列", () => {
-  it("どの操作の後も、充当額の合計 ≤ 合計、状態は残額で決まり、売掛金の残高 = 未回収の合計", () => {
+describe("INV-33・INV-34・INV-74: 任意の発行・消し込み（源泉徴収税額・差額つき）・取消の列", () => {
+  it("どの操作の後も、充当額（源泉徴収税額を含む）の合計 ≤ 合計、状態は残額で決まり、売掛金の残高 = 未回収の合計、事業主貸の借方 = 源泉徴収税額", () => {
     fc.assert(
       fc.property(
+        fc.boolean(),
+        // 取引先を「源泉徴収あり」にするか
         fc.boolean(),
         arbLedgerOps,
         // 列のどのあたりで 2025 年度を締めるか（%。締め済みの年度の取消 = 訂正仕訳の経路を含める）
         fc.nat(100),
-        (taxable, ops, closePercent) => {
-          const s = setupScenario({ taxable, initialSeq: 1 });
+        (taxable, withholding, ops, closePercent) => {
+          const s = setupScenario({ taxable, initialSeq: 1, withholding });
           const closeAt = Math.floor((closePercent * ops.length) / 100);
           for (const [i, op] of ops.entries()) {
             if (i === closeAt) s.closeYear(2025);
@@ -189,6 +217,8 @@ describe("INV-33・INV-34: 任意の発行・消し込み・取消の列", () =>
           for (const p of s.invoicing.state.payments) {
             seen.paid += 1;
             if (p.feeAmount > 0) seen.fee += 1;
+            if (p.withholdingAmount > 0) seen.withheld += 1;
+            if (p.withholdingAmount > 0 && p.feeAmount > 0) seen.withheldAndFee += 1;
             if (p.voidedAt !== null) seen.voided += 1;
             if (p.voidJournalId !== null) seen.reversed += 1;
           }
@@ -196,9 +226,11 @@ describe("INV-33・INV-34: 任意の発行・消し込み・取消の列", () =>
       ),
       { numRuns: 150 },
     );
-    // 生成した列が、消し込み・手数料・取消・訂正仕訳の経路を実際に通っている
+    // 生成した列が、消し込み・手数料・源泉徴収税額・取消・訂正仕訳の経路を実際に通っている
     expect(seen.paid).toBeGreaterThan(0);
     expect(seen.fee).toBeGreaterThan(0);
+    expect(seen.withheld).toBeGreaterThan(0);
+    expect(seen.withheldAndFee).toBeGreaterThan(0);
     expect(seen.voided).toBeGreaterThan(0);
     expect(seen.reversed).toBeGreaterThan(0);
   });

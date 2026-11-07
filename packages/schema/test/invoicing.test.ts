@@ -327,6 +327,17 @@ describe("PaymentInput", () => {
       expect(PaymentInput.safeParse({ ...ok, amount }).success).toBe(false);
     }
   });
+  it("withholdingAmount（013）は任意の 0 以上の整数（1 兆円未満）。省略は省略のまま", () => {
+    expect(PaymentInput.parse(ok)).not.toHaveProperty("withholdingAmount");
+    for (const withholdingAmount of [0, 1, 143_961]) {
+      expect(PaymentInput.parse({ ...ok, withholdingAmount }).withholdingAmount).toBe(
+        withholdingAmount,
+      );
+    }
+    for (const withholdingAmount of [-1, 1.5, 1_000_000_000_000, "1"]) {
+      expect(PaymentInput.safeParse({ ...ok, withholdingAmount }).success).toBe(false);
+    }
+  });
 });
 
 describe("InvoicingVoidInput（H:§1 の末尾）", () => {

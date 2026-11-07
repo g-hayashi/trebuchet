@@ -850,7 +850,8 @@ export type PaymentResult = { payment: PaymentView; invoice: InvoiceDetail; jour
  * 入金を消し込む。検査（請求書 → 取消済み `INVOICE_VOIDED` → 入金額・入金日 → 手数料 → 超過
  * `PAYMENT_EXCEEDS_BALANCE`）→ 入金の仕訳（`createJournal`、`source = payment`。001 の検査の `err` は
  * そのまま返す）→ 消し込み → 記録、の順に 1 トランザクションで書く（R9）。
- * `treatDifferenceAsFee` なら手数料 = 残額 − 入金額（0 以下は `VALIDATION`）。充当額 = 入金額 + 手数料
+ * `treatDifferenceAsFee` なら手数料 = 残額 − 入金額 − 源泉徴収税額（0 以下は `VALIDATION`）。
+ * 充当額 = 入金額 + 手数料 + 源泉徴収税額（013 R6。源泉徴収税額は借方 事業主貸）
  */
 export function recordPayment(
   deps: InvoicingDeps,
@@ -872,6 +873,16 @@ export function recordPayment(
         field: "amount",
       });
     }
+    const withholdingAmount = input.withholdingAmount ?? 0;
+    if (
+      !Number.isSafeInteger(withholdingAmount) ||
+      withholdingAmount < 0 ||
+      withholdingAmount >= YEN_LIMIT
+    ) {
+      return validation("源泉徴収税額は 0 円以上 1 兆円未満の整数で入力してください", {
+        field: "withholdingAmount",
+      });
+    }
     if (!isValidDate(input.receivedOn)) {
       return validation("入金日が正しい日付ではありません", { field: "receivedOn" });
     }
@@ -879,15 +890,15 @@ export function recordPayment(
     const { remaining } = invoiceStatus(invoice, payments);
     let feeAmount = 0;
     if (input.treatDifferenceAsFee === true) {
-      feeAmount = remaining - input.amount;
+      feeAmount = remaining - input.amount - withholdingAmount;
       if (feeAmount <= 0) {
-        return validation("手数料にできる差額がありません（入金額が残額より少ないときだけです）", {
-          field: "amount",
-          remaining,
-        });
+        return validation(
+          "手数料にできる差額がありません（入金額と源泉徴収税額の合計が残額より少ないときだけです）",
+          { field: "amount", remaining },
+        );
       }
     }
-    const applied = input.amount + feeAmount;
+    const applied = input.amount + feeAmount + withholdingAmount;
     if (applied > remaining) {
       return err(
         domainError("PAYMENT_EXCEEDS_BALANCE", "入金額が請求の残額を超えています", {
@@ -905,6 +916,7 @@ export function recordPayment(
         receivedOn: input.receivedOn,
         amount: input.amount,
         feeAmount,
+        withholdingAmount,
         depositAccountId: input.depositAccountId,
         depositSubAccountId: input.depositSubAccountId,
       },
@@ -929,6 +941,7 @@ export function recordPayment(
       receivedOn: input.receivedOn,
       amount: input.amount,
       feeAmount,
+      withholdingAmount,
       depositAccountId: input.depositAccountId,
       depositSubAccountId: input.depositSubAccountId ?? null,
       journalId: journal.id,

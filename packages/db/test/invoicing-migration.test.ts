@@ -69,6 +69,8 @@ describe("源泉徴収の列（013）", () => {
       /CHECK/,
     );
     full.prepare("UPDATE partner_billing_terms SET withholding = 1").run();
+    // 0021 のトリガー（BEFORE UPDATE）が先に働くので、CHECK を確かめるために外す
+    full.exec("DROP TRIGGER invoice_payments_void_only");
     expect(() => full.prepare("UPDATE invoice_payments SET withholding_amount = -1").run()).toThrow(
       /CHECK/,
     );

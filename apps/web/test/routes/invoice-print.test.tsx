@@ -196,9 +196,17 @@ describe("源泉徴収（013 R8・FR-005）", () => {
     expect(tax.compareDocumentPosition(net) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("源泉徴収税額が 0 なら、源泉徴収の行を出さない", async () => {
+  it("源泉徴収税額があるとき、見出しの「ご請求金額」は差引請求額（合計ではない）", async () => {
+    renderDetail(WITH_WITHHOLDING);
+    const sheet = await findSheet();
+    expect(within(sheet).getByText("ご請求金額 299,370 円")).toBeInTheDocument();
+    expect(within(sheet).queryByText("ご請求金額 330,000 円")).not.toBeInTheDocument();
+  });
+
+  it("源泉徴収税額が 0 なら、「ご請求金額」は合計。源泉徴収の行を出さない", async () => {
     renderDetail(INVOICE_DETAIL);
     const sheet = await findSheet();
+    expect(within(sheet).getByText("ご請求金額 405,000 円")).toBeInTheDocument();
     expect(within(sheet).getByText("合計 405,000 円")).toBeInTheDocument();
     expect(within(sheet).queryByText(/源泉徴収税額/)).not.toBeInTheDocument();
     expect(within(sheet).queryByText(/差引請求額/)).not.toBeInTheDocument();

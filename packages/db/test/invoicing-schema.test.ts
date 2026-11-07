@@ -627,6 +627,7 @@ describe("invoice_payments", () => {
     for (const [col, value] of [
       ["amount", 1],
       ["fee_amount", 5],
+      ["withholding_amount", 5],
       ["received_on", "2026-12-01"],
       ["invoice_id", seedInvoice().id],
     ] as const) {

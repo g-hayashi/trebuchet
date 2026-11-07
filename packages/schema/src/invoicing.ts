@@ -6,6 +6,7 @@ import {
   Id,
   MonthString,
   TaxCategoryCode,
+  YEN_LIMIT,
   Yen,
 } from "./primitives.ts";
 
@@ -382,6 +383,8 @@ export const PaymentView = z.object({
   receivedOn: DateString,
   amount: Yen,
   feeAmount: z.number().int().nonnegative(),
+  /** 実際に差し引かれた源泉徴収税額（013）。0 は源泉徴収なし */
+  withholdingAmount: z.number().int().nonnegative(),
   depositAccountId: Id,
   depositSubAccountId: Id.nullable(),
   journalId: Id,
@@ -404,6 +407,10 @@ export const InvoiceDetail = InvoiceSummary.extend({
   voidedAt: Timestamp.nullable(),
   voidReason: z.string().nullable(),
   payments: z.array(PaymentView),
+  /** 取消でない消し込みの源泉徴収税額の合計（013） */
+  withholdingPaid: z.number().int().nonnegative(),
+  /** `max(0, withholdingTax − withholdingPaid)`。消し込みの源泉徴収税額の既定値 */
+  withholdingRemaining: z.number().int().nonnegative(),
 });
 export type InvoiceDetail = z.infer<typeof InvoiceDetail>;
 
@@ -430,6 +437,8 @@ export const PaymentInput = z.object({
   depositAccountId: Id,
   depositSubAccountId: Id.optional(),
   treatDifferenceAsFee: z.boolean().optional(),
+  /** 実際に差し引かれた源泉徴収税額（013）。0 以上の整数。省略は 0 */
+  withholdingAmount: z.number().int().nonnegative().lt(YEN_LIMIT).optional(),
 });
 export type PaymentInput = z.infer<typeof PaymentInput>;
 

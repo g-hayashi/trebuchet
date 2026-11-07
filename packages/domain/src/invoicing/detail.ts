@@ -1,7 +1,7 @@
 import type { InvoiceDetail, InvoiceSummary, PaymentView } from "@trebuchet/schema";
 import type { InvoiceItemRecord, InvoiceRecord, PaymentRecord } from "../types.ts";
 import { calculateInvoiceAmounts } from "./amounts.ts";
-import { invoiceStatus, isOverdue } from "./status.ts";
+import { invoiceStatus, isOverdue, withholdingStanding } from "./status.ts";
 
 /**
  * 一覧の 1 行（H:§3.5）。`today` を渡すと `overdue` を判定する（`isOverdue`）。省略すると偽
@@ -37,6 +37,7 @@ export const toPaymentView = (p: PaymentRecord): PaymentView => ({
   receivedOn: p.receivedOn,
   amount: p.amount,
   feeAmount: p.feeAmount,
+  withholdingAmount: p.withholdingAmount,
   depositAccountId: p.depositAccountId,
   depositSubAccountId: p.depositSubAccountId,
   journalId: p.journalId,
@@ -78,5 +79,6 @@ export function buildInvoiceDetail(
     voidedAt: invoice.voidedAt,
     voidReason: invoice.voidReason,
     payments: payments.map(toPaymentView),
+    ...withholdingStanding(invoice, payments),
   };
 }

@@ -45,6 +45,7 @@ function seeded() {
     receivedOn: "2026-11-01",
     amount: 120_000,
     feeAmount: 0,
+    withholdingAmount: 0,
     depositAccountId: t.accountId("普通預金"),
     depositSubAccountId: null,
     journalId: "j-pay-1",

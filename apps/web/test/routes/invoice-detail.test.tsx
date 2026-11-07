@@ -164,7 +164,8 @@ describe("源泉徴収（013 R8・FR-005）", () => {
   it("源泉徴収税額が 0 なら、源泉徴収の行を出さない", async () => {
     setup();
     await screen.findByRole("heading", { name: "請求書 2026-0001" });
-    expect(screen.queryByText(/源泉徴収税額/)).not.toBeInTheDocument();
+    // 請求書の行（「源泉徴収税額 N 円」）を出さない。消し込みの入力の欄の名前（013 US2）は別
+    expect(screen.queryByText(/源泉徴収税額 [\d,]+ 円/)).not.toBeInTheDocument();
     expect(screen.queryByText(/差引請求額/)).not.toBeInTheDocument();
   });
 });

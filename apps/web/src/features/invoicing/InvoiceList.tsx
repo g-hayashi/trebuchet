@@ -23,9 +23,41 @@ import {
 } from "@/components/ui/table";
 import { partnersQuery } from "@/features/masters/api";
 import { formatYen } from "@/lib/format";
-import { type InvoiceFilters, invoiceListQuery } from "./api";
+import { type InvoiceFilters, invoiceListQuery, invoiceQuery } from "./api";
 import { PaymentForm } from "./PaymentForm";
 import { INVOICE_LIST_STATUS_LABELS, INVOICE_LIST_STATUSES, INVOICE_STATUS_LABELS } from "./status";
+
+/**
+ * 一覧の行からの消し込み。源泉徴収のない請求書（`withholdingTax` が 0）は一覧の値だけで足りる。
+ * 源泉徴収のある請求書は、既定の源泉徴収税額（入金済みの分を引いた残り。013 FR-008）が詳細にしかないので、
+ * 詳細を読んでから入力を出す
+ */
+function ListPaymentForm({
+  entityId,
+  invoice,
+  onPaid,
+}: {
+  entityId: string;
+  invoice: { id: string; remaining: number; withholdingTax: number };
+  onPaid: () => void;
+}) {
+  const needsDetail = invoice.withholdingTax > 0;
+  const detail = useQuery({ ...invoiceQuery(entityId, invoice.id), enabled: needsDetail });
+  if (needsDetail && detail.data === undefined) {
+    return <ApiErrorMessage error={detail.error} />;
+  }
+  return (
+    <PaymentForm
+      entityId={entityId}
+      invoice={{
+        id: invoice.id,
+        remaining: detail.data?.remaining ?? invoice.remaining,
+        withholdingRemaining: detail.data?.withholdingRemaining,
+      }}
+      onPaid={onPaid}
+    />
+  );
+}
 
 /** URL の状態の絞り込み。省略は既定（未入金・一部入金 = 未回収。期限切れはこの中にある）、`all` はすべて */
 export type ListStatus = InvoiceListStatus | "all";
@@ -59,6 +91,7 @@ export function InvoiceList({
     id: string;
     invoiceNo: string;
     remaining: number;
+    withholdingTax: number;
   } | null>(null);
   const rows =
     invoices.data?.invoices.filter(
@@ -214,6 +247,7 @@ export function InvoiceList({
                             id: invoice.id,
                             invoiceNo: invoice.invoiceNo,
                             remaining: invoice.remaining,
+                            withholdingTax: invoice.withholdingTax,
                           })
                         }
                       >
@@ -235,7 +269,7 @@ export function InvoiceList({
             </SheetDescription>
           </SheetHeader>
           {paying !== null && (
-            <PaymentForm
+            <ListPaymentForm
               key={paying.id}
               entityId={entityId}
               invoice={paying}

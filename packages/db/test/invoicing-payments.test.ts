@@ -189,3 +189,115 @@ describe("voidPayment（実 DB）", () => {
     expect(r.value.invoice).toMatchObject({ status: "unpaid", remaining: 1_205_000 });
   });
 });
+
+// 013 US2: 源泉徴収税額つきの消し込みの実 DB での往復（R6、data-model §1.4・§3、INV-74）
+describe("源泉徴収つきの消し込み（実 DB。013 US2）", () => {
+  let withholdingInvoiceId: string;
+
+  beforeEach(() => {
+    t.setSettings({ nextSeq: 2, taxDisplay: "inclusive_only" });
+    const partner = t.addPartner("株式会社B", { honorific: "御中" });
+    t.setTerms(partner.id, { withholding: true });
+    const issued = issueInvoice(
+      t.deps,
+      {
+        partnerId: partner.id,
+        targetMonth: "2026-09",
+        items: [{ name: "開発", amount: 1_205_000, taxCategory: "SALES_10" }],
+      },
+      TODAY,
+    );
+    if (!issued.ok) throw new Error(JSON.stringify(issued.error));
+    withholdingInvoiceId = issued.value.invoice.id;
+  });
+
+  const payWithholding = (over: Partial<Parameters<typeof recordPayment>[2]> = {}) =>
+    recordPayment(
+      t.deps,
+      withholdingInvoiceId,
+      {
+        receivedOn: "2026-11-10",
+        amount: 1_061_039,
+        withholdingAmount: 143_961,
+        depositAccountId: t.accountId("普通預金"),
+        ...over,
+      },
+      TODAY,
+    );
+
+  it("withholding_amount が保存され、複合仕訳（借方 入金先・事業主貸、貸方 売掛金）・詳細に読み戻される", () => {
+    const r = payWithholding();
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    const { payment, journal, invoice } = r.value;
+    expect(payment).toMatchObject({ amount: 1_061_039, feeAmount: 0, withholdingAmount: 143_961 });
+    expect(invoice).toMatchObject({
+      status: "paid",
+      remaining: 0,
+      withholdingPaid: 143_961,
+      withholdingRemaining: 0,
+    });
+    expect(t.store.listPayments(withholdingInvoiceId)[0]).toMatchObject({
+      id: payment.id,
+      withholdingAmount: 143_961,
+    });
+    const saved = t.ledger.getJournal(journal.id);
+    expect(saved?.source).toBe("payment");
+    expect(
+      saved?.lines.map((l) => [l.side, l.accountId === t.accountId("事業主貸"), l.amount]),
+    ).toEqual([
+      ["debit", false, 1_061_039],
+      ["debit", true, 143_961],
+      ["credit", false, 1_205_000],
+    ]);
+    expect(getInvoiceDetail(t.deps, withholdingInvoiceId, TODAY)).toMatchObject({
+      ok: true,
+      value: { status: "paid", withholdingRemaining: 0, payments: [payment] },
+    });
+    const audit = t.db.$client
+      .prepare("SELECT after_json FROM invoicing_audit_log WHERE target_id = ?")
+      .get(payment.id) as { after_json: string };
+    expect(JSON.parse(audit.after_json)).toMatchObject({ withholdingAmount: 143_961 });
+  });
+
+  it("差額の扱いと併用でき、残額を超える額は拒否されて何も残らない", () => {
+    const journals = t.count("journals");
+    const over = payWithholding({ amount: 1_061_040 });
+    expect(!over.ok && over.error.code).toBe("PAYMENT_EXCEEDS_BALANCE");
+    expect(!over.ok && over.error.details).toMatchObject({ applied: 1_205_001 });
+    expect(t.count("journals")).toBe(journals);
+
+    const r = payWithholding({ amount: 1_060_000, treatDifferenceAsFee: true });
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.payment).toMatchObject({ feeAmount: 1_039, withholdingAmount: 143_961 });
+    expect(r.value.invoice).toMatchObject({ status: "paid", remaining: 0 });
+  });
+
+  it("取消: 仕訳が取り消され、withholding_amount の行は残り、源泉徴収の残りが戻る", () => {
+    const paid = payWithholding();
+    if (!paid.ok) throw new Error(JSON.stringify(paid.error));
+    const r = voidPayment(
+      t.deps,
+      withholdingInvoiceId,
+      paid.value.payment.id,
+      { reason: "誤り" },
+      TODAY,
+    );
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(t.ledger.getJournal(paid.value.journal.id)?.status).toBe("voided");
+    expect(r.value.invoice).toMatchObject({
+      status: "unpaid",
+      withholdingPaid: 0,
+      withholdingRemaining: 143_961,
+    });
+    expect(t.store.listPayments(withholdingInvoiceId)[0]).toMatchObject({
+      withholdingAmount: 143_961,
+      voidReason: "誤り",
+    });
+    // 取消済みの消し込みの withholding_amount もトリガーで変えられない
+    expect(() =>
+      t.db.$client
+        .prepare("UPDATE invoice_payments SET withholding_amount = 0 WHERE id = ?")
+        .run(paid.value.payment.id),
+    ).toThrow(/immutable|only be voided/);
+  });
+});
