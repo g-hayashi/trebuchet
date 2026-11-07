@@ -19,9 +19,9 @@ afterEach(() => {
 const AT = "2026-10-25T09:00:00.000Z";
 
 describe("DrizzleAiSettingsStore", () => {
-  it("行がなければ既定（端末内は有効、外部は無効、接続先・モデルは null）", () => {
+  it("行がなければ既定（端末内は無効（非推奨）、外部は無効、接続先・モデルは null）", () => {
     expect(store.get()).toEqual({
-      localEnabled: true,
+      localEnabled: false,
       externalEnabled: false,
       externalBaseUrl: null,
       externalModel: null,

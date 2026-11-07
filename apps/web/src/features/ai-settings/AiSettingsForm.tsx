@@ -88,10 +88,17 @@ function Fields({ settings }: { settings: AiSettings }) {
     >
       <Card>
         <CardHeader>
-          <CardTitle>端末内の AI</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            端末内の AI
+            <span className="rounded-md border px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
+              非推奨
+            </span>
+          </CardTitle>
           <CardDescription>
             この端末で動く AI（Apple
-            のオンデバイスモデル）で推定します。明細の内容は端末の外へ出ません。
+            のオンデバイスモデル）で推定します。明細の内容は端末の外へ出ません。精度が低いため、外部の
+            AI を推奨します。無効にすると、列の対応の案も出ません（列の案は端末内の AI
+            だけで作ります）。
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
@@ -116,8 +123,8 @@ function Fields({ settings }: { settings: AiSettings }) {
         <CardHeader>
           <CardTitle>外部の AI</CardTitle>
           <CardDescription>
-            端末内の AI
-            の確信度が、明細の設定のしきい値に届かないときだけ、外部へ送ります。送る内容は、4
+            端末内の AI を使わないときは、外部へ送ります（端末内の AI
+            を使うときは、確信度が明細の設定のしきい値に届かないときだけ）。送る内容は、4
             桁以上の数字・連絡先・振込の名義を伏せたものです（口座の名前・メモ・取引先の一覧は送りません）。
           </CardDescription>
         </CardHeader>

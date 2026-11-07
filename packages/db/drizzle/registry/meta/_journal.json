@@ -29,6 +29,13 @@
       "when": 1793806363440,
       "tag": "0003_entity_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794044879151,
+      "tag": "0004_ai_local_default_off",
+      "breakpoints": true
     }
   ]
 }

@@ -35,5 +35,6 @@
 - **申告の控え（`tax_return_memos`・`filed_documents`）とアプリの中の評価（`eval_runs`、`lib/jobs.ts`、`JOB_RUNNING`）は消した**（011 の migration で `DROP TABLE`）。過去の migration と snapshot にだけ残る。決算書の計算は控えを参照していなかったので変わらない。再び作らない。
 - **明細の承認の入力に `learn` はない**。承認のたびに学ぶ条件（`learnFromApproval`）でルールを作る・直す。ルールの一覧で利用者が直した・止めた・再開したルールは `managed_by = 'user'` になり、戻さない。承認と `seedRulesFromJournals` は `user` のルールを変えない（INV-71）。取込の確定の後、web が `inference-rules/seed` → `statements/candidates` → `statements/infer`（AI が無効なら飛ばす）を順に呼ぶ（`candidate-chain.ts`）。
 - **AI の推定の場面は `scene`（`statement`・`journal_entry`）で分ける**。`journal_entry` に送るのは `buildJournalEntryPayload` の日付・金額・`maskContent` を通した摘要だけ（INV-45）。`statement` の場面の指示文は `packages/domain/test/statements/prompt-golden.test.ts` が固定する（変えるときは `eval:statements` の前後の比較が要る）。仕訳の AI の候補は保存せず、ルールを使わない。
+- **端末内の AI は非推奨で、既定は無効**（2026-11-07。006 の文書）。AI の設定の画面（`AiSettingsForm.tsx`）の端末内の項目に「非推奨」と理由、無効だと列の対応の案（007）も出ないことを示す。既定では推定の経路は「ルール → 外部」になる（外部も既定は無効で、利用者が接続先・モデルを入れて有効にする）。
 - **`eval:statements` の規則**: 明細の推定のプロンプト・推定の経路（ルール → 端末内 → 外部）を変えるときは、変更の前と後で `pnpm eval:statements` を実行して結果を比べる（Constitution IV、011/R10）。AI（`fm` と外部）を呼ぶので CI に含まれない。結果は `.tmp/eval-statements/` に件数と割合だけを残し、モデル名・URL・キー・明細・AI の回答を書かない。外部の有効・無効の状態や fixture の版が違う結果は比べない。CI のテストは偽の `SuggestionProvider` で集計だけを確かめる。`eval:columns`（007）・`eval:receipts`（010）と同じ規則。
 

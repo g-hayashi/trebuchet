@@ -78,6 +78,14 @@ describe("AI の設定の表示", () => {
     expect(screen.getByText("API キーは設定済みです。")).toBeInTheDocument();
   });
 
+  it("端末内の AI は「非推奨」と理由を示し、無効だと列の対応の案も出ないことを添える（動作は変えない）", async () => {
+    openSettings({ localEnabled: false });
+    expect(await screen.findByLabelText("端末内の AI を使う")).not.toBeChecked();
+    expect(screen.getByText("非推奨")).toBeInTheDocument();
+    expect(screen.getByText(/精度が低いため、外部の AI を推奨します/)).toBeInTheDocument();
+    expect(screen.getByText(/無効にすると、列の対応の案も出ません/)).toBeInTheDocument();
+  });
+
   it("端末内の AI が使えないときは、その旨を示す", async () => {
     openSettings({ localAvailable: false });
     expect(await screen.findByText("この端末の AI は使えません。")).toBeInTheDocument();

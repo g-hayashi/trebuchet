@@ -75,6 +75,13 @@ describe("ai_settings（registry）", () => {
     expect(() => insert(row({ receipt_images_enabled: 1, ...external }))).not.toThrow();
   });
 
+  it("local_enabled の列の既定は 0（端末内の AI は非推奨で既定は無効）", () => {
+    db.$client.prepare("INSERT INTO ai_settings (id, updated_at) VALUES (1, ?)").run(NOW);
+    expect(db.$client.prepare("SELECT local_enabled AS v FROM ai_settings").get()).toEqual({
+      v: 0,
+    });
+  });
+
   it("1 行だけ（id = 1）。真偽値は 0・1", () => {
     expect(() => insert(row({ id: 2 }))).toThrow(/CHECK/);
     expect(() => insert(row({ local_enabled: 2 }))).toThrow(/CHECK/);

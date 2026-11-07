@@ -12,7 +12,7 @@ export type AiSettingsRecord = {
 };
 
 export const DEFAULT_AI_SETTINGS: AiSettingsRecord = {
-  localEnabled: true,
+  localEnabled: false,
   externalEnabled: false,
   externalBaseUrl: null,
   externalModel: null,

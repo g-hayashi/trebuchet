@@ -38,7 +38,9 @@ const completion = (content: unknown) =>
 
 type Reply = (url: string, init: RequestInit) => Promise<Response>;
 
-async function setup(options: { fmAvailable?: boolean; reply?: Reply } = {}) {
+async function setup(
+  options: { fmAvailable?: boolean; reply?: Reply; localEnabled?: boolean } = {},
+) {
   const entityId = await createTestEntity();
   const session = await createTestSession({ now: NOW });
   const calls: { url: string; init: RequestInit }[] = [];
@@ -73,6 +75,11 @@ async function setup(options: { fmAvailable?: boolean; reply?: Reply } = {}) {
   };
   const putAi = (json: Record<string, unknown>) =>
     client.api.settings.ai.$put({ json: { receiptImagesEnabled: false, ...json } as never });
+  // 既定は端末内が無効（非推奨）。既定でこのテストの対象にするため、明示的に有効にする
+  if (options.localEnabled !== false) {
+    const res = await putAi({ localEnabled: true, externalEnabled: false });
+    expect(res.status).toBe(200);
+  }
   return { calls, fetchFn, secrets, suggest, putAi, client };
 }
 
@@ -116,6 +123,14 @@ describe("POST /statements/imports/column-suggestion", () => {
     expect(t.calls.map((c) => c.url)).toEqual([LOCAL_URL]);
     expect(JSON.stringify(t.calls)).not.toContain(KEY);
     expect(JSON.stringify(t.calls)).not.toContain("api.example.com");
+  });
+
+  it("設定を保存していない既定（端末内は無効）では disabled で、fetch は呼ばれない", async () => {
+    const t = await setup({ localEnabled: false });
+    const { status, body } = await t.suggest(CUSTOM);
+    expect(status).toBe(200);
+    expect(body).toEqual({ suggestion: null, unavailable: "disabled" });
+    expect(t.fetchFn).not.toHaveBeenCalled();
   });
 
   it("端末内が設定で無効なら disabled で、fetch は呼ばれない（外部が有効でも呼ばない）", async () => {

@@ -70,7 +70,8 @@ export const aiSettings = sqliteTable(
   "ai_settings",
   {
     id: integer("id").primaryKey(),
-    localEnabled: integer("local_enabled").notNull().default(1),
+    /** 端末内の AI は非推奨（精度が低い）なので既定は無効 */
+    localEnabled: integer("local_enabled").notNull().default(0),
     externalEnabled: integer("external_enabled").notNull().default(0),
     externalBaseUrl: text("external_base_url"),
     externalModel: text("external_model"),

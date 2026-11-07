@@ -71,12 +71,12 @@ function dumpRegistry(): string {
 }
 
 describe("GET /settings/ai", () => {
-  it("既定: 端末内は有効、外部は無効、接続先・モデルは null、API キーなし。localAvailable は fm の判定", async () => {
+  it("既定: 端末内は無効（非推奨）、外部は無効、接続先・モデルは null、API キーなし。localAvailable は fm の判定", async () => {
     const off = await setup({ fmAvailable: false });
     const res = await off.get();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      localEnabled: true,
+      localEnabled: false,
       localAvailable: false,
       externalEnabled: false,
       externalBaseUrl: null,
@@ -160,7 +160,7 @@ describe("PUT /settings/ai", () => {
 
     // 欠けた入力で、設定もキーも変わらない
     const after = await (await t.get()).json();
-    expect(after.localEnabled).toBe(true);
+    expect(after.localEnabled).toBe(false); // 既定のまま（失敗した入力の localEnabled: true は保存されない）
     expect(after.externalEnabled).toBe(false);
     expect(await t.secrets.get(AI_API_KEY_SECRET)).toBeUndefined();
   });
