@@ -1,4 +1,4 @@
-# Data Model: 源泉徴収と仮払税金（013）
+# Data Model: 源泉徴収（013）
 
 005 の表（`packages/db/src/schema/tenant.ts`）に列を足す。新しい表は作らない。
 

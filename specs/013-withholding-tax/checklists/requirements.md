@@ -1,4 +1,4 @@
-# Specification Quality Checklist: 源泉徴収と仮払税金
+# Specification Quality Checklist: 源泉徴収
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-11-07
