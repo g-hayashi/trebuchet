@@ -333,7 +333,7 @@ describe("まとめて承認と主な操作（FR-021・024）", () => {
     await u.click(within(bulk).getByRole("button", { name: "まとめて承認" }));
     expect(await within(bulk).findByText("2 件を承認しました。")).toBeInTheDocument();
     expect(calls(all, "POST", "/statements/approve-bulk")[0]?.body).toEqual({
-      statementIds: [uuid(1), uuid(2)],
+      items: [{ statementId: uuid(1) }, { statementId: uuid(2) }],
     });
   });
 

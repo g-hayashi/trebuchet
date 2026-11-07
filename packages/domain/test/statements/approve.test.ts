@@ -5,6 +5,7 @@ import {
   acknowledgeChange,
   approveBulk,
   approveCandidate,
+  excludeBulk,
   excludeStatement,
   unexcludeStatement,
   unlinkStatement,
@@ -429,39 +430,85 @@ describe("approveBulk（FR-018）", () => {
     unwrap(buildCandidates(ctx.deps));
   };
 
-  it("しきい値（既定 80）以上だけを明細ごとに承認する。対の相手は二重に数えない", () => {
+  it("選んだ行だけを、確信度に関わらず候補のまま承認する。対の相手は二重に数えない", () => {
     seed();
-    const r = unwrap(approveBulk(ctx.deps));
-    // 家賃近い（95）、引落（93）と支払い（対の相手）。家賃遠い（日付差 7 日 = 60）は未満
+    // 設定のしきい値は 100 でも拒まない（家賃遠い = 確信度 60）
+    unwrap(saveStatementSettings(ctx.deps, { bulkThreshold: 100, externalThreshold: 60 }));
+    const r = unwrap(
+      approveBulk(ctx.deps, {
+        items: [
+          { statementId: ctx.idOf("家賃遠い") },
+          { statementId: ctx.idOf("引落") },
+          { statementId: ctx.idOf("支払い") },
+        ],
+      }),
+    );
     expect([...r.approved].sort()).toEqual(
-      [ctx.idOf("家賃近い"), ctx.idOf("引落"), ctx.idOf("支払い")].sort(),
+      [ctx.idOf("家賃遠い"), ctx.idOf("引落"), ctx.idOf("支払い")].sort(),
     );
     expect(r.failed).toEqual([]);
-    expect(statusOf(ctx.idOf("家賃遠い"))).toBe("unprocessed");
+    expect(statusOf(ctx.idOf("家賃近い"))).toBe("unprocessed");
     expect(statusOf(ctx.idOf("候補なし"))).toBe("unprocessed");
     expect(journals().filter((j) => j.source === "statement")).toHaveLength(1);
   });
 
-  it("threshold を渡す・設定のしきい値を使う", () => {
+  it("items が空なら何も承認しない（全件承認はない）", () => {
     seed();
-    unwrap(saveStatementSettings(ctx.deps, { bulkThreshold: 50, externalThreshold: 60 }));
-    const r = unwrap(approveBulk(ctx.deps));
-    expect(r.approved).toContain(ctx.idOf("家賃遠い"));
-    expect(r.approved).not.toContain(ctx.idOf("候補なし"));
-    const none = unwrap(approveBulk(ctx.deps, { threshold: 100 }));
-    expect(none).toEqual({ approved: [], failed: [] });
+    expect(unwrap(approveBulk(ctx.deps, { items: [] }))).toEqual({ approved: [], failed: [] });
+    expect(statusOf(ctx.idOf("家賃近い"))).toBe("unprocessed");
   });
 
-  it("statementIds を渡すと対象を絞る。失敗は理由つきで残し、ほかは承認する", () => {
+  it("draft があればその案で登録し、match があればその仕訳に結びつける", () => {
     seed();
-    const ids = [ctx.idOf("家賃近い"), ctx.idOf("候補なし"), ctx.idOf("家賃遠い"), "no-such-id"];
-    const r = unwrap(approveBulk(ctx.deps, { statementIds: ids }));
-    expect(r.approved).toEqual([ctx.idOf("家賃近い")]);
-    expect(r.failed.map((f) => f.statementId).sort()).toEqual(
-      [ctx.idOf("候補なし"), ctx.idOf("家賃遠い"), "no-such-id"].sort(),
+    const none = ctx.idOf("候補なし");
+    const near = ctx.idOf("家賃近い");
+    const ref = viewOf(near).candidate?.match;
+    if (ref === undefined) throw new Error("match の候補がない");
+    const r = unwrap(
+      approveBulk(ctx.deps, {
+        items: [
+          { statementId: none, draft: ctx.shapeDraft(none, "business", ctx.a.supplies) },
+          { statementId: near, match: ref },
+        ],
+      }),
     );
-    expect(r.failed.find((f) => f.statementId === "no-such-id")?.code).toBe("STATEMENT_NOT_FOUND");
+    expect(r.approved).toEqual([none, near]);
+    expect(r.failed).toEqual([]);
+    expect(ctx.activeLinks(none)[0]?.kind).toBe("created");
+    expect(ctx.activeLinks(near)[0]).toMatchObject({ kind: "matched", journalId: ref.journalId });
+  });
+
+  it("失敗は理由つきで残し、ほかは承認する（候補なし・draft なし = VALIDATION、不明 = STATEMENT_NOT_FOUND）", () => {
+    seed();
+    const r = unwrap(
+      approveBulk(ctx.deps, {
+        items: [
+          { statementId: ctx.idOf("家賃近い") },
+          { statementId: ctx.idOf("候補なし") },
+          { statementId: "no-such-id" },
+        ],
+      }),
+    );
+    expect(r.approved).toEqual([ctx.idOf("家賃近い")]);
+    expect(r.failed.map((f) => [f.statementId, f.code])).toEqual([
+      [ctx.idOf("候補なし"), "VALIDATION"],
+      ["no-such-id", "STATEMENT_NOT_FOUND"],
+    ]);
     for (const f of r.failed) expect(f.message).not.toBe("");
+    expect(statusOf(ctx.idOf("候補なし"))).toBe("unprocessed");
+  });
+
+  it("同じ明細を 2 回渡しても 1 回だけ承認する。登録済みの明細は failed", () => {
+    seed();
+    const near = ctx.idOf("家賃近い");
+    const r = unwrap(
+      approveBulk(ctx.deps, { items: [{ statementId: near }, { statementId: near }] }),
+    );
+    expect(r.approved).toEqual([near]);
+    expect(r.failed).toEqual([]);
+    const again = unwrap(approveBulk(ctx.deps, { items: [{ statementId: near }] }));
+    expect(again.approved).toEqual([]);
+    expect(again.failed.map((f) => f.code)).toEqual(["STATEMENT_ALREADY_REGISTERED"]);
   });
 
   it("承認の途中の失敗（締め済み）は、その明細が理由つきで failed に残り、ほかは承認される", () => {
@@ -482,7 +529,11 @@ describe("approveBulk（FR-018）", () => {
     );
     unwrap(buildCandidates(ctx.deps));
     ctx.closeYear(2025);
-    const r = unwrap(approveBulk(ctx.deps));
+    const r = unwrap(
+      approveBulk(ctx.deps, {
+        items: ["家賃近い", "旧引落", "旧支払い"].map((c) => ({ statementId: ctx.idOf(c) })),
+      }),
+    );
     expect(r.approved).toContain(ctx.idOf("家賃近い"));
     expect(r.failed.map((f) => f.statementId).sort()).toEqual(
       [ctx.idOf("旧引落"), ctx.idOf("旧支払い")].sort(),
@@ -533,6 +584,52 @@ describe("excludeStatement・unexcludeStatement（FR-017）", () => {
     unwrap(excludeStatement(ctx.deps, b, { reason: "二回目" }));
     expect(ctx.statements().find((s) => s.id === b)?.excludedReason).toBe("最初");
     expect(codeOf(excludeStatement(ctx.deps, "no-such-id", {}))).toBe("STATEMENT_NOT_FOUND");
+  });
+});
+
+describe("excludeBulk（FR-017。選んだ行の除外）", () => {
+  it("選んだ明細を除外し、登録済み・不明は理由つきで failed に残す。除外済みは excluded に数える", () => {
+    ctx.mapBank();
+    ctx.importRows([
+      ctx.row({ content: "A", amount: -100 }),
+      ctx.row({ content: "B", amount: -200 }),
+      ctx.row({ content: "家賃", amount: -80_000 }),
+      ctx.row({ content: "C", amount: -300 }),
+    ]);
+    unwrap(approveCandidate(ctx.deps, ctx.idOf("家賃"), { draft: rentDraft() }));
+    unwrap(excludeStatement(ctx.deps, ctx.idOf("C"), { reason: "最初" }));
+    const r = unwrap(
+      excludeBulk(ctx.deps, {
+        statementIds: [
+          ctx.idOf("A"),
+          ctx.idOf("B"),
+          ctx.idOf("家賃"),
+          ctx.idOf("C"),
+          "no-such-id",
+          ctx.idOf("A"),
+        ],
+        reason: "私用",
+      }),
+    );
+    expect(r.excluded).toEqual([ctx.idOf("A"), ctx.idOf("B"), ctx.idOf("C")]);
+    expect(r.failed.map((f) => [f.statementId, f.code])).toEqual([
+      [ctx.idOf("家賃"), "STATEMENT_ALREADY_REGISTERED"],
+      ["no-such-id", "STATEMENT_NOT_FOUND"],
+    ]);
+    for (const f of r.failed) expect(f.message).not.toBe("");
+    expect(statusOf(ctx.idOf("A"))).toBe("excluded");
+    expect(ctx.statements().find((s) => s.id === ctx.idOf("A"))?.excludedReason).toBe("私用");
+    // 除外済みは最初の理由のまま
+    expect(ctx.statements().find((s) => s.id === ctx.idOf("C"))?.excludedReason).toBe("最初");
+    expect(statusOf(ctx.idOf("家賃"))).toBe("registered");
+    expect(journals()).toHaveLength(1);
+  });
+
+  it("statementIds が空なら何もしない", () => {
+    expect(unwrap(excludeBulk(ctx.deps, { statementIds: [] }))).toEqual({
+      excluded: [],
+      failed: [],
+    });
   });
 });
 

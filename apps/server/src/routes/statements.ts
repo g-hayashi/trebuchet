@@ -6,6 +6,7 @@ import {
   commitStatementImport,
   deleteStatementSource,
   detectStatementLayout,
+  excludeBulk,
   excludeStatement,
   getStatementSettings,
   inferWithAi,
@@ -31,6 +32,7 @@ import {
   ApproveBulkInput,
   ApproveInput,
   BuildCandidatesInput,
+  ExcludeBulkInput,
   ExcludeInput,
   InferenceRuleListQuery,
   InferenceRuleUpdateInput,
@@ -197,6 +199,10 @@ export function statementRoutes({
       })
       .post("/statements/approve-bulk", validate("json", ApproveBulkInput), (c) => {
         const result = approveBulk(deps(c.var.db), c.req.valid("json"));
+        return respond(c, result, (bulk) => c.json(bulk, 200));
+      })
+      .post("/statements/exclude-bulk", validate("json", ExcludeBulkInput), (c) => {
+        const result = excludeBulk(deps(c.var.db), c.req.valid("json"));
         return respond(c, result, (bulk) => c.json(bulk, 200));
       })
       .post("/statements/:statementId/approve", validate("json", ApproveInput), (c) => {

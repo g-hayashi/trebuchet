@@ -427,16 +427,37 @@ export const ApproveInput = z.object({
 });
 export type ApproveInput = z.infer<typeof ApproveInput>;
 
-/** POST /statements/approve-bulk */
+/** 一覧で選んだ行を一度に承認・除外する件数の上限（007/R17） */
+export const MAX_BULK_SELECTION = 500;
+
+/**
+ * POST /statements/approve-bulk（007/R17）。利用者が一覧で選んだ行だけを承認する（しきい値で拒まない）。
+ * 各 item は `ApproveInput` と同じ規則: `draft` があればその案、`match` があれば既存の仕訳に結びつけ、
+ * どちらもなければ候補のまま
+ */
 export const ApproveBulkInput = z.object({
-  statementIds: z.array(Id).optional(),
-  threshold: Percent.optional(),
+  items: z
+    .array(
+      z.object({
+        statementId: Id,
+        draft: JournalInput.optional(),
+        match: z.object({ journalId: Id, lineId: Id }).optional(),
+      }),
+    )
+    .max(MAX_BULK_SELECTION),
 });
 export type ApproveBulkInput = z.infer<typeof ApproveBulkInput>;
 
 /** POST /statements/:statementId/exclude（理由は任意） */
 export const ExcludeInput = z.object({ reason: z.string().max(500).optional() });
 export type ExcludeInput = z.infer<typeof ExcludeInput>;
+
+/** POST /statements/exclude-bulk（007/R17。理由は任意で、選んだ全部に同じものを残す） */
+export const ExcludeBulkInput = z.object({
+  statementIds: z.array(Id).max(MAX_BULK_SELECTION),
+  reason: z.string().max(500).optional(),
+});
+export type ExcludeBulkInput = z.infer<typeof ExcludeBulkInput>;
 
 /** unexclude・unlink の理由。空・空白のみの判定はドメインで行う（`REASON_REQUIRED`） */
 export const StatementReasonInput = z.object({ reason: z.string() });

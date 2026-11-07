@@ -226,7 +226,7 @@ describe("承認（§4.4）", () => {
 });
 
 describe("まとめて承認（§4.5）", () => {
-  it("しきい値以上の候補を承認し、できなかったものは failed（code・message）に残す", async () => {
+  it("選んだ行を承認し、できなかったものは failed（code・message）に残す", async () => {
     await mapAccount("サブ口座", "現金");
     await importLines(
       line("05/10(日)", "口座間の移動", "-5,000", BANK, "", 1),
@@ -238,10 +238,10 @@ describe("まとめて承認（§4.5）", () => {
     const res = await st()["approve-bulk"].$post({
       param: ctx.param,
       json: {
-        statementIds: [
-          (await list()).find((s) => s.amount === -5000)?.id as string,
-          memo,
-          "00000000-0000-7000-8000-000000000001",
+        items: [
+          { statementId: (await list()).find((s) => s.amount === -5000)?.id as string },
+          { statementId: memo },
+          { statementId: "00000000-0000-7000-8000-000000000001" },
         ],
       },
     });
@@ -257,20 +257,78 @@ describe("まとめて承認（§4.5）", () => {
     expect(body.failed.every((f) => f.message.length > 0)).toBe(true);
   });
 
-  it("対象を省くと設定のしきい値以上の未処理すべて。しきい値を 100 にすると何も承認しない", async () => {
-    await mapAccount("サブ口座", "現金");
-    await importLines(
-      line("05/10(日)", "口座間の移動", "-5,000", BANK, "", 1),
-      line("05/10(日)", "口座間の移動", "5,000", "サブ口座", "", 1),
-    );
-    await okBody(await st().candidates.$post({ param: ctx.param, json: {} }));
+  it("items が空なら何も承認しない。items を省く・threshold・statementIds の旧い形は 400", async () => {
+    await importLines(line("05/10(日)", "文房具", "-1,200", BANK, "", 0));
     const none = await okBody(
-      await st()["approve-bulk"].$post({ param: ctx.param, json: { threshold: 100 } }),
+      await st()["approve-bulk"].$post({ param: ctx.param, json: { items: [] } }),
     );
     expect(none).toEqual({ approved: [], failed: [] });
-    const all = await okBody(await st()["approve-bulk"].$post({ param: ctx.param, json: {} }));
-    expect(all.approved).toHaveLength(2);
-    expect(all.failed).toEqual([]);
+    const missing = await st()["approve-bulk"].$post({ param: ctx.param, json: {} as never });
+    expect(missing.status).toBe(400);
+    const old = await st()["approve-bulk"].$post({
+      param: ctx.param,
+      json: { statementIds: [await idOf("文房具")] } as never,
+    });
+    expect(old.status).toBe(400);
+  });
+
+  it("draft で登録できる。件数の上限（500）を超えると 400", async () => {
+    await importLines(line("05/10(日)", "文房具", "-1,200", BANK, "", 0));
+    const id = await idOf("文房具");
+    const body = await okBody(
+      await st()["approve-bulk"].$post({
+        param: ctx.param,
+        json: { items: [{ statementId: id, draft: SUPPLIES_DRAFT() }] },
+      }),
+    );
+    expect(body).toMatchObject({ approved: [id], failed: [] });
+    const many = Array.from({ length: 501 }, () => ({ statementId: id }));
+    const over = await st()["approve-bulk"].$post({ param: ctx.param, json: { items: many } });
+    expect(over.status).toBe(400);
+  });
+});
+
+describe("選んだ行の除外（§4.5a）", () => {
+  it("除外し、登録済み・不明は failed に残す。statementIds が空なら何もしない", async () => {
+    await importLines(
+      line("05/10(日)", "文房具", "-1,200", BANK, "", 0),
+      line("05/11(月)", "私用の買い物", "-500", BANK, "", 0),
+      line("05/12(火)", "家賃", "-80,000", BANK, "", 0),
+    );
+    const [a, b, rent] = [await idOf("文房具"), await idOf("私用の買い物"), await idOf("家賃")];
+    expect((await approve(rent, { draft: SUPPLIES_DRAFT(80_000, "2026-05-12") })).status).toBe(201);
+    const res = await st()["exclude-bulk"].$post({
+      param: ctx.param,
+      json: {
+        statementIds: [a, b, rent, "00000000-0000-7000-8000-000000000001"],
+        reason: "私用",
+      },
+    });
+    expect(res.status).toBe(200);
+    const body = await okBody(res);
+    expect(body.excluded).toEqual([a, b]);
+    expect(body.failed.map((f) => [f.statementId, f.code])).toEqual([
+      [rent, "STATEMENT_ALREADY_REGISTERED"],
+      ["00000000-0000-7000-8000-000000000001", "STATEMENT_NOT_FOUND"],
+    ]);
+    expect(body.failed.every((f) => f.message.length > 0)).toBe(true);
+    const all = await list();
+    expect(all.find((s) => s.id === a)?.status).toBe("excluded");
+    expect(all.find((s) => s.id === rent)?.status).toBe("registered");
+    const empty = await okBody(
+      await st()["exclude-bulk"].$post({ param: ctx.param, json: { statementIds: [] } }),
+    );
+    expect(empty).toEqual({ excluded: [], failed: [] });
+  });
+
+  it("statementIds が 500 件を超えると 400", async () => {
+    const res = await st()["exclude-bulk"].$post({
+      param: ctx.param,
+      json: {
+        statementIds: Array.from({ length: 501 }, () => "00000000-0000-7000-8000-000000000001"),
+      },
+    });
+    expect(res.status).toBe(400);
   });
 });
 

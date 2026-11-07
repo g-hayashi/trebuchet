@@ -162,3 +162,14 @@
   4. **カードの符号の既定**: 金額の列の見出しが「ご利用金額」「ご利用額」「利用金額」「利用額」なら、符号の案は `outflow_positive`（`columns.ts` の `suggestAmountSign`）。`StatementTableLayout` に `suggestedAmountSign`（省ける）を足し、辞書の金額の列から決める。AI の案の金額の列にも同じ規則を掛け、AI の符号より優先する。web の `ColumnMappingEditor` は、取込元の符号がなければ `suggestedAmountSign` を符号の初期値にする（利用者が変えられる）。銀行の「金額」などは案を出さず、利用者が選ぶ（FR-004）。
 - **Rationale**: 利用者が貼る実際のカードの表で、見出しが見つからず、AI が金額でない列を出金にした。値の読み取りはプログラムだけ（INV-49）なので、案の段階で値に合わない役割を落とし、辞書で当たる見出しを増やす。推定はすべて案で、確定は利用者。
 - **Alternatives**: 引用なしの改行をすべての区切り文字でまとめる（カンマの CSV の合計の行などを壊す）。件のまとめを常に行う（1 行 1 件の表の合計の行が前の件の金額に混ざる）。中身の推定を `detectTableLayout` に置く（上記）。
+
+## R17. 明細の確認を一覧の選択に変える（2026-11-07）
+
+- **Decision**: 明細の確認は、未処理の行の一覧から利用者が行を選んで承認・除外する形にする。
+  - **選んだ行だけを承認・除外する**。`POST /statements/approve-bulk` は `{ items: { statementId, draft?, match? }[] }`（500 件まで）。item ごとに `POST /statements/:id/approve` と同じ規則（`draft`・`match`・なければ候補のまま。候補も `draft` もなければ `VALIDATION`）で、明細ごとに別の UnitOfWork。しきい値では拒まない。省略時の全件承認と `threshold`・`statementIds` は廃止。戻りは `{ approved, failed[] }` のまま。新しく `POST /statements/exclude-bulk` `{ statementIds, reason? }`（500 件まで）→ `{ excluded, failed[] }`（`excludeStatement` を明細ごとに）。
+  - 一覧は最初は何も選ばない。**既存の仕訳がある行（候補の `method` が `match`。`candidate.match` に仕訳と行がある）は、すべて選択の対象外**にする（二重の仕訳を作らないため。結びつけは行ごとの確認で行う）。
+  - 事業／私用の切り替えは一覧に作らない（行ごとの確認で直す）。
+  - しきい値（`bulkThreshold`）の設定は残し、画面の「確信度の高い行を選択」の補助にだけ使う（設定の API は変えない）。
+  - 一覧の「既存の仕訳あり」の目印は、すでに `GET /statements` が返す候補（`method: "match"`、`match.journalId`・`lineId`、`reason` に仕訳番号と日付の差）を使い、API に項目を足さない。
+- **Rationale**: しきい値のまとめて承認は、利用者が中身を見ないまま仕訳を作るので事故になりやすい。一覧で自分が選んだ行だけを処理する形なら、承認の対象と件数が操作の時点で見える。
+- **Alternatives**: しきい値のまとめて承認を残す（中身を見ずに登録される）。一覧に事業／私用の切り替えを置く（行ごとの確認と二重になり、仕訳の案との食い違いが出る）。

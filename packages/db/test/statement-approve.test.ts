@@ -388,7 +388,11 @@ describe("INV-47（承認の側）: 障害の注入", () => {
       model: null,
       createdAt: clock.now(),
     });
-    const r = ok(approveBulk(deps()));
+    const r = ok(
+      approveBulk(deps(), {
+        items: [{ statementId: idOf("家賃A") }, { statementId: idOf("家賃B") }],
+      }),
+    );
     expect(r.approved).toEqual([idOf("家賃A")]);
     expect(r.failed.map((f) => [f.statementId, f.code])).toEqual([[idOf("家賃B"), "UNBALANCED"]]);
     expect(count("journals")).toBe(1);

@@ -693,7 +693,7 @@ describe("まとめて承認（H:§4.5）", () => {
     expect(failed).toHaveTextContent("高い確信");
     expect(failed).toHaveTextContent("2026 年度は締め済みです");
     expect(calls(all, "POST", "/statements/approve-bulk")[0]?.body).toEqual({
-      statementIds: [uuid(1), uuid(2)],
+      items: [{ statementId: uuid(1) }, { statementId: uuid(2) }],
     });
     await waitFor(() => expect(calls(all, "GET", "/statements").length).toBeGreaterThan(1));
   });

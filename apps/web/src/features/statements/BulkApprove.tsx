@@ -32,7 +32,10 @@ export function BulkApprove({
 
   const approve = useMutation({
     mutationFn: ({ ids }: { ids: string[]; contents: Record<string, string> }) =>
-      postApproveBulk(entityId, ids),
+      postApproveBulk(
+        entityId,
+        ids.map((statementId) => ({ statementId })),
+      ),
     onSuccess: () => invalidateLedger(queryClient, entityId),
   });
   const result = approve.data;
