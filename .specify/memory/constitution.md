@@ -1,12 +1,12 @@
 <!--
 Sync Impact Report
-- Version: 2.0.1 → 2.0.2（PATCH: 例外の明文化。原則の意味は変えない）
-- 変更した節: Core Principles の III（ローカルファーストとプライバシー）。「外部のAIに送る情報は必要最小限、マスクする」の後に、証憑の画像の読み取りを、利用者が別に有効にしたときだけ許す例外を 1 文足した
-- 理由: 利用者が、外部の AI への証憑の画像の送信を明示的に選んだ（2026-11-02、010）。画像は口座番号・氏名をマスクできず、仕様・plan だけに例外があると憲法と食い違うため。判断の記録は ADR 0014
-- 影響: 例外は 1 つのポート（`ReceiptReader`）に閉じ込め、外部の AI の設定と「証憑の画像を外部の AI に送る」の両方が有効なときだけ呼ぶ。006 の経路（`buildAiPayload`、INV-45）は変えず、画像を受け取らない。AGENTS.md の 006 の規則にも同じ例外を書いた。docs/requirements.md の NFR-07 の記述は、006 の経路（文字列）についてのままでよい
+- Version: 2.0.2 → 2.0.3（PATCH: 理由の注記の削除。原則の意味は変えない）
+- 変更した節: Core Principles の VII（シンプルさと境界）。ドメイン層の規則の「（後の Tauri 化に備える）」を削った
+- 理由: 利用者が Tauri 化を見送った（2026-11-07。docs/requirements.md の §7）。ドメイン層を純粋に保つ規則そのものは、テストのしやすさと層の分離のために残す
+- 影響: なし（規則は変えない）
 - 原則の追加・削除・再定義: なし
 - テンプレートへの影響: なし
-- 日付: 2026-11-03
+- 日付: 2026-11-07
 -->
 
 # Trebuchet Constitution
@@ -70,7 +70,7 @@ Sync Impact Report
 
 ### VII. シンプルさと境界
 
-- ドメイン層は MUST 純粋な TypeScript とし、Hono・React・DB に依存しない（後の Tauri 化に備える）。
+- ドメイン層は MUST 純粋な TypeScript とし、Hono・React・DB に依存しない。
 - 現在のフェーズで不要な抽象化・汎用化は作らない（YAGNI）。複雑さを持ち込む場合は
   plan.md の Complexity Tracking に理由を書く。
 - 外部の依存は、標準機能や既存の依存で代替できない場合に限って追加する。
@@ -101,4 +101,4 @@ Sync Impact Report
 - plan.md の Constitution Check で各原則への適合を確認する。違反は Complexity Tracking で
   正当化されない限り認めない。
 
-**Version**: 2.0.2 | **Ratified**: 2026-10-18 | **Last Amended**: 2026-11-03
+**Version**: 2.0.3 | **Ratified**: 2026-10-18 | **Last Amended**: 2026-11-07
