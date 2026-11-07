@@ -1060,6 +1060,41 @@ describe("取込の手順と、取込の後の自動の連鎖（011 US3。FR-019
     expect(progress).toHaveTextContent("AI で推定 2 / 2 件");
   });
 
+  it("推定で外部の AI へ送ったとき、④ の進みの近くに表示を出し、終わった後も残す", async () => {
+    const needsAi = ids(2);
+    open({
+      [`POST ${CANDIDATES_PATH}`]: () => ok({ built: 3, needsAi }),
+      [`POST ${INFER_PATH}`]: (call) =>
+        ok({
+          results: (call.body as { statementIds: string[] }).statementIds.map((statementId) => ({
+            statementId,
+            method: "external_ai",
+            confidence: 80,
+          })),
+          localAvailable: false,
+          externalUsed: true,
+        }),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    await commit(u);
+    await reviewRegion();
+
+    const progress = await screen.findByRole("status", { name: "候補の作成の進み" });
+    expect(progress).toHaveTextContent("AI で推定 2 / 2 件");
+    expect(
+      within(progress).getByText(
+        "外部の AI へ内容を送りました（確信度がしきい値に届かなかった明細だけ）。",
+        { exact: true },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(progress).getByText("端末内の AI が使えません。設定を確かめてください。", {
+        exact: true,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("端末内の AI がなく、外部の AI だけが有効でも推定を呼ぶ", async () => {
     const all = open({
       "GET /api/settings/ai": () => ok(AI_EXTERNAL_ONLY),
@@ -1175,52 +1210,93 @@ describe("取込の手順と、取込の後の自動の連鎖（011 US3。FR-019
     expect(currentStep()).toHaveTextContent("取込");
   });
 
-  it("確認では、未処理の明細を 1 件ずつ出す（ReviewQueue）。主な操作は ③ までは「取り込む」、④ では「承認して次へ」", async () => {
+  const OPEN_STATEMENT = {
+    id: uuid(300),
+    date: "2026-05-10",
+    amount: -1200,
+    content: "ショップ001",
+    accountName: "サンプル銀行",
+    usage: "business",
+    status: "unprocessed",
+    changed: null,
+    candidate: {
+      method: "rule",
+      purpose: "business",
+      confidence: 90,
+      reason: "ルール",
+      draft: {
+        date: "2026-05-10",
+        lines: [
+          { side: "debit", accountId: uuid(6010), amount: 1200, taxCategory: "PURCHASE_10" },
+          { side: "credit", accountId: uuid(1020), amount: 1200, taxCategory: "OUT_OF_SCOPE" },
+        ],
+      },
+    },
+    links: [],
+  };
+
+  it("確認（④）では、未処理の明細を一覧で出し、行を選んで承認・除外する（ReviewTable）。主な操作は ③ までは「取り込む」、④ では「選択した N 件を承認」", async () => {
     open({
-      [`GET ${BASE}/statements`]: () =>
-        ok({
-          statements: [
-            {
-              id: uuid(300),
-              date: "2026-05-10",
-              amount: -1200,
-              content: "ショップ001",
-              accountName: "サンプル銀行",
-              usage: "business",
-              status: "unprocessed",
-              changed: null,
-              candidate: null,
-              links: [],
-            },
-          ],
-        }),
+      [`GET ${BASE}/statements`]: () => ok({ statements: [OPEN_STATEMENT] }),
     });
     const u = userEvent.setup();
     renderImport();
     await commit(u);
     const region = await reviewRegion();
-    expect(await within(region).findByText(/ショップ001/)).toBeInTheDocument();
-    expect(within(region).getByRole("button", { name: "承認して次へ" })).toBeInTheDocument();
+    const table = await within(region).findByRole("table", { name: "未処理の明細" });
+    expect(within(table).getByRole("row", { name: /ショップ001/ })).toBeInTheDocument();
+    // 最初は何も選ばない
+    expect(within(table).getByRole("checkbox", { name: "ショップ001 を選択" })).not.toBeChecked();
+    expect(within(region).getByRole("button", { name: "選択した 0 件を承認" })).toBeDisabled();
     // 画面の中の主な操作（variant="default"）は 1 つ
     const primary = screen
       .getAllByRole("button")
       .filter((b) => b.className.split(" ").includes("bg-primary"));
-    expect(primary.map((b) => b.textContent)).toEqual(["承認して次へ"]);
+    expect(primary.map((b) => b.textContent)).toEqual(["選択した 0 件を承認"]);
   });
 
-  it("新しい入力を読み取ると、前の連鎖の進みと確認は消える", async () => {
+  it("④ では入力の欄（貼り付け・ファイル）を隠し、「入力し直す」だけを出す。押すと最初（①）に戻る", async () => {
+    open({
+      [`GET ${BASE}/statements`]: () => ok({ statements: [OPEN_STATEMENT] }),
+    });
+    const u = userEvent.setup();
+    renderImport();
+    expect(await screen.findByLabelText("貼り付けのテキスト")).toBeInTheDocument();
+    await commit(u);
+    await reviewRegion();
+
+    // 入力の欄はない。取り込んだ件数の知らせと「入力し直す」は残る
+    expect(screen.queryByLabelText("貼り付けのテキスト")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "読み取る" })).not.toBeInTheDocument();
+    expect(screen.getByText("3 件を取り込みました。")).toBeInTheDocument();
+    expect(currentStep()).toHaveTextContent("確認・承認");
+
+    await u.click(screen.getByRole("button", { name: "入力し直す" }));
+    expect(await screen.findByLabelText("貼り付けのテキスト")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "明細の確認" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "候補の作成の進み" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "入力し直す" })).not.toBeInTheDocument();
+    expect(currentStep()).toHaveTextContent("入力");
+  });
+
+  it("③ までは入力の欄を出す（取込の画面を開いた最初と、列の対応・プレビューの間）", async () => {
+    open();
+    const u = userEvent.setup();
+    renderImport();
+    expect(await screen.findByLabelText("貼り付けのテキスト")).toBeInTheDocument();
+    await readPaste(u);
+    await mappingRegion();
+    expect(screen.getByLabelText("貼り付けのテキスト")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "入力し直す" })).not.toBeInTheDocument();
+  });
+
+  it("④ で確認する明細がなければ、その旨を出す", async () => {
     open();
     const u = userEvent.setup();
     renderImport();
     await commit(u);
-    await reviewRegion();
-    fireEvent.change(await screen.findByLabelText("貼り付けのテキスト"), {
-      target: { value: TEXT },
-    });
-    await u.click(screen.getByRole("button", { name: "読み取る" }));
-    await mappingRegion();
-    expect(screen.queryByRole("region", { name: "明細の確認" })).not.toBeInTheDocument();
-    expect(currentStep()).toHaveTextContent("列と口座");
+    const region = await reviewRegion();
+    expect(await within(region).findByText("未処理の明細はありません。")).toBeInTheDocument();
   });
 });
 

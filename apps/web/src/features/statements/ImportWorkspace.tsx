@@ -27,6 +27,7 @@ import { useToast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/api";
 import { thisYear } from "@/lib/dates";
 import { AccountMappingForm } from "./AccountMappingForm";
+import { AiProgressLines } from "./AiProgressLines";
 import { type AccountDraft, draftFromSuggestion, inputFromDraft } from "./account-draft";
 import {
   importBatchesQuery,
@@ -35,6 +36,7 @@ import {
   postImportPreview,
   statementKeys,
   statementSourcesQuery,
+  statementsQuery,
 } from "./api";
 import {
   type ColumnMappingDraft,
@@ -44,11 +46,14 @@ import {
 import { type ChainProgress, runCandidateChain } from "./candidate-chain";
 import { ImportPreview } from "./ImportPreview";
 import { ORIGIN_LABELS } from "./labels";
-import { ReviewQueue } from "./ReviewQueue";
+import { ReviewTable } from "./ReviewTable";
 import { AppliedSource, SourceChooser } from "./SourcePicker";
 import { StatementInput, type StatementInputValue } from "./StatementInput";
 
-/** 取込の手順（011 R9。FR-019）。確定の後の「確認・承認」は、候補の作成が終わったら確認の画面（ReviewQueue）を出す */
+/**
+ * 取込の手順（011 R9。FR-019）。確定の後の「確認・承認」は、候補の作成が終わったら確認の表（ReviewTable）を出す。
+ * ④ では入力の欄を出さず、「入力し直す」だけを出す（007/R17）
+ */
 const IMPORT_STEPS = ["入力", "列と口座", "取込", "確認・承認"] as const;
 
 /** 取込の後の連鎖の状態。running の間は進みを出し、done で確認の画面を出す */
@@ -62,12 +67,28 @@ function ChainStatus({ progress, phase }: { progress: ChainProgress; phase: Chai
       {phase === "running" && <p className="text-muted-foreground">候補を作っています…</p>}
       {seeded !== undefined && <p>過去の仕訳からルールを {seeded} 件作りました。</p>}
       {built !== undefined && <p>候補を {built} 件作りました。</p>}
-      {ai && (
-        <p className="tabular-nums">
-          AI で推定 {ai.done} / {ai.total} 件{ai.stopped ? "で止まりました" : ""}
-        </p>
-      )}
+      {ai && <AiProgressLines ai={ai} />}
       {aiSkipped && <p>AI の設定が無効なので、推定は飛ばしました。</p>}
+    </div>
+  );
+}
+
+/** ④ 確認・承認: 未処理の明細を確認の表で出す（行を選んで承認・除外する） */
+function ImportReview({ entityId }: { entityId: string }) {
+  const statements = useQuery(statementsQuery(entityId, { status: "unprocessed" }));
+  return (
+    <div className="grid gap-3">
+      <ApiErrorMessage error={statements.error} />
+      {statements.isPending && !statements.error && (
+        <p className="text-sm text-muted-foreground">読み込み中…</p>
+      )}
+      {statements.data && (
+        <ReviewTable
+          entityId={entityId}
+          statements={statements.data}
+          emptyMessage="未処理の明細はありません。"
+        />
+      )}
     </div>
   );
 }
@@ -277,6 +298,22 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
     previewMutation.reset();
   };
 
+  /** ④ の「入力し直す」: 状態を最初（①）に戻す。連鎖の進みと確認は消す */
+  const restart = () => {
+    resetResults();
+    chainRun.current += 1;
+    setChain(undefined);
+    layoutMutation.reset();
+    setInput(undefined);
+    setLayout(undefined);
+    setRequest(undefined);
+    setPreview(undefined);
+    setManual(false);
+    setChosen(undefined);
+    setPickedSourceId(undefined);
+    setInputVersion((v) => v + 1);
+  };
+
   const startLayout = (next: Input) => {
     resetResults();
     // 新しい入力を読み取ったら、前の連鎖の進みと確認は消す
@@ -388,12 +425,20 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
     <div className="grid gap-8">
       <Steps steps={IMPORT_STEPS} current={step} label="取込の手順" />
       <section aria-label="入力" className="grid gap-3">
-        <StatementInput
-          key={inputVersion}
-          primary={step === 0}
-          pending={layoutMutation.isPending}
-          onRead={startLayout}
-        />
+        {step < 3 ? (
+          <StatementInput
+            key={inputVersion}
+            primary={step === 0}
+            pending={layoutMutation.isPending}
+            onRead={startLayout}
+          />
+        ) : (
+          <div>
+            <Button variant="link" className="px-0" onClick={restart}>
+              入力し直す
+            </Button>
+          </div>
+        )}
         <ApiErrorMessage error={layoutMutation.error} />
         {notice && <SaveNotice message={notice} />}
       </section>
@@ -404,7 +449,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
           <ChainStatus progress={chain.progress} phase={chain.phase} />
         </section>
       )}
-      {chain?.phase === "done" && <ReviewQueue entityId={entityId} />}
+      {chain?.phase === "done" && <ImportReview entityId={entityId} />}
 
       {layout && applied && (
         <section aria-label="取込元" className="grid gap-4">

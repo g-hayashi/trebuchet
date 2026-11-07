@@ -23,7 +23,7 @@
 | 最初からある科目の保護（INV-70） | `ACCOUNT_SYSTEM_PROTECTED`（`packages/schema/src/errors.ts`、`packages/domain/src/usecases/masters.ts`、`apps/web/src/lib/api-errors.ts`） |
 | 印刷 | `apps/web/src/print.css`（請求書）、`features/blue-return/print.css`（決算書）、`features/invoicing/InvoiceDetail.tsx`・`InvoicePrint.tsx` |
 | バックアップの既定の置き場所 | `apps/server/src/lib/backup-folder.ts`（`resolveBackupFolder`） |
-| 明細の取込の手順と確認 | `apps/web/src/features/statements/`（`ImportWorkspace.tsx` の `Steps`、`candidate-chain.ts`、`ReviewQueue.tsx`）、`routes/e/$entityId/statements/review.tsx` |
+| 明細の取込の手順と確認 | `apps/web/src/features/statements/`（`ImportWorkspace.tsx` の `Steps`、`candidate-chain.ts`、確認の表 `ReviewTable.tsx`。007/R17 で 1 件ずつの `ReviewQueue`・`BulkApprove`・`review` ルートを消した） |
 | ルールの `managed_by`（INV-71） | `packages/domain/src/statements/rules.ts`（`learnRule`）、`usecases/inference-rules.ts`、`packages/db/src/schema/tenant.ts` |
 | 仕訳の入力の AI の候補 | `packages/domain/src/statements/mask.ts`（`buildJournalEntryPayload`）・`prompt.ts`（`scene`）、`usecases/journal-ai-suggestion.ts`、`POST /journals/ai-suggestion`（`apps/server/src/routes/journals.ts`）、`apps/web/src/features/ai-assist/` |
 | 評価・E2E | `scripts/eval-statements.ts`、`packages/domain/src/statements/eval-runner.ts`、`packages/domain/test/fixtures/statements/statement-evals.ts`、`apps/web/e2e/mobile.spec.ts` |

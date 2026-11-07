@@ -24,9 +24,6 @@ function StatementsPage() {
   return (
     <main className="grid gap-6">
       <h1 className="text-xl font-semibold">明細</h1>
-      <p className="text-sm text-muted-foreground">
-        取り込んだ明細を確かめて、仕訳として登録します。候補を確認して承認するまで、帳簿（仕訳）は変わりません。
-      </p>
       <StatementsWorkspace entityId={entityId} highlightId={statementId} initialStatus={status} />
     </main>
   );

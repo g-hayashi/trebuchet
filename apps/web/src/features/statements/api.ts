@@ -207,6 +207,19 @@ export const postApproveBulk = async (
     }),
   );
 
+/** 選んだ行の除外（§4.5a。007/R17）。理由は任意で、選んだ全部に同じものを残す。明細ごとに別のトランザクション */
+export const postExcludeBulk = async (
+  entityId: string,
+  statementIds: string[],
+  reason?: string | undefined,
+) =>
+  unwrap(
+    await entityApi.statements["exclude-bulk"].$post({
+      param: { entityId },
+      json: { statementIds, ...(reason === undefined ? {} : { reason }) },
+    }),
+  );
+
 /** 除外する（§4.6。理由は任意） */
 export const postExclude = async (entityId: string, statementId: string) =>
   unwrap(

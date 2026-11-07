@@ -187,6 +187,11 @@ const DEFAULT_ENTITY_ROUTES: Record<string, Handler> = {
   "POST /inference-rules/seed": () => ok({ created: 0, skipped: 0 }),
   "POST /statements/candidates": () => ok({ built: 0, needsAi: [] }),
   "POST /statements/infer": () => ok({ results: [], localAvailable: true, externalUsed: false }),
+  // 選んだ行の承認・除外（007/R17）。何も処理しなかった応答
+  "POST /statements/approve-bulk": () => ok({ approved: [], failed: [] }),
+  "POST /statements/exclude-bulk": () => ok({ excluded: [], failed: [] }),
+  // 明細の確認の表が、相手の科目の選び直しに読む（税区分の一覧）
+  "GET /tax-categories": () => ok({ taxCategories: [], taxRates: [] }),
   // 評価の履歴（US5）。実行はまだない
   // 証憑（010 US1）。一覧は空。詳細は電子取引の 1 件で、PATCH は送られた値を当てて version を進める
   "GET /receipts": () => ok({ receipts: [], nextCursor: null }),

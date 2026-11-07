@@ -44,7 +44,7 @@ describe("明細の設定", () => {
   it("URL の事業体の設定を表示する。事業体の選択は持たない", async () => {
     openSettings({}, "e2");
 
-    expect(await screen.findByLabelText("まとめて承認のしきい値")).toHaveValue("90");
+    expect(await screen.findByLabelText("確信度の高い行のしきい値")).toHaveValue("90");
     expect(screen.getByLabelText("外部の AI へ送るしきい値")).toHaveValue("70");
     expect(screen.queryByLabelText("事業体")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "明細の設定" })).toBeInTheDocument();
@@ -64,7 +64,7 @@ describe("明細の設定", () => {
       "PUT /api/entities/e1/statement-settings": () => ok(settings(90, 40)),
     });
 
-    const bulk = await screen.findByLabelText("まとめて承認のしきい値");
+    const bulk = await screen.findByLabelText("確信度の高い行のしきい値");
     await u.clear(bulk);
     await u.type(bulk, "90");
     const external = screen.getByLabelText("外部の AI へ送るしきい値");
@@ -80,7 +80,7 @@ describe("明細の設定", () => {
     const u = user();
     const all = openSettings();
 
-    const bulk = await screen.findByLabelText("まとめて承認のしきい値");
+    const bulk = await screen.findByLabelText("確信度の高い行のしきい値");
     for (const bad of ["101", "5.5", "abc", ""]) {
       await u.clear(bulk);
       if (bad !== "") await u.type(bulk, bad);
@@ -93,9 +93,10 @@ describe("明細の設定", () => {
 
   it("しきい値を変えるのはここだけ。一覧・確認の画面には出ないと案内し、保存が主な操作", async () => {
     openSettings();
-    await screen.findByLabelText("まとめて承認のしきい値");
+    await screen.findByLabelText("確信度の高い行のしきい値");
     expect(screen.getByText(/一覧・確認の画面には出ません/)).toBeInTheDocument();
-    expect(screen.getByText(/確認の画面の「まとめて承認」/)).toBeInTheDocument();
+    expect(screen.getAllByText(/「確信度の高い行を選択」/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/まとめて承認/)).not.toBeInTheDocument();
     const primary = screen
       .getAllByRole("button")
       .filter((b) => b.className.split(" ").includes("bg-primary"))

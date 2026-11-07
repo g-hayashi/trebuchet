@@ -55,7 +55,6 @@ import { Route as EEntityIdReportsProfitAndLossRouteImport } from './routes/e/$e
 import { Route as EEntityIdReportsTrialBalanceRouteImport } from './routes/e/$entityId/reports/trial-balance'
 import { Route as EEntityIdStatementsIndexRouteImport } from './routes/e/$entityId/statements/index'
 import { Route as EEntityIdStatementsImportRouteImport } from './routes/e/$entityId/statements/import'
-import { Route as EEntityIdStatementsReviewRouteImport } from './routes/e/$entityId/statements/review'
 import { Route as EEntityIdStatementsRulesRouteImport } from './routes/e/$entityId/statements/rules'
 import { Route as EEntityIdStatementsSettingsRouteImport } from './routes/e/$entityId/statements/settings'
 import { Route as EEntityIdBlueReturnYearIndexRouteImport } from './routes/e/$entityId/blue-return/$year/index'
@@ -309,12 +308,6 @@ const EEntityIdStatementsImportRoute =
     path: '/statements/import',
     getParentRoute: () => EEntityIdRouteRoute,
   } as any)
-const EEntityIdStatementsReviewRoute =
-  EEntityIdStatementsReviewRouteImport.update({
-    id: '/statements/review',
-    path: '/statements/review',
-    getParentRoute: () => EEntityIdRouteRoute,
-  } as any)
 const EEntityIdStatementsRulesRoute =
   EEntityIdStatementsRulesRouteImport.update({
     id: '/statements/rules',
@@ -382,7 +375,6 @@ export interface FileRoutesByFullPath {
   '/e/$entityId/reports/profit-and-loss': typeof EEntityIdReportsProfitAndLossRoute
   '/e/$entityId/reports/trial-balance': typeof EEntityIdReportsTrialBalanceRoute
   '/e/$entityId/statements/import': typeof EEntityIdStatementsImportRoute
-  '/e/$entityId/statements/review': typeof EEntityIdStatementsReviewRoute
   '/e/$entityId/statements/rules': typeof EEntityIdStatementsRulesRoute
   '/e/$entityId/statements/settings': typeof EEntityIdStatementsSettingsRoute
   '/e/$entityId/blue-return/': typeof EEntityIdBlueReturnIndexRoute
@@ -435,7 +427,6 @@ export interface FileRoutesByTo {
   '/e/$entityId/reports/profit-and-loss': typeof EEntityIdReportsProfitAndLossRoute
   '/e/$entityId/reports/trial-balance': typeof EEntityIdReportsTrialBalanceRoute
   '/e/$entityId/statements/import': typeof EEntityIdStatementsImportRoute
-  '/e/$entityId/statements/review': typeof EEntityIdStatementsReviewRoute
   '/e/$entityId/statements/rules': typeof EEntityIdStatementsRulesRoute
   '/e/$entityId/statements/settings': typeof EEntityIdStatementsSettingsRoute
   '/e/$entityId/blue-return': typeof EEntityIdBlueReturnIndexRoute
@@ -490,7 +481,6 @@ export interface FileRoutesById {
   '/e/$entityId/reports/profit-and-loss': typeof EEntityIdReportsProfitAndLossRoute
   '/e/$entityId/reports/trial-balance': typeof EEntityIdReportsTrialBalanceRoute
   '/e/$entityId/statements/import': typeof EEntityIdStatementsImportRoute
-  '/e/$entityId/statements/review': typeof EEntityIdStatementsReviewRoute
   '/e/$entityId/statements/rules': typeof EEntityIdStatementsRulesRoute
   '/e/$entityId/statements/settings': typeof EEntityIdStatementsSettingsRoute
   '/e/$entityId/blue-return/': typeof EEntityIdBlueReturnIndexRoute
@@ -546,7 +536,6 @@ export interface FileRouteTypes {
     | '/e/$entityId/reports/profit-and-loss'
     | '/e/$entityId/reports/trial-balance'
     | '/e/$entityId/statements/import'
-    | '/e/$entityId/statements/review'
     | '/e/$entityId/statements/rules'
     | '/e/$entityId/statements/settings'
     | '/e/$entityId/blue-return/'
@@ -599,7 +588,6 @@ export interface FileRouteTypes {
     | '/e/$entityId/reports/profit-and-loss'
     | '/e/$entityId/reports/trial-balance'
     | '/e/$entityId/statements/import'
-    | '/e/$entityId/statements/review'
     | '/e/$entityId/statements/rules'
     | '/e/$entityId/statements/settings'
     | '/e/$entityId/blue-return'
@@ -653,7 +641,6 @@ export interface FileRouteTypes {
     | '/e/$entityId/reports/profit-and-loss'
     | '/e/$entityId/reports/trial-balance'
     | '/e/$entityId/statements/import'
-    | '/e/$entityId/statements/review'
     | '/e/$entityId/statements/rules'
     | '/e/$entityId/statements/settings'
     | '/e/$entityId/blue-return/'
@@ -1004,13 +991,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EEntityIdStatementsImportRouteImport
       parentRoute: typeof EEntityIdRouteRoute
     }
-    '/e/$entityId/statements/review': {
-      id: '/e/$entityId/statements/review'
-      path: '/statements/review'
-      fullPath: '/e/$entityId/statements/review'
-      preLoaderRoute: typeof EEntityIdStatementsReviewRouteImport
-      parentRoute: typeof EEntityIdRouteRoute
-    }
     '/e/$entityId/statements/rules': {
       id: '/e/$entityId/statements/rules'
       path: '/statements/rules'
@@ -1094,7 +1074,6 @@ interface EEntityIdRouteRouteChildren {
   EEntityIdReportsProfitAndLossRoute: typeof EEntityIdReportsProfitAndLossRoute
   EEntityIdReportsTrialBalanceRoute: typeof EEntityIdReportsTrialBalanceRoute
   EEntityIdStatementsImportRoute: typeof EEntityIdStatementsImportRoute
-  EEntityIdStatementsReviewRoute: typeof EEntityIdStatementsReviewRoute
   EEntityIdStatementsRulesRoute: typeof EEntityIdStatementsRulesRoute
   EEntityIdStatementsSettingsRoute: typeof EEntityIdStatementsSettingsRoute
   EEntityIdBlueReturnIndexRoute: typeof EEntityIdBlueReturnIndexRoute
@@ -1140,7 +1119,6 @@ const EEntityIdRouteRouteChildren: EEntityIdRouteRouteChildren = {
   EEntityIdReportsProfitAndLossRoute: EEntityIdReportsProfitAndLossRoute,
   EEntityIdReportsTrialBalanceRoute: EEntityIdReportsTrialBalanceRoute,
   EEntityIdStatementsImportRoute: EEntityIdStatementsImportRoute,
-  EEntityIdStatementsReviewRoute: EEntityIdStatementsReviewRoute,
   EEntityIdStatementsRulesRoute: EEntityIdStatementsRulesRoute,
   EEntityIdStatementsSettingsRoute: EEntityIdStatementsSettingsRoute,
   EEntityIdBlueReturnIndexRoute: EEntityIdBlueReturnIndexRoute,
