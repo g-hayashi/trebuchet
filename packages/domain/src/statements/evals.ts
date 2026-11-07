@@ -1,6 +1,5 @@
 import type { CandidateMethod, Purpose, TaxCategoryCode } from "@trebuchet/schema";
-import type { Account, InferenceRule, Journal } from "../types.ts";
-import { STATEMENT_ACCOUNT_CODES } from "./journal-shape.ts";
+import type { InferenceRule } from "../types.ts";
 import { learnRule, ruleFor } from "./rules.ts";
 
 /**
@@ -53,38 +52,10 @@ const METHOD_ORDER: readonly CandidateMethod[] = [
   "none",
 ];
 
-const OWNER_CODES: ReadonlySet<string> = new Set([
-  STATEMENT_ACCOUNT_CODES.ownerContribution,
-  STATEMENT_ACCOUNT_CODES.ownerDrawing,
-]);
-
 /** 千分率の整数（四捨五入。整数だけで計算する）。`total` が 0 なら 0 */
 export function perMille(matches: number, total: number): number {
   if (total <= 0) return 0;
   return Math.floor((matches * 2000 + total) / (2 * total));
-}
-
-/**
- * 登録済みの仕訳から正解を読む。仕訳が有効で 2 行（明細の行 `ownLineId` と相手の行 1 つ）のときだけ。
- * それ以外（訂正・取消済み、分割）は null（承認からの学習と同じく、要約できない）。
- * 判定は相手が事業主貸・事業主借なら私用、それ以外は事業
- */
-export function truthOf(
-  journal: Pick<Journal, "status" | "lines">,
-  ownLineId: string,
-  accounts: readonly Pick<Account, "id" | "code">[],
-): EvalFields | null {
-  if (journal.status !== "active" || journal.lines.length !== 2) return null;
-  if (!journal.lines.some((l) => l.id === ownLineId)) return null;
-  const counter = journal.lines.find((l) => l.id !== ownLineId);
-  if (counter === undefined) return null;
-  const code = accounts.find((a) => a.id === counter.accountId)?.code ?? "";
-  return {
-    counterAccountId: counter.accountId,
-    taxCategory: counter.taxCategory,
-    partnerId: counter.partnerId,
-    purpose: OWNER_CODES.has(code) ? "private" : "business",
-  };
 }
 
 /** 基準日より前の標本の承認を日付順に学んだルール（メモリだけ。`learnRule` の結果を `InferenceRule` にする） */

@@ -40,36 +40,6 @@ export const putInvoiceSettings = async (
   json: Parameters<(typeof entityApi)["invoice-settings"]["$put"]>[0]["json"],
 ) => unwrap(await entityApi["invoice-settings"].$put({ param: { entityId }, json }));
 
-const termsApi = entityApi.partners[":partnerId"]["billing-terms"];
-
-export const putBillingTerms = async (
-  entityId: string,
-  partnerId: string,
-  json: Parameters<typeof termsApi.$put>[0]["json"],
-) => unwrap(await termsApi.$put({ param: { entityId, partnerId }, json }));
-
-/** 敬称だけを直す（001 の `PATCH /partners/:partnerId`。名称とメモはそのまま送る） */
-export const patchPartnerHonorific = async (
-  entityId: string,
-  partner: { id: string; name: string; memo: string | null },
-  honorific: "様" | "御中" | null,
-) =>
-  unwrap(
-    await entityApi.partners[":partnerId"].$patch({
-      param: { entityId, partnerId: partner.id },
-      json: {
-        name: partner.name,
-        honorific,
-        ...(partner.memo === null || partner.memo === "" ? {} : { memo: partner.memo }),
-      },
-    }),
-  );
-
-/** 条件を外す（204）。失敗のときは ApiError を投げる */
-export const deleteBillingTerms = async (entityId: string, partnerId: string) => {
-  await unwrap(await termsApi.$delete({ param: { entityId, partnerId } }));
-};
-
 // ---- 工数・請求書（US1。contracts §3、§6.1） ----
 
 export const invoiceKeys = {

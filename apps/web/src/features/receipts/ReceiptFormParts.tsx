@@ -1,8 +1,7 @@
-import { Link } from "@tanstack/react-router";
-import type { ReceiptCategory, ReceiptDetail } from "@trebuchet/schema";
+import type { ReceiptCategory } from "@trebuchet/schema";
 import { FieldError } from "@/components/ui/form-error";
 import { ApiError } from "@/lib/api";
-import { CATEGORY_HINTS, CATEGORY_LABELS, CATEGORY_OPTIONS, warningText } from "./labels";
+import { CATEGORY_HINTS, CATEGORY_LABELS, CATEGORY_OPTIONS } from "./labels";
 
 // 証憑の追加のフォームの部品
 
@@ -48,28 +47,5 @@ export function CategoryFieldset({
       ))}
       <FieldError id={`${id}-category-error`} message={error} />
     </fieldset>
-  );
-}
-
-/** 保存の結果（201 を受けた後）。警告（入力期間・解像度・階調）が出ても保存はされている */
-export function SavedNotice({ entityId, receipt }: { entityId: string; receipt: ReceiptDetail }) {
-  return (
-    <div role="status" className="mt-4 grid gap-2 rounded-md border px-3 py-2 text-sm">
-      <p className="font-medium">保存しました。</p>
-      {receipt.warnings.length > 0 && (
-        <ul className="list-disc pl-5">
-          {receipt.warnings.map((w) => (
-            <li key={w.code}>{warningText(w)}</li>
-          ))}
-        </ul>
-      )}
-      <Link
-        to="/e/$entityId/receipts/$receiptId"
-        params={{ entityId, receiptId: receipt.id }}
-        className="underline"
-      >
-        証憑を開く
-      </Link>
-    </div>
   );
 }

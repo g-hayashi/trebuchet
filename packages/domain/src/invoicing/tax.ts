@@ -1,13 +1,11 @@
 import {
   defaultTaxCategory,
   type InvoiceTaxDisplay,
-  type TaxBreakdownEntry,
   type TaxCategoryCode,
 } from "@trebuchet/schema";
 import { isTaxableCategory, resolveTaxRate } from "../tax-rates.ts";
 import { resolveTaxSetting, type TaxSettingDraft } from "../tax-settings.ts";
 import type { TaxRate } from "../types.ts";
-import { taxBreakdown } from "./amounts.ts";
 
 /**
  * 請求書の消費税の扱い（005 R10）。売上の計上日で決める。
@@ -47,23 +45,6 @@ export function itemTaxRate(
   if (setting === undefined || setting.taxpayerStatus === "exempt") return null;
   if (!isTaxableCategory(taxCategory)) return null;
   return resolveTaxRate(taxCategory, salesDate, taxRates) ?? null;
-}
-
-/** 請求書の別記の内訳（税率ごと。税率なしの明細は載せない。API の `taxBreakdown`） */
-export function taxBreakdownEntries(
-  items: readonly { amount: number; taxRate: number | null }[],
-): TaxBreakdownEntry[] {
-  const entries: TaxBreakdownEntry[] = [];
-  for (const row of taxBreakdown(items)) {
-    if (row.rate === null) continue;
-    entries.push({
-      rate: row.rate,
-      inclusive: row.inclusive,
-      tax: row.tax,
-      exclusive: row.exclusive,
-    });
-  }
-  return entries;
 }
 
 /**

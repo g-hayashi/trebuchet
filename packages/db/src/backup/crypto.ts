@@ -185,21 +185,6 @@ function parseFile(bytes: Uint8Array): Result<Parsed, "INVALID" | "VERSION_MISMA
 }
 
 /**
- * ヘッダーと recovery の包みを、認証せずに読む（復元が回復キーで DK を開くための入口）。
- * 本体は使わない。形が違えば INVALID、format が 1 でなければ VERSION_MISMATCH
- */
-export function readBackupHeader(
-  bytes: Uint8Array,
-): Result<{ header: BackupHeader; recoveryWrap: WrappedKey }, "INVALID" | "VERSION_MISMATCH"> {
-  const parsed = parseFile(bytes);
-  if (!parsed.ok) return parsed;
-  return {
-    ok: true,
-    value: { header: parsed.value.header, recoveryWrap: parsed.value.recoveryWrap },
-  };
-}
-
-/**
  * DK で復号する。GCM の final() が通るまで平文を返さない・使わない。
  * 形式の版が 1 でなければ復号の前に VERSION_MISMATCH。アプリの版が currentVersion と
  * 一致しないときは、復号と検証が通った後に VERSION_MISMATCH。それ以外の失敗（誤った鍵、改ざん、

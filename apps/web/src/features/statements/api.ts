@@ -4,7 +4,6 @@ import type {
   JournalInput,
   Purpose,
   RuleStatus,
-  StatementAccountInput,
   StatementColumnSuggestionOptions,
   StatementColumnSuggestionResponse,
   StatementCommitOptions,
@@ -57,14 +56,6 @@ export const importBatchesQuery = (entityId: string) =>
     queryFn: async () =>
       (await unwrap(await entityApi.statements.imports.$get({ param: { entityId } }))).batches,
   });
-
-/** 取込元の口座の対応を保存する（§2.2） */
-export const putStatementAccount = async (
-  entityId: string,
-  name: string,
-  json: StatementAccountInput,
-) =>
-  unwrap(await entityApi["statement-accounts"][":name"].$put({ param: { entityId, name }, json }));
 
 // 取込の 3 つの API は multipart（`file` と `options` の JSON。007 contracts §2）。
 // hc の型つきの `form` に頼らず、002 と同じ `uploadForm` で送り、応答の型は schema の型で指定する

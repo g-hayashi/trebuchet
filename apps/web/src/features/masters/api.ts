@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { PartnerInput, PartnerProfileInput, TagCreate } from "@trebuchet/schema";
+import type { PartnerProfileInput, TagCreate } from "@trebuchet/schema";
 import { api, type QueryItem, unwrap } from "@/lib/api";
 
 // 取引先・メモタグの API（001 contracts/http-api.md）
@@ -23,12 +23,6 @@ export const tagsQuery = (entityId: string) =>
     queryKey: masterKeys.tags(entityId),
     queryFn: async () => (await unwrap(await entityApi.tags.$get({ param: { entityId } }))).tags,
   });
-
-export const postPartner = async (entityId: string, json: PartnerInput) =>
-  unwrap(await entityApi.partners.$post({ param: { entityId }, json }));
-
-export const patchPartner = async (entityId: string, partnerId: string, json: PartnerInput) =>
-  unwrap(await entityApi.partners[":partnerId"].$patch({ param: { entityId, partnerId }, json }));
 
 /** 取引先と請求の条件を 1 回で追加する（011 R15。`billingTerms` が null なら条件なし） */
 export const postPartnerProfile = async (entityId: string, json: PartnerProfileInput) =>

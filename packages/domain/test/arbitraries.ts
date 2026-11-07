@@ -209,21 +209,3 @@ export function dateInPeriodArb(period: FiscalPeriod): fc.Arbitrary<string> {
     return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
   });
 }
-
-export type JournalWithVoidFlag = { date: string; lines: LineDraft[]; voided: boolean };
-
-/** 取消フラグ付きの仕訳の列 */
-export function journalSequenceArb(
-  accounts: readonly Account[],
-  period: FiscalPeriod,
-  options: { maxLength?: number } = {},
-): fc.Arbitrary<JournalWithVoidFlag[]> {
-  return fc.array(
-    fc.record({
-      date: dateInPeriodArb(period),
-      lines: balancedLinesArb(accounts),
-      voided: fc.boolean(),
-    }),
-    { maxLength: options.maxLength ?? 30 },
-  );
-}

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { decryptBackup, encryptBackup, readBackupHeader } from "../src/backup/crypto.ts";
+import { decryptBackup, encryptBackup } from "../src/backup/crypto.ts";
 import { recoveryFixture } from "./backup-fixtures.ts";
 
 const NOW = { registry: 3, tenant: 5 };
@@ -78,7 +78,6 @@ describe("版の完全一致", () => {
     });
     expect(open(file)).toEqual({ ok: false, error: "VERSION_MISMATCH" });
     expect(open(file, randomBytes(32))).toEqual({ ok: false, error: "VERSION_MISMATCH" });
-    expect(readBackupHeader(file)).toEqual({ ok: false, error: "VERSION_MISMATCH" });
   });
 
   it("鍵・包みの形が違うヘッダーは、鍵を導出せずに INVALID", () => {
@@ -106,17 +105,6 @@ describe("版の完全一致", () => {
     for (const edit of edits) {
       const file = rewriteHeader(same, edit);
       expect(open(file)).toEqual({ ok: false, error: "INVALID" });
-      expect(readBackupHeader(file)).toEqual({ ok: false, error: "INVALID" });
-    }
-  });
-
-  it("readBackupHeader は認証せずにヘッダーと recovery の包みを返す", () => {
-    const r = readBackupHeader(same);
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.value.header.macId).toBe("mac-0001");
-      expect(Buffer.from(r.value.recoveryWrap.wrapped)).toEqual(Buffer.from(recovery.wrap.wrapped));
-      expect(Buffer.from(r.value.recoveryWrap.salt)).toEqual(Buffer.from(recovery.wrap.salt));
     }
   });
 });

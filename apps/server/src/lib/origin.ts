@@ -10,7 +10,6 @@ export type RemoteSettings = { enabled: boolean; host: string | null };
 export type GetRemoteSettings = () => Promise<RemoteSettings>;
 
 const REMOTE_DISABLED: RemoteSettings = { enabled: false, host: null };
-export const getRemoteSettingsDisabled: GetRemoteSettings = async () => REMOTE_DISABLED;
 
 /** server が待ち受けるポート（`main.ts` の待ち受けと、tailscale serve の転送先で共有する） */
 export const SERVER_PORT = 8787;
