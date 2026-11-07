@@ -109,7 +109,7 @@ description: "Task list for 009-depreciation-deferred"
 - [X] T025 文書を更新する: `AGENTS.md` に「定額法・一括償却資産・開業費（009）」の節、「決算書（003）」の節の少額の特例だけの記述の修正、「開発の進め方」の不変条件の索引の記述（INV-1〜50）を INV-1〜60 に直す（内容は R17/T025）、`docs/requirements.md` の FR-10 の状態（決算の残り）、`docs/adr/0005-closing-adjustments-as-journals.md` の「関連」に ADR 0012
 - [X] T026 **（メイン）** 全体の検証: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`。落ちたら implementer に直させる
 - [X] T027 **（利用者の端末）** `pnpm --filter @trebuchet/web e2e`（既存の E2E が壊れていないこと）と、quickstart §2 の手動確認（利用者が `TREBUCHET_DATA_DIR="$PWD/.tmp/quickstart-009" pnpm dev` を起動し、implementer にブラウザの MCP の snapshot で手順 1〜11 を確かめさせる）。画面の文言と金額を quickstart.md に合わせ、手順2〜7 の所要時間を計る（SC-004: 資産 1 件の登録から仕訳の登録まで 3 分以内）
-- [ ] T028 **（保留: 2026-11-02 利用者の判断。P3、手の空いたときに行う）** **（メイン）** 実データで `pnpm verify:tax-return` を実行し（quickstart §3。`work/` の JSON は利用者が T024 の形で用意する）、`ASSET_REGISTER_MISMATCH` と欄 18 の不一致が 0 件であることを確かめる。結果の数値・資産名はリポジトリに書かない。一致しなければ原因を調べて直す
+- [X] T028 **（保留: 2026-11-02 利用者の判断。P3、手の空いたときに行う）** **（メイン）** 実データで `pnpm verify:tax-return` を実行し（quickstart §3。`work/` の JSON は利用者が T024 の形で用意する）、`ASSET_REGISTER_MISMATCH` と欄 18 の不一致が 0 件であることを確かめる。結果の数値・資産名はリポジトリに書かない。一致しなければ原因を調べて直す。**取り下げ（2026-11-07 利用者の判断）**: closing の JSON を作らない（手間に見合わない）。計算は合成データの自動テストで確かめてある。スクリプトは残す
 
 ---
 
