@@ -169,3 +169,73 @@ describe("源泉徴収（013 R8・FR-005）", () => {
     expect(screen.queryByText(/差引請求額/)).not.toBeInTheDocument();
   });
 });
+
+describe("源泉徴収の分かりやすさ（013）", () => {
+  const PAYMENT = {
+    id: "pay1",
+    receivedOn: "2026-11-20",
+    amount: 299_370,
+    feeAmount: 0,
+    withholdingAmount: 30_630,
+    depositAccountId: "a1",
+    depositSubAccountId: null,
+    journalId: "j3",
+    voidedAt: null,
+    voidReason: null,
+    voidJournalId: null,
+  };
+  const WITHHELD = {
+    ...DETAIL,
+    total: 330_000,
+    remaining: 330_000,
+    withholdingBase: 300_000,
+    withholdingTax: 30_630,
+    netAmount: 299_370,
+    withholdingRemaining: 30_630,
+  };
+  const NOTE =
+    "残額は源泉徴収前の額です。入金の消し込みで、振り込まれた額と源泉徴収税額を合わせて充てます。";
+
+  it("入金の表に「源泉徴収税額」の列を出し、入金ごとの額を入れる", async () => {
+    setup({
+      ...WITHHELD,
+      paid: 330_000,
+      remaining: 0,
+      status: "paid",
+      withholdingPaid: 30_630,
+      withholdingRemaining: 0,
+      payments: [PAYMENT],
+    });
+    const table = await screen.findByRole("table", { name: "消し込みの一覧" });
+    expect(within(table).getByRole("columnheader", { name: "源泉徴収税額" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "30,630" })).toBeInTheDocument();
+  });
+
+  it("請求書の源泉徴収税額も入金の源泉徴収税額も 0 なら、列を出さない", async () => {
+    setup({
+      ...DETAIL,
+      paid: 100_000,
+      remaining: 305_000,
+      payments: [{ ...PAYMENT, amount: 100_000, withholdingAmount: 0 }],
+    });
+    const table = await screen.findByRole("table", { name: "消し込みの一覧" });
+    expect(
+      within(table).queryByRole("columnheader", { name: "源泉徴収税額" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("源泉徴収税額があるとき、残額の後に「源泉徴収前の額」の説明を添える", async () => {
+    setup(WITHHELD);
+    await screen.findByRole("heading", { name: "請求書 2026-0001" });
+    const remaining = screen.getByText("残額 330,000 円");
+    const note = screen.getByText(NOTE);
+    expect(note).toBeVisible();
+    expect(remaining.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("源泉徴収税額が 0 なら、残額の説明を出さない", async () => {
+    setup();
+    await screen.findByRole("heading", { name: "請求書 2026-0001" });
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+  });
+});

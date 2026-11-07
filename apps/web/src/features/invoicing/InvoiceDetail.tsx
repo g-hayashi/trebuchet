@@ -39,6 +39,9 @@ export function InvoiceDetail({
   const [voidingPayment, setVoidingPayment] = useState<string | null>(null);
   const voided = invoice.status === "voided";
   const summary = invoiceTaxSummary(invoice);
+  // 源泉徴収のない請求書（005）では列を出さない
+  const showWithholdingColumn =
+    invoice.withholdingTax > 0 || invoice.payments.some((p) => p.withholdingAmount > 0);
 
   // 印刷（PDF に保存）のファイル名の既定になるので、開いている間だけ title を請求番号にする
   const invoiceNo = invoice.invoiceNo;
@@ -151,6 +154,11 @@ export function InvoiceDetail({
             )}
             <p className="text-sm">{`入金 ${formatYen(invoice.paid)} 円`}</p>
             <p className="text-sm">{`残額 ${formatYen(invoice.remaining)} 円`}</p>
+            {invoice.withholdingTax > 0 && (
+              <p className="text-xs text-muted-foreground">
+                残額は源泉徴収前の額です。入金の消し込みで、振り込まれた額と源泉徴収税額を合わせて充てます。
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-4 text-sm">
@@ -181,6 +189,9 @@ export function InvoiceDetail({
                     <TableHead>入金日</TableHead>
                     <TableHead className="text-right">入金額</TableHead>
                     <TableHead className="text-right">振込手数料</TableHead>
+                    {showWithholdingColumn && (
+                      <TableHead className="text-right">源泉徴収税額</TableHead>
+                    )}
                     <TableHead>状態</TableHead>
                     <TableHead>仕訳</TableHead>
                     <TableHead />
@@ -196,6 +207,11 @@ export function InvoiceDetail({
                       <TableCell className="text-right tabular-nums">
                         {formatYen(p.feeAmount)}
                       </TableCell>
+                      {showWithholdingColumn && (
+                        <TableCell className="text-right tabular-nums">
+                          {formatYen(p.withholdingAmount)}
+                        </TableCell>
+                      )}
                       <TableCell>
                         {p.voidedAt === null ? (
                           "有効"

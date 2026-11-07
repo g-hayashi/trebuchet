@@ -71,6 +71,25 @@ describe("取引先の画面（011 FR-049）", () => {
     expect(within(rowC).getByText("使用停止")).toBeInTheDocument();
   });
 
+  it("請求の条件の欄は、源泉徴収ありのときだけ「・源泉徴収あり」を添える", async () => {
+    setup([
+      {
+        ...HOURLY,
+        billingType: "monthly",
+        unitPrice: null,
+        monthlyAmount: 1_205_000,
+        withholding: true,
+      },
+      { ...HOURLY, partnerId: "p2", partnerName: "B 商事", withholding: false },
+    ]);
+    const table = await screen.findByRole("table");
+    const rowA = within(table).getByRole("row", { name: /株式会社A/ });
+    expect(within(rowA).getByText("月額 1,205,000 円・源泉徴収あり")).toBeInTheDocument();
+    const rowB = within(table).getByRole("row", { name: /B 商事/ });
+    expect(within(rowB).getByText("時間単価 10,000 円")).toBeInTheDocument();
+    expect(within(rowB).queryByText(/源泉徴収あり/)).not.toBeInTheDocument();
+  });
+
   it("検索で名前とメモを絞り込み、見つからなければ知らせる", async () => {
     setup();
     const user = userEvent.setup();
