@@ -20,6 +20,7 @@ const entity = {
   name: "個人事業A",
   kind: "individual",
   createdAt: "2026-01-01T00:00:00.000Z",
+  demo: false,
 } as const;
 
 beforeEach(() => {
@@ -261,12 +262,14 @@ const entityA = {
   name: "個人事業A",
   kind: "individual",
   createdAt: "2026-01-01T00:00:00.000Z",
+  demo: false,
 } as const;
 const entityB = {
   id: "0190a000-0000-7000-8000-00000000000b",
   name: "株式会社B",
   kind: "corporation",
   createdAt: "2026-02-01T00:00:00.000Z",
+  demo: false,
 } as const;
 
 const LAST_ENTITY_KEY = "trebuchet:lastEntityId";

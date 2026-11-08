@@ -1,4 +1,4 @@
-import type { AuthStore, BackupStore, Clock, SecretStore } from "@trebuchet/domain";
+import type { AuthStore, BackupStore, Clock, DemoAssets, SecretStore } from "@trebuchet/domain";
 import { Hono } from "hono";
 import {
   aiSettingsStore,
@@ -101,6 +101,8 @@ export type AppOptions = {
    * `reader` は外部の AI による読み取り（既定は `ai` の設定から作った `createReceiptReader`）
    */
   receipts?: Partial<ReceiptRuntime>;
+  /** デモ事業（014）の素材の差し替え口。既定は `apps/server/assets/demo/` の同梱の画像。テストは途中の失敗を起こす偽物を渡す */
+  demo?: { assets?: DemoAssets };
   /** WebAuthn の検証。既定は @simplewebauthn/server。ルートのテストは偽物を渡す */
   webauthn?: WebAuthnVerifier;
   /** 解錠中の DK（008 の D3）。既定は deps.ts の vault（背景の処理が解錠・施錠を受け取る） */
@@ -179,7 +181,15 @@ export function createApp(options: AppOptions = {}) {
         tailscale: options.tailscale ?? createTailscaleCli({ port: SERVER_PORT }),
       }),
     )
-    .route("/entities", entitiesRoutes({ clock }))
+    .route(
+      "/entities",
+      entitiesRoutes({
+        clock,
+        files: options.receipts?.files ?? defaultReceiptRuntime.files,
+        imageTool: options.receipts?.imageTool ?? defaultReceiptRuntime.imageTool,
+        ...(options.demo === undefined ? {} : { demo: options.demo }),
+      }),
+    )
     .route(
       "/entities/:entityId",
       tenantRoutes({

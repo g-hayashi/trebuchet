@@ -394,12 +394,14 @@ describe("DrizzleRegistryRepository", () => {
       name: "法人",
       kind: "corporation" as const,
       createdAt: "2026-10-18T00:00:01.000Z",
+      demo: false,
     };
     const first = {
       id: randomUUIDv7(),
       name: "個人",
       kind: "individual" as const,
       createdAt: "2026-10-18T00:00:00.000Z",
+      demo: false,
     };
     registry.insertEntity(later);
     registry.insertEntity(first);
@@ -419,6 +421,7 @@ describe("DrizzleRegistryRepository", () => {
       name: "個人",
       kind: "individual",
       createdAt: "2026-10-18T00:00:00.000Z",
+      demo: false,
     });
     const row = registryDb.$client.prepare("SELECT db_file FROM entities WHERE id = ?").get(id);
     expect(row).toEqual({ db_file: `tenants/${id}.sqlite` });
@@ -453,6 +456,7 @@ describe("createEntity と DB のリポジトリの結合", () => {
         name: "個人事業",
         kind: "individual",
         createdAt: "2026-10-18T00:00:00.000Z",
+        demo: false,
       },
     ]);
   });

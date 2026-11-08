@@ -1,7 +1,8 @@
 import type { EntitySummary, Result } from "../types.ts";
 import { domainError, err, ok } from "../types.ts";
 
-export type EntityStatus = "active" | "archived" | "deleting";
+/** `preparing` はデモの投入中（一覧・取得・バックアップの対象外。014 R2） */
+export type EntityStatus = "active" | "archived" | "deleting" | "preparing";
 export type ManagedEntity = EntitySummary & { status: EntityStatus };
 export interface EntityLifecycleStore {
   getManagedEntity(id: string): ManagedEntity | undefined;
@@ -17,7 +18,9 @@ export function manageEntity(
   confirmationName?: string,
 ): Result<null> {
   const entity = store.getManagedEntity(id);
-  if (!entity) return err(domainError("ENTITY_NOT_FOUND", "事業体が見つかりません"));
+  // 準備中の事業体は一覧に出さない。利用者の操作（非表示・復元・完全削除）の対象にしない
+  if (!entity || entity.status === "preparing")
+    return err(domainError("ENTITY_NOT_FOUND", "事業体が見つかりません"));
   if (action === "purge") {
     if (entity.status === "active") {
       return err(domainError("VALIDATION", "完全に削除する前に事業体を非表示にしてください"));

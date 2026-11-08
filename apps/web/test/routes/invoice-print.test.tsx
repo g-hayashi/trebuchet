@@ -10,8 +10,16 @@ import { renderRoute } from "../render-route";
 
 const BASE = "/api/entities/e1";
 
-function renderDetail(detail: unknown = INVOICE_DETAIL) {
-  mockApi({ [`GET ${BASE}/invoices/inv1`]: () => ok(detail) });
+function renderDetail(detail: unknown = INVOICE_DETAIL, demo = false) {
+  mockApi({
+    [`GET ${BASE}/invoices/inv1`]: () => ok(detail),
+    "GET /api/entities": () =>
+      ok({
+        entities: [
+          { id: "e1", name: "事業体", kind: "individual", createdAt: "2026-01-01T00:00:00Z", demo },
+        ],
+      }),
+  });
   return renderRoute(Route, {
     path: "/e/$entityId/invoices/$invoiceId",
     url: "/e/e1/invoices/inv1",
@@ -117,6 +125,24 @@ describe("請求書の印刷（詳細の画面から直接。US1 FR-011・012、
     });
     const sheet = await findSheet();
     expect(within(sheet).getAllByText("山田 太郎")).toHaveLength(1);
+  });
+
+  it("demo の事業体の請求書には、印刷にも「デモ（架空のデータ）」を出す。通常の事業体では出さない（014 T007）", async () => {
+    const { unmount } = renderDetail(INVOICE_DETAIL, true);
+    const sheet = await findSheet();
+    expect(await within(sheet).findByText("デモ（架空のデータ）")).toBeInTheDocument();
+    unmount();
+
+    renderDetail(INVOICE_DETAIL, false);
+    const normal = await findSheet();
+    // 事業体の一覧の取得が終わるのを待ってから、印が無いことを確かめる
+    await waitFor(() =>
+      expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).endsWith("/api/entities"))).toBe(
+        true,
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(within(normal).queryByText("デモ（架空のデータ）")).not.toBeInTheDocument();
   });
 
   it("請求書は data-print-root の中に 1 通だけ置く", async () => {

@@ -5,6 +5,7 @@ import {
   authStore,
   backupRunner,
   backupStore,
+  cleanupDemoLeftovers,
   clock,
   entityIds,
   fmServer,
@@ -47,6 +48,11 @@ const background = startBackgroundServices({
   recurring: { entities: entityIds, openUnitOfWork: openRecurringUnitOfWork, ids },
   fm: fmServer,
   vault,
+  // 投入中のまま落ちたデモ事業（014 R2）。registry を開けるのは解錠の後
+  onUnlock: () => {
+    const { failed } = cleanupDemoLeftovers();
+    if (failed > 0) console.error(`デモ事業の作りかけを ${failed} 件消せませんでした`);
+  },
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

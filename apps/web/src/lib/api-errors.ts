@@ -230,6 +230,18 @@ export function describeError(error: unknown): ErrorDescription {
         message: "バックアップは実行中です。終わるまでお待ちください。",
         details: [],
       };
+    case "DEMO_NOT_AVAILABLE":
+      return {
+        message:
+          "事業体があるため、デモ事業は作れません。事業体を非表示にするか、完全に削除してから試してください。",
+        details: [],
+      };
+    case "DEMO_FAILED":
+      return {
+        message:
+          "デモ事業を作れませんでした。作りかけのデータは残っていません。もう一度お試しください。",
+        details: [],
+      };
     case "PAYMENT_EXCEEDS_BALANCE": {
       const remaining = asNumber(error.details?.remaining);
       return {

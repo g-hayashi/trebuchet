@@ -603,8 +603,23 @@ export interface ReceiptReader {
 export interface RegistryRepository {
   listEntities(): EntitySummary[];
   getEntity(id: string): EntitySummary | undefined;
-  insertEntity(entity: EntitySummary): void;
+  /** `status` の既定は `active`。`preparing` の行は `listEntities`・`getEntity` に出ない */
+  insertEntity(entity: EntitySummary & { status?: "active" | "preparing" | undefined }): void;
   renameEntity(id: string, name: string): void;
+  /** `preparing` → `active`。`preparing` 以外の行は変えない */
+  activateEntity(id: string): void;
+  /** 投入中のまま残った行（起動時の後始末用。014 R2）。作成日時の順 */
+  listPreparingEntities(): EntitySummary[];
+}
+
+/**
+ * デモ事業の素材（014 R4）。製品に同梱した合成の画像。domain は `node:fs` を使えないので、
+ * server が読んで渡す。`key` は `DemoPlan.receipts[].asset`（`receipt-01` など）
+ */
+export interface DemoAssets {
+  receiptImage(key: string): Uint8Array;
+  /** 画像の寸法と色（server が `ReceiptImageTool.probe` で先に調べて渡す。調べられなければ null） */
+  receiptProbe(key: string): ReceiptProbe | null;
 }
 
 /** macOS キーチェーン（R12）。テストはメモリの偽物。キーチェーンが使えない環境ではメモリの実装 */

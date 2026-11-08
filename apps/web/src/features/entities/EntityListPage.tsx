@@ -29,6 +29,7 @@ import {
   archivedEntitiesKey,
   archivedEntitiesQuery,
   archiveEntity,
+  createDemoEntity,
   createEntity,
   entitiesQuery,
   entityKeys,
@@ -124,6 +125,11 @@ function EntityList() {
                     >
                       {e.name}
                     </Link>
+                    {e.demo && (
+                      <span className="ml-2 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">
+                        デモ
+                      </span>
+                    )}
                     {e.id === lastId && (
                       <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
                         最後に開いた
@@ -159,9 +165,12 @@ function EntityList() {
           </Table>
         ) : (
           entities && (
-            <p className="text-sm text-muted-foreground">
-              事業体がまだありません。右のフォームから作成してください。
-            </p>
+            <>
+              <p className="text-sm text-muted-foreground">
+                事業体がまだありません。右のフォームから作成してください。
+              </p>
+              <DemoEntityStart />
+            </>
           )
         )}
         <p className="mt-4 text-sm text-muted-foreground">
@@ -268,6 +277,32 @@ function EntityList() {
         </Dialog>
       </CardContent>
     </Card>
+  );
+}
+
+/** 事業体が 0 件のときの、デモ事業（架空のデータ。014）の作成。成功したらデモのホームへ移る */
+function DemoEntityStart() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const create = useMutation({
+    mutationFn: createDemoEntity,
+    onSuccess: async (entity) => {
+      await queryClient.invalidateQueries({ queryKey: entityKeys.all });
+      await navigate({ to: "/e/$entityId", params: { entityId: entity.id } });
+    },
+  });
+  return (
+    <div className="mt-4 grid gap-3">
+      <p className="text-sm text-muted-foreground">
+        架空のデータで機能を試せる事業体を作ります。試し終わったら削除できます。
+      </p>
+      <ApiErrorMessage error={create.error} />
+      <div>
+        <Button variant="outline" disabled={create.isPending} onClick={() => create.mutate()}>
+          {create.isPending ? "作成中…" : "デモ事業を作って試す"}
+        </Button>
+      </div>
+    </div>
   );
 }
 

@@ -34,6 +34,9 @@ import {
   type ClosingStore,
   type ClosingUnitOfWork,
   type CommitAdjustmentDeps,
+  cleanupPreparingEntities,
+  type DemoAssets,
+  type DemoEntityDeps,
   domainError,
   err,
   type HomeDeps,
@@ -343,6 +346,50 @@ export function receiptReadingDeps(
     images: runtime.imageTool,
     reader: runtime.reader,
   };
+}
+
+/**
+ * デモ事業（014）の作成の依存。作る事業体ごとに、テナントの DB を開いて既存のユースケースの依存を組み立てる。
+ * AI のポートは渡さない（R7、INV-45）。証憑のファイルの置き場は `ReceiptRuntime.files`（テストは差し替える）
+ */
+export function demoEntityDeps(options: {
+  clock: Clock;
+  assets: DemoAssets;
+  files?: ReceiptRuntime["files"];
+}): DemoEntityDeps {
+  const { clock, assets } = options;
+  const registry = registryRepository();
+  return {
+    create: {
+      registry,
+      openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
+      ids,
+      clock,
+    },
+    entities: registry,
+    tenant: (entityId) => {
+      const db = openTenant(entityId);
+      const statements = statementDeps(db, clock);
+      return {
+        masters: masterDeps(db, clock),
+        journals: journalDeps(db, clock),
+        closing: closingSettingsDeps(db, clock),
+        invoicing: invoicingDeps(db, clock),
+        recurring: recurringDeps(db, clock),
+        receipts: receiptDeps(db, clock, entityId, {
+          files: options.files ?? defaultReceiptRuntime.files,
+        }),
+        statements: { uow: statements.uow, ids: statements.ids, clock: statements.clock },
+      };
+    },
+    assets,
+  };
+}
+
+/** 解錠の後の後片づけ: 投入中のまま残ったデモ事業（`preparing`）を消す（014 R2）。1 件の失敗で止めない */
+export function cleanupDemoLeftovers(): { purged: number; failed: number } {
+  const registry = registryRepository();
+  return cleanupPreparingEntities({ create: { registry }, entities: registry });
 }
 
 /** 定期仕訳の自動登録（スケジューラー）が判定する事業体の ID。registry の全事業体 */

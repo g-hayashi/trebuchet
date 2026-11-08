@@ -41,7 +41,13 @@ describe("createEntity（US1）", () => {
     });
 
     expect(registry.listEntities()).toEqual([
-      { id: entity.id, name: "個人事業", kind: "individual", createdAt: entity.createdAt },
+      {
+        id: entity.id,
+        name: "個人事業",
+        kind: "individual",
+        createdAt: entity.createdAt,
+        demo: false,
+      },
     ]);
 
     const tenant = tenants.get(entity.id);
@@ -154,6 +160,30 @@ describe("createEntity（US1）", () => {
     expect(registry.listEntities()).toEqual([]);
     expect(failing.getProfile()).toBeUndefined();
     expect(failing.listAccounts()).toEqual([]);
+  });
+
+  it("status: preparing・demo: true を registry に渡す（一覧には出ない）", () => {
+    const { deps, registry } = setup();
+    const result = createEntity(deps, { ...individual, status: "preparing", demo: true });
+    if (!result.ok) throw new Error(result.error.message);
+    expect(registry.listEntities()).toEqual([]);
+    expect(registry.listPreparingEntities()).toEqual([
+      {
+        id: result.value.id,
+        name: "個人事業",
+        kind: "individual",
+        createdAt: "2026-10-18T01:02:03.000Z",
+        demo: true,
+      },
+    ]);
+  });
+
+  it("status・demo を省略すると active・demo: false で登録する", () => {
+    const { deps, registry } = setup();
+    const result = createEntity(deps, individual);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(registry.listPreparingEntities()).toEqual([]);
+    expect(registry.listEntities()).toMatchObject([{ id: result.value.id, demo: false }]);
   });
 
   it("registry への登録が失敗したら例外になり、事業体は一覧に現れない", () => {

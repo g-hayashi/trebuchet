@@ -1,15 +1,71 @@
 import { DrizzleMasterRepository, openTenant } from "@trebuchet/db";
-import { createEntity, manageEntity, renameEntity } from "@trebuchet/domain";
+import {
+  createDemoEntity,
+  createEntity,
+  type DemoAssets,
+  manageEntity,
+  renameEntity,
+} from "@trebuchet/domain";
 import { EntityCreate, EntityPatch } from "@trebuchet/schema";
 import { Hono } from "hono";
-import { ids, type RouteOptions, registryRepository } from "../deps.ts";
+import { loadDemoAssets } from "../demo-assets.ts";
+import {
+  defaultReceiptRuntime,
+  demoEntityDeps,
+  ids,
+  type ReceiptRuntime,
+  type RouteOptions,
+  registryRepository,
+} from "../deps.ts";
 import { fail, respond } from "../errors.ts";
+import { todayOf } from "../lib/today.ts";
 import { hasActiveEntityRequests, type TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 
+/** デモ事業を作っている最中か（プロセス内の排他。014 R6）。同時の 2 つ目は 409 */
+let creatingDemo = false;
+
 /** `/api/entities`（テナントのミドルウェアの外） */
-export function entitiesRoutes({ clock }: RouteOptions) {
+export function entitiesRoutes({
+  clock,
+  demo,
+  files,
+  imageTool,
+}: RouteOptions & {
+  /** デモ事業の素材の差し替え口（既定は同梱の画像。寸法は `imageTool` で調べる） */
+  demo?: { assets?: DemoAssets };
+  /** 証憑のファイルの置き場の差し替え口（`createApp({ receipts })` と同じもの） */
+  files?: ReceiptRuntime["files"];
+  /** 同梱の画像の寸法を調べる変換器（`createApp({ receipts })` と同じもの。既定は sips） */
+  imageTool?: ReceiptRuntime["imageTool"];
+}) {
   return new Hono()
+    .post("/demo", async (c) => {
+      if (creatingDemo) {
+        return fail(c, {
+          code: "DEMO_NOT_AVAILABLE",
+          message: "事業体があるため、デモ事業は作れません",
+        });
+      }
+      // 排他は await の前に取る（寸法の読み取りの間に 2 つ目が入らないように）
+      creatingDemo = true;
+      try {
+        // createDemoEntity は同期。寸法は先に調べる（失敗は null で続ける）
+        const assets =
+          demo?.assets ?? (await loadDemoAssets(imageTool ?? defaultReceiptRuntime.imageTool));
+        const result = createDemoEntity(
+          demoEntityDeps({
+            clock,
+            assets,
+            ...(files === undefined ? {} : { files }),
+          }),
+          { today: todayOf(clock) },
+        );
+        return respond(c, result, (entity) => c.json({ entity }, 201));
+      } finally {
+        creatingDemo = false;
+      }
+    })
     .get("/", (c) => c.json({ entities: registryRepository().listEntities() }, 200))
     .get("/archived", (c) => c.json({ entities: registryRepository().listArchivedEntities() }, 200))
     .post("/:entityId/archive", (c) => {

@@ -110,6 +110,8 @@ const ERROR_STATUS = {
   RECEIPT_CONVERSION_FAILED: 500,
   // 読み取りの記録の errorCode で出るだけで HTTP では返さない。値は型のために要る
   RECEIPT_READ_UNSUPPORTED: 422,
+  DEMO_NOT_AVAILABLE: 409,
+  DEMO_FAILED: 500,
 } as const satisfies Record<ErrorCode, ContentfulStatusCode>;
 
 export function errorBody(error: DomainError): ErrorResponse {

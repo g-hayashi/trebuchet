@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
+import { DemoBanner } from "@/components/layout/DemoBanner";
 import { EntityNav } from "@/components/layout/EntityNav";
 import { isMobileRoute } from "@/components/layout/MobileNav";
 import { PcRecommended } from "@/components/layout/PcRecommended";
@@ -21,6 +22,7 @@ function EntityLayout() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-4">
       {notFound && <p className="mb-2 text-sm text-muted-foreground">（事業体が見つかりません）</p>}
+      <DemoBanner entityId={entityId} />
       <PcRecommended />
       {/* スマホの幅の対象の画面は、2 段のメニューを出さず、ヘッダーのメニューに絞る（FR-059）。対象の外では出して、他の画面へ移れるようにする */}
       {mobile && isMobileRoute(pathname) ? null : <EntityNav entityId={entityId} />}
