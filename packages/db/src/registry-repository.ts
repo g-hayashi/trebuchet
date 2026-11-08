@@ -5,7 +5,7 @@ import type {
   ManagedEntity,
   RegistryRepository,
 } from "@trebuchet/domain";
-import { asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, ne, notInArray } from "drizzle-orm";
 import { entities } from "./schema/registry.ts";
 import { type RegistryDb, removeTenantData } from "./tenant-store.ts";
 
@@ -14,7 +14,19 @@ const summary = {
   name: entities.name,
   kind: entities.kind,
   createdAt: entities.createdAt,
+  isDemo: entities.isDemo,
 };
+
+type SummaryRow = { id: string; name: string; kind: EntitySummary["kind"]; createdAt: string };
+
+function toSummary(row: SummaryRow & { isDemo: number }): EntitySummary {
+  const { isDemo, ...rest } = row;
+  return { ...rest, demo: isDemo === 1 };
+}
+
+function toManaged(row: SummaryRow & { isDemo: number; status: EntityStatus }): ManagedEntity {
+  return { ...toSummary(row), status: row.status };
+}
 
 /** RegistryRepository の Drizzle（better-sqlite3）による実装 */
 export class DrizzleRegistryRepository implements RegistryRepository, EntityLifecycleStore {
@@ -31,20 +43,55 @@ export class DrizzleRegistryRepository implements RegistryRepository, EntityLife
       .from(entities)
       .where(eq(entities.status, "active"))
       .orderBy(asc(entities.createdAt), asc(entities.id))
-      .all();
+      .all()
+      .map(toSummary);
   }
 
+  /** 準備中（`preparing`）の行は返さない（014 R2） */
   getEntity(id: string): EntitySummary | undefined {
-    return this.db.select(summary).from(entities).where(eq(entities.id, id.toLowerCase())).get();
+    const row = this.db
+      .select(summary)
+      .from(entities)
+      .where(and(eq(entities.id, id.toLowerCase()), ne(entities.status, "preparing")))
+      .get();
+    return row === undefined ? undefined : toSummary(row);
   }
 
   /** DB ファイルは data ディレクトリからの相対パスで記録する（data ディレクトリを移動できるように） */
-  insertEntity(entity: EntitySummary): void {
+  insertEntity(entity: EntitySummary & { status?: "active" | "preparing" | undefined }): void {
     const id = entity.id.toLowerCase();
     this.db
       .insert(entities)
-      .values({ ...entity, id, dbFile: `tenants/${id}.sqlite` })
+      .values({
+        id,
+        name: entity.name,
+        kind: entity.kind,
+        createdAt: entity.createdAt,
+        isDemo: entity.demo ? 1 : 0,
+        status: entity.status ?? "active",
+        dbFile: `tenants/${id}.sqlite`,
+      })
       .run();
+  }
+
+  /** `preparing` の行だけを `active` にする */
+  activateEntity(id: string): void {
+    this.db
+      .update(entities)
+      .set({ status: "active" })
+      .where(and(eq(entities.id, id.toLowerCase()), eq(entities.status, "preparing")))
+      .run();
+  }
+
+  /** 投入中のまま残った行。作成日時の順 */
+  listPreparingEntities(): EntitySummary[] {
+    return this.db
+      .select(summary)
+      .from(entities)
+      .where(eq(entities.status, "preparing"))
+      .orderBy(asc(entities.createdAt), asc(entities.id))
+      .all()
+      .map(toSummary);
   }
 
   renameEntity(id: string, name: string): void {
@@ -55,17 +102,19 @@ export class DrizzleRegistryRepository implements RegistryRepository, EntityLife
     return this.db
       .select({ ...summary, status: entities.status })
       .from(entities)
-      .where(ne(entities.status, "active"))
+      .where(notInArray(entities.status, ["active", "preparing"]))
       .orderBy(asc(entities.createdAt), asc(entities.id))
-      .all();
+      .all()
+      .map(toManaged);
   }
 
   getManagedEntity(id: string): ManagedEntity | undefined {
-    return this.db
+    const row = this.db
       .select({ ...summary, status: entities.status })
       .from(entities)
       .where(eq(entities.id, id.toLowerCase()))
       .get();
+    return row === undefined ? undefined : toManaged(row);
   }
 
   setEntityStatus(id: string, status: EntityStatus): void {

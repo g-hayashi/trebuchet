@@ -10,6 +10,7 @@ const entity = {
   name: "合成事業",
   kind: "individual",
   createdAt: "2026-01-01T00:00:00Z",
+  demo: false,
 };
 afterEach(() => vi.unstubAllGlobals());
 

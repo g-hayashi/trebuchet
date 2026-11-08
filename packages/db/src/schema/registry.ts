@@ -13,13 +13,16 @@ export const entities = sqliteTable(
     kind: text("kind", { enum: ["individual", "corporation"] }).notNull(),
     dbFile: text("db_file").notNull().unique(),
     createdAt: text("created_at").notNull(),
-    status: text("status", { enum: ["active", "archived", "deleting"] })
+    status: text("status", { enum: ["active", "archived", "deleting", "preparing"] })
       .notNull()
       .default("active"),
+    /** デモ事業の印（014 R3）。作成後に変えない */
+    isDemo: integer("is_demo").notNull().default(0),
   },
   (t) => [
     check("entities_kind", sql`${t.kind} IN ('individual', 'corporation')`),
-    check("entities_status", sql`${t.status} IN ('active', 'archived', 'deleting')`),
+    check("entities_status", sql`${t.status} IN ('active', 'archived', 'deleting', 'preparing')`),
+    check("entities_is_demo", sql`${t.isDemo} IN (0, 1)`),
   ],
 );
 

@@ -98,7 +98,14 @@ function sanitizeRegistryCopy(file: string, hasTenant: (entityId: string) => boo
     const orphans = (
       db.prepare("SELECT id, status FROM entities").all() as { id: string; status: string }[]
     )
-      .filter((r) => r.status === "deleting" || !isValidEntityId(r.id) || !hasTenant(r.id))
+      // deleting・preparing（デモの投入中。014 R2）の行は写さない。is_demo は他の列と同じく写る
+      .filter(
+        (r) =>
+          r.status === "deleting" ||
+          r.status === "preparing" ||
+          !isValidEntityId(r.id) ||
+          !hasTenant(r.id),
+      )
       .map((r) => r.id);
     db.transaction(() => {
       for (const t of triggers) db.exec(`DROP TRIGGER "${t.name.replaceAll('"', '""')}"`);

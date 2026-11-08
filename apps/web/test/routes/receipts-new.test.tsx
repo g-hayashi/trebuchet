@@ -51,6 +51,7 @@ describe("証憑の追加と連続入力（T023）", () => {
             name: `合成事業${id}`,
             kind: "individual",
             createdAt: "2026-01-01T00:00:00.000Z",
+            demo: false,
           })),
         }),
     });

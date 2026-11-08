@@ -113,6 +113,9 @@ export const ErrorCode = z.enum([
   "RECEIPT_FILE_UNREADABLE",
   "RECEIPT_CONVERSION_FAILED",
   "RECEIPT_READ_UNSUPPORTED",
+  // 014-demo-entity（contracts/http-api.md）
+  "DEMO_NOT_AVAILABLE",
+  "DEMO_FAILED",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 

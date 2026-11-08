@@ -36,6 +36,13 @@
       "when": 1794044879151,
       "tag": "0004_ai_local_default_off",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794116165922,
+      "tag": "0005_demo_entity",
+      "breakpoints": true
     }
   ]
 }

@@ -53,6 +53,8 @@ export function startBackgroundServices(
     /** 端末内の AI（`fm serve`。006 R10）。終了時に止める。起動は最初の推定のとき */
     fm?: Pick<FmServer, "stop">;
     vault: Vault;
+    /** 解錠のたびに（背景の処理を始める前に）1 回呼ぶ。失敗しても背景の処理は始める。デモ事業の作りかけの後始末に使う（014 R2） */
+    onUnlock?: () => void;
   },
 ): BackgroundServices {
   const removedSnapshots = removeStaleSnapshots(deps.tmpRoot);
@@ -61,6 +63,11 @@ export function startBackgroundServices(
 
   function start(): void {
     if (running !== null) return;
+    try {
+      deps.onUnlock?.();
+    } catch (e) {
+      console.error("onUnlock に失敗", e instanceof Error ? e.name : "unknown");
+    }
     const backup = startBackupScheduler(deps);
     const recurring = startRecurringScheduler({ ...deps.recurring, clock: deps.clock });
     running = { backup, recurring };

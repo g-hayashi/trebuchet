@@ -85,9 +85,12 @@ export type EntitySummary = {
   name: string;
   kind: EntityKind;
   createdAt: string;
+  /** デモ事業の印（registry の `is_demo`。作成後に変えない。014 R3） */
+  demo: boolean;
 };
 
-export type EntityProfile = EntitySummary & {
+/** テナントの DB のプロファイル。デモの印は registry だけが持つので含めない */
+export type EntityProfile = Omit<EntitySummary, "demo"> & {
   fiscalStartMonth: number;
 };
 

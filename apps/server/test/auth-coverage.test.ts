@@ -145,6 +145,17 @@ describe("INV-29 全ルートの保護", () => {
     expect(existsSync(registryFile())).toBe(false);
   });
 
+  it("デモ事業の作成（014 T005）は列挙に入り、保護されている。未サインインは 401", async () => {
+    const protectedKeys = new Set(protectedRoutes().map((r) => `${r.method} ${r.path}`));
+    expect(protectedKeys.has("POST /api/entities/demo")).toBe(true);
+    const res = await app.request("/api/entities/demo", {
+      method: "POST",
+      headers: { Host: TEST_HOST, Origin: TEST_ORIGIN },
+    });
+    expect(res.status).toBe(401);
+    expect((await errorOf(res)).code).toBe("UNAUTHENTICATED");
+  });
+
   it("ホームの要約（011 T008）は列挙に入り、保護されている", () => {
     const protectedKeys = new Set(protectedRoutes().map((r) => `${r.method} ${r.path}`));
     expect(protectedKeys.has("GET /api/entities/:entityId/home")).toBe(true);

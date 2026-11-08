@@ -16,6 +16,10 @@ export type CreateEntityInput = {
   kind: EntityKind;
   fiscalStartMonth: number;
   firstFiscalYear: number;
+  /** 既定は `active`。デモは `preparing` で作り、投入が済んだら `activateEntity` する（014 R2）。`POST /api/entities` からは渡さない */
+  status?: "active" | "preparing" | undefined;
+  /** デモ事業の印。既定は false（014 R3）。`POST /api/entities` からは渡さない */
+  demo?: boolean | undefined;
 };
 
 export type CreateEntityDeps = {
@@ -118,6 +122,8 @@ export function createEntity(
     name: profile.name,
     kind: profile.kind,
     createdAt: profile.createdAt,
+    demo: input.demo ?? false,
+    status: input.status ?? "active",
   });
   return ok(profile);
 }

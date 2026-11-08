@@ -64,6 +64,26 @@ describe("背景の処理を解錠に結びつける（008 の D7）", () => {
     expect(entities).toHaveBeenCalledTimes(2);
   });
 
+  it("解錠のたびに onUnlock を呼ぶ（施錠中は呼ばない。重なった解錠の知らせでは二重に呼ばない。014 T005）", async () => {
+    clearDataKey();
+    const vault = createVault({ store: env.auth });
+    const onUnlock = vi.fn();
+    const services = startBackgroundServices({
+      ...deps({ start: vi.fn() }, () => [], vault),
+      onUnlock,
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(onUnlock).not.toHaveBeenCalled();
+
+    vault.unlock(Buffer.from(TEST_DATA_KEY));
+    vault.unlock(Buffer.from(TEST_DATA_KEY));
+    await vi.waitFor(() => expect(onUnlock).toHaveBeenCalledTimes(1));
+    await vault.lock();
+    vault.unlock(Buffer.from(TEST_DATA_KEY));
+    await vi.waitFor(() => expect(onUnlock).toHaveBeenCalledTimes(2));
+    services.stop();
+  });
+
   it("施錠すると間隔の判定も止まる（タイマーが残らない）", async () => {
     vi.useFakeTimers();
     const vault = createVault({ store: env.auth });

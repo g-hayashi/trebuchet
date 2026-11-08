@@ -37,6 +37,9 @@ export const purgeEntity = async (entityId: string, name: string) =>
 export const createEntity = async (json: Parameters<typeof entitiesApi.$post>[0]["json"]) =>
   (await unwrap(await entitiesApi.$post({ json }))).entity;
 
+/** デモ事業（架空のデータの事業体。014）を作る。事業体があるときは 409 `DEMO_NOT_AVAILABLE` */
+export const createDemoEntity = async () => (await unwrap(await entitiesApi.demo.$post())).entity;
+
 export const patchEntity = async (
   entityId: string,
   json: Parameters<typeof entityApi.$patch>[0]["json"],

@@ -115,6 +115,7 @@ describe("GET /api/entities", () => {
       [a, "事業A", "individual"],
       [b, "事業B", "individual"],
     ]);
+    expect(entities.map((e) => e.demo)).toEqual([false, false]);
   });
 });
 

@@ -9,7 +9,14 @@ import { invoiceTaxSummary, quantityOf, recipientOf } from "./display";
  * （013）は差引請求額、ないときは合計。
  * 印刷の対象の絞り込みと余白は、全体の `src/print.css`（`[data-print-root]`）で行う
  */
-export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
+export function InvoicePrint({
+  invoice,
+  demo = false,
+}: {
+  invoice: InvoiceDetail;
+  /** デモの事業体（014）の請求書なら、印刷にも「デモ（架空のデータ）」を出す（print.css で隠さない） */
+  demo?: boolean;
+}) {
   const { issuer } = invoice;
   const summary = invoiceTaxSummary(invoice);
   const showBreakdown = invoice.taxDisplay === "separate" && invoice.taxBreakdown.length > 0;
@@ -19,6 +26,7 @@ export function InvoicePrint({ invoice }: { invoice: InvoiceDetail }) {
       className="invoice-sheet grid gap-6 text-sm"
     >
       <h2 className="text-center text-2xl font-semibold tracking-widest">請求書</h2>
+      {demo && <p className="text-center text-sm font-medium">デモ（架空のデータ）</p>}
 
       <div className="flex justify-between gap-6">
         <div className="grid content-start gap-1">

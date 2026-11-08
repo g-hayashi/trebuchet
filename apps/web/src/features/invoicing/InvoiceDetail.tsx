@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { InvoiceDetail as InvoiceDetailData } from "@trebuchet/schema";
 import { useEffect, useState } from "react";
@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { entitiesQuery } from "@/features/entities/api";
 import { formatDateTime, formatYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
 import { postInvoiceVoid, postPaymentVoid } from "./api";
@@ -35,6 +36,9 @@ export function InvoiceDetail({
   invoice: InvoiceDetailData;
 }) {
   const queryClient = useQueryClient();
+  // デモの事業体（014）は、印刷にも印を出す。一覧は骨組み（`DemoBanner`）と同じ query を共有する
+  const { data: entities } = useQuery(entitiesQuery());
+  const demo = entities?.find((e) => e.id === entityId)?.demo === true;
   const [voiding, setVoiding] = useState(false);
   const [voidingPayment, setVoidingPayment] = useState<string | null>(null);
   const voided = invoice.status === "voided";
@@ -296,7 +300,7 @@ export function InvoiceDetail({
 
       {/* 印刷するもの。画面では inline の display: none で隠し、印刷では src/print.css の !important で出す（011 FR-036）。hidden 属性は使わない（preflight の [hidden] は layer 内の !important で上書きできず、印刷が空白になる） */}
       <div data-print-root style={{ display: "none" }}>
-        <InvoicePrint invoice={invoice} />
+        <InvoicePrint invoice={invoice} demo={demo} />
       </div>
     </>
   );

@@ -56,7 +56,22 @@ const DEFAULT_AI_SETTINGS = {
 };
 
 const DEFAULT_ROUTES: Record<string, Handler> = {
+  "GET /api/entities": () => ok({ entities: [] }),
   "GET /api/entities/archived": () => ok({ entities: [] }),
+  // デモ事業の作成（014）。作れる
+  "POST /api/entities/demo": () =>
+    ok(
+      {
+        entity: {
+          id: "0190a000-0000-7000-8000-0000000000d1",
+          name: "デモ事業",
+          kind: "individual",
+          createdAt: "2026-11-08T03:00:00Z",
+          demo: true,
+        },
+      },
+      201,
+    ),
   "GET /api/auth/status": () => ok(DEFAULT_AUTH_STATUS),
   // 再認証（008）。パスキーの追加・削除と回復キーの再発行の前に、画面が呼ぶ。成功する
   "POST /api/auth/reauth/options": () => ok({ challenge: "reauth" }),
