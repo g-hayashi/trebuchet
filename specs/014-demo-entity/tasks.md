@@ -56,7 +56,7 @@ description: "Task list for 014 デモ事業の作成"
 - [X] T010 文書: `docs/features/014-demo-entity.md`（層の表と固有の規則: AI を呼ばない、テストのフィクスチャを読まない、全部か無か、素材の置き場所）と AGENTS.md の「機能ごとの文書」の表に 1 行、`specs/INVARIANTS.md` に INV-76・77（data-model §4）、`docs/requirements.md` の FR-15 の状態（済 014）
 - [X] T011 マニュアル（R9、FR-014）: `apps/web/src/features/manual/content.ts` の `entities` の記事にデモ事業の作り方・目印・消し方の節を足し、sources に新しいファイル（`usecases/demo-entity.ts`、`DemoBanner.tsx`）を足して `pnpm manual:check` を通す（撮影は T013 で利用者の端末）
 - [X] T012 最終の検証（メイン）: `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm --filter @trebuchet/web build`、`pnpm manual:check`（2026-11-08: manual:check 以外は通過。manual:check は根拠の変更で 29 記事が要確認となり、T013 の撮影と record の後に通す）
-- [ ] T013 利用者の端末での確認: quickstart の 1〜6（SC-001 の 10 秒を含む）と、`pnpm manual:capture` → 画像の確認 → `pnpm manual:record`（docs/features/012-app-manual.md）
+- [X] T013 利用者の端末での確認: quickstart の 1〜6（SC-001 の 10 秒を含む）と、`pnpm manual:update`（撮影と確認版の更新）→ コミット前に画像の確認（docs/features/012-app-manual.md）
 
 ## Dependencies & Execution Order
 

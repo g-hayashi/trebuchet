@@ -117,7 +117,7 @@ apps/server ──→ packages/schema
 - **仕訳を作る機能の仕訳**: 請求・入金の仕訳は `JOURNAL_LINKED` で通常の訂正・取消を拒む（005）。決算整理（按分・償却）は案を利用者が確かめて `createJournal` で登録する（003・009）。明細の承認だけが明細から仕訳を作る（006）。
 - **作らないもの**: 銀行の自動連携（006）、申告の控えの表とアプリの中の評価（011 で削除）、互換の別名（007）。
 - **web**: 各画面で `variant="default"` のボタンは 1 つ（011 の ui-shell §7）。ブラウザに覚える値は `localStorage`（DB・API に足さない）。
-- **マニュアル**: 利用者の操作・表示・制約を変えたら `$app-manual` の手順で対象の記事と画像を更新し、`pnpm manual:check` を通す。確認版の更新は `docs/features/012-app-manual.md` に従い、撮影・内容確認後だけ行う。
+- **マニュアル**: 利用者の操作・表示・制約を変えたら `$app-manual` の手順で対象の記事と画像を更新し、`pnpm manual:check` を通す。撮影と確認版の更新は `pnpm manual:update`（`docs/features/012-app-manual.md`）。画像と本文の確認はコミットの前に行う。
 
 ## データと一時ファイル
 

@@ -17,6 +17,7 @@
     "manual:check": "node scripts/check-manual.ts",
     "manual:record": "node scripts/check-manual.ts --record",
     "manual:capture": "pnpm --filter @trebuchet/web exec playwright test --config manual.playwright.config.ts",
+    "manual:update": "pnpm manual:capture && pnpm manual:record",
     "bench:reports": "node scripts/bench-reports.ts",
     "bench:import": "node scripts/bench-import.ts",
     "bench:backup": "node scripts/bench-backup.ts",
