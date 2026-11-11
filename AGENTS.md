@@ -46,6 +46,7 @@ apps/server ──→ packages/schema
 | バックアップ（`.tbk`）の復元（server を止めて行う） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--receipts-dir <dir>] [--allow-missing-receipts] [--yes]`（回復キーを標準入力から読む。証憑のフラグは `docs/features/010-receipts.md`。`scripts/restore-backup.ts` の先頭のコメント） |
 | freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。`scripts/verify-freee-import.ts` の先頭のコメント。`--continue` は 008 以降使えない: 実行ごとに乱数の DK で作るため） |
 | 青色申告決算書の照合（実データ、ローカル専用） | `pnpm verify:tax-return`（`work/` を読む。`scripts/verify-tax-return.ts` の先頭のコメント） |
+| 宣伝動画（MP4 約30秒と GIF。日本語・英語の字幕。AI・Tailscale は架空の応答に差し替える。`docs/promo/` に出力。CI に含まれない） | `pnpm promo:record`（録画 `promo:capture` は `PROMO_LANG=ja\|en`、変換 `promo:encode`。`apps/web/e2e/promo.capture.ts`、`scripts/promo-encode.ts` の先頭のコメント。ffmpeg が要る） |
 | E2E（Playwright、Chromium） | `pnpm --filter @trebuchet/web e2e` |
 | web のビルド（`routeTree.gen.ts` を再生成する） | `pnpm --filter @trebuchet/web build` |
 
