@@ -1,6 +1,15 @@
 import type { ProfitAndLoss, StatementSection } from "@trebuchet/schema";
 import type { Account, PostedLine } from "../types.ts";
-import { debitNet, isActive, PL_SECTIONS, SECTION_SIDE, sectionRows, toSide } from "./common.ts";
+import {
+  debitNet,
+  isActive,
+  PL_SECTIONS,
+  SECTION_SIDE,
+  sectionRows,
+  sectionTotal,
+  sumAmounts,
+  toSide,
+} from "./common.ts";
 import { compareFigure, compareSections } from "./statement.ts";
 
 export type ProfitAndLossInput = {
@@ -9,8 +18,6 @@ export type ProfitAndLossInput = {
   from: string;
   to: string;
 };
-
-const sum = (rows: readonly { amount: number }[]) => rows.reduce((s, r) => s + r.amount, 0);
 
 /**
  * 損益計算書（FR-029）。区分（売上 → 売上原価 → 経費 → その他）ごとに科目を決算書の順に並べる。
@@ -27,9 +34,9 @@ export function buildProfitAndLoss(input: ProfitAndLossInput): ProfitAndLoss {
     const rows = sectionRows(input.accounts, section, (id) =>
       toSide(net.get(id) ?? 0, SECTION_SIDE[section]),
     );
-    return rows.length === 0 ? [] : [{ section, rows, total: { amount: sum(rows) } }];
+    return rows.length === 0 ? [] : [{ section, rows, total: { amount: sumAmounts(rows) } }];
   });
-  const total = (section: string) => sections.find((s) => s.section === section)?.total.amount ?? 0;
+  const total = (section: string) => sectionTotal(sections, section);
   const netIncome = total("PL_SALES") - total("PL_COGS") - total("PL_EXPENSE") + total("PL_OTHER");
   return {
     kind: "profit-and-loss",

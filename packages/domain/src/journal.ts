@@ -1,14 +1,16 @@
-import { defaultTaxCategory, YEN_LIMIT } from "@trebuchet/schema";
+import { defaultTaxCategory } from "@trebuchet/schema";
 import { isValidDate } from "./dates.ts";
-import { computeInclusiveTax, sumYen } from "./money.ts";
+import { computeInclusiveTax, isYen, sumYen } from "./money.ts";
 import { isTaxableCategory, resolveTaxRate } from "./tax-rates.ts";
 import { resolveTaxSetting, type TaxSettingDraft } from "./tax-settings.ts";
+import { blankToNull } from "./text.ts";
 import {
   type Account,
   type DomainError,
   domainError,
   err,
   type FiscalPeriod,
+  findPeriodByDate,
   type JournalDraft,
   type LineDraft,
   ok,
@@ -19,6 +21,7 @@ import {
   type TaxRate,
   type ValidJournal,
   type ValidLine,
+  validationError,
 } from "./types.ts";
 
 /** 仕訳の検証に使うマスタ（1つの事業体の分） */
@@ -32,17 +35,9 @@ export type JournalContext = {
   taxRates: readonly TaxRate[];
 };
 
-const isValidAmount = (amount: number) =>
-  Number.isSafeInteger(amount) && amount > 0 && amount < YEN_LIMIT;
-
-const trimToNull = (value: string | undefined) => {
-  const trimmed = value?.trim() ?? "";
-  return trimmed.length === 0 ? null : trimmed;
-};
-
 /** 日付を含む会計期間。期間の外なら OUT_OF_PERIOD、締め済みなら PERIOD_CLOSED（訂正仕訳を案内する） */
 export function checkPeriod(date: string, periods: readonly FiscalPeriod[]): Result<FiscalPeriod> {
-  const period = periods.find((p) => p.startDate <= date && date <= p.endDate);
+  const period = findPeriodByDate(periods, date);
   if (period === undefined) {
     const lastEnd = periods.reduce<string | undefined>(
       (max, p) => (max === undefined || p.endDate > max ? p.endDate : max),
@@ -83,7 +78,7 @@ export function validateJournal(
   let computeTax = false;
 
   if (!dateOk) {
-    errors.push(domainError("VALIDATION", "存在しない日付です", { field: "date" }));
+    errors.push(validationError("存在しない日付です", { field: "date" }));
   } else {
     const p = checkPeriod(draft.date, ctx.periods);
     if (p.ok) {
@@ -115,10 +110,10 @@ export function validateJournal(
   const tagIds = new Set(ctx.tags.map((t) => t.id));
 
   const lineError = (lineIndex: number, field: string, message: string, extra = {}) =>
-    errors.push(domainError("VALIDATION", message, { lineIndex, field, ...extra }));
+    errors.push(validationError(message, { lineIndex, field, ...extra }));
 
   const lines = draft.lines.map((line: LineDraft, lineIndex): ValidLine => {
-    if (!isValidAmount(line.amount)) {
+    if (!isYen(line.amount)) {
       lineError(lineIndex, "amount", "金額は1円以上1兆円未満の整数で入力してください");
     }
 
@@ -173,7 +168,7 @@ export function validateJournal(
         lineError(lineIndex, "taxCategory", "この日付に適用される税率がない税区分です", {
           taxCategory,
         });
-      } else if (isValidAmount(line.amount)) {
+      } else if (isYen(line.amount)) {
         taxAmount = computeInclusiveTax(line.amount, rate);
       }
     }
@@ -187,7 +182,7 @@ export function validateJournal(
       taxCategory,
       taxAmount,
       partnerId: line.partnerId ?? null,
-      description: trimToNull(line.description),
+      description: blankToNull(line.description),
       tagIds: [...lineTags],
     };
   });
@@ -195,12 +190,8 @@ export function validateJournal(
   const hasBothSides =
     lines.some((l) => l.side === "debit") && lines.some((l) => l.side === "credit");
   if (lines.length < 2 || !hasBothSides) {
-    errors.push(
-      domainError("VALIDATION", "借方と貸方をそれぞれ1行以上入力してください", {
-        field: "lines",
-      }),
-    );
-  } else if (lines.every((l) => isValidAmount(l.amount))) {
+    errors.push(validationError("借方と貸方をそれぞれ1行以上入力してください", { field: "lines" }));
+  } else if (lines.every((l) => isYen(l.amount))) {
     const debit = sumYen(lines.filter((l) => l.side === "debit").map((l) => l.amount));
     const credit = sumYen(lines.filter((l) => l.side === "credit").map((l) => l.amount));
     if (debit !== credit) {
@@ -218,7 +209,7 @@ export function validateJournal(
   return ok({
     date: draft.date,
     fiscalPeriodId: period.id,
-    memo: trimToNull(draft.memo),
+    memo: blankToNull(draft.memo),
     correctsJournalId: draft.correctsJournalId ?? null,
     lines,
   });
@@ -227,6 +218,6 @@ export function validateJournal(
 /** 複数の違反を1つのエラーにまとめる。主なエラーは最初のもので、details.errors にすべての違反を入れる */
 export function combineErrors(errors: readonly DomainError[]): DomainError {
   const [first] = errors;
-  if (first === undefined) return domainError("VALIDATION", "入力が正しくありません");
+  if (first === undefined) return validationError("入力が正しくありません");
   return { ...first, details: { ...first.details, errors: [...errors] } };
 }

@@ -1,6 +1,8 @@
-import type { AdjustmentProposal } from "@trebuchet/schema";
+import { ACCOUNT_CODES, type AdjustmentProposal } from "@trebuchet/schema";
 import { DRAWINGS_ACCOUNT_CODE } from "../carry-forward.ts";
+import { yearOfDate } from "../dates.ts";
 import { formatSignedAmount } from "../reports/warnings.ts";
+import { blankToNull } from "../text.ts";
 import {
   type Account,
   type DepreciationMethod,
@@ -12,14 +14,16 @@ import {
   type Result,
   type StraightLineRate,
   type TaxParameter,
+  validation,
 } from "../types.ts";
 import { computeHomeUse } from "./home-use.ts";
 import { lumpSumYear } from "./lump-sum.ts";
+import { checkPriorAccumulation } from "./prior-accumulation.ts";
 import { assetStartYear, straightLineYear } from "./straight-line.ts";
 import { resolveStraightLineRate, resolveTaxParameter } from "./tax-parameters.ts";
 
 /** 減価償却費の科目コード（初期セットの 5180。決算書の欄18） */
-export const DEPRECIATION_ACCOUNT_CODE = "5180";
+export const DEPRECIATION_ACCOUNT_CODE = ACCOUNT_CODES.depreciation;
 
 const RATIO_DENOMINATOR = 10000;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -31,13 +35,6 @@ export type FixedAssetDraft = Omit<
 > & {
   id?: string;
 };
-
-const blankToNull = (s: string | null | undefined): string | null => {
-  const t = s?.trim() ?? "";
-  return t === "" ? null : t;
-};
-
-const yearOf = (date: string) => date.slice(0, 4);
 
 /** 償却の計算に必要な値の表（定額法の償却率と税制の値）。`depreciate` などが受け取る（009 D: §2） */
 export type DepreciationParams = {
@@ -70,8 +67,7 @@ export function validateFixedAsset(
   sameYearAssets: readonly FixedAsset[],
   params: DepreciationParams & { accounts: readonly Account[] },
 ): Result<FixedAssetDraft> {
-  const fail = (field: string, message: string) =>
-    err(domainError("VALIDATION", message, { field }));
+  const fail = (field: string, message: string) => validation(message, { field });
   const name = draft.name.trim();
   if (name === "") return fail("name", "資産名を入力してください");
   if (
@@ -119,31 +115,15 @@ export function validateFixedAsset(
       return fail("inServiceOn", "事業の用に供した日は取得年月日以後にしてください");
     }
   }
-  const priorFail = (field: "priorAccumulated" | "priorThroughYear", message: string) =>
-    err(domainError("PRIOR_ACCUMULATED_INVALID", message, { field }));
   /** 前年までの累計と累計の年の検査（定額法・一括償却。累計の上限だけが方法で違う） */
   const checkPrior = (maxPrior: number, maxMessage: string): Result<never> | null => {
-    if (
-      !Number.isSafeInteger(draft.priorAccumulated) ||
-      draft.priorAccumulated < 0 ||
-      draft.priorAccumulated > maxPrior
-    ) {
-      return priorFail("priorAccumulated", maxMessage);
-    }
-    const through = draft.priorThroughYear;
-    if (through !== null && !Number.isSafeInteger(through)) {
-      return priorFail("priorThroughYear", "累計の年は整数で入力してください");
-    }
-    if (draft.priorAccumulated > 0 && through === null) {
-      return priorFail(
-        "priorThroughYear",
-        "前年までの償却累計額には、何年分までかの入力が必要です",
-      );
-    }
-    if (through !== null && through < Number(yearOf(inServiceOn ?? draft.acquiredOn))) {
-      return priorFail("priorThroughYear", "累計の年は事業の用に供した年以後にしてください");
-    }
-    return null;
+    const error = checkPriorAccumulation(draft, {
+      max: maxPrior,
+      maxMessage,
+      startYear: yearOfDate(inServiceOn ?? draft.acquiredOn),
+      startYearMessage: "累計の年は事業の用に供した年以後にしてください",
+    });
+    return error === null ? null : err(error);
   };
 
   if (draft.method === "lump_sum") {
@@ -229,9 +209,12 @@ export function validateFixedAsset(
 
   // 少額の特例は、取得の年に取得価額の全額を償却する。供用日・累計は持たない（R1）
   if (draft.priorAccumulated !== 0 || draft.priorThroughYear !== null) {
-    return priorFail(
-      draft.priorAccumulated !== 0 ? "priorAccumulated" : "priorThroughYear",
-      "少額減価償却資産の特例には、前年までの償却累計額を指定できません",
+    return err(
+      domainError(
+        "PRIOR_ACCUMULATED_INVALID",
+        "少額減価償却資産の特例には、前年までの償却累計額を指定できません",
+        { field: draft.priorAccumulated !== 0 ? "priorAccumulated" : "priorThroughYear" },
+      ),
     );
   }
   if (inServiceOn !== null) {
@@ -274,10 +257,11 @@ export function validateFixedAsset(
       ),
     );
   }
-  const year = yearOf(draft.acquiredOn);
+  const year = yearOfDate(draft.acquiredOn);
   const others = sameYearAssets
     .filter(
-      (a) => a.id !== draft.id && a.method === "small_asset_28_2" && yearOf(a.acquiredOn) === year,
+      (a) =>
+        a.id !== draft.id && a.method === "small_asset_28_2" && yearOfDate(a.acquiredOn) === year,
     )
     .reduce((s, a) => s + a.acquisitionCost, 0);
   const total = others + draft.acquisitionCost;
@@ -338,7 +322,7 @@ export type Depreciation = {
  * 未償却残高は 0。取得した年以外の償却費・必要経費算入額は 0。年は取得年月日の年（個人は暦年）
  */
 function smallAssetYear(asset: FixedAsset, fiscalYear: number): Depreciation {
-  const acquiredNow = yearOf(asset.acquiredOn) === String(fiscalYear);
+  const acquiredNow = yearOfDate(asset.acquiredOn) === fiscalYear;
   const base = acquiredNow ? asset.acquisitionCost : 0;
   return {
     method: "small_asset_28_2",
@@ -367,7 +351,7 @@ function straightLineDepreciation(
   ratePermille: number,
 ): Depreciation {
   const y = straightLineYear(asset, fiscalYear, ratePermille);
-  const disposedNow = asset.disposedOn !== null && yearOf(asset.disposedOn) === String(fiscalYear);
+  const disposedNow = asset.disposedOn !== null && yearOfDate(asset.disposedOn) === fiscalYear;
   const disposalKind = disposedNow ? (asset.disposalKind ?? "scrap") : null;
   return {
     method: "straight_line",
@@ -464,7 +448,7 @@ function isSmallAssetRow(asset: FixedAsset, fiscalYear: number): boolean {
   const yearEnd = `${fiscalYear}-12-31`;
   if (asset.acquiredOn > yearEnd) return false;
   if (asset.disposedOn !== null && asset.disposedOn <= yearEnd) return false;
-  return yearOf(asset.acquiredOn) === String(fiscalYear);
+  return yearOfDate(asset.acquiredOn) === fiscalYear;
 }
 
 /**
@@ -485,16 +469,16 @@ export function isDepreciationRow(
   if (!d.ok) return false;
   // 一括償却は除却しても台帳に残し、その年度の額が正の間は載せ続ける（FR-011）
   if (asset.method === "lump_sum") return d.value.total > 0;
-  if (asset.disposedOn !== null && fiscalYear > Number(yearOf(asset.disposedOn))) return false;
+  if (asset.disposedOn !== null && fiscalYear > yearOfDate(asset.disposedOn)) return false;
   return (
     d.value.total > 0 ||
-    yearOf(asset.acquiredOn) === String(fiscalYear) ||
-    (asset.disposedOn !== null && yearOf(asset.disposedOn) === String(fiscalYear))
+    yearOfDate(asset.acquiredOn) === fiscalYear ||
+    (asset.disposedOn !== null && yearOfDate(asset.disposedOn) === fiscalYear)
   );
 }
 
 /** 固定資産除却損の科目コード（初期セットの 5300。009/R9）。定額法の廃棄の年度の案だけが使う */
-export const DISPOSAL_LOSS_ACCOUNT_CODE = "5300";
+export const DISPOSAL_LOSS_ACCOUNT_CODE = ACCOUNT_CODES.disposalLoss;
 
 const ACCOUNT_LABELS: Record<string, string> = {
   [DEPRECIATION_ACCOUNT_CODE]: "減価償却費",
@@ -569,7 +553,7 @@ export function proposeDepreciationAdjustment(
   if (asset.linkedJournalId !== null) return ok(null);
   switch (asset.method) {
     case "small_asset_28_2":
-      if (yearOf(asset.acquiredOn) !== String(fiscalYear) || !isSmallAssetRow(asset, fiscalYear)) {
+      if (yearOfDate(asset.acquiredOn) !== fiscalYear || !isSmallAssetRow(asset, fiscalYear)) {
         return ok(null);
       }
       break;

@@ -59,7 +59,7 @@ export function perMille(matches: number, total: number): number {
 }
 
 /** 基準日より前の標本の承認を日付順に学んだルール（メモリだけ。`learnRule` の結果を `InferenceRule` にする） */
-export function learnEvalRules(samples: readonly EvalSample[]): InferenceRule[] {
+function learnEvalRules(samples: readonly EvalSample[]): InferenceRule[] {
   const rules = new Map<string, InferenceRule>();
   const ordered = [...samples].sort(
     (a, b) => a.date.localeCompare(b.date) || a.statementId.localeCompare(b.statementId),

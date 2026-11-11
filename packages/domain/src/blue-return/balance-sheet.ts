@@ -1,4 +1,9 @@
-import type { BlueReturn, BlueReturnWarning, CarryForwardCheck } from "@trebuchet/schema";
+import {
+  ACCOUNT_CODES,
+  type BlueReturn,
+  type BlueReturnWarning,
+  type CarryForwardCheck,
+} from "@trebuchet/schema";
 import {
   type CarryForwardBalance,
   DRAWINGS_ACCOUNT_CODE,
@@ -20,7 +25,7 @@ import type { BlueReturnForm, BsSide } from "./form.ts";
 import { checkOpeningCarryForward } from "./opening-check.ts";
 
 /** 繰延資産の科目コード（初期セットの開業費。R8） */
-export const DEFERRED_ASSET_CODES: readonly string[] = ["1080"];
+export const DEFERRED_ASSET_CODES: readonly string[] = [ACCOUNT_CODES.startupCosts];
 
 /** 空欄の行からあふれた科目をまとめる行の科目名 */
 export const BS_OVERFLOW_LABEL = "その他";
@@ -118,7 +123,7 @@ export function buildPage4(input: Page4Input): { page4: Page4; warnings: BlueRet
   }
 
   // 空欄の行の割り当て
-  const sorted = sortAccounts([...accounts]);
+  const sorted = sortAccounts(accounts);
   const blankSlots = (side: BsSide) =>
     form.bsRows.flatMap((row, i) => (row.kind === "blank" && row.side === side ? [i] : []));
   /** 行の index → その行に入る科目 */

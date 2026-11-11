@@ -3,6 +3,7 @@ import {
   StatementColumnMapping,
   type StatementDelimiter,
   type StatementTableLayout,
+  YEN_LIMIT,
 } from "@trebuchet/schema";
 import { isValidDate } from "../dates.ts";
 import { type DelimitedLine, parseDelimitedLines } from "../import/csv.ts";
@@ -40,7 +41,6 @@ export type StatementReadOptions = {
   fixedAccountName?: string | undefined;
 };
 
-const MAX_AMOUNT = 1_000_000_000_000;
 const TRUE_VALUES = new Set(["1", "○", "◯", "true", "yes", "はい", "振替"]);
 
 const norm = (s: string): string => s.normalize("NFKC").trim();
@@ -65,7 +65,7 @@ export function parseStatementAmount(raw: string): number | undefined | "large" 
   }
   if (!/^[+-]?\d+$/.test(s)) return undefined;
   const n = Number(s);
-  if (Math.abs(n) >= MAX_AMOUNT) return "large";
+  if (Math.abs(n) >= YEN_LIMIT) return "large";
   const signed = negative ? -n : n;
   return signed === 0 ? 0 : signed;
 }

@@ -1,11 +1,11 @@
 import type { LedgerRepository } from "../ports.ts";
 import {
-  domainError,
   err,
   type Journal,
   type JournalDetail,
   type JournalHistoryEntry,
   type JournalRef,
+  journalNotFoundError,
   ok,
   type Result,
 } from "../types.ts";
@@ -19,8 +19,7 @@ const toRef = (j: Journal): JournalRef => ({
   status: j.status,
 });
 
-const notFound = (journalId: string) =>
-  err(domainError("JOURNAL_NOT_FOUND", "仕訳が見つかりません", { journalId }));
+const notFound = (journalId: string) => err(journalNotFoundError(journalId));
 
 /** 仕訳と、訂正元・訂正仕訳への参照（FR-019a） */
 export function getJournalDetail(deps: QueryDeps, journalId: string): Result<JournalDetail> {

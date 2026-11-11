@@ -29,7 +29,7 @@ import {
 } from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
 import { isValidDate, monthEnd } from "../dates.ts";
-import { calculateInvoiceAmounts, itemAmount } from "../invoicing/amounts.ts";
+import { calculateInvoiceAmounts, hoursToHalves, itemAmount } from "../invoicing/amounts.ts";
 import { buildInvoiceDetail, buildInvoiceSummary, toPaymentView } from "../invoicing/detail.ts";
 import { buildInvoiceDraft } from "../invoicing/draft.ts";
 import { dueDate } from "../invoicing/due-date.ts";
@@ -40,9 +40,15 @@ import {
 } from "../invoicing/journal-drafts.ts";
 import { formatInvoiceNo } from "../invoicing/number.ts";
 import { invoiceStatus } from "../invoicing/status.ts";
-import { effectiveTaxDisplay, invoiceSalesTaxCategory, itemTaxRate } from "../invoicing/tax.ts";
+import {
+  DEFAULT_TAX_DISPLAY,
+  effectiveTaxDisplay,
+  invoiceSalesTaxCategory,
+  itemTaxRate,
+} from "../invoicing/tax.ts";
 import { invoiceWithholding } from "../invoicing/withholding.ts";
 import { checkPeriod } from "../journal.ts";
+import { isYen } from "../money.ts";
 import type {
   Clock,
   IdGenerator,
@@ -51,17 +57,21 @@ import type {
   MasterRepository,
 } from "../ports.ts";
 import { resolveTaxSetting } from "../tax-settings.ts";
+import { compareText } from "../text.ts";
 import {
   domainError,
   err,
   type InvoiceItemRecord,
   type InvoiceRecord,
   type Journal,
+  journalNotFoundError,
+  notFoundError,
   ok,
   type Partner,
   type PaymentRecord,
   type Result,
   validation,
+  validationError,
 } from "../types.ts";
 import { createJournal, loadContext } from "./create-journal.ts";
 import { checkReason, type LedgerDeps } from "./journal-edit.ts";
@@ -96,7 +106,7 @@ export function previewInvoiceCalculation(
       enabled: terms?.withholding === true,
       amounts,
       // 設定がなければ税込のみ（`effectiveTaxDisplay` と同じ。計上日はまだない）
-      taxDisplay: invoicing.getInvoiceSettings()?.taxDisplay ?? "inclusive_only",
+      taxDisplay: invoicing.getInvoiceSettings()?.taxDisplay ?? DEFAULT_TAX_DISPLAY,
       date: input.issueDate ?? today,
       params: terms?.withholding === true ? invoicing.listTaxParameters() : [],
     });
@@ -227,12 +237,7 @@ function writeBillingTerms(
   const mismatch = amountMismatch(input);
   if (mismatch !== null) return err(mismatch);
   if (!masters.listPartners().some((p) => p.id === partnerId)) {
-    return err(
-      domainError("VALIDATION", "取引先が見つかりません", {
-        field: "partnerId",
-        partnerId,
-      }),
-    );
+    return validation("取引先が見つかりません", { field: "partnerId", partnerId });
   }
   const before = invoicing.getBillingTerms(partnerId);
   const now = deps.clock.now();
@@ -381,24 +386,16 @@ export function saveWorkHours(
     const allowed = hourlyPartners(partners, invoicing.listBillingTerms());
     for (const entry of input.entries) {
       if (!allowed.has(entry.partnerId)) {
-        return err(
-          domainError(
-            "VALIDATION",
-            "工数を入れられない取引先です（時間単価型の有効な取引先だけ）",
-            {
-              field: "partnerId",
-              partnerId: entry.partnerId,
-            },
-          ),
-        );
+        return validation("工数を入れられない取引先です（時間単価型の有効な取引先だけ）", {
+          field: "partnerId",
+          partnerId: entry.partnerId,
+        });
       }
       if (!isHalfStep(entry.hours) || entry.hours < 0) {
-        return err(
-          domainError("VALIDATION", "工数は 0.5 時間単位で入力してください", {
-            field: "hours",
-            partnerId: entry.partnerId,
-          }),
-        );
+        return validation("工数は 0.5 時間単位で入力してください", {
+          field: "hours",
+          partnerId: entry.partnerId,
+        });
       }
     }
     const now = deps.clock.now();
@@ -407,7 +404,7 @@ export function saveWorkHours(
       const row = {
         partnerId: entry.partnerId,
         targetMonth: month,
-        halfHours: entry.hours * 2,
+        halfHours: hoursToHalves(entry.hours),
         updatedAt: now,
       };
       invoicing.upsertWorkHours(row);
@@ -450,9 +447,7 @@ export function draftInvoices(
       for (const partnerId of new Set(request.partnerIds)) {
         const partner = partners.find((p) => p.id === partnerId);
         if (partner === undefined) {
-          return err(
-            domainError("VALIDATION", "取引先が見つかりません", { field: "partnerId", partnerId }),
-          );
+          return validation("取引先が見つかりません", { field: "partnerId", partnerId });
         }
         if (!terms.has(partnerId)) {
           return err(
@@ -580,16 +575,15 @@ export function issueInvoice(
     for (const [index, item] of input.items.entries()) {
       const field = `items.${index}`;
       if (item.name.trim() === "") return validation("品名を入力してください", { field, index });
-      if (!Number.isSafeInteger(item.amount) || item.amount < 1 || item.amount >= YEN_LIMIT) {
+      if (!isYen(item.amount)) {
         return validation("金額は 1 円以上 1 兆円未満の整数で入力してください", { field, index });
       }
       let quantityHalves: number | null = null;
       if (item.quantity !== undefined) {
-        const halves = item.quantity * 2;
-        if (!isHalfStep(item.quantity) || halves < 1) {
+        if (!isHalfStep(item.quantity) || item.quantity < 0.5) {
           return validation("数量は 0.5 単位の正の数で入力してください", { field, index });
         }
-        quantityHalves = halves;
+        quantityHalves = hoursToHalves(item.quantity);
       }
       const unitPrice = item.unitPrice ?? null;
       if (
@@ -631,7 +625,7 @@ export function issueInvoice(
     const amounts = calculateInvoiceAmounts(records, priceMode);
     const { total } = amounts;
     if (total >= YEN_LIMIT) return validation("合計が大きすぎます", { field: "items" });
-    const taxDisplay = effectiveTaxDisplay(settings.taxDisplay, salesDate, ctx.taxSettings);
+    const taxDisplay = effectiveTaxDisplay(settings.taxDisplay);
     // 源泉徴収は発行日の税制の値で決め、写しに固定する（013 R5）。値がなければ何も書かずに拒む
     const withholding = invoiceWithholding({
       enabled: terms.withholding,
@@ -760,11 +754,7 @@ export function voidInvoice(
     }
     const original = ledger.getJournal(invoice.journalId);
     if (original === undefined) {
-      return err(
-        domainError("JOURNAL_NOT_FOUND", "請求書の仕訳が見つかりません", {
-          journalId: invoice.journalId,
-        }),
-      );
+      return err(journalNotFoundError(invoice.journalId, "請求書の仕訳"));
     }
 
     // (2) 最初の書き込みは仕訳。未締めなら取消、締め済みなら今日付の逆仕訳
@@ -869,7 +859,7 @@ export function recordPayment(
         domainError("INVOICE_VOIDED", "この請求書はすでに取り消されています", { invoiceId }),
       );
     }
-    if (!Number.isSafeInteger(input.amount) || input.amount < 1 || input.amount >= YEN_LIMIT) {
+    if (!isYen(input.amount)) {
       return validation("入金額は 1 円以上 1 兆円未満の整数で入力してください", {
         field: "amount",
       });
@@ -997,12 +987,7 @@ export function voidPayment(
     const payments = invoicing.listPayments(invoiceId);
     const payment = payments.find((p) => p.id === paymentId);
     if (payment === undefined) {
-      return err(
-        domainError("PAYMENT_NOT_FOUND", "入金の消し込みが見つかりません", {
-          invoiceId,
-          paymentId,
-        }),
-      );
+      return err(notFoundError("PAYMENT_NOT_FOUND", "入金の消し込み", { invoiceId, paymentId }));
     }
     if (payment.voidedAt !== null) {
       return err(
@@ -1011,11 +996,7 @@ export function voidPayment(
     }
     const original = ledger.getJournal(payment.journalId);
     if (original === undefined) {
-      return err(
-        domainError("JOURNAL_NOT_FOUND", "入金の仕訳が見つかりません", {
-          journalId: payment.journalId,
-        }),
-      );
+      return err(journalNotFoundError(payment.journalId, "入金の仕訳"));
     }
 
     // (2) 最初の書き込みは仕訳。未締めなら取消、締め済みなら今日付の逆仕訳
@@ -1112,7 +1093,7 @@ export function listInvoices(
     return ok({
       invoices: all.filter(matches),
       outstandingByPartner: [...totals.values()].sort((x, y) =>
-        x.partnerName < y.partnerName ? -1 : x.partnerName > y.partnerName ? 1 : 0,
+        compareText(x.partnerName, y.partnerName),
       ),
     });
   });
@@ -1201,7 +1182,7 @@ export function getInvoiceDetail(
 }
 
 const invoiceNotFound = (invoiceId: string) =>
-  domainError("INVOICE_NOT_FOUND", "請求書が見つかりません", { invoiceId });
+  notFoundError("INVOICE_NOT_FOUND", "請求書", { invoiceId });
 
 /** 仕訳の起点（請求書・入金・定期仕訳）。ふつうの仕訳は `null`、仕訳がなければ `JOURNAL_NOT_FOUND` */
 export function getJournalOrigin(
@@ -1210,7 +1191,7 @@ export function getJournalOrigin(
 ): Result<JournalOrigin | null> {
   return deps.uow.run(({ ledger, invoicing }) => {
     if (ledger.getJournal(journalId) === undefined) {
-      return err(domainError("JOURNAL_NOT_FOUND", "仕訳が見つかりません", { journalId }));
+      return err(journalNotFoundError(journalId));
     }
     return ok(invoicing.originOfJournal(journalId));
   });
@@ -1226,10 +1207,10 @@ function amountMismatch(input: BillingTermsInput) {
       ? (["unitPrice", "monthlyAmount"] as const)
       : (["monthlyAmount", "unitPrice"] as const);
   if (input[need] === undefined) {
-    return domainError("VALIDATION", "請求の型に合う金額を入力してください", { field: need });
+    return validationError("請求の型に合う金額を入力してください", { field: need });
   }
   if (input[forbid] !== undefined) {
-    return domainError("VALIDATION", "請求の型に合わない金額は指定できません", { field: forbid });
+    return validationError("請求の型に合わない金額は指定できません", { field: forbid });
   }
   return null;
 }

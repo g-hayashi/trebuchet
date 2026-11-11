@@ -30,7 +30,7 @@ export function detectWarnings(
     });
   }
   const byAccount = balancesByAccount(balances);
-  for (const account of sortAccounts([...accounts])) {
+  for (const account of sortAccounts(accounts)) {
     if (account.category !== "asset" && account.category !== "liability") continue;
     const closing = byAccount.get(account.id)?.closing;
     if (closing === undefined) continue;

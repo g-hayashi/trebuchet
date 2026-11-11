@@ -1,6 +1,6 @@
 /**
  * freee の書き出しのうち取込で使う列の名前（research R3）。列は位置ではなく列名で特定する。
- * 表記は分析メモによる仮のもの。T005 で実ファイルのヘッダと照合して確定する
+ * 表記は分析メモによる。実ファイルのヘッダとの照合は `pnpm verify:freee`
  */
 
 const sideColumns = <P extends "借方" | "貸方">(prefix: P) =>

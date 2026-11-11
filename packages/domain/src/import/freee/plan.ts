@@ -9,21 +9,23 @@ import type {
   ImportWarningCode,
   MappingRow,
 } from "@trebuchet/schema";
+import { yearOfDate } from "../../dates.ts";
 import { checkPeriod, type JournalContext, validateJournal } from "../../journal.ts";
 import { computeInclusiveTax, sumYen } from "../../money.ts";
 import { resolveTaxRate } from "../../tax-rates.ts";
 import { resolveTaxSetting, type TaxSettingDraft } from "../../tax-settings.ts";
-import type {
-  Account,
-  DomainError,
-  FiscalPeriod,
-  Partner,
-  SubAccount,
-  Tag,
-  TaxCategory,
-  TaxCategoryCode,
-  TaxRate,
-  ValidJournal,
+import {
+  type Account,
+  type DomainError,
+  type FiscalPeriod,
+  findPeriodByDate,
+  type Partner,
+  type SubAccount,
+  type Tag,
+  type TaxCategory,
+  type TaxCategoryCode,
+  type TaxRate,
+  type ValidJournal,
 } from "../../types.ts";
 import type { ImportRef, JournalSignature } from "../types.ts";
 import { isPriorYearClosing } from "./closing.ts";
@@ -134,9 +136,9 @@ const lineKeys = (lines: readonly { side: string; accountId: string; amount: num
 /** 期間に入る日付はその年度。入らない日付は最初の会計期間の開始の月日から推定する（期間がなければ暦年） */
 function fiscalYearOf(date: string, periods: readonly FiscalPeriod[]): number | undefined {
   if (!/^\d{4}/.test(date)) return undefined;
-  const period = periods.find((p) => p.startDate <= date && date <= p.endDate);
+  const period = findPeriodByDate(periods, date);
   if (period !== undefined) return period.fiscalYear;
-  const year = Number(date.slice(0, 4));
+  const year = yearOfDate(date);
   const first = [...periods].sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
   if (first === undefined) return year;
   return date.slice(5) < first.startDate.slice(5) ? year - 1 : year;

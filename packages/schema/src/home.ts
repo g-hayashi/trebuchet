@@ -1,10 +1,14 @@
 import { z } from "zod";
+import { ACCOUNT_CODES } from "./account-codes.ts";
 import { DateString, Id } from "./primitives.ts";
 
 // 011-ui-overhaul（data-model §2.1、contracts/http-api.md §1）。ホームの要約。保存しない値
 
 /** 今期の数字の「現金と預金」にする科目のコード（seed の現金 1010・普通預金 1020。R3） */
-export const CASH_AND_DEPOSIT_CODES: readonly string[] = ["1010", "1020"];
+export const CASH_AND_DEPOSIT_CODES: readonly string[] = [
+  ACCOUNT_CODES.cash,
+  ACCOUNT_CODES.ordinaryDeposit,
+];
 
 /** ホームの「最近の仕訳」の件数 */
 export const HOME_RECENT_JOURNAL_COUNT = 5;

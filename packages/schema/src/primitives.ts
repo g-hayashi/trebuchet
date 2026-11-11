@@ -26,13 +26,38 @@ export const MonthString = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "月は YYYY-MM で入力してください");
 
+/** 年（4 桁の数字） */
+export const YEAR_PATTERN = /^\d{4}$/;
+
 /** パスの `:year`（4 桁の数字）。数値にする。形が違うときの応答は server の `validate` が決める */
 export const FiscalYearParam = z.object({
-  year: z
-    .string()
-    .regex(/^\d{4}$/)
-    .transform(Number),
+  year: z.string().regex(YEAR_PATTERN).transform(Number),
 });
+
+/** SHA-256（小文字16進64文字）の形 */
+export const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+
+/** ファイルの内容の SHA-256（小文字16進64文字） */
+export const Sha256 = z.string().regex(SHA256_PATTERN, "SHA-256 の形式が正しくありません");
+
+/** 確信度・しきい値（0〜100 の整数） */
+export const Percent = z.number().int().min(0).max(100);
+
+// API のクエリ文字列（すべて文字列）と、TanStack Router の URL の検索パラメータ
+// （数値・真偽値は JSON として解釈される）の両方を受け付ける
+
+export const QueryInt = z.union([
+  z.number(),
+  z.string().regex(/^\d+$/, "整数で指定してください").transform(Number),
+]);
+/** URL の検索パラメーターは数字だけの値を数値に読むので、文字列に戻す（取引先が「7」のとき） */
+export const QueryText = z.union([z.string(), z.number().transform(String)]);
+export const QueryBool = z.union([
+  z.boolean(),
+  z.enum(["true", "false"]).transform((v) => v === "true"),
+]);
+/** 金額の検索の範囲（0 以上 1 兆円未満の整数） */
+export const AmountBound = QueryInt.pipe(z.number().int().nonnegative().lt(YEN_LIMIT));
 
 /** 日（1〜28、または 31 = 末日。29・30 は不可。005 の R8） */
 export const DayOfMonthOrEnd = z

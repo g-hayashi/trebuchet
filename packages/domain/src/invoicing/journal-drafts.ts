@@ -1,11 +1,11 @@
-import type { InvoicePriceMode, TaxCategoryCode } from "@trebuchet/schema";
+import { ACCOUNT_CODES, type InvoicePriceMode, type TaxCategoryCode } from "@trebuchet/schema";
 import {
   type Account,
-  domainError,
   err,
   type Journal,
   type JournalDraft,
   type LineDraft,
+  notFoundError,
   ok,
   type Result,
 } from "../types.ts";
@@ -17,13 +17,13 @@ import { calculateInvoiceAmounts } from "./amounts.ts";
  */
 export const INVOICING_ACCOUNT_CODES = {
   /** 売掛金 */
-  receivable: "1030",
+  receivable: ACCOUNT_CODES.receivable,
   /** 売上高 */
-  sales: "4010",
+  sales: ACCOUNT_CODES.sales,
   /** 支払手数料 */
-  paymentFee: "5250",
+  paymentFee: ACCOUNT_CODES.paymentFee,
   /** 事業主貸（013。源泉徴収された所得税は事業主個人の税なので入金の仕訳で借方に計上する） */
-  ownerDrawing: "3090",
+  ownerDrawing: ACCOUNT_CODES.ownerDrawing,
 } as const;
 
 export function findAccountByCode(
@@ -32,9 +32,7 @@ export function findAccountByCode(
 ): Result<string> {
   const found = accounts.find((a) => a.code === code);
   if (found === undefined) {
-    return err(
-      domainError("ACCOUNT_NOT_FOUND", `勘定科目（コード ${code}）が見つかりません`, { code }),
-    );
+    return err(notFoundError("ACCOUNT_NOT_FOUND", `勘定科目（コード ${code}）`, { code }));
   }
   return ok(found.id);
 }

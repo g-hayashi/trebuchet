@@ -1,5 +1,6 @@
 import type { BlueReturn, BlueReturnWarning, StatementRow } from "@trebuchet/schema";
-import type { OpeningInput } from "../reports/common.ts";
+import { yearOfDate } from "../dates.ts";
+import { type OpeningInput, sumAmounts } from "../reports/common.ts";
 import { buildProfitAndLoss } from "../reports/profit-and-loss.ts";
 import { formatSignedAmount } from "../reports/warnings.ts";
 import type {
@@ -78,8 +79,6 @@ export type BuildBlueReturnInput = {
 };
 
 type Page1Line = BlueReturn["page1"]["lines"][number];
-
-const sumAmounts = (rows: readonly { amount: number }[]) => rows.reduce((s, r) => s + r.amount, 0);
 
 /** 一般の欄（kind = account）の番号の集合 */
 const accountLineNos = (form: BlueReturnForm) =>
@@ -207,7 +206,7 @@ function parameterMissingWarnings(
     if (a.method === "small_asset_28_2") continue;
     if (a.acquiredOn > `${fiscalYear}-12-31`) continue;
     if (fiscalYear < assetStartYear(a)) continue;
-    if (a.disposedOn !== null && fiscalYear > Number(a.disposedOn.slice(0, 4))) continue;
+    if (a.disposedOn !== null && fiscalYear > yearOfDate(a.disposedOn)) continue;
     const d = depreciate(a, fiscalYear, params);
     if (d.ok || d.error.code !== "TAX_PARAMETER_MISSING") continue;
     const key = d.error.details?.key;

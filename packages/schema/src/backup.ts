@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Id } from "./primitives.ts";
+import { Id, SHA256_PATTERN } from "./primitives.ts";
 
 // 004-auth-backup（contracts/http-api.md、data-model.md §1.6）
 
@@ -33,10 +33,7 @@ export const BackupRun = z.object({
   errorCode: z.string().nullable(),
   fileName: z.string().nullable(),
   sizeBytes: Count.nullable(),
-  contentSha256: z
-    .string()
-    .regex(/^[0-9a-f]{64}$/)
-    .nullable(),
+  contentSha256: z.string().regex(SHA256_PATTERN).nullable(),
   summary: z.array(BackupEntitySummary).nullable(),
 });
 export type BackupRun = z.infer<typeof BackupRun>;

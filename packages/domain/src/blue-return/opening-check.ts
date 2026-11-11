@@ -1,5 +1,6 @@
 import { type CarryForwardBalance, carryForward } from "../carry-forward.ts";
-import { debitNet, type OpeningInput, sortAccounts } from "../reports/common.ts";
+import { accountOrder, debitNet, type OpeningInput } from "../reports/common.ts";
+import { compareText } from "../text.ts";
 import { type Account, ok, type Result } from "../types.ts";
 
 /**
@@ -42,8 +43,7 @@ export function checkOpeningCarryForward(
   const actual = totals(opening);
 
   const ids = new Set([...expected.keys(), ...actual.keys()]);
-  const order = new Map(sortAccounts([...accounts]).map((a, i) => [a.id, i]));
-  const rank = (id: string) => order.get(id) ?? Number.MAX_SAFE_INTEGER;
+  const rank = accountOrder(accounts);
   const mismatches: OpeningMismatch[] = [];
   for (const accountId of ids) {
     const e = signed(accountId, expected.get(accountId) ?? 0);
@@ -52,9 +52,7 @@ export function checkOpeningCarryForward(
     mismatches.push({ accountId, expected: e, actual: a, diff: a - e });
   }
   mismatches.sort(
-    (x, y) => rank(x.accountId) - rank(y.accountId) || compareIds(x.accountId, y.accountId),
+    (x, y) => rank(x.accountId) - rank(y.accountId) || compareText(x.accountId, y.accountId),
   );
   return ok(mismatches);
 }
-
-const compareIds = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);

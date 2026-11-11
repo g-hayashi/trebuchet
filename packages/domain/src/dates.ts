@@ -1,5 +1,7 @@
 /** 日付（YYYY-MM-DD）の計算。暦日だけを扱い、タイムゾーンの影響を受けないよう UTC で計算する */
 
+import { isValidDateString } from "@trebuchet/schema";
+
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DAY_MS = 86_400_000;
 
@@ -17,10 +19,7 @@ function fromUtcMs(ms: number): string {
 }
 
 /** YYYY-MM-DD の形式で、実在する日付か */
-export function isValidDate(date: string): boolean {
-  const ms = toUtcMs(date);
-  return !Number.isNaN(ms) && fromUtcMs(ms) === date;
-}
+export const isValidDate = isValidDateString;
 
 export function addDays(date: string, days: number): string {
   return fromUtcMs(toUtcMs(date) + days * DAY_MS);
@@ -60,6 +59,9 @@ export const monthOfDate = (date: string): string => date.slice(0, 7);
 
 /** 日付（`YYYY-MM-DD`）の年（暦年） */
 export const yearOfDate = (date: string): number => Number(date.slice(0, 4));
+
+/** 日付（`YYYY-MM-DD`）または月（`YYYY-MM`）の月番号（1〜12） */
+export const monthNumberOf = (date: string): number => Number(date.slice(5, 7));
 
 const isLeapYear = (year: number) => (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 

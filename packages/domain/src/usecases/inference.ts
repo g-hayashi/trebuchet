@@ -14,12 +14,12 @@ import {
 import { counterAccounts, type ParsedSuggestion, parseSuggestion } from "../statements/prompt.ts";
 import {
   type Account,
-  domainError,
   err,
   ok,
   type Result,
   type StatementCandidateRecord,
   type StatementRecord,
+  statementNotFoundError,
 } from "../types.ts";
 import {
   type CandidateBody,
@@ -176,9 +176,7 @@ export async function inferWithAi(
     const states = new Map(loadStatementStates(tx).map((s) => [s.record.id, s]));
     const unknown = ids.find((id) => !states.has(id));
     if (unknown !== undefined) {
-      return err(
-        domainError("STATEMENT_NOT_FOUND", "明細が見つかりません", { statementId: unknown }),
-      );
+      return err(statementNotFoundError(unknown));
     }
     const candidates = new Map(
       tx.statements.listStatementCandidates().map((c) => [c.statementId, c]),

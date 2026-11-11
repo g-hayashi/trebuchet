@@ -178,7 +178,7 @@ export interface LedgerRepository extends JournalRepository {
   recentRegistered(limit: number): Journal[];
 }
 
-/** 帳票の集計（US4 で実装する） */
+/** 帳票の集計に使う、仕訳の行と期首残高の読み取り */
 export interface ReportRepository {
   /** 期間内の有効な仕訳の行（取消済みは含まない） */
   linesInRange(from: string, to: string): PostedLine[];
@@ -447,7 +447,7 @@ export interface StatementStore {
   upsertStatementCandidate(candidate: StatementCandidateRecord): void;
   deleteStatementCandidate(statementId: string): void;
 
-  // ---- 結びつき（US2。§1.5。書き込みは承認・取消のタスク（T015）が使う） ----
+  // ---- 結びつき（US2。§1.5。書き込みは承認・取消のユースケースが使う） ----
   /** 失効したものを含む全件（作成の順） */
   listStatementLinks(): StatementLinkRecord[];
   /** 有効な結びつきの重複（明細ごと・仕訳の行ごと）は一意制約の違反で例外（INV-43） */

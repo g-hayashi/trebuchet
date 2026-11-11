@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ErrorDetails } from "./errors.ts";
 import { JournalInput } from "./journals.ts";
-import { DateString, FiscalYearParam, Id } from "./primitives.ts";
+import { DateString, FiscalYearParam, Id, YEAR_PATTERN } from "./primitives.ts";
 
 // 003-tax-return（contracts/http-api.md、data-model.md §1・§2）
 
@@ -127,11 +127,7 @@ export const DeferredAmortizationParam = FiscalYearParam.extend({ deferredAssetI
 
 /** 固定資産の一覧のクエリ（GET /fixed-assets）。year を付けると各資産にその年の償却の計算を付ける */
 export const FixedAssetsQuery = z.object({
-  year: z
-    .string()
-    .regex(/^\d{4}$/, "年は4桁で指定してください")
-    .transform(Number)
-    .optional(),
+  year: z.string().regex(YEAR_PATTERN, "年は4桁で指定してください").transform(Number).optional(),
 });
 export type FixedAssetsQuery = z.infer<typeof FixedAssetsQuery>;
 

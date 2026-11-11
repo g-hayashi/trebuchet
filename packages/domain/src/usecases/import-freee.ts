@@ -28,13 +28,17 @@ import type {
 } from "../ports.ts";
 import { computeBalances } from "../reports/balances.ts";
 import { FREEE_UNMAPPABLE_ACCOUNTS } from "../seed/freee-aliases.ts";
+import { compareText } from "../text.ts";
 import {
   domainError,
   err,
+  findPeriodByDate,
   type Journal,
   type JournalLine,
+  notFoundError,
   ok,
   type Result,
+  validation,
   validationError,
 } from "../types.ts";
 import { checkReason } from "./journal-edit.ts";
@@ -154,9 +158,9 @@ function compareFreeeNo(a: string | null, b: string | null): number {
   if (b === null) return -1;
   const numeric = /^\d+$/;
   if (numeric.test(a) && numeric.test(b)) {
-    return a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
+    return a.length - b.length || compareText(a, b);
   }
-  return a < b ? -1 : 1;
+  return compareText(a, b);
 }
 
 /**
@@ -448,13 +452,11 @@ function readLedgerFile(bytes: Uint8Array): Result<FreeeLedgerAccount[]> {
   const ledger = parseFreeeLedger(read.value);
   if (!ledger.ok) {
     const { row, column, code } = ledger.error;
-    return err(
-      domainError("VALIDATION", `総勘定元帳の ${row} 行目の「${column}」を読めません`, {
-        row,
-        column,
-        code,
-      }),
-    );
+    return validation(`総勘定元帳の ${row} 行目の「${column}」を読めません`, {
+      row,
+      column,
+      code,
+    });
   }
   return ledger;
 }
@@ -611,11 +613,7 @@ export function voidImportBatch(
   return deps.uow.run((tx): Result<VoidImportBatchResult> => {
     const batch = tx.imports.getBatch(input.batchId);
     if (batch === undefined) {
-      return err(
-        domainError("IMPORT_BATCH_NOT_FOUND", "取込の回が見つかりません", {
-          batchId: input.batchId,
-        }),
-      );
+      return err(notFoundError("IMPORT_BATCH_NOT_FOUND", "取込の回", { batchId: input.batchId }));
     }
     if (batch.status === "voided") {
       return err(
@@ -634,7 +632,7 @@ export function voidImportBatch(
     const periods = tx.masters.listFiscalPeriods();
     const closedYears = new Set<number>();
     for (const j of journals) {
-      const period = periods.find((p) => p.startDate <= j.date && j.date <= p.endDate);
+      const period = findPeriodByDate(periods, j.date);
       if (period?.status === "closed") closedYears.add(period.fiscalYear);
     }
     if (closedYears.size > 0) {

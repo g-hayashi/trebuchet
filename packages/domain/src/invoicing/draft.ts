@@ -5,7 +5,7 @@ import type {
   InvoiceItemInput,
   InvoiceSettings,
 } from "@trebuchet/schema";
-import { monthEnd } from "../dates.ts";
+import { monthEnd, monthNumberOf } from "../dates.ts";
 import type { JournalContext } from "../journal.ts";
 import type { DomainError, InvoiceRecord, Partner, TaxParameter } from "../types.ts";
 import { calculateInvoiceAmounts, itemAmount } from "./amounts.ts";
@@ -46,7 +46,7 @@ export function buildInvoiceDraft(input: BuildInvoiceDraftInput): DraftOutcome {
   const { terms, month, today, ctx } = input;
   const salesDate = monthEnd(month);
   const taxCategory = invoiceSalesTaxCategory(salesDate, ctx.taxSettings, terms.taxRate);
-  const name = `${Number(month.slice(5))}月分 ${terms.defaultItemName}`;
+  const name = `${monthNumberOf(month)}月分 ${terms.defaultItemName}`;
 
   let item: InvoiceItemInput;
   if (terms.billingType === "hourly") {
@@ -73,7 +73,7 @@ export function buildInvoiceDraft(input: BuildInvoiceDraftInput): DraftOutcome {
   if (taxRate === null || taxRate === 8 || taxRate === 10) item.taxRate = taxRate;
   const priceMode = terms.priceMode ?? "inclusive";
   const amounts = calculateInvoiceAmounts([{ amount: item.amount, taxRate }], priceMode);
-  const taxDisplay = effectiveTaxDisplay(input.settings?.taxDisplay, salesDate, ctx.taxSettings);
+  const taxDisplay = effectiveTaxDisplay(input.settings?.taxDisplay);
   const withholding = invoiceWithholding({
     enabled: terms.withholding,
     amounts,

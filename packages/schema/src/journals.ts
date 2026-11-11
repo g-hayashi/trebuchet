@@ -1,5 +1,15 @@
 import { z } from "zod";
-import { DateString, Id, Side, TaxCategoryCode, YEN_LIMIT, Yen } from "./primitives.ts";
+import {
+  AmountBound,
+  DateString,
+  Id,
+  QueryBool,
+  QueryInt,
+  QueryText,
+  Side,
+  TaxCategoryCode,
+  Yen,
+} from "./primitives.ts";
 
 /** 仕訳の出どころ。domain の型と db の列の enum はここから導出する（正本） */
 export const JOURNAL_SOURCES = [
@@ -154,14 +164,6 @@ export type ReopenInput = z.infer<typeof ReopenInput>;
 // ---- 検索（FR-023） ----
 // API のクエリ文字列（すべて文字列）と、TanStack Router の URL の検索パラメータ
 // （数値・真偽値は JSON として解釈される）の両方を受け付ける
-
-const QueryInt = z.union([
-  z.number(),
-  z.string().regex(/^\d+$/, "整数で指定してください").transform(Number),
-]);
-const QueryText = z.union([z.string(), z.number().transform(String)]);
-const QueryBool = z.union([z.boolean(), z.enum(["true", "false"]).transform((v) => v === "true")]);
-const AmountBound = QueryInt.pipe(z.number().int().nonnegative().lt(YEN_LIMIT));
 
 /** 検索のカーソル。直前のページの最後の仕訳の「日付_仕訳番号」 */
 export const JournalCursor = z

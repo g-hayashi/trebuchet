@@ -1,3 +1,4 @@
+import { ACCOUNT_CODES } from "@trebuchet/schema";
 import type { TaxCategoryCode } from "../types.ts";
 
 /**
@@ -14,7 +15,7 @@ export const FREEE_ACCOUNT_ALIASES: Readonly<Record<string, string>> = {
 
 /** 名前がこの語で終わる科目は、カードの科目（未払金＋同じ名前の補助科目）とする */
 export const FREEE_CARD_SUFFIX = "カード";
-export const FREEE_CARD_ACCOUNT_CODE = "2020";
+export const FREEE_CARD_ACCOUNT_CODE = ACCOUNT_CODES.accountsPayable;
 
 /** 対応づけない freee の科目（年初付の決算振替にだけ出てくる） */
 export const FREEE_UNMAPPABLE_ACCOUNTS: readonly string[] = ["損益"];

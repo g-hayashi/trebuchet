@@ -1,6 +1,14 @@
 import { checkPeriod } from "../journal.ts";
 import type { Clock, IdGenerator, LedgerRepository, MasterRepository } from "../ports.ts";
-import { domainError, err, type FiscalPeriod, type Journal, ok, type Result } from "../types.ts";
+import {
+  domainError,
+  err,
+  type FiscalPeriod,
+  type Journal,
+  journalNotFoundError,
+  ok,
+  type Result,
+} from "../types.ts";
 import { isLinkedSource, linkedError } from "./create-journal.ts";
 
 /** 訂正・取消のユースケースの依存。ledger と masters は同じテナントの DB */
@@ -45,7 +53,7 @@ export function loadEditableJournal(
 ): Result<Journal> {
   const journal = ledger.getJournal(journalId);
   if (journal === undefined) {
-    return err(domainError("JOURNAL_NOT_FOUND", "仕訳が見つかりません", { journalId }));
+    return err(journalNotFoundError(journalId));
   }
   if (journal.status === "voided") {
     return err(

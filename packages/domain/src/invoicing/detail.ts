@@ -5,7 +5,6 @@ import { invoiceStatus, isOverdue, withholdingStanding } from "./status.ts";
 
 /**
  * 一覧の 1 行（H:§3.5）。`today` を渡すと `overdue` を判定する（`isOverdue`）。省略すると偽
- * （一覧・詳細への期限切れの反映は T018）
  */
 export function buildInvoiceSummary(
   invoice: InvoiceRecord,

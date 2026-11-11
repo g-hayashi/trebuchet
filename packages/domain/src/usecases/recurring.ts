@@ -22,15 +22,18 @@ import {
   type RecurringPlan,
   recurringJournalDraft,
 } from "../recurring/due.ts";
+import { blankToNull } from "../text.ts";
 import {
   type DomainError,
   domainError,
   err,
   type Journal,
+  notFoundError,
   ok,
   type RecurringRunRecord,
   type Result,
   validation,
+  validationError,
 } from "../types.ts";
 import { createJournal, loadContext } from "./create-journal.ts";
 import { checkReason } from "./journal-edit.ts";
@@ -43,7 +46,7 @@ export type RecurringDeps = {
 };
 
 const notFound = (id: string) =>
-  err(domainError("RECURRING_NOT_FOUND", "定期仕訳が見つかりません", { recurringId: id }));
+  err(notFoundError("RECURRING_NOT_FOUND", "定期仕訳", { recurringId: id }));
 
 const versionConflict = (def: Recurring) =>
   err(
@@ -70,18 +73,13 @@ function checkDefinition(
   ctx: JournalContext,
 ): DomainError | undefined {
   if (def.endMonth !== null && def.endMonth < def.startMonth) {
-    return domainError("VALIDATION", "終了月は開始月以降にしてください", { field: "endMonth" });
+    return validationError("終了月は開始月以降にしてください", { field: "endMonth" });
   }
   const validated = validateJournal(recurringJournalDraft(def, def.startMonth), ctx);
   if (validated.ok) return undefined;
   const errors = validated.error.filter((e) => !TIME_DEPENDENT_CODES.has(e.code));
   return errors.length === 0 ? undefined : combineErrors(errors);
 }
-
-const trimToNull = (value: string | undefined): string | null => {
-  const trimmed = value?.trim() ?? "";
-  return trimmed.length === 0 ? null : trimmed;
-};
 
 /** 入力の行を保存する行にする（行番号を振り、省略は null） */
 function toLines(lines: RecurringInput["lines"]): RecurringLineView[] {
@@ -93,7 +91,7 @@ function toLines(lines: RecurringInput["lines"]): RecurringLineView[] {
     amount: l.amount,
     taxCategory: l.taxCategory ?? null,
     partnerId: l.partnerId ?? null,
-    description: trimToNull(l.description),
+    description: blankToNull(l.description),
   }));
 }
 
@@ -135,7 +133,7 @@ export function createRecurring(
     const def: Recurring = {
       id: deps.ids.next(),
       name: input.name.trim(),
-      memo: trimToNull(input.memo),
+      memo: blankToNull(input.memo),
       dayOfMonth: input.dayOfMonth,
       startMonth: input.startMonth,
       endMonth: input.endMonth ?? null,
@@ -184,7 +182,7 @@ export function updateRecurring(
     const after: Recurring = {
       ...before,
       name: input.name.trim(),
-      memo: trimToNull(input.memo),
+      memo: blankToNull(input.memo),
       dayOfMonth: input.dayOfMonth,
       startMonth: input.startMonth,
       endMonth: input.endMonth ?? null,

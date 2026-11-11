@@ -1,6 +1,7 @@
 import type { AccountingMethod, TaxpayerStatus } from "@trebuchet/schema";
 import { isValidDate } from "./dates.ts";
-import { domainError, err, ok, type Result } from "./types.ts";
+import { compareText } from "./text.ts";
+import { domainError, err, ok, type Result, validation } from "./types.ts";
 
 /** 消費税の設定の1行（ID なし。保存済みの TaxSetting もこの形を満たす） */
 export type TaxSettingDraft = {
@@ -19,26 +20,20 @@ export function validateTaxSettings<T extends TaxSettingDraft>(
 ): Result<T[]> {
   for (const [index, s] of settings.entries()) {
     if (!isValidDate(s.effectiveFrom)) {
-      return err(
-        domainError("VALIDATION", "適用開始日が正しい日付ではありません", {
-          index,
-          effectiveFrom: s.effectiveFrom,
-        }),
-      );
+      return validation("適用開始日が正しい日付ではありません", {
+        index,
+        effectiveFrom: s.effectiveFrom,
+      });
     }
     if (s.taxpayerStatus === "exempt" && s.accountingMethod !== "tax_included") {
-      return err(
-        domainError("VALIDATION", "免税事業者の期間は税込経理のみ選べます", {
-          index,
-          effectiveFrom: s.effectiveFrom,
-        }),
-      );
+      return validation("免税事業者の期間は税込経理のみ選べます", {
+        index,
+        effectiveFrom: s.effectiveFrom,
+      });
     }
   }
 
-  const sorted = [...settings].sort((a, b) =>
-    a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : 0,
-  );
+  const sorted = [...settings].sort((a, b) => compareText(a.effectiveFrom, b.effectiveFrom));
   const first = sorted[0];
   if (first === undefined) {
     return err(

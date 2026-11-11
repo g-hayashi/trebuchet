@@ -19,6 +19,7 @@ import {
   err,
   ok,
   type Result,
+  validation,
 } from "../types.ts";
 import {
   type BlueReturnDeps,
@@ -132,7 +133,7 @@ function saveDeferredAssetIn(
       ? undefined
       : deps.closing.listDeferredAssets().find((a) => a.id === params.id);
   if (params.id !== undefined && before === undefined) {
-    return err(domainError("VALIDATION", "開業費が見つかりません", { field: "id" }));
+    return validation("開業費が見つかりません", { field: "id" });
   }
   const draft: DeferredAssetDraft = {
     ...(params.id === undefined ? {} : { id: params.id }),
@@ -229,17 +230,14 @@ function decideDeferredAmortizationIn(
   if (!period.ok) return period;
   const asset = deps.closing.listDeferredAssets().find((a) => a.id === deferredAssetId);
   if (asset === undefined) {
-    return err(domainError("VALIDATION", "開業費が見つかりません", { field: "deferredAssetId" }));
+    return validation("開業費が見つかりません", { field: "deferredAssetId" });
   }
   if (period.value.status === "closed") return periodClosedError(fiscalYear);
   const startYear = deferredStartYear(asset);
   if (fiscalYear < startYear) {
-    return err(
-      domainError(
-        "VALIDATION",
-        `この開業費の償却は ${startYear} 年度から決められます（それより前の年度は決められません）`,
-        { field: "fiscalYear", startYear },
-      ),
+    return validation(
+      `この開業費の償却は ${startYear} 年度から決められます（それより前の年度は決められません）`,
+      { field: "fiscalYear", startYear },
     );
   }
   const active = activeDeferredRefs(deps, asset.id);

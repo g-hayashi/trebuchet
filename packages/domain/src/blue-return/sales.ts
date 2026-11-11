@@ -1,9 +1,11 @@
-import type { BlueReturn, BlueReturnWarning } from "@trebuchet/schema";
+import { ACCOUNT_CODES, type BlueReturn, type BlueReturnWarning } from "@trebuchet/schema";
+import { monthNumberOf } from "../dates.ts";
 import { formatSignedAmount } from "../reports/warnings.ts";
+import { compareText } from "../text.ts";
 import type { Account, FiscalPeriod, PostedLine } from "../types.ts";
 
 /** 雑収入の科目コード（初期セットの雑収入）。売上高と同じ区分（PL_SALES）にあるので、コードで分ける */
-const MISC_INCOME_ACCOUNT_CODE = "4020";
+const MISC_INCOME_ACCOUNT_CODE = ACCOUNT_CODES.miscIncome;
 
 type Monthly = BlueReturn["page2"]["monthly"];
 type SalesPartners = BlueReturn["page3"]["salesPartners"];
@@ -58,7 +60,7 @@ export function summarizeMonthlySales(
   for (const l of lines) {
     const kind = kinds.get(l.accountId);
     if (kind === undefined || !inRange(l, range)) continue;
-    const row = months[Number(l.date.slice(5, 7)) - 1];
+    const row = months[monthNumberOf(l.date) - 1];
     if (row === undefined) continue;
     row[kind] += creditNet(l);
     row.total += creditNet(l);
@@ -67,8 +69,6 @@ export function summarizeMonthlySales(
   const otherIncome = months.reduce((s, m) => s + m.otherIncome, 0);
   return { months, total: { sales, otherIncome, total: sales + otherIncome } };
 }
-
-const byName = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
  * 売上先の明細（FR-025〜026、R10）。売上高の行を取引先ごとに貸方−借方で集計し、金額の降順
@@ -109,7 +109,8 @@ export function summarizeSalesPartners(
   }
 
   const sorted = [...byPartner.values()].sort(
-    (a, b) => b.amount - a.amount || byName(a.name, b.name) || byName(a.partnerId, b.partnerId),
+    (a, b) =>
+      b.amount - a.amount || compareText(a.name, b.name) || compareText(a.partnerId, b.partnerId),
   );
   const individual = sorted.filter((p) => p.amount > 0).slice(0, rows);
   const listed = new Set(individual.map((p) => p.partnerId));
@@ -121,8 +122,8 @@ export function summarizeSalesPartners(
   for (const p of sorted) idsByName.set(p.name, [...(idsByName.get(p.name) ?? []), p.partnerId]);
   const duplicateNames = [...idsByName]
     .filter(([, ids]) => ids.length > 1)
-    .map(([name, ids]) => ({ name, partnerIds: [...ids].sort(byName) }))
-    .sort((a, b) => byName(a.name, b.name));
+    .map(([name, ids]) => ({ name, partnerIds: [...ids].sort(compareText) }))
+    .sort((a, b) => compareText(a.name, b.name));
 
   const others = remainder + withoutAmount + otherIncome;
   return {

@@ -169,9 +169,9 @@ describe("buildInvoiceDraft（課税事業者）", () => {
     expect(build({ settings: null }).taxDisplay).toBe("inclusive_only");
   });
 
-  it("effectiveTaxDisplay: 計上日の設定にかかわらず表示の設定を守る", () => {
-    expect(effectiveTaxDisplay("separate", "2026-10-31", ctx.taxSettings)).toBe("separate");
-    expect(effectiveTaxDisplay("separate", "2024-12-31", ctx.taxSettings)).toBe("separate");
+  it("effectiveTaxDisplay: 設定した表示を守り、設定がなければ税込のみ", () => {
+    expect(effectiveTaxDisplay("separate")).toBe("separate");
+    expect(effectiveTaxDisplay(undefined)).toBe("inclusive_only");
   });
 });
 

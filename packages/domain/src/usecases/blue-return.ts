@@ -5,7 +5,6 @@ import {
   type FixedAssetInput,
   type HomeUseAllocationInput,
   type RentDetailInput,
-  YEN_LIMIT,
 } from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
 import type { PriorPeriod } from "../blue-return/balance-sheet.ts";
@@ -33,6 +32,7 @@ import {
   validateHomeUseAllocation,
 } from "../blue-return/home-use.ts";
 import { yearOfDate } from "../dates.ts";
+import { isNonNegativeYen } from "../money.ts";
 import type {
   Clock,
   ClosingStore,
@@ -53,6 +53,7 @@ import {
   type DomainError,
   type DomainWarning,
   domainError,
+  entityNotFoundError,
   err,
   type FiscalPeriod,
   type FixedAsset,
@@ -62,6 +63,7 @@ import {
   periodNotFound,
   type RentDetail,
   type Result,
+  validation,
 } from "../types.ts";
 import { createJournal } from "./create-journal.ts";
 import type { ReportDeps } from "./reports.ts";
@@ -107,7 +109,7 @@ export type DeductionAnswersView = {
 export function requireIndividual(masters: Pick<MasterRepository, "getProfile">): Result<null> {
   const profile = masters.getProfile();
   if (profile === undefined) {
-    return err(domainError("ENTITY_NOT_FOUND", "事業体が見つかりません"));
+    return err(entityNotFoundError());
   }
   if (profile.kind !== "individual") {
     return err(
@@ -245,11 +247,7 @@ function saveClosingNoteIn(
   if (!period.ok) return period;
   const body = params.body.trim();
   if (body.length > CLOSING_NOTE_MAX) {
-    return err(
-      domainError("VALIDATION", `メモは${CLOSING_NOTE_MAX}文字以内で入力してください`, {
-        field: "body",
-      }),
-    );
+    return validation(`メモは${CLOSING_NOTE_MAX}文字以内で入力してください`, { field: "body" });
   }
   const before = deps.closing
     .listClosingNotes(params.fiscalYear)
@@ -438,17 +436,15 @@ export function getRentDetails(
 }
 
 function validateRentRow(row: RentDetailInput, rowIndex: number): Result<RentDetailInput> {
-  const fail = (field: string, message: string) =>
-    err(domainError("VALIDATION", message, { rowIndex, field }));
+  const fail = (field: string, message: string) => validation(message, { rowIndex, field });
   const payee = row.payee.trim();
   const property = row.property.trim();
   if (payee === "") return fail("payee", "支払先を入力してください");
   if (property === "") return fail("property", "賃借物件を入力してください");
-  const isYen = (n: number) => Number.isInteger(n) && n >= 0 && n < YEN_LIMIT;
-  if (!isYen(row.annualRent)) {
+  if (!isNonNegativeYen(row.annualRent)) {
     return fail("annualRent", "賃借料は0円以上1兆円未満の整数で入力してください");
   }
-  if (!isYen(row.deductibleAmount) || row.deductibleAmount > row.annualRent) {
+  if (!isNonNegativeYen(row.deductibleAmount) || row.deductibleAmount > row.annualRent) {
     return fail("deductibleAmount", "必要経費算入額は0円以上、賃借料以下にしてください");
   }
   return ok({ ...row, payee, property });
@@ -614,7 +610,7 @@ function saveFixedAssetIn(
   const all = deps.closing.listFixedAssets();
   const before = params.id === undefined ? undefined : all.find((a) => a.id === params.id);
   if (params.id !== undefined && before === undefined) {
-    return err(domainError("VALIDATION", "固定資産が見つかりません", { field: "id" }));
+    return validation("固定資産が見つかりません", { field: "id" });
   }
   const validated = validateFixedAsset(
     {
@@ -703,27 +699,21 @@ function disposeFixedAssetIn(
   if (!individual.ok) return individual;
   const before = deps.closing.listFixedAssets().find((a) => a.id === params.id);
   if (before === undefined) {
-    return err(domainError("VALIDATION", "固定資産が見つかりません", { field: "id" }));
+    return validation("固定資産が見つかりません", { field: "id" });
   }
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(params.disposedOn) ||
     Number.isNaN(Date.parse(params.disposedOn))
   ) {
-    return err(
-      domainError("VALIDATION", "除却の日は YYYY-MM-DD で入力してください", {
-        field: "disposedOn",
-      }),
-    );
+    return validation("除却の日は YYYY-MM-DD で入力してください", { field: "disposedOn" });
   }
   const serviceOn = before.inServiceOn ?? before.acquiredOn;
   if (params.disposedOn < serviceOn) {
-    return err(
-      domainError("VALIDATION", "除却の日は事業の用に供した日（取得年月日）以後にしてください", {
-        field: "disposedOn",
-        acquiredOn: before.acquiredOn,
-        inServiceOn: serviceOn,
-      }),
-    );
+    return validation("除却の日は事業の用に供した日（取得年月日）以後にしてください", {
+      field: "disposedOn",
+      acquiredOn: before.acquiredOn,
+      inServiceOn: serviceOn,
+    });
   }
   // 除却済みの資産の除却の日・種類を変えると、前の除却の年度の仕訳（除却損・売却）とも食い違う
   const fromYear = Math.min(
@@ -940,12 +930,7 @@ function rebuildProposal(
       const allocations = src.closing.listHomeUseAllocations(period.fiscalYear);
       const allocation = allocations.find((a) => a.id === sourceId);
       if (allocation === undefined) {
-        return err(
-          domainError("VALIDATION", "この年度の按分の登録が見つかりません", {
-            field: "sourceId",
-            sourceId,
-          }),
-        );
+        return validation("この年度の按分の登録が見つかりません", { field: "sourceId", sourceId });
       }
       const assessed = assessHomeUse(src, period, allocation, allocations);
       if (!assessed.ok) return assessed;
@@ -954,18 +939,14 @@ function rebuildProposal(
     case "depreciation": {
       const asset = src.closing.listFixedAssets().find((a) => a.id === sourceId);
       if (asset === undefined) {
-        return err(
-          domainError("VALIDATION", "固定資産が見つかりません", { field: "sourceId", sourceId }),
-        );
+        return validation("固定資産が見つかりません", { field: "sourceId", sourceId });
       }
       return assessDepreciation(src, period, asset);
     }
     case "deferred_amortization": {
       const asset = src.closing.listDeferredAssets().find((a) => a.id === sourceId);
       if (asset === undefined) {
-        return err(
-          domainError("VALIDATION", "開業費が見つかりません", { field: "sourceId", sourceId }),
-        );
+        return validation("開業費が見つかりません", { field: "sourceId", sourceId });
       }
       return assessDeferred(src, period, asset);
     }

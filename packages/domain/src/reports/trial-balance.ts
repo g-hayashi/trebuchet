@@ -20,7 +20,7 @@ export function buildTrialBalance(input: TrialBalanceInput): TrialBalance {
   const balances = balancesByAccount(computeBalances(input));
   const rows: TrialBalanceRow[] = [];
   const totals = { debit: 0, credit: 0, closingDebit: 0, closingCredit: 0 };
-  for (const account of sortAccounts([...input.accounts])) {
+  for (const account of sortAccounts(input.accounts)) {
     const b = balances.get(account.id);
     if (b === undefined || (b.opening === 0 && b.debit === 0 && b.credit === 0)) continue;
     rows.push({

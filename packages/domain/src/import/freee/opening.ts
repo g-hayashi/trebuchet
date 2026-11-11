@@ -6,9 +6,10 @@ import type {
 } from "@trebuchet/schema";
 import { type CarryForwardBalance, carryForward } from "../../carry-forward.ts";
 import { validateOpeningBalances } from "../../opening.ts";
-import { debitNet, type OpeningInput, sortAccounts, toSide } from "../../reports/common.ts";
+import { accountOrder, debitNet, type OpeningInput, toSide } from "../../reports/common.ts";
 import { formatSignedAmount } from "../../reports/warnings.ts";
 import { FREEE_UNMAPPABLE_ACCOUNTS } from "../../seed/freee-aliases.ts";
+import { compareText } from "../../text.ts";
 import {
   type Account,
   domainError,
@@ -243,19 +244,18 @@ function compareKeys(
   accounts: readonly Account[],
   subAccounts: readonly SubAccount[],
 ): (a: Key, b: Key) => number {
-  const order = new Map(sortAccounts([...accounts]).map((a, i) => [a.id, i]));
+  const rank = accountOrder(accounts);
   const subNames = new Map(subAccounts.map((s) => [s.id, s.name]));
-  const rank = (id: string) => order.get(id) ?? Number.MAX_SAFE_INTEGER;
-  const cmp = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
   return (a, b) => {
-    const byAccount = rank(a.accountId) - rank(b.accountId) || cmp(a.accountId, b.accountId);
+    const byAccount =
+      rank(a.accountId) - rank(b.accountId) || compareText(a.accountId, b.accountId);
     if (byAccount !== 0) return byAccount;
     if (a.subAccountId === b.subAccountId) return 0;
     if (a.subAccountId === null) return -1;
     if (b.subAccountId === null) return 1;
     return (
-      cmp(subNames.get(a.subAccountId) ?? "", subNames.get(b.subAccountId) ?? "") ||
-      cmp(a.subAccountId, b.subAccountId)
+      compareText(subNames.get(a.subAccountId) ?? "", subNames.get(b.subAccountId) ?? "") ||
+      compareText(a.subAccountId, b.subAccountId)
     );
   };
 }

@@ -51,7 +51,8 @@ export function taxBreakdown(
         rate === null
           ? 0
           : priceMode === "exclusive"
-            ? Number((BigInt(amount) * BigInt(rate)) / 100n)
+            ? // 明細は最大 5 件で各 1e12 未満、税率は 10 以下なので、積は 2^53 未満（`computeInclusiveTax` と同じ）
+              Math.floor((amount * rate) / 100)
             : computeInclusiveTax(amount, rate);
       const inclusive = priceMode === "exclusive" ? amount + tax : amount;
       return { rate, inclusive, tax, exclusive: inclusive - tax };

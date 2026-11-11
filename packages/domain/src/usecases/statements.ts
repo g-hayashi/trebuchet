@@ -43,16 +43,19 @@ import {
   type UnreadableRow,
 } from "../statements/table.ts";
 import {
+  accountNotFoundError,
   domainError,
   err,
   ok,
   type Result,
   type StatementRecord,
+  statementNotFoundError,
   validationError,
 } from "../types.ts";
 import {
   buildCandidatesInTx,
   loadStatementStates,
+  type StatementTx,
   toCandidateView,
 } from "./statement-candidates.ts";
 import { checkStatementSourceName, sourceNameTaken, sourceNotFound } from "./statement-sources.ts";
@@ -123,11 +126,7 @@ function saveStatementAccountInTx(
   if (input.accountId != null) {
     const account = tx.masters.getAccount(input.accountId);
     if (account === undefined) {
-      return err(
-        domainError("ACCOUNT_NOT_FOUND", "勘定科目が見つかりません", {
-          accountId: input.accountId,
-        }),
-      );
+      return err(accountNotFoundError(input.accountId));
     }
     if (!account.isActive) {
       return err(
@@ -250,8 +249,6 @@ export type StatementSourceToSave = {
   /** 見出しの署名（`headerSignature`）。見出しなしは null */
   header: string[] | null;
 };
-
-export type StatementTx = Parameters<Parameters<StatementUnitOfWork["run"]>[0]>[0];
 
 /** 計画を立てる（保存済みの明細と口座を読む）。`accounts` は口座の ID の引き当てにも使う */
 function buildPlan(statements: StatementStore, rows: StatementRow[]) {
@@ -697,9 +694,7 @@ export function buildCandidates(
       const known = new Set(states.map((s) => s.record.id));
       const unknown = statementIds.find((id) => !known.has(id));
       if (unknown !== undefined) {
-        return err(
-          domainError("STATEMENT_NOT_FOUND", "明細が見つかりません", { statementId: unknown }),
-        );
+        return err(statementNotFoundError(unknown));
       }
       targetIds = new Set(statementIds);
     }

@@ -14,10 +14,12 @@ import {
   err,
   type Journal,
   type JournalDraft,
+  journalNotFoundError,
   ok,
   type ReceiptLinkRow,
   type ReceiptRow,
   type Result,
+  receiptNotFoundError,
   validation,
 } from "../types.ts";
 import { createJournal } from "./create-journal.ts";
@@ -37,7 +39,7 @@ type LinkTx = TenantTx<{ receipts: ReceiptStore }>;
 
 const CANDIDATE_PAGE = 200;
 
-const notFound = () => domainError("RECEIPT_NOT_FOUND", "証憑が見つかりません");
+const notFound = receiptNotFoundError;
 const deleted = () => domainError("RECEIPT_DELETED", "削除済みの証憑は変更できません");
 
 /** 結びつけられる証憑（ある・削除済みでない）を読む */
@@ -82,9 +84,7 @@ function linkInTx(
 
   const journal = tx.ledger.getJournal(input.journalId);
   if (journal === undefined) {
-    return err(
-      domainError("JOURNAL_NOT_FOUND", "仕訳が見つかりません", { journalId: input.journalId }),
-    );
+    return err(journalNotFoundError(input.journalId));
   }
   if (journal.status === "voided") {
     return err(
@@ -286,7 +286,7 @@ export function listJournalReceipts(
 ): Result<ReceiptSummary[]> {
   return deps.uow.run((tx) => {
     if (tx.ledger.getJournal(journalId) === undefined) {
-      return err(domainError("JOURNAL_NOT_FOUND", "仕訳が見つかりません", { journalId }));
+      return err(journalNotFoundError(journalId));
     }
     const summaries: ReceiptSummary[] = [];
     for (const link of tx.receipts.listActiveLinksByJournal(journalId)) {

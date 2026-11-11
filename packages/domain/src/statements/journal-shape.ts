@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_CODES,
   type Purpose,
   type StatementAccount,
   type TaxCategoryCode,
@@ -20,15 +21,15 @@ import {
  */
 export const STATEMENT_ACCOUNT_CODES = {
   /** 現金 */
-  cash: "1010",
+  cash: ACCOUNT_CODES.cash,
   /** 普通預金 */
-  ordinaryDeposit: "1020",
+  ordinaryDeposit: ACCOUNT_CODES.ordinaryDeposit,
   /** 未払金（カード） */
-  accountsPayable: "2020",
+  accountsPayable: ACCOUNT_CODES.accountsPayable,
   /** 事業主借 */
-  ownerContribution: "3010",
+  ownerContribution: ACCOUNT_CODES.ownerContribution,
   /** 事業主貸 */
-  ownerDrawing: "3090",
+  ownerDrawing: ACCOUNT_CODES.ownerDrawing,
 } as const;
 
 export type ShapeStatement = {

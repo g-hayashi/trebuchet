@@ -15,18 +15,24 @@ import {
   err,
   type Journal,
   type JournalDraft,
+  journalNotFoundError,
   ok,
   type Result,
   type StatementCandidateRecord,
   type StatementLinkRecord,
   type StatementRecord,
+  statementNotFoundError,
   validation,
 } from "../types.ts";
 import { createJournal } from "./create-journal.ts";
 import { learnFromApproval } from "./inference-rules.ts";
 import { checkReason } from "./journal-edit.ts";
-import { loadStatementStates, type StatementState } from "./statement-candidates.ts";
-import { type StatementTx, statementViewsInTx } from "./statements.ts";
+import {
+  loadStatementStates,
+  type StatementState,
+  type StatementTx,
+} from "./statement-candidates.ts";
+import { statementViewsInTx } from "./statements.ts";
 
 // 承認・除外・結びつきの取消（006 US2。R5〜R7・R15・R16、§1.5、FR-014〜018・020・021・021a）。
 // 書き込みは UnitOfWork の中だけ（INV-47）。fn が `err` を返すか例外を投げれば、失効した結びつきも含めて全部巻き戻る
@@ -140,8 +146,7 @@ function revokeStaleLinks(
   for (const link of state.activeLinks) revokeLink(deps, tx, link, REVOKE_REASON, "revoke", at);
 }
 
-const notFound = (statementId: string) =>
-  err(domainError("STATEMENT_NOT_FOUND", "明細が見つかりません", { statementId }));
+const notFound = (statementId: string) => err(statementNotFoundError(statementId));
 
 /** 明細の状態で承認を止める */
 function checkApprovable(state: StatementState) {
@@ -283,7 +288,7 @@ export function approveCandidate(
 
     const pairLink =
       candidate?.method === "transfer"
-        ? linkTransferPair(deps, tx, states, record, candidate, journal, ownLine.id, now)
+        ? linkTransferPair(deps, tx, states, record, journal, ownLine.id, now)
         : null;
     // 承認から学ぶ（同じ UnitOfWork。INV-47）。最後に行うので、ここまでに作った結びつきも候補の作り直しに反映される。
     // 承認のたびに学ぶ（011 R9）。利用者が管理する（`managedBy: user`）ルールは変えない
@@ -315,7 +320,6 @@ function linkTransferPair(
   tx: StatementTx,
   states: readonly StatementState[],
   record: StatementRecord,
-  _candidate: StatementCandidateRecord,
   journal: Journal,
   ownLineId: string,
   now: string,
@@ -380,9 +384,7 @@ function approveMatch(
   }
   const journal = tx.ledger.getJournal(ref.journalId);
   if (journal === undefined) {
-    return err(
-      domainError("JOURNAL_NOT_FOUND", "仕訳が見つかりません", { journalId: ref.journalId }),
-    );
+    return err(journalNotFoundError(ref.journalId));
   }
   if (journal.status !== "active") {
     return validation("取消済みの仕訳には結びつけられません", { journalId: journal.id });

@@ -47,11 +47,9 @@ export type BlueReturnForm = {
   blankRowAccountCodes: Readonly<Record<BsSide, readonly string[]>>;
 };
 
-// 要確認: T002（売上先の明細の個別の行数）
+// 令和7年分の様式の行数: 売上先の明細（3ページ）の個別の行、貸借対照表（4ページ）の空欄の行
 const SALES_PARTNER_ROWS_2025 = 4;
-// 要確認: T002（4ページの空欄の行の数）
 const BS_BLANK_ROWS_ASSET_2025 = 4;
-// 要確認: T002（4ページの空欄の行の数）
 const BS_BLANK_ROWS_LIABILITY_EQUITY_2025 = 3;
 
 const line = (no: number, label: string, kind: FormLineKind): FormLine => ({ no, label, kind });
@@ -89,7 +87,7 @@ const PL_2025: readonly FormLine[] = [
   line(31, "雑費", "account"),
   line(32, "計", "computed"),
   line(33, "差引金額", "computed"),
-  // 要確認: T002（欄34〜42 の欄名。引当金・準備金・専従者給与等）
+  // 欄34〜42 は引当金・準備金・専従者給与等の欄。この版では使わない
   ...range(34, 42).map((no) => line(no, "各種引当金・準備金等", "unused")),
   line(43, "青色申告特別控除前の所得金額", "computed"),
   line(44, "青色申告特別控除額", "computed"),

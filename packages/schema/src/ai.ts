@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DateString, TaxCategoryCode, Yen } from "./primitives.ts";
+import { DateString, Percent, TaxCategoryCode, Yen } from "./primitives.ts";
 import { StatementAmountSign, StatementColumnRole } from "./statements.ts";
 
 // 006-mfme-ai-journal（research R10・R12、contracts/http-api.md §7）
@@ -9,7 +9,7 @@ export const AiSuggestion = z.object({
   accountCode: z.string().min(1),
   taxCategory: TaxCategoryCode,
   purpose: z.enum(["business", "private"]),
-  confidence: z.number().int().min(0).max(100),
+  confidence: Percent,
   reason: z.string().max(200),
 });
 export type AiSuggestion = z.infer<typeof AiSuggestion>;
@@ -37,7 +37,7 @@ export type JournalAiSuggestionResult = z.infer<typeof JournalAiSuggestionResult
 export const AiColumnSuggestion = z.object({
   roles: z.array(z.union([StatementColumnRole, z.literal("none")])),
   amountSign: StatementAmountSign.nullable().optional(),
-  confidence: z.number().int().min(0).max(100),
+  confidence: Percent,
 });
 export type AiColumnSuggestion = z.infer<typeof AiColumnSuggestion>;
 
@@ -53,7 +53,7 @@ export const AiReceiptReading = z.object({
   partnerName: z.string().min(1).max(100).nullable(),
   accountCode: z.string().min(1).nullable(),
   taxCategory: TaxCategoryCode.nullable(),
-  confidence: z.number().int().min(0).max(100),
+  confidence: Percent,
   reason: z.string().max(200),
 });
 export type AiReceiptReading = z.infer<typeof AiReceiptReading>;
