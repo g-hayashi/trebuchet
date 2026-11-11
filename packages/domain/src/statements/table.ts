@@ -150,7 +150,7 @@ const DELIMITER_CANDIDATES: readonly StatementDelimiter[] = ["\t", ",", ";"];
 
 /**
  * `detectTableLayout` の戻り。`StatementTableLayout`（data-model §3）のうち、文字コード（server の `decodeText` の結果）と
- * 取込元の照合（`match`・`headerDiff`。T012）を除いた部分
+ * 取込元の照合（`match`・`headerDiff`。007/T012）を除いた部分
  */
 export type StatementTableDetection = Omit<
   StatementTableLayout,

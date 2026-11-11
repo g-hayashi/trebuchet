@@ -33,7 +33,7 @@ export function counterAccounts<A extends Pick<Account, "code" | "isActive">>(
   return accounts.filter(isCounterAccount);
 }
 
-/** 場面ごとの指示文の書き出し（2 行）。明細の場面は 006 から 1 バイトも変えない（評価の前後の比較。T042） */
+/** 場面ごとの指示文の書き出し（2 行）。明細の場面は 006 から 1 バイトも変えない（評価の前後の比較。011/T042） */
 const INTRO: Record<SuggestionPayload["scene"], readonly [string, string]> = {
   statement: [
     "あなたは日本の個人事業主の経理を手伝います。与えられた銀行・カード・現金の明細 1 件に対し、",

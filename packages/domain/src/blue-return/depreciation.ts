@@ -507,7 +507,7 @@ export function accountByCode(accounts: readonly Account[], code: string): Resul
 const formatRate = (permille: number) =>
   `${Math.floor(permille / 1000)}.${String(permille % 1000).padStart(3, "0")}`;
 
-/** 案の摘要（009/R17 の T011: 方法・月数・率・除却の種類。売却は譲渡所得が範囲外である旨） */
+/** 案の摘要（009/R17・009/T011: 方法・月数・率・除却の種類。売却は譲渡所得が範囲外である旨） */
 function depreciationMemo(asset: FixedAsset, d: Depreciation): string {
   const percent = `事業専用割合 ${asset.businessRatio / 100}%`;
   if (d.method === "small_asset_28_2") {
