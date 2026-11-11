@@ -68,13 +68,6 @@ export class InMemoryLedgerRepository implements LedgerRepository {
     return found === undefined ? undefined : structuredClone(found);
   }
 
-  recentJournals(limit: number): Journal[] {
-    return [...this.state.journals]
-      .sort((a, b) => b.date.localeCompare(a.date) || b.journalNo - a.journalNo)
-      .slice(0, limit)
-      .map((j) => structuredClone(j));
-  }
-
   replaceJournal(
     id: string,
     journal: JournalReplacement,

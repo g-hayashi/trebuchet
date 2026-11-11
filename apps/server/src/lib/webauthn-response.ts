@@ -5,8 +5,8 @@
  * 正しさは包みが開けたかでだけ判定する（落とし穴 3）
  */
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  !!value && typeof value === "object" && !Array.isArray(value);
+import { isRecord } from "./util.ts";
+
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 const PRF_BYTES = 32;
 

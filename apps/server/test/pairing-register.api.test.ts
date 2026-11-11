@@ -5,7 +5,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { vault as defaultVault } from "../src/deps.ts";
 import { SESSION_COOKIE } from "../src/lib/session.ts";
 import { errorOf } from "./helpers.ts";
-import { authStore, MIN, REMOTE_HOST, setupPairing } from "./pairing-helpers.ts";
+import {
+  authStore,
+  MIN,
+  markPairingTokenUsed,
+  REMOTE_HOST,
+  setupPairing,
+} from "./pairing-helpers.ts";
 import { b64, prfOf } from "./webauthn-fakes.ts";
 
 // T017b: `pairing/register/*`（公開）。ts.net の名前のパスキーを、ペアリングのトークンでだけ登録する。
@@ -36,9 +42,7 @@ describe("トークンの検査（401 PAIRING_TOKEN_INVALID）", () => {
     async (step) => {
       const { t, cookie, token: expired } = await ready();
       const used = await t.issueToken(cookie);
-      expect(
-        await authStore().consumePairingToken(hashToken(used), REMOTE_HOST, t.clock.now()),
-      ).toBe(true);
+      markPairingTokenUsed(hashToken(used), t.clock.now());
       const call = (token: string) =>
         t.call("POST", `/auth/pairing/register/${step}`, {
           host: REMOTE_HOST,
@@ -231,7 +235,7 @@ describe("失敗ではトークンを減らさない", () => {
         const value = Reflect.get(target, prop) as unknown;
         if (prop === "addPasskeyWithPairingToken") {
           return async (...args: Parameters<AuthStore["addPasskeyWithPairingToken"]>) => {
-            await target.consumePairingToken(tokenHash, REMOTE_HOST, args[3]);
+            markPairingTokenUsed(tokenHash, args[3]);
             return target.addPasskeyWithPairingToken(...args);
           };
         }

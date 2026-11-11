@@ -1,9 +1,9 @@
 import {
+  accountNotFoundError,
   addAccount,
   addSubAccount,
   addTag,
   deleteAccount,
-  domainError,
   replaceTaxSettings,
   updateAccount,
   upsertPartner,
@@ -21,9 +21,6 @@ import { accountUpdateDeps, masterDeps, type RouteOptions } from "../deps.ts";
 import { fail, respond } from "../errors.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
-
-const accountNotFound = (accountId: string) =>
-  domainError("ACCOUNT_NOT_FOUND", "勘定科目が見つかりません", { accountId });
 
 /** `/api/entities/:entityId` の下のマスタ（FR-004〜FR-010） */
 export function masterRoutes({ clock }: RouteOptions) {
@@ -55,7 +52,8 @@ export function masterRoutes({ clock }: RouteOptions) {
       .get("/accounts/:accountId/sub-accounts", (c) => {
         const accountId = c.req.param("accountId");
         const { repo } = masterDeps(c.var.db, clock);
-        if (repo.getAccount(accountId) === undefined) return fail(c, accountNotFound(accountId));
+        if (repo.getAccount(accountId) === undefined)
+          return fail(c, accountNotFoundError(accountId));
         return c.json({ subAccounts: repo.listSubAccounts(accountId) }, 200);
       })
       .post("/accounts/:accountId/sub-accounts", validate("json", SubAccountCreate), (c) => {

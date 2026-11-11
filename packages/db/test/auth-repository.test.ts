@@ -262,9 +262,6 @@ describe("施錠中", () => {
     expect(await store.isPairingTokenValid("ph1", "mac.ts.net", "2026-10-20T09:05:00.000Z")).toBe(
       true,
     );
-    expect(await store.consumePairingToken("ph1", "mac.ts.net", "2026-10-20T09:05:00.000Z")).toBe(
-      true,
-    );
     expect(await store.deleteExpiredPairingTokens(T2)).toBe(1);
   });
 });
@@ -330,22 +327,6 @@ describe("sessions", () => {
     expect(active.map((s) => s.id).sort()).toEqual(["ok", "rec-ok"]);
   });
 
-  it("失効済みで before より古い行だけを掃除する", async () => {
-    await store.createSession(session("old", "t1"));
-    await store.createSession(session("new", "t2"));
-    await store.createSession(session("live", "t3"));
-    await store.createSession(session("edge", "t4"));
-    await store.revokeSession("old", "2026-10-01T00:00:00.000Z");
-    await store.revokeSession("new", "2026-10-19T00:00:00.000Z");
-    await store.revokeSession("edge", "2026-10-13T00:00:00.000Z");
-    const n = await store.deleteStaleSessions("2026-10-13T00:00:00.000Z");
-    expect(n).toBe(1);
-    expect(await store.findSessionByTokenHash("t1")).toBeUndefined();
-    expect(await store.findSessionByTokenHash("t2")).toBeDefined();
-    expect(await store.findSessionByTokenHash("t3")).toBeDefined();
-    expect(await store.findSessionByTokenHash("t4")).toBeDefined();
-  });
-
   it("全削除（008 の D3: 起動時・施錠時）は失効の有無・種類によらず全部消し、件数を返す。施錠中も使える", async () => {
     await store.createSession(session("a", "t1"));
     await store.createSession(session("b", "t2", { kind: "recovery" }));
@@ -394,16 +375,6 @@ describe("auth_events", () => {
     expect((await store.listEvents(2)).map((e) => e.id)).toEqual(["e3", "e2"]);
   });
 
-  it("since と kinds での取得（since を含む、新しい順）", async () => {
-    await store.appendEvent({ id: "e1", occurredAt: T0, kind: "recovery_failed" });
-    await store.appendEvent({ id: "e2", occurredAt: T1, kind: "sign_in" });
-    await store.appendEvent({ id: "e3", occurredAt: T1, kind: "recovery_failed" });
-    await store.appendEvent({ id: "e4", occurredAt: T2, kind: "recovery_failed" });
-    const got = await store.listEventsSince(T1, ["recovery_failed"]);
-    expect(got.map((e) => e.id)).toEqual(["e4", "e3"]);
-    expect(await store.listEventsSince(T0, [])).toEqual([]);
-  });
-
   it("更新・削除はトリガーで失敗する", async () => {
     await store.appendEvent({ id: "e1", occurredAt: T0, kind: "register" });
     expect(() =>
@@ -434,20 +405,6 @@ describe("pairing tokens", () => {
     expect(await store.isPairingTokenValid("zz", "mac.ts.net", MID)).toBe(false);
   });
 
-  it("消費は単回（2回目は偽）で、確認も偽になる", async () => {
-    await store.createPairingToken(token());
-    expect(await store.consumePairingToken("ph1", "mac.ts.net", MID)).toBe(true);
-    expect(await store.consumePairingToken("ph1", "mac.ts.net", MID)).toBe(false);
-    expect(await store.isPairingTokenValid("ph1", "mac.ts.net", MID)).toBe(false);
-  });
-
-  it("期限切れ・rpId 違いの消費は偽で、used_at を付けない", async () => {
-    await store.createPairingToken(token());
-    expect(await store.consumePairingToken("ph1", "mac.ts.net", LATE)).toBe(false);
-    expect(await store.consumePairingToken("ph1", "other.ts.net", MID)).toBe(false);
-    expect(await store.consumePairingToken("ph1", "mac.ts.net", MID)).toBe(true);
-  });
-
   describe("addPasskeyWithPairingToken（004/T017b。パスキー・包み・消費を 1 トランザクションで）", () => {
     const paired = (id: string) => passkey(id, { rpId: "mac.ts.net", createdAt: MID });
 
@@ -463,7 +420,7 @@ describe("pairing tokens", () => {
     it("無効（使用済み・期限切れ・存在しない・rpId 違い）なら false で、何も書かない", async () => {
       await store.initializeVault(passkey("pk1"), wrap(1), wrap(2));
       await store.createPairingToken(token());
-      await store.consumePairingToken("ph1", "mac.ts.net", MID);
+      db.$client.prepare("UPDATE pairing_tokens SET used_at = ? WHERE token_hash = 'ph1'").run(MID);
       expect(await store.addPasskeyWithPairingToken(paired("pk2"), wrap(3), "ph1", MID)).toBe(
         false,
       );

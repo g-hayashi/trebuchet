@@ -5,8 +5,7 @@ import {
   shouldRunAutoBackup,
 } from "@trebuchet/domain";
 import type { BackupRunner } from "./backup-run.ts";
-
-const HOUR_MS = 60 * 60 * 1000;
+import { errorName, HOUR_MS, startInterval } from "./util.ts";
 
 export type BackupSchedulerDeps = {
   runner: Pick<BackupRunner, "start">;
@@ -36,16 +35,11 @@ export function startBackupScheduler(deps: BackupSchedulerDeps): BackupScheduler
       const started = await deps.runner.start("auto");
       if (started.ok) await started.value.done;
     } catch (e) {
-      console.error("backup: 自動の判断に失敗", e instanceof Error ? e.name : "unknown");
+      console.error("backup: 自動の判断に失敗", errorName(e));
     } finally {
       judging = false;
     }
   }
 
-  const timer = setInterval(() => {
-    void tick();
-  }, deps.intervalMs ?? HOUR_MS);
-  timer.unref();
-
-  return { tick, stop: () => clearInterval(timer) };
+  return { tick, stop: startInterval(tick, deps.intervalMs ?? HOUR_MS) };
 }

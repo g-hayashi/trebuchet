@@ -7,6 +7,7 @@ import { randomBytes } from "node:crypto";
  */
 
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/** 回復キーの乱数（160 ビット） */
 export const RECOVERY_KEY_BYTES = 20;
 const CHARS = (RECOVERY_KEY_BYTES * 8) / 5; // 32
 

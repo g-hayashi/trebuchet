@@ -406,11 +406,9 @@ describe("DrizzleRegistryRepository", () => {
     registry.insertEntity(later);
     registry.insertEntity(first);
     expect(registry.listEntities()).toEqual([first, later]);
-    expect(registry.getEntity(later.id)).toEqual(later);
-    expect(registry.getEntity(randomUUIDv7())).toBeUndefined();
 
     registry.renameEntity(first.id, "個人（屋号）");
-    expect(registry.getEntity(first.id)).toEqual({ ...first, name: "個人（屋号）" });
+    expect(registry.listEntities()).toEqual([{ ...first, name: "個人（屋号）" }, later]);
   });
 
   it("DB ファイルは data ディレクトリからの相対パスで記録される", () => {

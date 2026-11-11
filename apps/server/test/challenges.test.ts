@@ -10,15 +10,15 @@ describe("ChallengeStore", () => {
   it("同じ用途で 1 回だけ取り出せる", () => {
     const store = new ChallengeStore(makeClock(START));
     store.issue("register", "a");
-    expect(store.consume("register", "a")).toBe(true);
-    expect(store.consume("register", "a")).toBe(false);
+    expect(store.take("register", "a")).toBeDefined();
+    expect(store.take("register", "a")).toBeUndefined();
   });
 
-  it("用途の不一致は false で、そのまま破棄される", () => {
+  it("用途の不一致は undefined で、そのまま破棄される", () => {
     const store = new ChallengeStore(makeClock(START));
     store.issue("register", "a");
-    expect(store.consume("sign-in", "a")).toBe(false);
-    expect(store.consume("register", "a")).toBe(false);
+    expect(store.take("sign-in", "a")).toBeUndefined();
+    expect(store.take("register", "a")).toBeUndefined();
   });
 
   it("5 分で期限が切れる", () => {
@@ -27,18 +27,17 @@ describe("ChallengeStore", () => {
     store.issue("register", "a");
     store.issue("register", "b");
     clock.advance(CHALLENGE_TTL_MS - 1);
-    expect(store.consume("register", "a")).toBe(true);
+    expect(store.take("register", "a")).toBeDefined();
     clock.advance(1);
-    expect(store.consume("register", "b")).toBe(false);
+    expect(store.take("register", "b")).toBeUndefined();
   });
 
   it("100 件を超えたら古いものから捨てる", () => {
     const store = new ChallengeStore(makeClock(START));
     for (let i = 0; i < CHALLENGE_MAX + 1; i++) store.issue("register", `c${i}`);
-    expect(store.size).toBe(CHALLENGE_MAX);
-    expect(store.consume("register", "c0")).toBe(false);
-    expect(store.consume("register", "c1")).toBe(true);
-    expect(store.consume("register", `c${CHALLENGE_MAX}`)).toBe(true);
+    expect(store.take("register", "c0")).toBeUndefined();
+    expect(store.take("register", "c1")).toBeDefined();
+    expect(store.take("register", `c${CHALLENGE_MAX}`)).toBeDefined();
   });
 
   it("take は一緒に入れた値を 1 回だけ返す。用途の不一致・期限切れは undefined で破棄する", () => {

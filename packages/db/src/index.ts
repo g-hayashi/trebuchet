@@ -19,4 +19,5 @@ export * as tenantSchema from "./schema/tenant.ts";
 export * from "./statement-repository.ts";
 export * from "./tenant-store.ts";
 export * from "./unit-of-work.ts";
+export { sha256Hex } from "./util.ts";
 export * from "./vault-crypto.ts";

@@ -125,6 +125,14 @@ export function fail(c: Context, error: DomainError) {
 }
 
 /**
+ * ドメインのエラーを、コードの表のステータスによらず 422 にする。
+ * 同じコード（`VALIDATION` など）を、ルートによって 400 と 422 に分けるときに使う
+ */
+export function failUnprocessable(c: Context, error: DomainError) {
+  return c.json(errorBody(error), 422);
+}
+
+/**
  * ユースケースの結果をレスポンスにする。失敗は `fail`、成功は `onOk` が返すレスポンス
  * （`return respond(c, result, (v) => c.json({ account: v }, 201))`）。
  * 成功のレスポンスをルート側で作るので、hc の型（ステータスと本文）はそのまま保たれる
@@ -173,6 +181,18 @@ export function validationError(
 export const lockedError = (): DomainError => ({
   code: "LOCKED",
   message: "施錠されています。パスキーか回復キーで解錠してください",
+});
+
+/** 401 UNAUTHENTICATED（有効な通常のセッションがない） */
+export const unauthenticatedError = (): DomainError => ({
+  code: "UNAUTHENTICATED",
+  message: "サインインが必要です",
+});
+
+/** 421 HOST_NOT_ALLOWED（初回の設定は、この Mac の localhost からだけ） */
+export const firstRegistrationHostError = (): DomainError => ({
+  code: "HOST_NOT_ALLOWED",
+  message: "最初の登録は、この Mac の localhost からだけできます",
 });
 
 export const onError: ErrorHandler = (e, c) => {

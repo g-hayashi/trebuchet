@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
 import type { TailscaleStatus } from "@trebuchet/schema";
+import { LOOPBACK_HOST } from "./origin.ts";
+import { isRecord } from "./util.ts";
 
 export type { TailscaleStatus };
 
@@ -57,9 +59,6 @@ const notFound = () =>
 const commandFailed = () =>
   new TailscaleError("TAILSCALE_COMMAND_FAILED", "tailscale のコマンドが失敗しました");
 
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-
 function parseJson(stdout: string): Record<string, unknown> {
   let value: unknown;
   try {
@@ -86,7 +85,9 @@ function isServing(serve: Record<string, unknown>, dnsName: string, port: number
   const site = Object.entries(web).find(([key]) => key.toLowerCase() === `${dnsName}:443`)?.[1];
   const handlers = isRecord(site) ? site.Handlers : undefined;
   if (!isRecord(handlers)) return false;
-  return Object.values(handlers).some((h) => isRecord(h) && h.Proxy === `http://127.0.0.1:${port}`);
+  return Object.values(handlers).some(
+    (h) => isRecord(h) && h.Proxy === `http://${LOOPBACK_HOST}:${port}`,
+  );
 }
 
 export function createTailscaleCli({
@@ -96,7 +97,7 @@ export function createTailscaleCli({
   port: number;
   exec?: TailscaleExec;
 }): TailscaleCli {
-  const target = `http://127.0.0.1:${port}`;
+  const target = `http://${LOOPBACK_HOST}:${port}`;
 
   /** PATH の `tailscale`、なければ Mac アプリの実行ファイル。どちらもなければ TAILSCALE_NOT_FOUND */
   async function run(args: string[]): Promise<string> {

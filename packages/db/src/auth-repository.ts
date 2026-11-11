@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import {
   type AppSettingKey,
   type AuthEvent,
-  type AuthEventKind,
   type AuthStore,
   isSessionActive,
   type KeyWrap,
@@ -14,7 +13,7 @@ import {
   type WrappedKey,
 } from "@trebuchet/domain";
 import type { RemoteSettings } from "@trebuchet/schema";
-import { and, count, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, lt, sql } from "drizzle-orm";
 import { rowidOf } from "./internal.ts";
 import {
   authEvents,
@@ -136,6 +135,15 @@ function toEvent(r: EventRow): AuthEvent {
 }
 
 /** 新しい順（同じ時刻は後から追記した方が先）。auth_events は追記のみなので rowid が追記の順 */
+/** 使えるペアリングのトークン: ハッシュと rpId が一致し、未使用で、`now` が期限より前（`now < expires_at`） */
+const usableToken = (tokenHash: string, rpId: string, now: string) =>
+  and(
+    eq(pairingTokens.tokenHash, tokenHash),
+    eq(pairingTokens.rpId, rpId),
+    isNull(pairingTokens.usedAt),
+    sql`${now} < ${pairingTokens.expiresAt}`,
+  );
+
 const newestFirst = [desc(authEvents.occurredAt), desc(rowidOf(authEvents))] as const;
 
 /**
@@ -296,14 +304,6 @@ export class DrizzleAuthStore implements AuthStore {
       .filter((s) => isSessionActive(s, now));
   }
 
-  async deleteStaleSessions(before: string): Promise<number> {
-    return this.db
-      .delete(sessions)
-      .where(lt(sessions.revokedAt, before))
-      .returning({ id: sessions.id })
-      .all().length;
-  }
-
   async deleteAllSessions(): Promise<number> {
     return this.db.delete(sessions).returning({ id: sessions.id }).all().length;
   }
@@ -334,17 +334,6 @@ export class DrizzleAuthStore implements AuthStore {
     return (limit === undefined ? query : query.limit(limit)).all().map(toEvent);
   }
 
-  async listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]> {
-    if (kinds.length === 0) return [];
-    return this.db
-      .select()
-      .from(authEvents)
-      .where(and(gte(authEvents.occurredAt, since), inArray(authEvents.kind, kinds)))
-      .orderBy(...newestFirst)
-      .all()
-      .map(toEvent);
-  }
-
   // ペアリングのトークン（auth.sqlite。施錠中も使える）
 
   async createPairingToken(t: {
@@ -371,34 +360,9 @@ export class DrizzleAuthStore implements AuthStore {
     const row = this.db
       .select({ id: pairingTokens.id })
       .from(pairingTokens)
-      .where(
-        and(
-          eq(pairingTokens.tokenHash, tokenHash),
-          eq(pairingTokens.rpId, rpId),
-          isNull(pairingTokens.usedAt),
-          sql`${now} < ${pairingTokens.expiresAt}`,
-        ),
-      )
+      .where(usableToken(tokenHash, rpId, now))
       .get();
     return row !== undefined;
-  }
-
-  /** `UPDATE … WHERE used_at IS NULL AND now < expires_at` の結果で単回を保証する */
-  async consumePairingToken(tokenHash: string, rpId: string, now: string): Promise<boolean> {
-    const rows = this.db
-      .update(pairingTokens)
-      .set({ usedAt: now })
-      .where(
-        and(
-          eq(pairingTokens.tokenHash, tokenHash),
-          eq(pairingTokens.rpId, rpId),
-          isNull(pairingTokens.usedAt),
-          sql`${now} < ${pairingTokens.expiresAt}`,
-        ),
-      )
-      .returning({ id: pairingTokens.id })
-      .all();
-    return rows.length > 0;
   }
 
   /** トークンの消費とパスキー・包みの追加を同じトランザクションで行う。追加が失敗すれば消費も巻き戻る */
@@ -413,14 +377,7 @@ export class DrizzleAuthStore implements AuthStore {
       const consumed = tx
         .update(pairingTokens)
         .set({ usedAt: now })
-        .where(
-          and(
-            eq(pairingTokens.tokenHash, tokenHash),
-            eq(pairingTokens.rpId, p.rpId),
-            isNull(pairingTokens.usedAt),
-            sql`${now} < ${pairingTokens.expiresAt}`,
-          ),
-        )
+        .where(usableToken(tokenHash, p.rpId, now))
         .returning({ id: pairingTokens.id })
         .all();
       if (consumed.length === 0) return false;

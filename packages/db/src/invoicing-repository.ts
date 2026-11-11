@@ -51,10 +51,7 @@ export function appendInvoicingAuditRow(db: TenantConn, entry: InvoicingAuditEnt
   db.insert(invoicingAuditLog).values(entry).run();
 }
 
-/**
- * InvoicingStore の Drizzle（better-sqlite3）による実装。メソッドはすべて同期。
- * 請求書・入金のメソッドは US1・US4 の db のタスクで足す
- */
+/** InvoicingStore の Drizzle（better-sqlite3）による実装。メソッドはすべて同期 */
 export class DrizzleInvoicingStore implements InvoicingStore {
   private readonly db: TenantConn;
 

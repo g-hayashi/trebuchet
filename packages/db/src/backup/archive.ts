@@ -1,5 +1,7 @@
-import { createHash } from "node:crypto";
 import type { Result } from "@trebuchet/domain";
+import { SHA256_PATTERN } from "@trebuchet/schema";
+import { isValidEntityId, REGISTRY_FILE_NAME } from "../tenant-store.ts";
+import { sha256Hex } from "../util.ts";
 import type {
   BackupManifest,
   ManifestEntity,
@@ -12,14 +14,14 @@ import type {
 const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
 const MAX_FILES = 10_001;
 
-/** 許すパスは `registry.sqlite` と `tenants/<UUID>.sqlite` だけ（パス・トラバーサルの防止） */
-const PATH_PATTERN =
-  /^(?:registry|tenants\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sqlite$/i;
-const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const TENANT_PATH = /^tenants\/(.+)\.sqlite$/i;
 
-/** バイト列の SHA-256（小文字 16 進 64 文字）。content_sha256（R10）はアーカイブの平文にこれを掛けた値 */
-export const sha256Hex = (bytes: Uint8Array): string =>
-  createHash("sha256").update(bytes).digest("hex");
+/** 許すパスは `registry.sqlite` と `tenants/<UUID>.sqlite` だけ（大文字小文字は問わない。パス・トラバーサルの防止） */
+export function isArchivePath(path: string): boolean {
+  if (path.toLowerCase() === REGISTRY_FILE_NAME) return true;
+  const entityId = TENANT_PATH.exec(path)?.[1];
+  return entityId !== undefined && isValidEntityId(entityId);
+}
 
 /** `マニフェストの長さ（uint32 BE）| マニフェスト（JSON）| ファイル1 | ファイル2 | …` */
 export function packArchive(snapshot: Snapshot): Buffer {
@@ -65,7 +67,7 @@ function parseFiles(value: unknown): ManifestFile[] | undefined {
   for (const f of value as unknown[]) {
     if (typeof f !== "object" || f === null) return undefined;
     const { path, size, sha256 } = f as Record<string, unknown>;
-    if (typeof path !== "string" || !PATH_PATTERN.test(path)) return undefined;
+    if (typeof path !== "string" || !isArchivePath(path)) return undefined;
     if (!isNonNegativeInt(size)) return undefined;
     if (typeof sha256 !== "string" || !SHA256_PATTERN.test(sha256)) return undefined;
     const key = path.toLowerCase();
@@ -73,7 +75,7 @@ function parseFiles(value: unknown): ManifestFile[] | undefined {
     seen.add(key);
     out.push({ path, size, sha256 });
   }
-  if (!seen.has("registry.sqlite")) return undefined;
+  if (!seen.has(REGISTRY_FILE_NAME)) return undefined;
   return out;
 }
 

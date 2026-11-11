@@ -14,8 +14,8 @@ import { RECEIPT_MAX_PIXELS, type ReceiptMediaType } from "@trebuchet/schema";
 
 /**
  * 証憑の画像の変換（010/R12、contracts/domain-module.md §4）。macOS の `sips` を `execFile` で呼ぶ
- * （新しい依存を足さない）。T040 のゲートの結果: HEIC → JPEG、PDF の 1 ページ目 → PNG → 長辺 2,048、
- * AI 用の JPEG のすべてが `sips` で足りた（`qlmanage` の代替は使わない）。
+ * （新しい依存を足さない）。HEIC → JPEG、PDF の 1 ページ目 → PNG → 長辺 2,048、
+ * AI 用の JPEG のすべてが `sips` で足りる（`qlmanage` の代替は使わない）。
  *
  * - 作業ファイル（平文の写し）は `<tmpRoot>receipt-convert-<乱数>/` に書き、`finally` で必ず消す（R9）。
  *   起動時の掃除は `startup.ts`。子プロセスの `TMPDIR` も `tmpRoot`（`/tmp` に平文を書かせない）

@@ -11,6 +11,7 @@ import {
   withDataKey,
 } from "@trebuchet/db";
 import type { AuthStore } from "@trebuchet/domain";
+import { errorName } from "./util.ts";
 
 /**
  * vault（008 の D3。写す元: invest-copilot `vault.ts`）。解錠済みの DK は db の `setDataKey` が持つ
@@ -48,7 +49,7 @@ export function createVault(deps: { store: () => AuthStore }): Vault {
       try {
         listener(unlocked);
       } catch (e) {
-        console.error("vault: 知らせの処理に失敗", e instanceof Error ? e.name : "unknown");
+        console.error("vault: 知らせの処理に失敗", errorName(e));
       }
     }
   }

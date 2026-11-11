@@ -9,7 +9,7 @@ type Entry = { scope: string; expiresAt: number; data: unknown };
 /**
  * 要求ごとに 1 つの challenge を、用途（`scope`）と途中の値（`data`。008 の PRF の salt・登録を検証した資格情報）
  * つきで保持する。取り出しは 1 回だけ（成功・失敗で破棄）。100 件を超えたら古いものから捨てる。
- * 期限切れ・用途の不一致・捨てられたものは `consume` が false、`take` が undefined を返す
+ * 期限切れ・用途の不一致・捨てられたものは `take` が undefined を返す
  */
 export class ChallengeStore {
   private readonly entries = new Map<string, Entry>();
@@ -46,14 +46,5 @@ export class ChallengeStore {
     return entry.scope === scope && entry.expiresAt > this.nowMs()
       ? { data: entry.data }
       : undefined;
-  }
-
-  /** 有効なら true。見つかったものは、真偽によらず破棄する */
-  consume(scope: string, challenge: string): boolean {
-    return this.take(scope, challenge) !== undefined;
-  }
-
-  get size(): number {
-    return this.entries.size;
   }
 }

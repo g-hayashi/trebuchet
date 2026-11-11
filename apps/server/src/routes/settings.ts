@@ -1,8 +1,8 @@
 import { type AuthStore, type Clock, domainError } from "@trebuchet/domain";
 import { RemoteSettings, RemoteSettingsInput, TailscaleServeInput } from "@trebuchet/schema";
 import { Hono } from "hono";
-import { ids } from "../deps.ts";
 import { DomainException, fail } from "../errors.ts";
+import { ids } from "../lib/ids.ts";
 import { isLocalHost, rpIdFor } from "../lib/origin.ts";
 import { type TailscaleCli, TailscaleError } from "../lib/tailscale.ts";
 import type { GuardEnv } from "../middleware/host.ts";

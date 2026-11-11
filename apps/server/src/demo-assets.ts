@@ -25,7 +25,7 @@ const isKey = (key: string): key is keyof typeof FILES => Object.hasOwn(FILES, k
  * 同梱の画像を読む `DemoAssets`。知らないキーは例外（計画と素材の食い違い。createDemoEntity が `DEMO_FAILED` にする）。
  * `probes` は画像の寸法（`probeDemoAssets` が先に調べたもの）。無いキーは null
  */
-export function createDemoAssets(
+function createDemoAssets(
   options: { dir?: string; probes?: ReadonlyMap<string, ReceiptProbe | null> } = {},
 ): DemoAssets {
   const dir = options.dir ?? ASSET_DIR;

@@ -34,14 +34,16 @@ export type AiProviderOptions = {
   endpoint(): Promise<AiEndpoint | undefined>;
   /**
    * `response_format`（json_schema）を送るか。既定は送る。端末内の `fm serve` には false を渡す
-   * （json_schema つきの推定の要求に 90〜180 秒応答しない。2026-11-04 の T050。出力は呼び出し側が検証する）
+   * （json_schema つきの推定の要求に 90〜180 秒応答しない。2026-11-04 の実測。出力は呼び出し側が検証する）
    */
   responseFormat?: boolean | undefined;
 };
 
 type Failure = { message: string; timeout?: boolean };
 
-const unavailable = () => err(domainError("AI_NOT_CONFIGURED", "AI を使えません"));
+/** AI を使えない（設定が無効か未完了）。AI は呼ばない */
+export const aiNotConfiguredError = () => domainError("AI_NOT_CONFIGURED", "AI を使えません");
+const unavailable = () => err(aiNotConfiguredError());
 const failed = (message: string, timeout = false) =>
   err(
     timeout

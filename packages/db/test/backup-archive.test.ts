@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { packArchive, sha256Hex, unpackArchive } from "../src/backup/archive.ts";
+import { isArchivePath, packArchive, unpackArchive } from "../src/backup/archive.ts";
 import type { Snapshot } from "../src/backup/types.ts";
+import { sha256Hex } from "../src/util.ts";
 
 const ID = "0192f3a0-0000-7000-8000-000000000001";
 
@@ -93,6 +94,15 @@ describe("アーカイブ", () => {
   ])("パスが %s のものは拒否する（パス・トラバーサルの防止）", (path) => {
     const archive = packArchive(snapshot([{ path, bytes: Buffer.from("x") }]));
     expect(unpackArchive(archive)).toEqual({ ok: false, error: "INVALID" });
+  });
+
+  it("isArchivePath は registry.sqlite と tenants/<UUID>.sqlite を大文字小文字によらず許す", () => {
+    expect(isArchivePath("registry.sqlite")).toBe(true);
+    expect(isArchivePath("REGISTRY.SQLITE")).toBe(true);
+    expect(isArchivePath(`tenants/${ID}.sqlite`)).toBe(true);
+    expect(isArchivePath(`TENANTS/${ID.toUpperCase()}.sqlite`)).toBe(true);
+    expect(isArchivePath(`tenants/${ID}.sqlite.bak`)).toBe(false);
+    expect(isArchivePath("tenants/x.sqlite")).toBe(false);
   });
 
   it("同じパスが 2 度あるもの、registry.sqlite がないものは拒否する", () => {

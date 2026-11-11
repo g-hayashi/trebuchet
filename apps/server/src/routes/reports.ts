@@ -18,18 +18,13 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import { reportDeps } from "../deps.ts";
 import { respond } from "../errors.ts";
+import { csvResponse } from "../lib/csv-response.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 
-/**
- * FR-032: BOM 付き UTF-8 の CSV をダウンロードさせる。
- * c.text にするのは、クライアントの型で JSON の応答と区別するため（Content-Type は上書きする）
- */
+/** FR-032: BOM 付き UTF-8 の CSV をダウンロードさせる */
 function csv(c: Context, report: Report, suffix: string) {
-  return c.text(toCsv(report), 200, {
-    "Content-Type": "text/csv; charset=utf-8",
-    "Content-Disposition": `attachment; filename="${report.kind}-${suffix}.csv"`,
-  });
+  return csvResponse(c, toCsv(report), `${report.kind}-${suffix}.csv`);
 }
 
 /** `/api/entities/:entityId` の下の帳票（FR-026〜033）。format=csv なら CSV を返す */

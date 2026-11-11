@@ -60,12 +60,12 @@ import {
   type HomeUseAllocation,
   type Journal,
   ok,
-  periodNotFound,
   type RentDetail,
   type Result,
   validation,
 } from "../types.ts";
 import { createJournal } from "./create-journal.ts";
+import { requirePeriod } from "./masters.ts";
 import type { ReportDeps } from "./reports.ts";
 
 /** 決算書の参照の依存。帳簿は 001 の ReportDeps、決算の設定は ClosingStore から読む */
@@ -128,8 +128,7 @@ export function requireIndividual(masters: Pick<MasterRepository, "getProfile">)
 export function resolveYear(masters: MasterRepository, fiscalYear: number): Result<FiscalPeriod> {
   const individual = requireIndividual(masters);
   if (!individual.ok) return individual;
-  const period = masters.getFiscalPeriodByYear(fiscalYear);
-  return period === undefined ? err(periodNotFound(fiscalYear)) : ok(period);
+  return requirePeriod(masters, fiscalYear);
 }
 
 /** 締め済みの年度に決算整理の仕訳・開業費の決定を書こうとしたとき（FR-021） */

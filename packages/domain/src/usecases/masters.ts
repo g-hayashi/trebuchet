@@ -42,6 +42,15 @@ export type MasterDeps = {
   clock: Clock;
 };
 
+/** 年度の会計期間。なければ `periodNotFound`（VALIDATION「会計期間が見つかりません」） */
+export function requirePeriod(
+  repo: Pick<MasterRepository, "getFiscalPeriodByYear">,
+  fiscalYear: number,
+): Result<FiscalPeriod> {
+  const period = repo.getFiscalPeriodByYear(fiscalYear);
+  return period === undefined ? err(periodNotFound(fiscalYear)) : ok(period);
+}
+
 function validName(
   raw: string,
   field: string,
@@ -510,10 +519,9 @@ export function replaceOpeningBalances(
 ): Result<OpeningBalance[]> {
   const validated = validateOpeningBalances(rows);
   return deps.repo.transaction((tx) => {
-    const period = tx.getFiscalPeriodByYear(fiscalYear);
-    if (period === undefined) {
-      return err(periodNotFound(fiscalYear));
-    }
+    const found = requirePeriod(tx, fiscalYear);
+    if (!found.ok) return found;
+    const period = found.value;
     if (period.status === "closed") {
       return err(
         domainError("PERIOD_CLOSED", "締め済みの会計期間の期首残高は変更できません", {

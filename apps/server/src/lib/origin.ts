@@ -5,11 +5,14 @@ import { LOCAL_RP_ID } from "@trebuchet/domain";
  * 純粋な関数だけ。リモートの設定（auth.sqlite の remote_settings。`AuthStore.getRemoteSettings`）は引数で受ける
  */
 
-/** リモート（Tailscale）の設定。既定は無効。読み込みは T016 が足す */
+/** リモート（Tailscale）の設定。既定は無効 */
 export type RemoteSettings = { enabled: boolean; host: string | null };
 export type GetRemoteSettings = () => Promise<RemoteSettings>;
 
 const REMOTE_DISABLED: RemoteSettings = { enabled: false, host: null };
+
+/** ループバックのアドレス。server・端末内の AI（`fm serve`）の待ち受けと、tailscale serve の転送先 */
+export const LOOPBACK_HOST = "127.0.0.1";
 
 /** server が待ち受けるポート（`main.ts` の待ち受けと、tailscale serve の転送先で共有する） */
 export const SERVER_PORT = 8787;
@@ -23,12 +26,11 @@ export const DEV_WEB_ORIGIN = `http://${DEV_WEB_HOST}`;
  * `127.0.0.1:8787` はヘルスチェックと E2E の server の起動確認だけに使う（RP ID は持たない）
  */
 const LOCAL_RP_HOSTS: readonly string[] = [DEV_WEB_HOST, `localhost:${SERVER_PORT}`];
-const LOCAL_HOSTS: readonly string[] = [...LOCAL_RP_HOSTS, `127.0.0.1:${SERVER_PORT}`];
+const LOCAL_HOSTS: readonly string[] = [...LOCAL_RP_HOSTS, `${LOOPBACK_HOST}:${SERVER_PORT}`];
 
 /**
- * 要求の接続先の名前を取り出す、唯一の場所。今は `Host` ヘッダーだけを見る。
- * Tailscale の `serve` の転送で届く名前（`Host` か `X-Forwarded-Host` か）は T001(b) の確認の後、
- * T016 でここだけを直して決める
+ * 要求の接続先の名前を取り出す、唯一の場所。`Host` ヘッダーだけを見る（`X-Forwarded-Host` は読まない。
+ * 127.0.0.1 に直接つなぐ相手が偽れるため。004/R3）
  */
 export function requestHost(req: { header(name: string): string | undefined }): string | undefined {
   return req.header("host");

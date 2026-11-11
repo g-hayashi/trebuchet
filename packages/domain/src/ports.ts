@@ -17,7 +17,6 @@ import type {
 import type {
   AppSettingKey,
   AuthEvent,
-  AuthEventKind,
   BackupRun,
   KeyWrap,
   NewAuthEvent,
@@ -147,8 +146,6 @@ export interface JournalRepository extends AuditLog {
   /** status active、source（省略時は manual）、version 1、updatedAt = createdAt で保存する */
   insertJournal(journal: NewJournal): Journal;
   getJournal(id: string): Journal | undefined;
-  /** 新しい順（日付の降順、同じ日付は仕訳番号の降順）。取消済みを含む */
-  recentJournals(limit: number): Journal[];
 }
 
 /** 仕訳の訂正・取消・履歴・検索（US3） */
@@ -602,8 +599,7 @@ export interface ReceiptReader {
 /** 事業体の一覧（data/registry.sqlite） */
 export interface RegistryRepository {
   listEntities(): EntitySummary[];
-  getEntity(id: string): EntitySummary | undefined;
-  /** `status` の既定は `active`。`preparing` の行は `listEntities`・`getEntity` に出ない */
+  /** `status` の既定は `active`。`preparing` の行は `listEntities` に出ない */
   insertEntity(entity: EntitySummary & { status?: "active" | "preparing" | undefined }): void;
   renameEntity(id: string, name: string): void;
   /** `preparing` → `active`。`preparing` 以外の行は変えない */
@@ -669,16 +665,12 @@ export interface AuthStore {
   /** 失効したセッションの id を返す */
   revokeSessionsByPasskey(passkeyId: string, at: string): Promise<string[]>;
   listActiveSessions(now: string): Promise<Session[]>;
-  /** 失効済みで before より古いものを消す。消した件数を返す */
-  deleteStaleSessions(before: string): Promise<number>;
   /** 全部消す（008 の D3: 起動時と施錠時。施錠中も使える）。消した件数を返す */
   deleteAllSessions(): Promise<number>;
   // 認証の記録（追記のみ）
   appendEvent(event: NewAuthEvent): Promise<void>;
   /** 新しい順。limit を省略すると全件 */
   listEvents(limit?: number): Promise<AuthEvent[]>;
-  /** since 以降の、kinds の記録（新しい順） */
-  listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]>;
   // ペアリングのトークン（ハッシュは hashToken）
   createPairingToken(token: {
     id: string;
@@ -688,8 +680,6 @@ export interface AuthStore {
     expiresAt: string;
   }): Promise<void>;
   isPairingTokenValid(tokenHash: string, rpId: string, now: string): Promise<boolean>;
-  /** 有効なら used_at を付けて true（単回） */
-  consumePairingToken(tokenHash: string, rpId: string, now: string): Promise<boolean>;
   deleteExpiredPairingTokens(before: string): Promise<number>;
   /**
    * ペアリングの登録: トークンを消費し、パスキーとその包みを入れる（1 トランザクション。INV-53）。

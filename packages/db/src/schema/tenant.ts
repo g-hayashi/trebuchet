@@ -1,6 +1,7 @@
 import {
   BILLING_TYPES,
   CANDIDATE_METHODS,
+  ENTITY_KINDS,
   JOURNAL_SOURCES,
   PURPOSES,
   ReceiptCategory,
@@ -13,6 +14,7 @@ import {
   RULE_MANAGED_BY,
   RULE_ORIGINS,
   RULE_STATUSES,
+  SIDES,
   STATEMENT_ACCOUNT_KINDS,
   STATEMENT_ACCOUNT_USAGES,
   STATEMENT_LINK_KINDS,
@@ -53,7 +55,7 @@ export const entityProfile = sqliteTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
-    kind: text("kind", { enum: ["individual", "corporation"] }).notNull(),
+    kind: text("kind", { enum: ENTITY_KINDS }).notNull(),
     fiscalStartMonth: integer("fiscal_start_month").notNull(),
     createdAt: text("created_at").notNull(),
   },
@@ -88,7 +90,7 @@ export const accounts = sqliteTable(
     category: text("category", {
       enum: ["asset", "liability", "equity", "revenue", "expense"],
     }).notNull(),
-    normalSide: text("normal_side", { enum: ["debit", "credit"] }).notNull(),
+    normalSide: text("normal_side", { enum: SIDES }).notNull(),
     reportSection: text("report_section", {
       enum: [
         "PL_SALES",
@@ -215,7 +217,7 @@ export const openingBalances = sqliteTable(
       .notNull()
       .references(() => accounts.id),
     subAccountId: text("sub_account_id").references(() => subAccounts.id),
-    side: text("side", { enum: ["debit", "credit"] }).notNull(),
+    side: text("side", { enum: SIDES }).notNull(),
     amount: integer("amount").notNull(),
   },
   (t) => [
@@ -257,7 +259,7 @@ export const journalLines = sqliteTable(
       .notNull()
       .references(() => journals.id),
     lineNo: integer("line_no").notNull(),
-    side: text("side", { enum: ["debit", "credit"] }).notNull(),
+    side: text("side", { enum: SIDES }).notNull(),
     accountId: text("account_id")
       .notNull()
       .references(() => accounts.id),
@@ -969,7 +971,7 @@ export const recurringJournalLines = sqliteTable(
       .notNull()
       .references(() => recurringJournals.id),
     lineNo: integer("line_no").notNull(),
-    side: text("side", { enum: ["debit", "credit"] }).notNull(),
+    side: text("side", { enum: SIDES }).notNull(),
     accountId: text("account_id")
       .notNull()
       .references(() => accounts.id),

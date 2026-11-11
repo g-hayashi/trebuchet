@@ -77,6 +77,7 @@ export * from "./statements/table.ts";
 export * from "./statements/transfer.ts";
 export * from "./tax-rates.ts";
 export * from "./tax-settings.ts";
+export * from "./text.ts";
 export * from "./types.ts";
 export * from "./usecases/blue-return.ts";
 export * from "./usecases/close-period.ts";

@@ -11,7 +11,7 @@ import {
   writeSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { BackupFileInfo } from "@trebuchet/domain";
+import { type BackupFileInfo, compareText } from "@trebuchet/domain";
 
 export type BackupFileErrorCode = "FOLDER_NOT_FOUND" | "WRITE_FAILED" | "VERIFY_FAILED";
 
@@ -33,10 +33,7 @@ const pad = (n: number, width = 2): string => String(n).padStart(width, "0");
 export function backupFileName(macId: string, at: Date): string {
   const prefix = macId.slice(0, 8).toLowerCase();
   if (!/^[0-9a-z]{8}$/.test(prefix)) throw new Error("macId の形が違う");
-  const stamp =
-    `${pad(at.getUTCFullYear(), 4)}${pad(at.getUTCMonth() + 1)}${pad(at.getUTCDate())}` +
-    `-${pad(at.getUTCHours())}${pad(at.getUTCMinutes())}${pad(at.getUTCSeconds())}`;
-  return `trebuchet-${prefix}-${stamp}.tbk`;
+  return `trebuchet-${prefix}-${compactStamp(at)}.tbk`;
 }
 
 /**
@@ -68,8 +65,7 @@ function parseName(name: string): BackupFileInfo | undefined {
     Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s)),
   );
   // 13 月などの存在しない日時は、丸められて元の数字に戻らない
-  const back = `${pad(date.getUTCFullYear(), 4)}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}`;
-  if (back !== `${y}${mo}${d}${h}${mi}${s}` || macId === undefined) return undefined;
+  if (compactStamp(date) !== `${y}${mo}${d}-${h}${mi}${s}` || macId === undefined) return undefined;
   return { name, macId, createdAt: date.toISOString() };
 }
 
@@ -142,5 +138,5 @@ export function listBackupFiles(folder: string): BackupFileInfo[] {
     const info = parseName(entry.name);
     if (info !== undefined) out.push(info);
   }
-  return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.name.localeCompare(b.name));
+  return out.sort((a, b) => compareText(a.createdAt, b.createdAt) || compareText(a.name, b.name));
 }

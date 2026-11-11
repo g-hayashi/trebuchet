@@ -3,12 +3,14 @@ import { mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { WrappedKey } from "@trebuchet/domain";
+import { SHA256_PATTERN } from "@trebuchet/schema";
 import { and, eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { Database, type DrizzleDb, drizzleOf } from "./driver.ts";
 import * as authSchema from "./schema/auth.ts";
 import * as registrySchema from "./schema/registry.ts";
 import * as tenantSchema from "./schema/tenant.ts";
+import { DK_BYTES } from "./vault-crypto.ts";
 
 export type TenantDb = DrizzleDb<typeof tenantSchema>;
 export type RegistryDb = DrizzleDb<typeof registrySchema>;
@@ -43,13 +45,24 @@ export function dataDir(): string {
   return resolve(process.env.TREBUCHET_DATA_DIR ?? DEFAULT_DATA_DIR);
 }
 
+/** registry の DB のファイル名（データ場所の直下。バックアップの中のパスも同じ） */
+export const REGISTRY_FILE_NAME = "registry.sqlite";
+
+/** `<データ場所>/registry.sqlite`。`dir` を渡すと、その場所（復元・バックアップの作業場所など）の下のパス */
+export function registryFile(dir: string = dataDir()): string {
+  return join(dir, REGISTRY_FILE_NAME);
+}
+
+/** データ場所からの相対パス `tenants/<entityId 小文字>.sqlite`（registry の `db_file`、バックアップの中のパス）。形は検査しない */
+export function tenantRelPath(entityId: string): string {
+  return `tenants/${entityId.toLowerCase()}.sqlite`;
+}
+
 /** entityId を検証してから DB ファイルのパスを返す（パストラバーサル防止） */
 export function tenantFile(entityId: string): string {
   if (!isValidEntityId(entityId)) throw new InvalidEntityIdError(entityId);
-  return join(dataDir(), "tenants", `${entityId.toLowerCase()}.sqlite`);
+  return join(dataDir(), tenantRelPath(entityId));
 }
-
-const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 export class InvalidReceiptHashError extends Error {
   constructor() {
@@ -69,10 +82,6 @@ export function receiptFile(entityId: string, sha256: string): string {
   const dir = receiptsDir(entityId);
   if (!SHA256_PATTERN.test(sha256)) throw new InvalidReceiptHashError();
   return join(dir, `${sha256}.trc`);
-}
-
-export function registryFile(): string {
-  return join(dataDir(), "registry.sqlite");
 }
 
 /** 認証の表（暗号化しない。008 の D2） */
@@ -99,12 +108,10 @@ export function tenantDbKeyInfo(entityId: string): string {
   return `trebuchet/db/tenant:${entityId.toLowerCase()}/v1`;
 }
 
-const DATA_KEY_BYTES = 32;
-
 /** DB の鍵 = HKDF-SHA256(DK, salt=空, info) の 32 バイト。使い終えたら呼び出し側が fill(0) する */
 export function deriveDbKey(dk: Uint8Array, scope: DbKeyScope): Buffer {
   const info = scope === "registry" ? DB_KEY_INFO_REGISTRY : tenantDbKeyInfo(scope.tenant);
-  return Buffer.from(hkdfSync("sha256", dk, Buffer.alloc(0), info, DATA_KEY_BYTES));
+  return Buffer.from(hkdfSync("sha256", dk, Buffer.alloc(0), info, DK_BYTES));
 }
 
 /** 解錠中の DK（メモリーだけに置く。ディスク・環境変数・ログに出さない） */
@@ -115,8 +122,8 @@ let dataKey: Uint8Array | null = null;
  * （呼び出し側は写しを残さない）。前の DK があれば先に `clearDataKey` する
  */
 export function setDataKey(dk: Uint8Array): void {
-  if (dk.length !== DATA_KEY_BYTES) {
-    throw new RangeError(`data key must be ${DATA_KEY_BYTES} bytes`);
+  if (dk.length !== DK_BYTES) {
+    throw new RangeError(`data key must be ${DK_BYTES} bytes`);
   }
   if (dataKey !== null && dataKey !== dk) clearDataKey();
   dataKey = dk;

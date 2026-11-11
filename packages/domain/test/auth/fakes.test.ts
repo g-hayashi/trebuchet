@@ -100,7 +100,7 @@ describe("FakeAuthStore", () => {
     expect(await s.getPasskeyWrap("b")).toBeDefined();
   });
 
-  it("セッション: 作成・検索・touch・失効・一覧・掃除", async () => {
+  it("セッション: 作成・検索・touch・失効・一覧", async () => {
     const s = new FakeAuthStore();
     await s.createSession(newSession("s1"));
     expect(await s.findSessionByTokenHash("h-s1")).toMatchObject({
@@ -115,9 +115,6 @@ describe("FakeAuthStore", () => {
     expect((await s.listActiveSessions(T(11))).map((x) => x.id)).toEqual(["s1"]);
     await s.revokeSession("s1", T(20));
     expect(await s.listActiveSessions(T(21))).toEqual([]);
-    expect(await s.deleteStaleSessions(T(20))).toBe(0);
-    expect(await s.deleteStaleSessions(T(21))).toBe(1);
-    expect(await s.findSessionByTokenHash("h-s1")).toBeUndefined();
   });
 
   it("セッションの全削除（008 の D3: 起動時・施錠時）は失効の有無・種類によらず全部消し、件数を返す", async () => {
@@ -142,7 +139,7 @@ describe("FakeAuthStore", () => {
     expect((await s.listActiveSessions(T(3))).map((x) => x.id)).toEqual(["s3"]);
   });
 
-  it("認証の記録: 新しい順、since と kinds で絞る", async () => {
+  it("認証の記録: 新しい順", async () => {
     const s = new FakeAuthStore();
     const ev = (id: string, kind: "sign_in" | "recovery_failed", n: number) => ({
       id,
@@ -158,8 +155,6 @@ describe("FakeAuthStore", () => {
       passkeyId: null,
       detail: { a: 1 },
     });
-    const since = await s.listEventsSince(T(2), ["recovery_failed"]);
-    expect(since.map((e) => e.id)).toEqual(["e3"]);
   });
 
   it("ペアリングのトークン: 検証・単回の消費・期限・掃除", async () => {
@@ -174,8 +169,11 @@ describe("FakeAuthStore", () => {
     expect(await s.isPairingTokenValid("th", "x.ts.net", T(1))).toBe(true);
     expect(await s.isPairingTokenValid("th", "y.ts.net", T(1))).toBe(false);
     expect(await s.isPairingTokenValid("th", "x.ts.net", T(600))).toBe(false);
-    expect(await s.consumePairingToken("th", "x.ts.net", T(1))).toBe(true);
-    expect(await s.consumePairingToken("th", "x.ts.net", T(2))).toBe(false);
+    await s.initializeVault(newPasskey("a"), wrap(1), wrap(2));
+    const pair = (hash: string, at: number) =>
+      s.addPasskeyWithPairingToken(newPasskey("b", "x.ts.net"), wrap(3), hash, T(at));
+    expect(await pair("th", 1)).toBe(true);
+    expect(await s.isPairingTokenValid("th", "x.ts.net", T(2))).toBe(false);
     await s.createPairingToken({
       id: "p2",
       tokenHash: "t2",
@@ -183,7 +181,7 @@ describe("FakeAuthStore", () => {
       now: T(0),
       expiresAt: T(10),
     });
-    expect(await s.consumePairingToken("t2", "x.ts.net", T(10))).toBe(false);
+    expect(await pair("t2", 10)).toBe(false);
     expect(await s.deleteExpiredPairingTokens(T(10))).toBe(0);
     expect(await s.deleteExpiredPairingTokens(T(11))).toBe(1);
   });

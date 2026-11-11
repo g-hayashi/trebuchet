@@ -9,9 +9,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { SHA256_PATTERN } from "@trebuchet/schema";
 import { Database } from "../driver.ts";
 import { decryptReceipt } from "../receipt-files.ts";
 import { isValidEntityId, receiptFile } from "../tenant-store.ts";
+import { isNotFound } from "../util.ts";
 import type { SnapshotFile } from "./types.ts";
 
 /**
@@ -53,9 +55,6 @@ export function receiptBackupName(dk: Uint8Array, sha256: string): string {
 
 const storeFile = (storeDir: string, entityId: string, dk: Uint8Array, sha256: string): string =>
   join(storeDir, entityId.toLowerCase(), `${receiptBackupName(dk, sha256)}.trc`);
-
-const isNotFound = (e: unknown): boolean =>
-  typeof e === "object" && e !== null && (e as { code?: unknown }).code === "ENOENT";
 
 export type SyncOptions = {
   dk: Uint8Array;
@@ -190,7 +189,7 @@ export function restoreReceiptsFromStore(options: RestoreReceiptsOptions): {
     for (const sha256 of new Set(ref.sha256s)) {
       try {
         // 名前をそのままパスにするので形を検査する（記録の改ざんでもパスの外へ書かない）
-        if (!/^[0-9a-f]{64}$/.test(sha256) || !isValidEntityId(entityId)) throw new Error("name");
+        if (!SHA256_PATTERN.test(sha256) || !isValidEntityId(entityId)) throw new Error("name");
         const bytes = readFileSync(storeFile(storeDir, entityId, dk, sha256));
         decryptReceipt(bytes, entityId, sha256, dk).fill(0);
         mkdirSync(join(targetDir, entityId), { recursive: true });

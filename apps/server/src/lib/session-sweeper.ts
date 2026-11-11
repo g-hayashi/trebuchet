@@ -1,4 +1,5 @@
 import type { AuthStore, Clock } from "@trebuchet/domain";
+import { errorName, startInterval } from "./util.ts";
 import type { Vault } from "./vault.ts";
 
 const MINUTE_MS = 60 * 1000;
@@ -36,12 +37,8 @@ export function startSessionSweeper(deps: {
     try {
       await sweepSessions({ store: deps.store(), vault: deps.vault, now: deps.clock.now() });
     } catch (e) {
-      console.error("session: 期限の判定に失敗", e instanceof Error ? e.name : "unknown");
+      console.error("session: 期限の判定に失敗", errorName(e));
     }
   }
-  const timer = setInterval(() => {
-    void tick();
-  }, deps.intervalMs ?? MINUTE_MS);
-  timer.unref();
-  return { tick, stop: () => clearInterval(timer) };
+  return { tick, stop: startInterval(tick, deps.intervalMs ?? MINUTE_MS) };
 }

@@ -12,12 +12,12 @@ import { loadDemoAssets } from "../demo-assets.ts";
 import {
   defaultReceiptRuntime,
   demoEntityDeps,
-  ids,
   type ReceiptRuntime,
   type RouteOptions,
   registryRepository,
 } from "../deps.ts";
 import { fail, respond } from "../errors.ts";
+import { ids } from "../lib/ids.ts";
 import { todayOf } from "../lib/today.ts";
 import { hasActiveEntityRequests, type TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";

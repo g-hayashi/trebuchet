@@ -1,4 +1,5 @@
 import { findRegisteredEntityId, openTenant, type TenantDb } from "@trebuchet/db";
+import { notFoundError } from "@trebuchet/domain";
 import { createMiddleware } from "hono/factory";
 import { DomainException } from "./errors.ts";
 
@@ -21,11 +22,7 @@ export const tenant = createMiddleware<TenantEnv>(async (c, next) => {
   const requested = c.req.param("entityId") ?? "";
   const entityId = findRegisteredEntityId(requested);
   if (entityId === undefined) {
-    throw new DomainException({
-      code: "ENTITY_NOT_FOUND",
-      message: "事業体が見つかりません",
-      details: { entityId: requested },
-    });
+    throw new DomainException(notFoundError("ENTITY_NOT_FOUND", "事業体", { entityId: requested }));
   }
   c.set("entityId", entityId);
   c.set("db", openTenant(entityId));

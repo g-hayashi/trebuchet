@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import type { KeyWrapKind, WrappedKey } from "@trebuchet/domain";
+import { RECOVERY_KEY_BYTES } from "./recovery-key.ts";
 
 /**
  * DK（データ鍵）の包みの純関数（008 の D1。写す元: invest-copilot `vaultCrypto.ts`）。I/O もモジュールの状態も持たない。
@@ -12,8 +13,6 @@ export const DK_BYTES = 32;
 const HKDF_INFO = "trebuchet/dk-wrap/v1";
 /** WebAuthn PRF の出力（`prf.results.first`） */
 const PRF_BYTES = 32;
-/** 回復キーの乱数（160 ビット） */
-const RECOVERY_BYTES = 20;
 const SALT_BYTES = 32;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
@@ -37,7 +36,7 @@ function wrapAad(kind: WrapKind, credentialId: string | null): Buffer {
 }
 
 function checkIkm(kind: WrapKind, ikm: Uint8Array): void {
-  const expected = kind === "passkey" ? PRF_BYTES : RECOVERY_BYTES;
+  const expected = kind === "passkey" ? PRF_BYTES : RECOVERY_KEY_BYTES;
   if (ikm.length !== expected) throw new Error(`${kind} key material must be ${expected} bytes`);
 }
 

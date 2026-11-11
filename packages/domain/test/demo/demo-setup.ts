@@ -86,7 +86,6 @@ export function setupDemo(
   const activated: string[] = [];
   const registryPort: RegistryRepository = {
     listEntities: () => registry.listEntities(),
-    getEntity: (id) => registry.getEntity(id),
     insertEntity: (e) => registry.insertEntity(e),
     renameEntity: (id, name) => registry.renameEntity(id, name),
     activateEntity: (id) => {

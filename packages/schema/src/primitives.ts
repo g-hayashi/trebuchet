@@ -67,7 +67,9 @@ export const DayOfMonthOrEnd = z
 
 export const Id = z.uuid();
 
-export const Side = z.enum(["debit", "credit"]);
+/** 貸借（db の列の `enum` もこの定数から作る） */
+export const SIDES = ["debit", "credit"] as const;
+export const Side = z.enum(SIDES);
 export type Side = z.infer<typeof Side>;
 
 export const TaxCategoryCode = z.enum([
@@ -95,7 +97,18 @@ export const ReportSection = z.enum([
 ]);
 export type ReportSection = z.infer<typeof ReportSection>;
 
-export const EntityKind = z.enum(["individual", "corporation"]);
+/** 科目の区分ごとに選べる決算書の区分（先頭が既定。web の選択肢に使う。domain の usecases/masters.ts の同名の値と同じ） */
+export const ALLOWED_SECTIONS: Record<AccountCategory, readonly ReportSection[]> = {
+  asset: ["BS_ASSET"],
+  liability: ["BS_LIABILITY"],
+  equity: ["BS_EQUITY", "BS_ASSET"],
+  revenue: ["PL_SALES", "PL_OTHER"],
+  expense: ["PL_COGS", "PL_EXPENSE", "PL_OTHER"],
+};
+
+/** 事業体の種別（db の列の `enum` もこの定数から作る） */
+export const ENTITY_KINDS = ["individual", "corporation"] as const;
+export const EntityKind = z.enum(ENTITY_KINDS);
 export type EntityKind = z.infer<typeof EntityKind>;
 
 export const TaxpayerStatus = z.enum(["exempt", "general", "simplified", "two_tenths"]);

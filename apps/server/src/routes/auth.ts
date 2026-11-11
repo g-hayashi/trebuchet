@@ -15,7 +15,6 @@ import {
   LOCAL_RP_ID,
   type NewPasskey,
   type Passkey,
-  type Session,
 } from "@trebuchet/domain";
 import {
   type AuthStatus,
@@ -25,21 +24,25 @@ import {
   type SessionView,
 } from "@trebuchet/schema";
 import { Hono } from "hono";
-import { DomainException } from "../errors.ts";
+import { DomainException, firstRegistrationHostError } from "../errors.ts";
 import {
   type AuthSupport,
+  b64,
   type Ctx,
   prfUnsupported,
   refOf,
+  sessionOf,
   toPasskeyView,
   webauthnFailed,
 } from "../lib/auth-support.ts";
 import type { ChallengeStore } from "../lib/challenges.ts";
+import { csvResponse } from "../lib/csv-response.ts";
 import { expectedOriginFor, isLocalHost, rpIdFor } from "../lib/origin.ts";
 import { clearSessionCookie } from "../lib/session.ts";
 import { sweepSessions } from "../lib/session-sweeper.ts";
+import { sleep } from "../lib/util.ts";
 import { setAsideDataFiles, type Vault } from "../lib/vault.ts";
-import { readPrf, responseKind } from "../lib/webauthn-response.ts";
+import { readPrf } from "../lib/webauthn-response.ts";
 import { findActiveSession } from "../middleware/auth.ts";
 import type { GuardEnv } from "../middleware/host.ts";
 import { validate } from "../validator.ts";
@@ -62,13 +65,8 @@ export const RECOVERY_FAILURE_DELAY_MS = 1000;
 const DEFAULT_EVENT_LIMIT = 100;
 const MAX_EVENT_LIMIT = 500;
 
-const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 const alreadyRegistered = () =>
   new DomainException(domainError("ALREADY_REGISTERED", "すでに設定されています"));
-const unauthenticated = () =>
-  new DomainException(domainError("UNAUTHENTICATED", "サインインが必要です"));
 
 const refsOf = (passkeys: Passkey[], rpId: string) =>
   passkeys.filter((p) => p.rpId === rpId).map(refOf);
@@ -85,13 +83,6 @@ function rpContext(c: Ctx): { rpId: string; origin: string } {
   return { rpId, origin };
 }
 
-/** 回復用の一時セッション・通常のセッションは、検査（middleware/auth.ts）が `c.var.session` に入れる */
-function sessionOf(c: Ctx): Session {
-  const session = c.var.session;
-  if (session === undefined) throw unauthenticated();
-  return session;
-}
-
 export function authRoutes(deps: AuthRouteDeps) {
   const { clock, challenges, vault, support } = deps;
   const {
@@ -100,8 +91,7 @@ export function authRoutes(deps: AuthRouteDeps) {
     nowMs,
     secure,
     record,
-    takeChallenge,
-    safely,
+    verifyAssertion,
     beginRegistration,
     finishRegistration,
     newPasskey,
@@ -132,11 +122,7 @@ export function authRoutes(deps: AuthRouteDeps) {
   /** 初回の設定の前提（未設定、ローカルの Host）。ミドルウェアでも検査済みだが二重に確かめる */
   async function assertFirstRegistration(store: AuthStore, c: Ctx) {
     if ((await store.getRecoveryWrap()) !== undefined) throw alreadyRegistered();
-    if (!isLocalHost(c.var.host)) {
-      throw new DomainException(
-        domainError("HOST_NOT_ALLOWED", "最初の登録は、この Mac の localhost からだけできます"),
-      );
-    }
+    if (!isLocalHost(c.var.host)) throw new DomainException(firstRegistrationHostError());
   }
 
   /**
@@ -224,28 +210,13 @@ export function authRoutes(deps: AuthRouteDeps) {
         const store = deps.store();
         const { rpId, origin } = rpContext(c);
         const { response } = c.req.valid("json");
-        const taken =
-          responseKind(response) === "authentication" ? takeChallenge("sign-in", response) : null;
-        const credentialId = typeof response.id === "string" ? response.id : undefined;
-        const passkey =
-          credentialId === undefined ? undefined : await store.getPasskey(credentialId);
-        const verified =
-          taken === null || passkey === undefined || passkey.rpId !== rpId
-            ? null
-            : await safely(() =>
-                webauthn.verifyAuthentication({
-                  response,
-                  expectedChallenge: (challenge) => challenge === taken.challenge,
-                  expectedOrigin: origin,
-                  expectedRpId: rpId,
-                  credential: {
-                    id: passkey.id,
-                    publicKey: passkey.publicKey,
-                    counter: passkey.counter,
-                    ...(passkey.transports ? { transports: passkey.transports } : {}),
-                  },
-                }),
-              );
+        const { passkey, verified } = await verifyAssertion(
+          store,
+          "sign-in",
+          response,
+          rpId,
+          origin,
+        );
         if (passkey === undefined || verified === null) {
           await record(store, c, "sign_in_failed", { passkeyId: passkey?.id ?? null });
           throw webauthnFailed();
@@ -378,30 +349,13 @@ export function authRoutes(deps: AuthRouteDeps) {
         const session = sessionOf(c);
         const { rpId, origin } = rpContext(c);
         const { response } = c.req.valid("json");
-        const taken =
-          responseKind(response) === "authentication"
-            ? takeChallenge(`reauth:${session.id}`, response)
-            : null;
-        const credentialId = typeof response.id === "string" ? response.id : undefined;
-        const passkey =
-          credentialId === undefined ? undefined : await store.getPasskey(credentialId);
-        const verified =
-          taken === null || passkey === undefined || passkey.rpId !== rpId
-            ? null
-            : await safely(() =>
-                webauthn.verifyAuthentication({
-                  response,
-                  expectedChallenge: (challenge) => challenge === taken.challenge,
-                  expectedOrigin: origin,
-                  expectedRpId: rpId,
-                  credential: {
-                    id: passkey.id,
-                    publicKey: passkey.publicKey,
-                    counter: passkey.counter,
-                    ...(passkey.transports ? { transports: passkey.transports } : {}),
-                  },
-                }),
-              );
+        const { passkey, verified } = await verifyAssertion(
+          store,
+          `reauth:${session.id}`,
+          response,
+          rpId,
+          origin,
+        );
         if (passkey === undefined || verified === null) throw webauthnFailed();
         await store.recordPasskeyUse(passkey.id, verified.newCounter, clock.now());
         reauth.mark(session.id, nowMs());
@@ -548,7 +502,8 @@ export function authRoutes(deps: AuthRouteDeps) {
         if (c.req.query("format") === "csv") {
           const events = await deps.store().listEvents();
           // 自由入力の detail・userAgent や資格情報・セッションの ID は CSV に含めない。
-          return c.text(
+          return csvResponse(
+            c,
             encodeCsv([
               ["日時", "種類", "端末の種類"],
               ...events.map((e) => [
@@ -557,12 +512,8 @@ export function authRoutes(deps: AuthRouteDeps) {
                 e.rpId === null ? "不明" : e.rpId === LOCAL_RP_ID ? "この Mac" : "スマホ・リモート",
               ]),
             ]),
-            200,
-            {
-              "Content-Type": "text/csv; charset=utf-8",
-              "Content-Disposition": 'attachment; filename="auth-events.csv"',
-              "Cache-Control": "no-store",
-            },
+            "auth-events.csv",
+            { noStore: true },
           );
         }
         const raw = c.req.query("limit");
