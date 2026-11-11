@@ -499,7 +499,7 @@ export function excludeStatement(
   input: { reason?: string | undefined } = {},
 ): Result<StatementView> {
   return deps.uow.run((tx) => {
-    const state = loadStatementStates(tx).find((s) => s.record.id === statementId);
+    const [state] = loadStatementStates(tx, new Set([statementId]));
     if (state === undefined) return notFound(statementId);
     if (state.status === "registered") {
       return err(
@@ -560,7 +560,7 @@ export function unexcludeStatement(
   const reason = checkReason(input.reason);
   if (!reason.ok) return reason;
   return deps.uow.run((tx) => {
-    const state = loadStatementStates(tx).find((s) => s.record.id === statementId);
+    const [state] = loadStatementStates(tx, new Set([statementId]));
     if (state === undefined) return notFound(statementId);
     if (state.status !== "excluded") {
       return validation("除外していない明細です", { statementId });
@@ -588,7 +588,7 @@ export function unexcludeStatement(
 /** 「変更あり」を確認した印（`changed_ack_at`）を書き、監査に残す（FR-005）。確認する変更がなければ `VALIDATION` */
 export function acknowledgeChange(deps: ApprovalDeps, statementId: string): Result<StatementView> {
   return deps.uow.run((tx) => {
-    const state = loadStatementStates(tx).find((s) => s.record.id === statementId);
+    const [state] = loadStatementStates(tx, new Set([statementId]));
     if (state === undefined) return notFound(statementId);
     const { changedJson, changedAckAt } = state.record;
     if (changedJson === null || changedAckAt !== null) {
@@ -623,7 +623,7 @@ export function unlinkStatement(
   const reason = checkReason(input.reason);
   if (!reason.ok) return reason;
   return deps.uow.run((tx) => {
-    const state = loadStatementStates(tx).find((s) => s.record.id === statementId);
+    const [state] = loadStatementStates(tx, new Set([statementId]));
     if (state === undefined) return notFound(statementId);
     if (state.activeLinks.length === 0) {
       return validation("結びつきがありません", { statementId });

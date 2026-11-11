@@ -196,6 +196,10 @@ export class InMemoryStatementStore implements StatementStore {
     return structuredClone(this.state.links);
   }
 
+  listLinksOfJournal(journalId: string): StatementLinkRecord[] {
+    return structuredClone(this.state.links.filter((l) => l.journalId === journalId));
+  }
+
   insertStatementLink(link: StatementLinkRecord): void {
     if (!this.state.statements.some((s) => s.id === link.statementId)) {
       throw new Error("FOREIGN KEY constraint failed: statement_links.statement_id");

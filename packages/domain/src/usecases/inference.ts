@@ -173,7 +173,7 @@ export async function inferWithAi(
 
   // 1. 読む
   const read = deps.uow.run((tx) => {
-    const states = new Map(loadStatementStates(tx).map((s) => [s.record.id, s]));
+    const states = new Map(loadStatementStates(tx, new Set(ids)).map((s) => [s.record.id, s]));
     const unknown = ids.find((id) => !states.has(id));
     if (unknown !== undefined) {
       return err(statementNotFoundError(unknown));
@@ -216,7 +216,7 @@ export async function inferWithAi(
   // 3. 書く（待ちの間に状態が変わった明細は書かない）
   const written = deps.uow.run((tx) => {
     const now = deps.clock.now();
-    const states = new Map(loadStatementStates(tx).map((s) => [s.record.id, s]));
+    const states = new Map(loadStatementStates(tx, new Set(ids)).map((s) => [s.record.id, s]));
     const candidates = new Map(
       tx.statements.listStatementCandidates().map((c) => [c.statementId, c]),
     );

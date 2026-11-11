@@ -225,6 +225,9 @@ describe("approveCandidate の永続化（実 DB）", () => {
     expect(all.filter((l) => l.revokedAt === null)).toHaveLength(1);
     expect(all.find((l) => l.revokedAt !== null)?.revokedReason).toBeTruthy();
     expect(statusOf(id)).toBe("registered");
+    // 仕訳ごとの結びつき（失効したものを含む。作成の順）
+    for (const link of all) expect(store.listLinksOfJournal(link.journalId)).toEqual([link]);
+    expect(store.listLinksOfJournal("00000000-0000-7000-8000-000000000000")).toEqual([]);
   });
 
   it("振替の対は 1 つの仕訳の別々の行に 2 件結びつく（INV-43）", () => {

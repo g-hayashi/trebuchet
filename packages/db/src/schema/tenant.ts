@@ -246,6 +246,8 @@ export const journals = sqliteTable(
   },
   (t) => [
     index("journals_date").on(t.date),
+    // 訂正仕訳をたどる（`correctingJournalsOf`・`correctionChains`）
+    index("journals_corrects").on(t.correctsJournalId),
     check("journals_status", sql`${t.status} IN ('active', 'voided')`),
     check("journals_version", sql`${t.version} >= 1`),
   ],

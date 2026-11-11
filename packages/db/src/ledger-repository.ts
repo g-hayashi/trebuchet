@@ -1,6 +1,7 @@
 import {
   type AuditEntry,
   type Journal,
+  type JournalChainRef,
   type JournalLine,
   type JournalQuery,
   type JournalReplacement,
@@ -30,6 +31,9 @@ import {
 } from "./schema/tenant.ts";
 
 type JournalRow = typeof journals.$inferSelect;
+
+/** `correctionChains` の 1 回の問い合わせの根の数（SQLite の変数の上限より十分に小さく） */
+const CHAIN_ROOTS_PER_QUERY = 500;
 
 /**
  * LedgerRepository と帳票の読み出し（ReportRepository）の Drizzle（better-sqlite3）による実装。
@@ -133,6 +137,25 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
       .orderBy(asc(journals.journalNo))
       .all();
     return this.withLines(rows);
+  }
+
+  /** 根の仕訳から訂正（`corrects_journal_id`。索引 `journals_corrects`）を再帰の CTE でたどる。根は分けて読む */
+  correctionChains(rootIds: readonly string[]): JournalChainRef[] {
+    const found = new Map<string, JournalChainRef>();
+    for (let i = 0; i < rootIds.length; i += CHAIN_ROOTS_PER_QUERY) {
+      const roots = rootIds.slice(i, i + CHAIN_ROOTS_PER_QUERY).map((id) => sql`${id}`);
+      const rows = this.db.all<JournalChainRef>(sql`
+        WITH RECURSIVE chain(id) AS (
+          SELECT id FROM journals WHERE id IN (${sql.join(roots, sql`, `)})
+          UNION
+          SELECT j.id FROM journals j JOIN chain c ON j.corrects_journal_id = c.id
+        )
+        SELECT j.id AS id, j.status AS status, j.corrects_journal_id AS correctsJournalId
+        FROM journals j WHERE j.id IN (SELECT id FROM chain)
+      `);
+      for (const row of rows) found.set(row.id, row);
+    }
+    return [...found.values()];
   }
 
   findJournals(query: JournalQuery): Page<Journal> {

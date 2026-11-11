@@ -128,6 +128,9 @@ export type NewJournal = Omit<ValidJournal, "lines"> & {
   source?: JournalSource | undefined;
 };
 
+/** 訂正の連鎖の 1 件（`LedgerRepository.correctionChains`。状態の導出に要る列だけ） */
+export type JournalChainRef = Pick<Journal, "id" | "status" | "correctsJournalId">;
+
 export interface AuditLog {
   appendAudit(entry: AuditEntry): void;
 }
@@ -167,6 +170,11 @@ export interface LedgerRepository extends JournalRepository {
   journalHistory(id: string): AuditEntry[];
   /** id を訂正元とする訂正仕訳（仕訳番号の順） */
   correctingJournalsOf(id: string): Journal[];
+  /**
+   * `rootIds` の仕訳と、訂正（`correctsJournalId`）をたどった先のすべての仕訳（訂正の訂正も含む）の
+   * ID・状態・訂正元だけ（行は読まない）。順は不定で、同じ仕訳は 1 回だけ。ない ID は無視する（006 R15 の状態の導出）
+   */
+  correctionChains(rootIds: readonly string[]): JournalChainRef[];
   /** 日付の降順・同じ日付は仕訳番号の降順。limit の既定は 50 */
   findJournals(query: JournalQuery): Page<Journal>;
   /** 全検索結果の件数と借方合計。cursor・limit は無視する */
@@ -447,6 +455,8 @@ export interface StatementStore {
   // ---- 結びつき（US2。§1.5。書き込みは承認・取消のユースケースが使う） ----
   /** 失効したものを含む全件（作成の順） */
   listStatementLinks(): StatementLinkRecord[];
+  /** `journalId` の仕訳への結びつき（失効したものを含む。作成の順） */
+  listLinksOfJournal(journalId: string): StatementLinkRecord[];
   /** 有効な結びつきの重複（明細ごと・仕訳の行ごと）は一意制約の違反で例外（INV-43） */
   insertStatementLink(link: StatementLinkRecord): void;
   /** 有効な結びつきを失効させる（`revoked_at`・`revoked_reason`）。ない・失効済みなら例外 */

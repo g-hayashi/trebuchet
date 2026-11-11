@@ -802,8 +802,8 @@ export function listJournalStatements(
   return deps.uow.run((tx) =>
     ok(
       tx.statements
-        .listStatementLinks()
-        .filter((l) => l.journalId === journalId && l.revokedAt === null)
+        .listLinksOfJournal(journalId)
+        .filter((l) => l.revokedAt === null)
         .map((l) => ({ statementId: l.statementId, kind: l.kind })),
     ),
   );
