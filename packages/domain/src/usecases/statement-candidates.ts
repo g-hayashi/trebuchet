@@ -2,11 +2,11 @@ import type { Candidate, Purpose, StatementAccount, StatementStatus } from "@tre
 import { addDays, daysBetween } from "../dates.ts";
 import type { LedgerRepository, StatementUnitOfWork } from "../ports.ts";
 import { journalShape, STATEMENT_ACCOUNT_CODES } from "../statements/journal-shape.ts";
-import { MATCH_WINDOW_DAYS, matchExistingJournal } from "../statements/match-existing.ts";
+import { createExistingJournalMatcher, MATCH_WINDOW_DAYS } from "../statements/match-existing.ts";
 import { ruleConfidence, ruleFor } from "../statements/rules.ts";
 import { statementStatus } from "../statements/status.ts";
 import {
-  findTransferPair,
+  createTransferPairFinder,
   inferUnpairedTransfer,
   transferConfidence,
   transferJournal,
@@ -158,6 +158,9 @@ export function buildCandidatesInTx(
   const journalNoOf = new Map(journals.map((j) => [j.id, j.journalNo]));
   const claimedLines = new Set(states.flatMap((s) => s.activeLinks.map((l) => l.journalLineId)));
   const claimed = new Set<string>();
+  // 明細ごとに全件を走査しない: 仕訳は行の内容で、振替の対の候補は金額で索引にし、対にした明細は `claimed` で後から除く
+  const matchJournal = createExistingJournalMatcher(journals);
+  const findPair = createTransferPairFinder(unprocessed);
   const ledgerAccounts = tx.masters.listAccounts();
   const rules = tx.statements.listInferenceRules();
 
@@ -177,7 +180,7 @@ export function buildCandidatesInTx(
     const account = accounts.get(record.statementAccountId) as StatementAccount;
 
     // 1. 既存の仕訳
-    const match = matchExistingJournal(record, account, journals, claimedLines);
+    const match = matchJournal(record, account, claimedLines);
     if (match !== undefined) {
       claimedLines.add(match.lineId);
       write(record.id, {
@@ -193,8 +196,7 @@ export function buildCandidatesInTx(
     }
 
     // 2. 振替の対
-    const pool = unprocessed.filter((r) => r.amount !== 0 && !claimed.has(r.id));
-    const pair = findTransferPair(record, pool);
+    const pair = findPair(record, claimed);
     if (pair !== undefined) {
       const pairAccount = accounts.get(pair.statementAccountId) as StatementAccount;
       const [mine, theirs] = pairBodies(record, account, pair, pairAccount, ledgerAccounts);

@@ -738,7 +738,9 @@ export function statementViewsInTx(
   const sameContent = new Map<string, StatementRecord[]>();
   for (const { record } of states) {
     const key = contentGroup(accounts.get(record.statementAccountId)?.name ?? "", record.content);
-    sameContent.set(key, [...(sameContent.get(key) ?? []), record]);
+    const group = sameContent.get(key);
+    if (group === undefined) sameContent.set(key, [record]);
+    else group.push(record);
   }
   const views: StatementView[] = [];
   for (const { record, status, activeLinks } of states) {
