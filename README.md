@@ -128,4 +128,4 @@ Mac が施錠されている間は `ts.net` の名前では使えない（先に
 
 ## ライセンス
 
-[GNU Affero General Public License v3.0](LICENSE)（AGPL-3.0-only）。
+[MIT License](LICENSE)。
