@@ -9,6 +9,7 @@ import { DEV_WEB_HOST, DEV_WEB_ORIGIN } from "../../apps/server/src/lib/origin.t
 import { issueSession, SESSION_COOKIE } from "../../apps/server/src/lib/session.ts";
 import { DrizzleAuthStore } from "../../packages/db/src/auth-repository.ts";
 import { openAuth, openRegistry } from "../../packages/db/src/tenant-store.ts";
+import { LOCAL_RP_ID } from "../../packages/domain/src/index.ts";
 
 export async function createBenchHeaders(): Promise<Record<string, string>> {
   if (process.env.TREBUCHET_DATA_DIR === undefined) {
@@ -18,7 +19,7 @@ export async function createBenchHeaders(): Promise<Record<string, string>> {
     id: randomUUIDv7(),
     now: new Date().toISOString(),
     kind: "normal",
-    rpId: "localhost",
+    rpId: LOCAL_RP_ID,
     passkeyId: null,
     userAgent: null,
   });

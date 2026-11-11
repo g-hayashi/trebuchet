@@ -1,7 +1,7 @@
 /**
  * SC-002 のベンチマーク: freee の仕訳帳 500 仕訳（複合仕訳を含む）の取込で、プレビューが 5 秒以内、確定が 10 秒以内かを測る。
  * `.tmp/bench-import-<uuid>/` に一時的なテナントを作り、終了時に削除する。
- * 仕訳帳の CSV は freee-arbitraries.ts（T011）の考え方でこのスクリプトの中で生成する（テストのコードには依存しない）。
+ * 仕訳帳の CSV は freee-arbitraries.ts（002/T011）の考え方でこのスクリプトの中で生成する（テストのコードには依存しない）。
  * 確定のあとに、同じファイルのプレビューをもう一度測る（全件が「取込済み」。取込の参照を1件ずつ読む処理の確認）。
  *
  *   pnpm bench:import
@@ -29,9 +29,9 @@ import {
   benchClock as clock,
   createBenchEntity,
   benchIds as ids,
-  positiveNumber,
   runBench,
 } from "./lib/bench-common.ts";
+import { positiveNumber } from "./lib/env.ts";
 
 const JOURNALS = 500;
 const FISCAL_YEAR = 2026;

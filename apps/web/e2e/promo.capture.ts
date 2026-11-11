@@ -1,9 +1,12 @@
 import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type BrowserContext, expect, type Locator, type Page, test } from "@playwright/test";
+import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { renderSVG } from "uqr";
+import { TMP_ROOT, WEB_ORIGIN } from "./env.ts";
 import { enterVault } from "./helpers/auth.ts";
 import { openNav } from "./helpers/nav.ts";
+import { entityIdOf, mainOf, pickQuickAccount, renderHtmlToPng } from "./helpers/ui.ts";
+import { MOBILE_VIEWPORT, PROMO_VIEWPORT } from "./helpers/viewports.ts";
 
 /**
  * 宣伝動画の録画（`pnpm promo:record`。変換は `scripts/promo-encode.ts`）。
@@ -55,9 +58,8 @@ const CAPTIONS = {
   },
 } satisfies Record<string, Record<Lang, string>>;
 
-const root = resolve(import.meta.dirname, "../../..");
-const outDir = resolve(root, ".tmp/promo", LANG);
-const SIZE = { width: 1280, height: 720 };
+const outDir = resolve(TMP_ROOT, "promo", LANG);
+const SIZE = PROMO_VIEWPORT;
 const TZ = "Asia/Tokyo";
 const FONT =
   '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif';
@@ -321,7 +323,7 @@ const cardStyle = `
   .caption{position:fixed;left:0;right:0;bottom:0;box-sizing:border-box;padding:20px 48px 24px;background:rgba(15,23,42,0.78);font:600 28px/1.35 ${FONT};letter-spacing:.02em;text-align:center}
 `;
 
-/** 1280x720 の中に、スマホの枠（390x844 を縮小した iframe）と、横に接続用の QR を並べる */
+/** 録画の画面（1280x720）の中に、スマホの枠（390x844 を縮小した iframe）と、横に接続用の QR を並べる */
 function mobileHtml(appUrl: string, text: string): string {
   const qr = renderSVG(`https://${TAILSCALE_NAME}/pair?token=demo-only`);
   const labels =
@@ -332,7 +334,7 @@ function mobileHtml(appUrl: string, text: string): string {
   ${cardStyle}
   .stage{position:absolute;inset:0 0 96px 0;display:flex;align-items:center;justify-content:center;gap:96px}
   .phone{width:258px;height:558px;border:10px solid #0b1220;border-radius:38px;overflow:hidden;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-  .phone iframe{width:390px;height:844px;border:0;transform:scale(.66);transform-origin:0 0}
+  .phone iframe{width:${MOBILE_VIEWPORT.width}px;height:${MOBILE_VIEWPORT.height}px;border:0;transform:scale(.66);transform-origin:0 0}
   .qr{display:grid;gap:18px;justify-items:center}
   .qr .box{width:260px;height:260px;box-sizing:border-box;padding:16px;border-radius:20px;background:#fff}
   .qr .box svg{width:100%;height:100%;display:block}
@@ -397,21 +399,25 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
 
   // 1. 録画しない context で解錠し、領収書の合成の画像を作る
   const setup = await browser.newContext({
-    baseURL: baseURL ?? "http://localhost:5173",
+    baseURL: baseURL ?? WEB_ORIGIN,
     locale: "ja-JP",
     timezoneId: TZ,
     viewport: SIZE,
   });
   const setupPage = await setup.newPage();
   await enterVault(setupPage);
-  await setupPage.setContent(receiptHtml(date0));
-  await setupPage.screenshot({ path: receiptFile, clip: { x: 0, y: 0, width: 500, height: 640 } });
+  await renderHtmlToPng(setup, receiptHtml(date0), receiptFile, {
+    x: 0,
+    y: 0,
+    width: 500,
+    height: 640,
+  });
   const storageState = await setup.storageState();
   await setup.close();
 
   // 2. 録画用の context
   const context = await browser.newContext({
-    baseURL: baseURL ?? "http://localhost:5173",
+    baseURL: baseURL ?? WEB_ORIGIN,
     locale: "ja-JP",
     timezoneId: TZ,
     viewport: SIZE,
@@ -427,11 +433,6 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   const t0 = Date.now();
   const page = await context.newPage();
   const now = () => Date.now() - t0;
-  const pageErrors: string[] = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
-  page.on("console", (message) => {
-    if (message.type() === "error") pageErrors.push(message.text());
-  });
 
   // 場面の開始時刻と、削る区間。場面は、削った分を除いて目標の長さまで待って終える
   const scenes: { id: string; startMs: number; targetMs: number }[] = [];
@@ -458,19 +459,19 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
     await holdScene(sceneTarget);
   };
 
-  const main = (): Locator => page.getByRole("main", { exact: true });
+  const main = mainOf(page);
   const pause = (ms: number) => page.waitForTimeout(ms);
 
   // ---- 0〜3 秒: 空の一覧で「デモ事業を作って試す」 ----
   await page.goto("/");
-  const demoButton = main().getByRole("button", { name: "デモ事業を作って試す", exact: true });
+  const demoButton = main.getByRole("button", { name: "デモ事業を作って試す", exact: true });
   await expect(demoButton).toBeVisible();
   await beginScene("intro", 3_000);
   await pause(1_700);
   const clickedAt = now();
   await demoButton.click();
   await page.waitForURL(/\/e\/[0-9a-f-]{36}$/, { timeout: 120_000 });
-  await expect(main().getByText("今日やること", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(main.getByText("今日やること", { exact: true })).toBeVisible({ timeout: 30_000 });
   // 定期仕訳の知らせは各画面の上を占めるので、削る区間の中で閉じる
   const recurringNotice = page.getByRole("region", { name: "定期仕訳の知らせ", exact: true });
   // 知らせは仕訳の自動登録の後に出るので、現れるまで少し待つ
@@ -485,7 +486,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   if (cutEnd > cutStart) cuts.push({ startMs: cutStart, endMs: cutEnd });
   await endScene();
 
-  const entityId = new URL(page.url()).pathname.split("/")[2] as string;
+  const entityId = entityIdOf(page);
   const entityRoot = `/e/${entityId}`;
 
   // 架空の AI の案の材料（実サーバーの科目・口座の ID を使い、承認は実サーバーが行う）
@@ -544,26 +545,20 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   await beginScene("entry", 5_000);
   await holdScene(1_200);
   await openNav(page, "仕訳", "入力する");
-  await expect(main().getByRole("button", { name: "かんたん入力", exact: true })).toHaveAttribute(
+  await expect(main.getByRole("button", { name: "かんたん入力", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
-  await main().getByLabel("日付", { exact: true }).fill(date0);
-  for (const [label, name] of [
-    ["借方科目", "消耗品費"],
-    ["貸方科目", "現金"],
-  ] as const) {
-    await main().getByRole("combobox", { name: label, exact: true }).fill(name);
-    await main()
-      .getByRole("option", { name: new RegExp(`^\\d+ ${name}$`) })
-      .click();
-    await pause(250);
-  }
-  await main().getByLabel("金額", { exact: true }).pressSequentially("1980", { delay: 90 });
-  await main().getByLabel("摘要", { exact: true }).pressSequentially("コピー用紙", { delay: 90 });
+  await main.getByLabel("日付", { exact: true }).fill(date0);
+  await pickQuickAccount(main, "借方科目", "消耗品費");
+  await pause(250);
+  await pickQuickAccount(main, "貸方科目", "現金");
+  await pause(250);
+  await main.getByLabel("金額", { exact: true }).pressSequentially("1980", { delay: 90 });
+  await main.getByLabel("摘要", { exact: true }).pressSequentially("コピー用紙", { delay: 90 });
   await pause(400);
-  await main().getByRole("button", { name: "登録", exact: true }).click();
-  await expect(main().getByRole("status", { name: "登録の結果", exact: true })).toContainText(
+  await main.getByRole("button", { name: "登録", exact: true }).click();
+  await expect(main.getByRole("status", { name: "登録の結果", exact: true })).toContainText(
     "を登録しました",
   );
   await endScene();
@@ -571,7 +566,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   // ---- 8〜13 秒: 明細の CSV を貼る → 仕訳の案（AI）→ 承認 ----
   await beginScene("statements", 5_000);
   await openNav(page, "明細", "取り込む");
-  await expect(main().getByRole("heading", { name: "明細の取込", exact: true })).toBeVisible();
+  await expect(main.getByRole("heading", { name: "明細の取込", exact: true })).toBeVisible();
   const csv = `${[
     '"取引日","摘要","出金額","入金額"',
     ...STATEMENT_ROWS.map((row, index) =>
@@ -583,28 +578,28 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
       ].join(","),
     ),
   ].join("\n")}\n`;
-  const input = main().getByRole("region", { name: "入力", exact: true });
+  const input = main.getByRole("region", { name: "入力", exact: true });
   await input.getByLabel("貼り付けのテキスト", { exact: true }).fill(csv);
   await pause(500);
   await input.getByRole("button", { name: "読み取る", exact: true }).click();
-  const preview = main().getByRole("region", { name: "プレビュー", exact: true });
+  const preview = main.getByRole("region", { name: "プレビュー", exact: true });
   const importButton = preview.getByRole("button", { name: "取り込む", exact: true });
   await expect(importButton).toBeEnabled({ timeout: 30_000 });
   await pause(400);
   await importButton.click();
-  await expect(main().getByRole("status", { name: "候補の作成の進み", exact: true })).toBeVisible();
+  await expect(main.getByRole("status", { name: "候補の作成の進み", exact: true })).toBeVisible();
   const rowCheckbox = (content: string) =>
-    main().getByRole("checkbox", { name: `${content} を選択`, exact: true });
+    main.getByRole("checkbox", { name: `${content} を選択`, exact: true });
   const [first, second] = STATEMENT_ROWS;
   await expect(rowCheckbox(first.content)).toBeVisible({ timeout: 60_000 });
-  await expect(main().getByText("端末内の AI", { exact: true }).first()).toBeVisible();
+  await expect(main.getByText("端末内の AI", { exact: true }).first()).toBeVisible();
   await pause(900);
   await rowCheckbox(first.content).check();
   await rowCheckbox(second.content).check();
   await pause(300);
-  await main().getByRole("button", { name: "選択した 2 件を承認", exact: true }).click();
+  await main.getByRole("button", { name: "選択した 2 件を承認", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "承認する", exact: true }).click();
-  await expect(main().getByText("2 件を承認しました。", { exact: true })).toBeVisible({
+  await expect(main.getByText("2 件を承認しました。", { exact: true })).toBeVisible({
     timeout: 30_000,
   });
   await endScene();
@@ -612,13 +607,11 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   // ---- 13〜18 秒: 領収書の画像を追加 → 読み取りで値が入る ----
   await beginScene("receipt", 5_000);
   await openNav(page, "証憑", "追加する");
-  await main().getByLabel("ファイルを選ぶ", { exact: true }).setInputFiles(receiptFile);
-  await main()
-    .getByRole("radio", { name: /^紙を撮影/ })
-    .check();
+  await main.getByLabel("ファイルを選ぶ", { exact: true }).setInputFiles(receiptFile);
+  await main.getByRole("radio", { name: /^紙を撮影/ }).check();
   await pause(500);
-  await main().getByRole("button", { name: "追加する", exact: true }).click();
-  const fields = main().getByRole("region", { name: "追加した証憑の値", exact: true });
+  await main.getByRole("button", { name: "追加する", exact: true }).click();
+  const fields = main.getByRole("region", { name: "追加した証憑の値", exact: true });
   await expect(fields).toBeVisible({ timeout: 30_000 });
   // 読み取った値の欄は画面の下に出るので、見える位置まで送る
   await fields.evaluate((element) =>
@@ -633,32 +626,20 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   // ---- 18〜24 秒: 請求書の一覧と詳細（3 秒）→ 青色申告決算書（3 秒） ----
   await beginScene("invoices", 6_000);
   await page.goto(`${entityRoot}/invoices`);
-  const invoiceLink = main().getByRole("link", { name: invoiceNo, exact: true });
+  const invoiceLink = main.getByRole("link", { name: invoiceNo, exact: true });
   await expect(invoiceLink).toBeVisible();
   await pause(900);
   await invoiceLink.click();
   await page.waitForURL((url) => url.pathname.startsWith(`${entityRoot}/invoices/`));
-  await expect(main().getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(main.getByRole("heading", { level: 1 })).toBeVisible();
   await holdScene(3_000);
   // 1 段目の「決算・申告」だけを押す（決算書の画面で 2 段目の「決算書」を押し直すと、入口の転送が進まない）
   await openNav(page, "決算・申告");
   // 決算書は初回の読み込みが遅いことがある。待ちは動画から削る
   const blueReturnWaitStart = now() + 300;
-  const blueReturnHeading = main().getByRole("heading", { name: /^青色申告決算書 \d{4}年分$/ });
-  try {
-    await expect(blueReturnHeading).toBeVisible({ timeout: 6_000 });
-  } catch {
-    // 調査用: 入口（/blue-return）の転送が進まないときの状態を出し、年度の URL を直接開く
-    console.warn("決算書が出ない:", {
-      url: page.url(),
-      mains: await page.locator("main").count(),
-      errors: pageErrors,
-    });
-    const year =
-      new Date().getMonth() + 1 >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1;
-    await page.goto(`${entityRoot}/blue-return/${year}`);
-    await expect(blueReturnHeading).toBeVisible({ timeout: 20_000 });
-  }
+  await expect(main.getByRole("heading", { name: /^青色申告決算書 \d{4}年分$/ })).toBeVisible({
+    timeout: 20_000,
+  });
   const blueReturnWaitEnd = now() - 300;
   if (blueReturnWaitEnd > blueReturnWaitStart)
     cuts.push({ startMs: blueReturnWaitStart, endMs: blueReturnWaitEnd });
@@ -667,7 +648,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   // ---- 24〜28 秒: スマホの幅（390px）の画面と、接続用の QR ----
   await beginScene("mobile", 4_000);
   await page.goto("/settings/remote");
-  await expect(main().getByText(TAILSCALE_NAME, { exact: true }).first()).toBeVisible();
+  await expect(main.getByText(TAILSCALE_NAME, { exact: true }).first()).toBeVisible();
   await holdScene(1_400);
   // 1280x720 の中に、スマホの枠（iframe）と QR を並べた合成ページ（同じオリジンのまま差し替える）
   await setCaption(page, null);

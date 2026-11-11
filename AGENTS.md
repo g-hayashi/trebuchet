@@ -47,7 +47,7 @@ apps/server ──→ packages/schema
 | 明細の推定の評価（ルール → 端末内 → 外部。011） | `pnpm eval:statements` |
 | 証憑の読み取りの評価（外部の AI を呼ぶ。010） | `pnpm eval:receipts` |
 | バックアップ（`.tbk`）の復元（server を止めて行う。回復キーを標準入力から読む） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--receipts-dir <dir>] [--allow-missing-receipts] [--yes]` |
-| freee の書き出しの確認と照合（実データ、ローカル専用。`work/` を読む。`--continue` は使えない: 008） | `pnpm verify:freee` |
+| freee の書き出しの確認と照合（実データ、ローカル専用。`work/` を読む。一時の事業体は実行ごとに作って消す。`--continue`・`--keep` はない: 008） | `pnpm verify:freee` |
 | 青色申告決算書の照合（実データ、ローカル専用。`work/` を読む） | `pnpm verify:tax-return` |
 | 宣伝動画（MP4 と GIF、日本語・英語。ffmpeg が要る） | `pnpm promo:record` |
 | E2E（Playwright、Chromium） | `pnpm --filter @trebuchet/web e2e` |

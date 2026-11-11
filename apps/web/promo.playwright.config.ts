@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { PROMO_VIEWPORT } from "./e2e/helpers/viewports.ts";
 import base from "./playwright.config.ts";
 
 // 宣伝動画の録画（`pnpm promo:record`。言語は環境変数 PROMO_LANG=ja|en）。
@@ -9,7 +10,7 @@ export default defineConfig({
   timeout: 300_000,
   use: {
     ...base.use,
-    viewport: { width: 1280, height: 720 },
+    viewport: PROMO_VIEWPORT,
     trace: "off",
     actionTimeout: 15_000,
   },

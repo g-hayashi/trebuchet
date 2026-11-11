@@ -36,9 +36,9 @@ import {
   benchClock as clock,
   createBenchEntity,
   benchIds as ids,
-  positiveNumber,
   runBench,
 } from "./lib/bench-common.ts";
+import { positiveNumber } from "./lib/env.ts";
 
 const ENTITIES = Math.floor(positiveNumber("BENCH_BACKUP_ENTITIES", 3));
 const YEARS = Math.floor(positiveNumber("BENCH_BACKUP_YEARS", 3));

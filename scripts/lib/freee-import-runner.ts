@@ -3,21 +3,19 @@
  *
  * 引数の解析と `process.exit` を含まない。使い方の誤りや処理の失敗は `StopError` で投げる（呼び出し側が捕まえる）。
  * 実データは読むだけで、`.tmp/verify-freee/` の外にファイルは書かない。出力の先は `log`（既定は `console.log`）。
- * 実行の後は `finishFreeeImport` で DB を閉じる（`keep` でなければ一時のデータ場所を消す）。
+ * 実行の後は `finishFreeeImport` で DB を閉じ、一時のデータ場所を消す。
  *
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む。
  */
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { createImportUnitOfWork } from "../../packages/db/src/import-repository.ts";
 import { DrizzleLedgerRepository } from "../../packages/db/src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../../packages/db/src/master-repository.ts";
-import { DrizzleRegistryRepository } from "../../packages/db/src/registry-repository.ts";
 import {
   clearDataKey,
   closeAll,
-  openRegistry,
   openTenant,
   setDataKey,
   TMP_ROOT,
@@ -183,9 +181,8 @@ const yen = (n: number) => AMOUNT.format(n);
 
 function unwrap<T>(result: Result<T>, label: string): T {
   if (result.ok) return result.value;
-  const { code, message, details } = result.error;
-  const extra = details === undefined ? "" : ` ${JSON.stringify(details)}`;
-  throw new StopError(`${label}に失敗しました: ${code} ${message}${extra}`);
+  // message・details には金額などの値が入りうるので、code だけを出す（verify-tax-return.ts の must と同じ）
+  throw new StopError(`${label}に失敗しました: ${result.error.code}`);
 }
 
 function countBy<T>(items: readonly T[], key: (item: T) => string): string {
@@ -205,7 +202,13 @@ export function resolveMappingPath(path: string): string {
 
 /** 対応表の JSON を読む。accounts の行は accountId の代わりに accountName（科目名）でも指定できる */
 function readMappingFile(file: string, accounts: readonly { id: string; name: string }[]) {
-  const raw: unknown = JSON.parse(readFileSync(file, "utf-8"));
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(file, "utf-8"));
+  } catch {
+    // SyntaxError の message には JSON の断片（値）が入りうるので出さない
+    throw new StopError("対応表の JSON を読めません（JSON の構文が正しくありません）");
+  }
   const rows = (raw as { accounts?: unknown }).accounts;
   const resolved = Array.isArray(rows)
     ? rows.map((row: Record<string, unknown>) => {
@@ -244,10 +247,6 @@ export type ImportArgs = {
 };
 
 export type ImportOptions = {
-  /** 終了後も `.tmp/verify-freee/` を残す（`finishFreeeImport` に渡す値と同じにする） */
-  keep: boolean;
-  /** `.tmp/verify-freee/` の事業体を作り直さず使う（`--continue`） */
-  reuse: boolean;
   /** 出力の先。既定は `console.log` */
   log?: Log;
 };
@@ -270,9 +269,8 @@ export type ImportRun = {
 };
 
 /** 取込 → 期首残高の保存 → 照合 → 帳票を行う。失敗は StopError。終わったら `finishFreeeImport` を呼ぶ */
-export function runFreeeImport(args: ImportArgs, options: ImportOptions): ImportRun {
+export function runFreeeImport(args: ImportArgs, options: ImportOptions = {}): ImportRun {
   const log = options.log ?? consoleLog;
-  const { keep, reuse } = options;
   const journalBytes = new Uint8Array(readFileSync(args.journal));
   const ledgerBytes = new Uint8Array(readFileSync(args.ledger));
   const sha256 = createHash("sha256").update(journalBytes).digest("hex");
@@ -283,30 +281,20 @@ export function runFreeeImport(args: ImportArgs, options: ImportOptions): Import
     verifyHeaders(args.ledger, KINDS.ledger, log);
   if (!headersOk) throw new StopError("ヘッダに問題があるため止めました");
 
-  if (!reuse) rmSync(DATA_DIR, { recursive: true, force: true });
-  else if (!existsSync(DATA_DIR))
-    throw new StopError(`${DATA_DIR} がありません（--keep で実行したあとに --continue を使う）`);
-  else
-    throw new StopError(
-      "--continue は使えません（008: 一時のデータ場所の DB は実行ごとの鍵で暗号化し、鍵を残さないため、前の実行の DB を開けません）",
-    );
+  rmSync(DATA_DIR, { recursive: true, force: true });
   mkdirSync(DATA_DIR, { recursive: true });
   process.env.TREBUCHET_DATA_DIR = DATA_DIR;
   // 008: 一時のデータ場所の DB も DK で暗号化する。DK は実行ごとの乱数で、メモリーだけに置く
-  // （ディスク・環境変数に出さない。INV-51）。前の実行の DB は開けないので、--continue は使えない
+  // （ディスク・環境変数に出さない。INV-51）。DB は実行のたびに作り直し、終了時に消す
   setDataKey(randomBytes(32));
 
   const ids = benchIds;
   const clock = benchClock;
-  let entityId = new DrizzleRegistryRepository(openRegistry()).listEntities()[0]?.id;
-  if (reuse) {
-    if (entityId === undefined) throw new StopError("再利用できる事業体がありません");
-  } else {
-    try {
-      entityId = createBenchEntity({ name: "freee 照合", firstFiscalYear: args.year }).id;
-    } catch (error) {
-      throw new StopError(`事業体の作成に失敗しました: ${(error as Error).message}`);
-    }
+  let entityId: string;
+  try {
+    entityId = createBenchEntity({ name: "freee 照合", firstFiscalYear: args.year }).id;
+  } catch (error) {
+    throw new StopError(`事業体の作成に失敗しました: ${(error as Error).message}`);
   }
   const db = openTenant(entityId);
   const masters = new DrizzleMasterRepository(db);
@@ -479,13 +467,12 @@ export function runFreeeImport(args: ImportArgs, options: ImportOptions): Import
   );
   log(`帳票の警告: ${countBy([...pl.warnings, ...bs.warnings], (w) => w.code)}`);
 
-  if (keep) log(`\n${DATA_DIR} を残した（--continue で別の年度を足せる）`);
   return { matched: reconciled.allMatched, context };
 }
 
-/** DB を閉じて施錠し（DK を消す）、`keep` でなければ一時のデータ場所を消す */
-export function finishFreeeImport(keep: boolean): void {
+/** DB を閉じて施錠し（DK を消す）、一時のデータ場所を消す */
+export function finishFreeeImport(): void {
   closeAll();
   clearDataKey();
-  if (!keep) rmSync(DATA_DIR, { recursive: true, force: true });
+  rmSync(DATA_DIR, { recursive: true, force: true });
 }

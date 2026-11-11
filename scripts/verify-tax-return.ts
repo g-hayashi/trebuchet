@@ -2,11 +2,11 @@
  * 青色申告決算書の実データでの照合（003 の research R15、ローカル専用）。実データは読むだけで、出力もコミットしない。
  *
  *   pnpm verify:tax-return --journal <仕訳帳.csv> --ledger <総勘定元帳.csv> --year 2025 --closing <work/ の JSON>
- *                          [--mapping <json>] [--keep] [--continue]
+ *                          [--mapping <json>]
  *
- * `--journal` `--ledger` `--year` `--mapping` `--keep` `--continue` は `verify-freee-import.ts` と同じ意味で、
+ * `--journal` `--ledger` `--year` `--mapping` は `verify-freee-import.ts` と同じ意味で、
  * 取込・期首残高の保存・元帳との照合は `lib/freee-import-runner.ts` が行う（research R12b）。
- * 使い捨ての事業体は `.tmp/verify-freee/` に作る。`--continue` で 2024 年分、2025 年分の順に続けて取り込める。
+ * 使い捨ての事業体は `.tmp/verify-freee/` に作り、終了時に消す（1 回の実行で 1 年度だけ取り込む）。
  * 取込の出力は、止まったとき（未定の対応・不一致・エラー）だけ出す。成功したときは件数だけを出す。
  *
  * ## --closing の JSON（`work/` に置く手書きのファイル。値はリポジトリに書かない）
@@ -47,9 +47,8 @@
  *
  * ## 照合
  *
- * 取込のあと、按分（科目コードで科目を引く）・資産（`linkedJournalNo` があれば取り込んだ freee の仕訳に結びつけ、
- * 同じ名前・取得日・取得価額の資産があれば更新。資産の勘定は一括償却が 1070、ほかは 1060）・開業費（同じ名前・開業日・
- * 総額のものがあれば更新）と年度ごとの償却額の決定・控除の回答を登録し、`getAdjustmentProposals` の案を登録してから、
+ * 取込のあと、按分（科目コードで科目を引く）・資産（`linkedJournalNo` があれば取り込んだ freee の仕訳に結びつける。
+ * 資産の勘定は一括償却が 1070、ほかは 1060）・開業費と年度ごとの償却額の決定・控除の回答を登録し、`getAdjustmentProposals` の案を登録してから、
  * `getBlueReturn` の各欄を `expected` と照合する。
  * - あわせて警告 `ASSET_REGISTER_MISMATCH`・`DEPRECIATION_MISMATCH`・`DEPRECIATION_PARAMETER_MISSING` の件数と、
  *   欄 18 と 3 ページの必要経費算入額の合計の一致・不一致（`DEPRECIATION_MISMATCH` の有無）を出す
@@ -60,8 +59,6 @@
  *   `name` があれば (page, no, name) で、なければ (page, no) で行を探す。2 行以上に当たるときは「あいまい」として
  *   件数を出し、一致にしない（終了コードは 1）
  * - 出力は欄の識別子と一致・不一致・欄なしの件数だけ。金額・取引先名・按分率は出さない
- * - `--continue` で複数年度を取り込んだときは、前の年度の決算書も作り、各年度の警告のコード
- *   （NEGATIVE_BALANCE、OPENING_MISMATCH）と科目名だけを出す
  * 終了コード: 0 = 成功（すべて一致）、1 = 不一致・取込の停止・JSON の誤り・エラー、2 = 使い方の誤り。
  */
 import { readFileSync } from "node:fs";
@@ -146,7 +143,7 @@ const ASSET_ACCOUNT_CODE = "1060";
 /** 一括償却資産の勘定 */
 const LUMP_SUM_ACCOUNT_CODE = "1070";
 const ASSET_METHODS: readonly AssetMethod[] = ["small_asset_28_2", "straight_line", "lump_sum"];
-/** 償却の警告のうち、1 件でもあれば不一致として終了コード 1 にするもの（009 T024） */
+/** 償却の警告のうち、1 件でもあれば不一致として終了コード 1 にするもの（009/T024） */
 const DEPRECIATION_CODES = [
   "ASSET_REGISTER_MISMATCH",
   "DEPRECIATION_MISMATCH",
@@ -166,7 +163,7 @@ function usage(message: string): never {
   console.error(message);
   console.error("使い方:");
   console.error(
-    "  node scripts/verify-tax-return.ts --journal <path> --ledger <path> --year <年度> --closing <work/ の json> [--mapping <.tmp/ の下の json>] [--keep] [--continue]",
+    "  node scripts/verify-tax-return.ts --journal <path> --ledger <path> --year <年度> --closing <work/ の json> [--mapping <.tmp/ の下の json>]",
   );
   process.exit(2);
 }
@@ -452,18 +449,8 @@ function registerClosing(context: ImportContext, input: ClosingInput, year: numb
       }
       linked++;
     }
-    // 同じ名前・取得日・取得価額の資産があれば更新（--continue での再実行で重複させない）
-    const existing = closing
-      .listFixedAssets()
-      .find(
-        (a) =>
-          a.name === asset.name &&
-          a.acquiredOn === asset.acquiredOn &&
-          a.acquisitionCost === asset.cost,
-      );
     must(
       saveFixedAsset(settings, {
-        ...(existing === undefined ? {} : { id: existing.id }),
         name: asset.name,
         acquiredOn: asset.acquiredOn,
         acquisitionCost: asset.cost,
@@ -484,17 +471,8 @@ function registerClosing(context: ImportContext, input: ClosingInput, year: numb
   let decisions = 0;
   for (const [i, deferred] of input.deferredAssets.entries()) {
     const account = accountByCode(deferred.accountCode, `deferredAssets[${i}].accountCode`);
-    const existing = closing
-      .listDeferredAssets()
-      .find(
-        (a) =>
-          a.name === deferred.name &&
-          a.openedOn === deferred.openedOn &&
-          a.totalAmount === deferred.totalAmount,
-      );
     const saved = must(
       saveDeferredAsset(settings, {
-        ...(existing === undefined ? {} : { id: existing.id }),
         name: deferred.name,
         totalAmount: deferred.totalAmount,
         openedOn: deferred.openedOn,
@@ -657,8 +635,6 @@ const { values } = parseArgs({
     year: { type: "string" },
     closing: { type: "string" },
     mapping: { type: "string" },
-    keep: { type: "boolean", default: false },
-    continue: { type: "boolean", default: false },
   },
   strict: true,
 });
@@ -703,28 +679,17 @@ let importStopped = true;
 try {
   const { matched, context } = runFreeeImport(
     { journal: values.journal, ledger: values.ledger, year, mapping: mappingFile },
-    { keep: values.keep, reuse: values.continue, log },
+    { log },
   );
   if (matched) {
     importStopped = false;
     console.log(`取込: ${values.year} 年度、元帳との照合はすべて一致`);
 
-    // 前の年度（--continue で取り込んだもの）の決算書。警告のコードと科目名だけを出す
     const blueDeps = {
       masters: context.masters,
       reports: context.reports,
       closing: new DrizzleClosingStore(openTenant(context.entityId)),
     };
-    const earlier = context.masters
-      .listFiscalPeriods()
-      .map((p) => p.fiscalYear)
-      .filter((y) => y < year)
-      .sort((a, b) => a - b);
-    for (const y of earlier) {
-      const prior = must(getBlueReturn(blueDeps, { fiscalYear: y }), `${y} 年度の決算書`);
-      printWarnings(`${y} 年度`, prior.warnings);
-    }
-
     const registered = registerClosing(context, closing, year);
     console.log(
       `登録: 按分 ${registered.homeUse}、資産 ${registered.assets}（仕訳に結びつけ ${registered.linked}）、開業費 ${registered.deferredAssets}（償却額の決定 ${registered.decisions}）、控除の回答、決算整理の仕訳 ${registered.adjustments}`,
@@ -742,8 +707,9 @@ try {
   }
 } catch (error) {
   if (importStopped) for (const line of buffered) console.log(line);
-  console.error(error instanceof StopError ? error.message : error);
+  // StopError 以外の例外の中身（実データの値を含みうる）は出さない
+  console.error(error instanceof StopError ? error.message : "予期しないエラーで止まりました");
 } finally {
-  finishFreeeImport(values.keep);
+  finishFreeeImport();
 }
 process.exit(exitCode);

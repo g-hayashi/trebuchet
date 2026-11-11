@@ -1,12 +1,14 @@
 import { expect, type Page, test } from "@playwright/test";
-import { enterVault, ORIGIN_HEADERS } from "./helpers/auth.ts";
+import { enterVault } from "./helpers/auth.ts";
+import { createEntityViaUi, postJournalViaApi } from "./helpers/entity.ts";
 import { openNav } from "./helpers/nav.ts";
+import { mainOf, pickQuickAccount } from "./helpers/ui.ts";
 
 type Line = { side?: "借方" | "貸方"; account: string; amount: string; description?: string };
 
 /** 仕訳の入力画面の n 行目（1 始まり）を埋める */
 async function fillLine(page: Page, n: number, line: Line) {
-  const field = (name: string) => page.getByLabel(`${n}行目の${name}`, { exact: true });
+  const field = (name: string) => mainOf(page).getByLabel(`${n}行目の${name}`, { exact: true });
   await field("勘定科目").selectOption({ label: line.account });
   if (line.side) await field("貸借").selectOption({ label: line.side });
   await field("金額").fill(line.amount);
@@ -16,25 +18,19 @@ async function fillLine(page: Page, n: number, line: Line) {
   if (line.description) await field("摘要").fill(line.description);
 }
 
-/** かんたん入力の科目の欄（combobox）に科目名を入れ、候補（「1030 売掛金」）から選ぶ */
-async function pickQuickAccount(page: Page, label: "借方科目" | "貸方科目", account: string) {
-  await page.getByRole("combobox", { name: label, exact: true }).fill(account);
-  await page.getByRole("option", { name: new RegExp(`^\\d+ ${account}$`) }).click();
-}
-
 /** 「かんたん入力」から「詳細」へ切り替える（登録のたびにかんたん入力へ戻る） */
 async function openDetailed(page: Page) {
-  await page.getByRole("button", { name: "詳細", exact: true }).click();
-  await expect(page.getByRole("button", { name: "詳細", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  const detailed = mainOf(page).getByRole("button", { name: "詳細", exact: true });
+  await detailed.click();
+  await expect(detailed).toHaveAttribute("aria-pressed", "true");
 }
 
+// 事業体の作成の画面の操作は、このテストだけが確かめる（ほかのテストは API で作る）
 test("事業体の作成から期首残高・仕訳の登録・貸借不一致の拒否・試算表の確認まで", async ({
   page,
 }) => {
-  const menu = page.getByRole("navigation", { name: "事業体のメニュー" });
+  const main = mainOf(page);
+  const menu = page.getByRole("navigation", { name: "事業体のメニュー", exact: true });
   let entityId = "";
 
   await test.step("設定または解錠する", async () => {
@@ -42,44 +38,36 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
   });
 
   await test.step("事業体を作成する", async () => {
-    // 事業体が 1 件だとトップはそのホームへ移るので、一覧と作成を開く
-    await page.goto("/?list=1");
-    const form = page
-      .locator("form")
-      .filter({ has: page.getByRole("button", { name: "作成する" }) });
-    await form.getByLabel("名称", { exact: true }).fill("個人事業");
-    await form.getByLabel("種別").selectOption({ label: "個人" });
-    await form.getByLabel("開始年度").fill("2026");
-    await form.getByLabel("期首の月").selectOption({ label: "1月" });
-    await form.getByRole("button", { name: "作成する" }).click();
-
-    await expect(page).toHaveURL(/\/e\/[0-9a-f-]{36}$/);
-    entityId = new URL(page.url()).pathname.split("/")[2] ?? "";
+    entityId = await createEntityViaUi(page, { name: "個人事業", firstFiscalYear: 2026 });
     await expect(menu).toBeVisible();
   });
 
   await test.step("期首残高を登録する（貸借が合うまで保存できない）", async () => {
     await openNav(page, "事業体の設定", "会計期間と移行");
-    await page
+    await main
       .getByRole("region", { name: "2026年度", exact: true })
       .getByRole("listitem", { name: "期首残高", exact: true })
       .getByRole("link", { name: "期首残高を開く", exact: true })
       .click();
-    await expect(page.getByRole("heading", { name: "2026年度の期首残高" })).toBeVisible();
+    await expect(
+      main.getByRole("heading", { name: "2026年度の期首残高", exact: true }),
+    ).toBeVisible();
 
-    const form = page.getByRole("form", { name: "期首残高" });
-    await form.getByRole("button", { name: "行を追加" }).click();
-    await form.getByRole("button", { name: "行を追加" }).click();
-    await form.getByLabel("1行目の勘定科目").selectOption({ label: "普通預金" });
-    await form.getByLabel("1行目の金額").fill("1,000,000");
-    await form.getByLabel("2行目の勘定科目").selectOption({ label: "元入金" });
-    await expect(form.getByLabel("2行目の貸借")).toHaveValue("credit");
+    const form = main.getByRole("form", { name: "期首残高", exact: true });
+    await form.getByRole("button", { name: "行を追加", exact: true }).click();
+    await form.getByRole("button", { name: "行を追加", exact: true }).click();
+    await form.getByLabel("1行目の勘定科目", { exact: true }).selectOption({ label: "普通預金" });
+    await form.getByLabel("1行目の金額", { exact: true }).fill("1,000,000");
+    await form.getByLabel("2行目の勘定科目", { exact: true }).selectOption({ label: "元入金" });
+    await expect(form.getByLabel("2行目の貸借", { exact: true })).toHaveValue("credit");
 
-    const save = form.getByRole("button", { name: "保存する" });
+    const save = form.getByRole("button", { name: "保存する", exact: true });
     await expect(save).toBeDisabled();
-    await expect(form.getByText("差額が 0 円になると保存できます。")).toBeVisible();
+    await expect(
+      form.getByText("差額が 0 円になると保存できます。", { exact: true }),
+    ).toBeVisible();
 
-    await form.getByLabel("2行目の金額").fill("1000000");
+    await form.getByLabel("2行目の金額", { exact: true }).fill("1000000");
     await expect(form.getByLabel("合計", { exact: true })).toContainText("差額0 円");
     const saved = page.waitForResponse(
       (r) => r.url().includes("/opening-balances") && r.request().method() === "PUT",
@@ -88,35 +76,35 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
     expect((await saved).ok()).toBe(true);
 
     await page.reload();
-    await expect(form.getByLabel("1行目の金額")).toHaveValue("1000000");
-    await expect(form.getByLabel("2行目の金額")).toHaveValue("1000000");
+    await expect(form.getByLabel("1行目の金額", { exact: true })).toHaveValue("1000000");
+    await expect(form.getByLabel("2行目の金額", { exact: true })).toHaveValue("1000000");
   });
 
-  const result = page.getByRole("status", { name: "登録の結果" });
+  const result = main.getByRole("status", { name: "登録の結果", exact: true });
 
   await test.step("単一の仕訳を登録する", async () => {
     await openNav(page, "仕訳", "入力する");
-    await expect(page.getByRole("heading", { name: "仕訳の入力" })).toBeVisible();
+    await expect(main.getByRole("heading", { name: "仕訳の入力", exact: true })).toBeVisible();
 
     // 既定は「かんたん入力」（日付・借方科目・貸方科目・金額・摘要）
-    await expect(page.getByRole("button", { name: "かんたん入力", exact: true })).toHaveAttribute(
+    await expect(main.getByRole("button", { name: "かんたん入力", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    await page.getByLabel("日付", { exact: true }).fill("2026-10-31");
-    await pickQuickAccount(page, "借方科目", "売掛金");
-    await pickQuickAccount(page, "貸方科目", "売上高");
-    await page.getByLabel("金額", { exact: true }).fill("495000");
-    await page.getByLabel("摘要", { exact: true }).fill("10月分 取引先A");
-    await page.getByRole("button", { name: "登録", exact: true }).click();
+    await main.getByLabel("日付", { exact: true }).fill("2026-10-31");
+    await pickQuickAccount(main, "借方科目", "売掛金");
+    await pickQuickAccount(main, "貸方科目", "売上高");
+    await main.getByLabel("金額", { exact: true }).fill("495000");
+    await main.getByLabel("摘要", { exact: true }).fill("10月分 取引先A");
+    await main.getByRole("button", { name: "登録", exact: true }).click();
     await expect(result).toContainText("仕訳 No.1 を登録しました。");
   });
 
   await test.step("複合仕訳（借方2行・貸方1行）を登録する", async () => {
-    await expect(page.getByLabel("日付", { exact: true })).toHaveValue("2026-10-31");
+    await expect(main.getByLabel("日付", { exact: true })).toHaveValue("2026-10-31");
     // 複数行の仕訳は「詳細」で入力する
     await openDetailed(page);
-    await page.getByRole("button", { name: "行を追加" }).click();
+    await main.getByRole("button", { name: "行を追加", exact: true }).click();
     await fillLine(page, 1, { side: "借方", account: "普通預金", amount: "487037" });
     await fillLine(page, 2, { side: "貸方", account: "売掛金", amount: "495000" });
     await fillLine(page, 3, {
@@ -125,8 +113,8 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
       amount: "7963",
       description: "源泉所得税",
     });
-    await expect(page.getByLabel("合計", { exact: true })).toContainText("借方合計495,000 円");
-    await page.getByRole("button", { name: "登録", exact: true }).click();
+    await expect(main.getByLabel("合計", { exact: true })).toContainText("借方合計495,000 円");
+    await main.getByRole("button", { name: "登録", exact: true }).click();
     await expect(result).toContainText("仕訳 No.2 を登録しました。");
   });
 
@@ -134,28 +122,22 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
     await openDetailed(page);
     await fillLine(page, 1, { account: "普通預金", amount: "500000" });
     await fillLine(page, 2, { account: "売上高", amount: "495000" });
-    const totals = page.getByLabel("合計", { exact: true });
+    const totals = main.getByLabel("合計", { exact: true });
     await expect(totals).toContainText("借方合計500,000 円");
     await expect(totals).toContainText("貸方合計495,000 円");
     await expect(totals).toContainText("差額5,000 円");
-    await expect(page.getByRole("button", { name: "登録", exact: true })).toBeDisabled();
-    await expect(page.getByText("差額が 0 円になると登録できます。")).toBeVisible();
+    await expect(main.getByRole("button", { name: "登録", exact: true })).toBeDisabled();
+    await expect(
+      main.getByText("差額が 0 円になると登録できます。", { exact: true }),
+    ).toBeVisible();
 
     // 画面を通さずに送っても、サーバーが差額付きで拒否する
-    const accounts = (await (
-      await page.request.get(`/api/entities/${entityId}/accounts`)
-    ).json()) as { accounts: { id: string; name: string }[] };
-    const idOf = (name: string) => accounts.accounts.find((a) => a.name === name)?.id;
-    // page.request は Origin を付けないので、CSRF の検査（FR-009）を通すために付ける。cookie は画面と共有する
-    const res = await page.request.post(`/api/entities/${entityId}/journals`, {
-      headers: ORIGIN_HEADERS,
-      data: {
-        date: "2026-10-31",
-        lines: [
-          { side: "debit", accountId: idOf("普通預金"), amount: 500000 },
-          { side: "credit", accountId: idOf("売上高"), amount: 495000 },
-        ],
-      },
+    const res = await postJournalViaApi(page, entityId, {
+      date: "2026-10-31",
+      lines: [
+        { side: "debit", account: "普通預金", amount: 500000 },
+        { side: "credit", account: "売上高", amount: 495000 },
+      ],
     });
     expect(res.status()).toBe(422);
     expect(await res.json()).toMatchObject({
@@ -163,14 +145,14 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
     });
 
     await openNav(page, "仕訳", "一覧");
-    const list = page.getByRole("table", { name: "仕訳の一覧" });
+    const list = main.getByRole("table", { name: "仕訳の一覧", exact: true });
     await expect(
       list.getByRole("button", { name: /^仕訳 No\.\d+ の詳細$/, exact: true }),
     ).toHaveCount(2);
   });
 
   await test.step("摘要を選択・コピーし、行クリックとキーボードで詳細を開閉する", async () => {
-    const list = page.getByRole("table", { name: "仕訳の一覧", exact: true });
+    const list = main.getByRole("table", { name: "仕訳の一覧", exact: true });
     const row = list.getByRole("row").filter({
       has: page.getByRole("button", { name: "仕訳 No.1 の詳細", exact: true }),
     });
@@ -213,11 +195,11 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
       .getByRole("navigation", { name: "帳票", exact: true })
       .getByRole("link", { name: "残高試算表", exact: true })
       .click();
-    await expect(page.getByRole("heading", { name: "残高試算表" })).toBeVisible();
-    const table = page.getByRole("table", { name: "残高試算表" });
+    await expect(main.getByRole("heading", { name: "残高試算表", exact: true })).toBeVisible();
+    const table = main.getByRole("table", { name: "残高試算表", exact: true });
     const cells = (name: string) => table.getByRole("row", { name }).getByRole("cell");
 
-    await expect(page.getByText("貸借一致", { exact: true })).toBeVisible();
+    await expect(main.getByText("貸借一致", { exact: true })).toBeVisible();
     await expect(table.locator("tfoot").getByRole("cell")).toHaveText([
       "",
       "合計",

@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { connect } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { LOOPBACK_HOST, SERVER_PORT } from "../../apps/server/src/lib/origin.ts";
 import { RECEIPT_STORE_DIRNAME } from "../../packages/db/src/backup/receipts.ts";
 import {
   type RestoreErrorCode,
@@ -21,8 +22,6 @@ const EXIT_INVALID = 1;
 const EXIT_USAGE = 2;
 const EXIT_SERVER_RUNNING = 3;
 const EXIT_CANCELLED = 4;
-
-const SERVER_PORT = 8787;
 
 export type RestoreCliDeps = {
   env: Record<string, string | undefined>;
@@ -43,7 +42,7 @@ export type RestoreCliDeps = {
 /** 127.0.0.1 の port に接続できれば、server（または何か）が動いているとみなす */
 export function isServerRunning(port: number = SERVER_PORT, timeoutMs = 1000): Promise<boolean> {
   return new Promise((resolve) => {
-    const socket = connect({ host: "127.0.0.1", port });
+    const socket = connect({ host: LOOPBACK_HOST, port });
     const done = (running: boolean) => {
       socket.destroy();
       resolve(running);

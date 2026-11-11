@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { enterVault } from "./helpers/auth.ts";
+import { MOBILE_VIEWPORT } from "./helpers/viewports.ts";
 
 test("/listで種別説明・非表示・復元・完全削除を操作し、別組織を保持する", async ({ page }) => {
   await enterVault(page);
@@ -36,8 +37,6 @@ test("/listで種別説明・非表示・復元・完全削除を操作し、別
   await expect(main.getByRole("link", { name: "合成保持組織", exact: true })).toBeVisible();
   await main.getByText("非表示の組織", { exact: true }).click();
   await expect(main.getByText("非表示の組織はありません。", { exact: true })).toBeVisible();
-  await page.screenshot({ path: "../../.tmp/entity-lifecycle-desktop.png", fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize(MOBILE_VIEWPORT);
   await expect(main.getByRole("button", { name: "非表示にする", exact: true })).toBeVisible();
-  await page.screenshot({ path: "../../.tmp/entity-lifecycle-mobile.png", fullPage: true });
 });

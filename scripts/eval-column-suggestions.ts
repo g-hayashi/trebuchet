@@ -11,8 +11,6 @@
  * `fm serve` は評価の間だけ起動し、終了時に必ず止める。実データ（`work/`・`data/`）は読まない。
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む（bench-statements.ts と同じ）。
  */
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { COLUMN_TIMEOUT_MS, createColumnProvider } from "../apps/server/src/lib/ai-client.ts";
 import { LOCAL_AI_MODEL } from "../apps/server/src/lib/ai-runtime.ts";
 import { createFmServer } from "../apps/server/src/lib/fm-server.ts";
@@ -22,7 +20,8 @@ import {
   evaluateColumnSuggestions,
 } from "../packages/domain/src/usecases/statement-columns.ts";
 import { COLUMN_EVAL_CASES } from "../packages/domain/test/fixtures/statements/column-evals.ts";
-import { positiveNumber } from "./lib/bench-common.ts";
+import { evalFmPort } from "./lib/env.ts";
+import { delta, evalDir, evalFetch, pct, readPrevious, saveEval } from "./lib/eval-history.ts";
 
 /** 保存する形（件数と千分率だけ） */
 type SavedEval = ColumnEvalResult & {
@@ -31,36 +30,7 @@ type SavedEval = ColumnEvalResult & {
   timeoutMs: number;
 };
 
-const OUT_DIR = fileURLToPath(new URL("../.tmp/eval-columns/", import.meta.url));
-
-/** 千分率を「87.5%」の形に */
-const pct = (rate: number): string => `${(rate / 10).toFixed(1)}%`;
-
-/** 前回との差（ポイント）。符号つき */
-function delta(current: number, previous: number | undefined): string {
-  if (previous === undefined) return "";
-  const diff = (current - previous) / 10;
-  return ` (前回比 ${diff >= 0 ? "+" : ""}${diff.toFixed(1)}pt)`;
-}
-
-/** 前回の結果（日時つきのファイル名の最後）。なければ undefined。読めない・形が違うときも undefined */
-function readPrevious(): SavedEval | undefined {
-  let files: string[];
-  try {
-    files = readdirSync(OUT_DIR)
-      .filter((f) => f.endsWith(".json"))
-      .sort();
-  } catch {
-    return undefined;
-  }
-  const last = files.at(-1);
-  if (last === undefined) return undefined;
-  try {
-    return JSON.parse(readFileSync(`${OUT_DIR}${last}`, "utf8")) as SavedEval;
-  } catch {
-    return undefined;
-  }
-}
+const OUT_DIR = evalDir("eval-columns");
 
 function report(current: SavedEval, previous: SavedEval | undefined): void {
   const prevRole = (role: string) => previous?.roles.find((r) => r.role === role)?.matchRate;
@@ -85,21 +55,21 @@ function report(current: SavedEval, previous: SavedEval | undefined): void {
   console.log(previous === undefined ? "  前回の結果: なし" : `  前回の結果: ${previous.at}`);
 }
 
-const fm = createFmServer({ port: positiveNumber("TREBUCHET_FM_PORT", 18791) });
+const fm = createFmServer({ port: evalFmPort() });
 try {
   if (!(await fm.available())) {
     console.error("端末内の AI（fm）が使えません。結果は残しません");
     process.exitCode = 1;
   } else {
     const provider = createColumnProvider({
-      fetch: (...args) => globalThis.fetch(...args),
+      fetch: evalFetch,
       available: () => fm.available(),
       localEndpoint: async () => {
         const baseUrl = await fm.ensureStarted();
         return baseUrl === undefined ? undefined : { baseUrl, model: LOCAL_AI_MODEL };
       },
     });
-    const previous = readPrevious();
+    const previous = readPrevious<SavedEval>(OUT_DIR);
     const result = await evaluateColumnSuggestions(COLUMN_EVAL_CASES, provider);
     const saved: SavedEval = {
       at: new Date().toISOString(),
@@ -108,13 +78,11 @@ try {
       ...result,
     };
     report(saved, previous);
-    mkdirSync(OUT_DIR, { recursive: true });
-    const file = `${OUT_DIR}${saved.at.replaceAll(":", "-").replaceAll(".", "-")}.json`;
-    writeFileSync(file, `${JSON.stringify(saved, null, 2)}\n`);
-    console.log(`  保存: ${file.slice(OUT_DIR.length)}（.tmp/eval-columns/）`);
+    console.log(`  保存: ${saveEval(OUT_DIR, saved)}（.tmp/eval-columns/）`);
   }
-} catch (error) {
-  console.error(error);
+} catch {
+  // 例外の中身（URL・応答の本文を含みうる）は出さない
+  console.error("評価に失敗しました（結果は残しません）");
   process.exitCode = 1;
 } finally {
   fm.stop();

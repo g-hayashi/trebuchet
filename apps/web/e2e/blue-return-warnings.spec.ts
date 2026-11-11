@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { type BlueReturn, BlueReturnWarningCode } from "@trebuchet/schema";
+import { MOBILE_VIEWPORT } from "./helpers/viewports.ts";
 
 test("決算書の全警告に説明と対応を表示し、対応画面へ移動できる", async ({ page }) => {
   const errors: string[] = [];
@@ -69,18 +70,17 @@ test("決算書の全警告に説明と対応を表示し、対応画面へ移�
   await page.goto(path);
   const main = page.getByRole("main", { exact: true });
   const warnings = main.getByRole("region", { name: "警告", exact: true });
-  await expect(warnings.getByText(/^意味：/)).toHaveCount(16);
-  await expect(warnings.getByText(/^対応：/)).toHaveCount(16);
+  const warningCount = BlueReturnWarningCode.options.length;
+  await expect(warnings.getByText(/^意味：/)).toHaveCount(warningCount);
+  await expect(warnings.getByText(/^対応：/)).toHaveCount(warningCount);
   await expect(warnings.locator("details[open]")).toHaveCount(0);
   await expect(warnings.getByText(/^意味：/).first()).toBeHidden();
   await warnings.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "../../.tmp/warning-desktop.png" });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize(MOBILE_VIEWPORT);
   await warnings.getByText("SALES_WITHOUT_PARTNERの警告", { exact: true }).scrollIntoViewIfNeeded();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
-  await page.screenshot({ path: "../../.tmp/warning-mobile.png" });
   const rent = warnings.getByRole("listitem").filter({ hasText: "RENT_DETAILS_MISMATCHの警告" });
   await rent.locator("summary").click();
   await expect(rent.getByText(/^対応：/)).toBeVisible();

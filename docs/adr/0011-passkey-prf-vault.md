@@ -1,6 +1,6 @@
 # ADR 0011: パスキーの PRF でデータ鍵を包み、DB 全体を暗号化する
 
-- 状態: 採用
+- 状態: 採用（注記: 影響の `pnpm verify:freee --continue` は、フラグ（`--continue`・`--keep`）ごと削除した。今の `pnpm verify:freee` にはない）
 - 日付: 2026-10-30
 - 関連: specs/008-passkey-vault/design.md（D1〜D12）、[ADR 0001](0001-sqlite-driver.md)（ドライバー）、[ADR 0006](0006-passkey-sessions.md)（回復コード・セッションの節を置き換える）、[ADR 0007](0007-backup-format.md)（パスフレーズ・キーチェーンの節を置き換える）
 

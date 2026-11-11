@@ -23,6 +23,6 @@
 - **バックアップの鍵は `HKDF(DK, ヘッダーの salt, "trebuchet/backup/v1")`**。ヘッダーに取った時点の recovery の包みを入れる（INV-54）。中の SQLite の写しは平文で、外側の AES-GCM が守る。`pnpm restore` は回復キーを標準入力から読み、ヘッダーの包み → 今の `auth.sqlite` の包みの順に試す。復元した後の `auth.sqlite` は recovery の包みだけ。画面のファイルの検査は解錠中に DK で行う。
 - **テストは `useTempDataDir` が固定のテスト用 DK を `setDataKey` する**（cleanup で `clearDataKey`）。既存の db・server のテストは鍵を意識しない。server のテストのセッションは `auth.sqlite` に作る（`createTestSession`）。
 - **E2E の仮想の認証器は `hasPrf: true`**。パスキーを書き出して戻すと PRF を失うので使わない。テストの間は回復キーを引き継ぎ、`enterVault` で回復キーで解錠して新しいパスキーを登録してから始める。E2E は利用者の端末で実行する。
-- **`pnpm verify:freee --continue` は使えない**（実行ごとに乱数の DK で作るため。利用者の判断で使えないままにする）。
+- **`pnpm verify:freee`・`verify:tax-return` に `--continue`・`--keep` はない**（一時のデータ場所の DB は実行ごとに乱数の DK で作り、鍵を残さないため、前の実行の事業体を開けない。実行のたびに作り、終了時に消す）。
 - **registry のマイグレーションは 008 で作り直した**（認証の表を `auth.sqlite` に分けたため）。以前の `data/` の DB は読めない。
 
