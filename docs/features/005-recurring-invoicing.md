@@ -12,7 +12,7 @@
 | 画面 | `apps/web/src/features/invoicing/`、`features/recurring/`、`apps/web/src/routes/e/$entityId/` の `invoice-settings.tsx`・`work-hours.tsx`・`invoices/`・`recurring/` |
 | E2E | `apps/web/e2e/invoicing.spec.ts`（対象月・発行日・入金日は固定の日付で、実行日に依存しない） |
 
-- **発行・入金・取消は 1 つの `InvoicingUnitOfWork` の中で書く**（ADR 0008）。複数回書くユースケースの一般の規則（AGENTS.md の「開発の進め方」）のとおり、`err` を返せば仕訳も請求の記録も巻き戻る。
+- **発行・入金・取消は 1 つの `InvoicingUnitOfWork` の中で書く**（ADR 0008）。複数回書くユースケースの一般の規則（`docs/development.md` の「ドメインとユースケース」）のとおり、`err` を返せば仕訳も請求の記録も巻き戻る。
 - **請求書・入金の仕訳は `JOURNAL_LINKED` で守る**（005/R13）。`source` が `invoice` / `payment` の仕訳は、001 の通常の訂正・取消を 409 で拒否する。請求・入金の取消だけが `{ linked: true }` で仕訳を取り消す。`recurring` の仕訳は通常どおり訂正・取消できる。消し込みのある請求書は取消せない（`INVOICE_HAS_PAYMENTS`）。
 - **請求書は発行時の写しを持つ**。写しの列と明細は DB のトリガーで更新を止め、取消で書けるのは取消の列だけ。物理削除しない。
 - **「今日」は `today: string`（`YYYY-MM-DD`）で domain に渡す**。server は `todayOf(clock)` で作る（005/R22）。ルートは `invoicingRoutes({ clock })`・`recurringRoutes({ clock })`（ほかのルートも同じ形）。server のテストは偽の時計を渡し、時刻を日付の境目から離す。

@@ -19,7 +19,7 @@
 - **端末内の AI は非推奨で、既定は無効**（2026-11-07 利用者の判断。全項目一致が 0% で、外部の AI を既定の使い方にする）。`ai_settings.local_enabled` の既定と `DEFAULT_AI_SETTINGS.localEnabled` は 0／false（registry の `0004_ai_local_default_off`）。外部の AI は接続先・モデルの入力が要るので既定で有効にしない。設定の画面に「非推奨」と理由を示す。有効にすれば今までどおり使える。端末内を無効にすると列の案（007。端末内だけ）も出ない。
 - **AI の設定の必須項目の検査**（外部を有効にするのに URL・モデル・API キーがそろっていなければ 422 `AI_NOT_CONFIGURED`）は `apps/server/src/routes/ai-settings.ts` にある。帳簿の業務ルールではなく、端末の設定値の検査なので server に置く。
 - **銀行の自動連携は実装しない**（2026-11-02 利用者の判断。API でも画面からの取得でも作らない。MF ME の画面からの取得は 2026-10-26 に取りやめ済み）。取込は貼り付けとファイル（007）。`apps/server` は Playwright に依存しない。
-- **アプリの中の評価（実行・履歴の保存・表示。表 `eval_runs`、`lib/jobs.ts`、`JOB_RUNNING`）は 011 で消した**（011/R10）。評価はスクリプト `pnpm eval:statements`（CI に含まれない。規則は[011](011-ui-overhaul.md)）。採点の純関数 `statements/evals.ts` は残る。server の差し替えは `createApp({ ai: { fetch, secrets, settings, fm } })`。
+- **アプリの中の評価は 011 で消した**（削除したものの一覧は[011](011-ui-overhaul.md)。評価はスクリプト `pnpm eval:statements`）。採点の純関数 `statements/evals.ts` は残る。server の差し替えは `createApp({ ai: { fetch, secrets, settings, fm } })`。
 - **テストは `fm`・外部の AI を呼ばない**。偽の `SuggestionProvider`（domain）と偽の `fetch`（server）を使う。
 - **明細の承認だけが仕訳を作る**（INV-41）。仕訳の `source` は `statement`（通常どおり訂正・取消できる）。明細の状態は保存せず、結びつき・除外・仕訳の状態から導く（006/R15）。
 - **実環境の確認（貼り付けの形、`fm serve`）の結果は、値・口座名・摘要を書かない**。形だけを記録する（quickstart §3）。

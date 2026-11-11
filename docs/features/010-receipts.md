@@ -10,7 +10,7 @@
 | 永続化（5 表、ファイルの暗号化、バックアップの写しと復元） | `packages/db/src/receipt-repository.ts`（`ReceiptStore`、`ReceiptUnitOfWork`）、`receipt-files.ts`（`encryptReceipt`・`decryptReceipt`、`ReceiptFileStore`）、`backup/receipts.ts`（置き場所への写しと復元） |
 | HTTP | `apps/server/src/routes/receipts.ts`（`journals.ts` は仕訳の一覧・詳細の合成だけを足す）、`ai-settings.ts`（`receiptImagesEnabled`） |
 | server の部品 | `apps/server/src/lib/image-tool.ts`（`sips`）、`ai-client.ts`（`createReceiptReader`）、`ai-runtime.ts`、`backup-run.ts`、`startup.ts`、`vault.ts` |
-| 画面 | `apps/web/src/features/receipts/`（`api.ts`、`labels.ts`、`ReceiptReadingNote.tsx` など）、`apps/web/src/routes/e/$entityId/receipts/`（`index.tsx`、`$receiptId.tsx`、`capture.tsx`）、`routes/settings/ai.tsx` |
+| 画面 | `apps/web/src/features/receipts/`（`api.ts`、`labels.ts`、`ReceiptReadingNote.tsx` など）、`apps/web/src/routes/e/$entityId/receipts/`（`index.tsx`、`$receiptId.tsx`、`new.tsx`）、`routes/settings/ai.tsx` |
 | 評価・性能・文書 | `scripts/eval-receipts.ts`、`scripts/bench-reports.ts`（SC-002）、`packages/domain/test/fixtures/receipts/`（`README.md`、`expected.ts`）、`docs/receipts/`（`processing-rules.md`、`system-overview.md`） |
 
 - **証憑のファイルは `TRC1` で暗号化し、名前は平文の SHA-256 + `.trc`**（`receipt-files.ts`）。鍵は `HKDF(DK, salt, "trebuchet/receipt:<entityId>/v1")` で、`withDataKey` の中でだけ作り `fill(0)` する。置き場所は `<データ場所>/receipts/<entityId>/`（`tenants/` と分ける）。DK・鍵をディスク・ログ・応答に出さない（INV-51・61）。施錠中は読み書きできない（`VaultLockedError`、401 `LOCKED`）。応答は `Cache-Control: no-store`。初回の設定で以前の事業体を `discarded-<時刻>/` に移すときは `receipts/` も移す。
@@ -22,5 +22,5 @@
 - **税制の値の 4 つの key**: `RECEIPT_INPUT_CYCLE_MONTHS`（2）、`RECEIPT_INPUT_GRACE_BUSINESS_DAYS`（7）、`RECEIPT_SCAN_MIN_LONG_PX`（2,338）、`RECEIPT_SCAN_MIN_SHORT_PX`（1,654）。足し方は [003](003-tax-return.md) の「税制の値の足し方」（`seed/tax-parameters.ts` とマイグレーションの両方）に従う。値は取引年月日（未入力なら受領日）で解決し、解決できなければ警告を出さない（保存を止めない）。入力期間・解像度の警告は保存を拒まない目安。
 - **紙を撮影した証憑（区分 `paper_scan`）は、紙の原本も保存する運用**（010/R1、plan Q1 = (A)。自作のアプリはタイムスタンプの代わりにならない）。電子取引（`electronic`）は事務処理規程で要件を満たす（`docs/receipts/`）。タイムスタンプを足すときは新しい ADR を書く。
 - **区分などの表示名は `features/receipts/labels.ts` の 1 か所だけ**に置く（`paper_scan` は「紙を撮影（原本は保存）」、`electronic` は「電子取引」）。識別子は schema の値のまま使い、画面・テストで表示名を書き直さない。
-- **web の証憑の操作の後の読み直し**: 仕訳が変わる操作（証憑と仕訳の結びつけ・解除、証憑からの仕訳の登録）は `invalidateLedger`（証憑の query も読み直す）、証憑だけが変わる操作は `receiptKeys.all(entityId)` を読み直す。API 呼び出しと query key は `features/receipts/api.ts`（AGENTS.md の「開発の進め方」のとおり）。
+- **web の証憑の操作の後の読み直し**: 仕訳が変わる操作（証憑と仕訳の結びつけ・解除、証憑からの仕訳の登録）は `invalidateLedger`（証憑の query も読み直す）、証憑だけが変わる操作は `receiptKeys.all(entityId)` を読み直す。API 呼び出しと query key は `features/receipts/api.ts`（`docs/development.md` の「web」のとおり）。
 

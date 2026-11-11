@@ -10,7 +10,7 @@
 | HTTP | `apps/server/src/routes/imports.ts` |
 | 画面 | `apps/web/src/features/imports/`、`apps/web/src/routes/e/$entityId/imports/` |
 
-- **実データ（`work/`）を読むのは `scripts/verify-freee-import.ts`（`pnpm verify:freee`）と `scripts/verify-tax-return.ts`（`pnpm verify:tax-return`）だけ**。共通部分は `scripts/lib/freee-import-runner.ts`。出力（件数、科目別の金額など）はコミットしない。ドキュメントや `tasks.md` にも実データの数値・取引先名・摘要・按分率を書かない。
+- **実データ（`work/`）を読むのは `scripts/verify-freee-import.ts`（`pnpm verify:freee`）と `scripts/verify-tax-return.ts`（`pnpm verify:tax-return`）だけ**。共通部分は `scripts/lib/freee-import-runner.ts`。出力・実データの数値の扱いは AGENTS.md の「実データ」（正本）のとおり。
 - **テストのフィクスチャは合成の CSV**（`packages/domain/test/fixtures/freee/`。作り方と匿名化の方針は同じ場所の `README.md`）。生成スクリプトはリポジトリに置かない（使い捨て）。手で直す場合は全項目をクォートし、LF で終える。元帳は UTF-8 の元（`ledger-2025.utf8.csv`）から CP932 の `ledger-2025.csv` を `iconv` で作る。変えたら README の「検算」をして `expected.ts` を直す。
 - 取込のプロパティテスト（INV-14, 16, 17）は `packages/domain/test/freee-arbitraries.ts` のジェネレーターで、貸借一致の仕訳から freee 形式の仕訳帳と元帳を作って検証する。
 - 年初付の決算振替は仕訳として取り込まず、期首残高に繰り込む（ADR 0004）。
