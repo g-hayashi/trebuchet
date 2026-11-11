@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { InvoiceDetail as InvoiceDetailData } from "@trebuchet/schema";
 import { useEffect, useState } from "react";
@@ -13,16 +13,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { entitiesQuery } from "@/features/entities/api";
+import { useEntity } from "@/features/entities/use-entity";
 import { formatDateTime, formatYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
+import { linkClass } from "@/lib/styles";
 import { postInvoiceVoid, postPaymentVoid } from "./api";
 import { invoiceTaxSummary, quantityOf, recipientOf } from "./display";
 import { InvoicePrint } from "./InvoicePrint";
 import { PaymentForm } from "./PaymentForm";
 import { INVOICE_STATUS_LABELS } from "./status";
-
-const linkClass = "text-primary underline underline-offset-4";
 
 /**
  * 請求書の詳細（FR-010〜014、017〜021）。発行時の写しの表示、売上の仕訳へのリンク、印刷、取消（理由つき）、
@@ -37,8 +36,7 @@ export function InvoiceDetail({
 }) {
   const queryClient = useQueryClient();
   // デモの事業体（014）は、印刷にも印を出す。一覧は骨組み（`DemoBanner`）と同じ query を共有する
-  const { data: entities } = useQuery(entitiesQuery());
-  const demo = entities?.find((e) => e.id === entityId)?.demo === true;
+  const demo = useEntity(entityId).entity?.demo === true;
   const [voiding, setVoiding] = useState(false);
   const [voidingPayment, setVoidingPayment] = useState<string | null>(null);
   const voided = invoice.status === "voided";

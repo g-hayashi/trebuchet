@@ -1,10 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
 import { DemoBanner } from "@/components/layout/DemoBanner";
 import { EntityNav } from "@/components/layout/EntityNav";
 import { isMobileRoute } from "@/components/layout/MobileNav";
 import { PcRecommended } from "@/components/layout/PcRecommended";
-import { entitiesQuery } from "@/features/entities/api";
+import { useEntity } from "@/features/entities/use-entity";
 import { RecurringNotice } from "@/features/recurring/RecurringNotice";
 import { useIsMobile } from "@/lib/use-media-query";
 
@@ -15,10 +14,10 @@ export const Route = createFileRoute("/e/$entityId")({
 /** 事業体ごとの画面の共通レイアウト。2 段のメニューは `EntityNav`（事業体の名前はヘッダーに出す） */
 function EntityLayout() {
   const { entityId } = Route.useParams();
-  const { data: entities } = useQuery(entitiesQuery());
+  const { entities, entity } = useEntity(entityId);
   const mobile = useIsMobile();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const notFound = entities !== undefined && !entities.some((e) => e.id === entityId);
+  const notFound = entities !== undefined && entity === undefined;
   return (
     <div className="mx-auto max-w-6xl px-4 py-4">
       {notFound && <p className="mb-2 text-sm text-muted-foreground">（事業体が見つかりません）</p>}

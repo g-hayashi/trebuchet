@@ -29,6 +29,16 @@ export function parseWholeYen(raw: string, { min }: { min: number }): number | n
   return value !== undefined && Number.isSafeInteger(value) && value >= min ? value : null;
 }
 
+/** 金額の条件の入力。空欄は指定なし、0 以上の整数でなければ null */
+export function parseAmount(raw: string): number | undefined | null {
+  return raw.trim() === "" ? undefined : parseWholeYen(raw, { min: 0 });
+}
+
+/** 検索の比較用に、全角・半角、大文字・小文字、前後の空白をそろえる */
+export function normalizeForSearch(value: string): string {
+  return value.normalize("NFKC").toLowerCase().trim();
+}
+
 /**
  * 入力欄の文字列を 0.5 の倍数（数量・工数）にする。`min` 以上のものだけ（既定は 0）。
  * 空欄・0.5 の倍数でない・範囲外・数値でない入力は null

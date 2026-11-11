@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { StatementLinkKind } from "@trebuchet/schema";
-
-const linkClass = "text-primary underline underline-offset-4";
+import { linkClass } from "@/lib/styles";
 
 const KIND_TEXT: Record<StatementLinkKind, string> = {
   created: "明細から登録した仕訳です。",

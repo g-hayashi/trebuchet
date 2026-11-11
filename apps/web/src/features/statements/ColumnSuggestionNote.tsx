@@ -16,7 +16,7 @@ export type ColumnAiSuggestion = NonNullable<StatementColumnSuggestionResponse["
  * 日付・内容と、金額（1 列）か出金・入金の一方がそろっているか。辞書の案でそろえば AI に尋ねない（FR-016）。
  * サーバーも同じ判定で呼ばない（`suggestStatementColumns`）。ここは無駄な要求を出さないための画面側の判定
  */
-export function hasRequiredRoles(columns: StatementColumnIndexes): boolean {
+function hasRequiredRoles(columns: StatementColumnIndexes): boolean {
   if (columns.date === undefined || columns.content === undefined) return false;
   const amount = columns.amount !== undefined;
   const outflow = columns.outflow !== undefined;

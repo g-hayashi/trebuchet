@@ -7,10 +7,8 @@ import { ApiErrorMessage } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDateTime } from "@/lib/format";
-import { authKeys, authStatusQuery, passkeysQuery } from "../auth/api";
+import { authKeys, authStatusQuery, LOCAL_RP_ID, passkeysQuery } from "../auth/api";
 import { issuePairing } from "./api";
-
-const LOCAL_RP_ID = "localhost";
 
 /** URL の QR コード。SVG は uqr の出力だけを入れる（URL の文字列そのものは HTML にしない） */
 function PairingQr({ url }: { url: string }) {

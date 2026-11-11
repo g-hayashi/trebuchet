@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReceiptHistoryEntry } from "@trebuchet/schema";
+import { Loading } from "@/components/loading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { formatDateTime } from "@/lib/format";
@@ -102,7 +103,7 @@ export function ReceiptHistory({ entityId, receiptId }: { entityId: string; rece
         </CardHeader>
         <CardContent>
           <ApiErrorMessage error={query.error} />
-          {query.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+          {query.isPending && <Loading />}
           {query.data && (
             <ol className="grid gap-3 text-sm">
               {query.data.map((entry, i) => (

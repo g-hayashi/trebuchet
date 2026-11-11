@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ImportBatch, ImportOptions, ImportPreview, TaxCategoryCode } from "@trebuchet/schema";
 import { useCallback, useId, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -20,7 +21,7 @@ import {
 import { type ItemSelection, PlanItemsTable } from "@/features/imports/PlanItemsTable";
 import { PreviewSummary } from "@/features/imports/PreviewSummary";
 import { YearSelector } from "@/features/imports/YearSelector";
-import { ApiError } from "@/lib/api";
+import { isApiError } from "@/lib/api";
 
 export const Route = createFileRoute("/e/$entityId/imports/new")({
   component: NewImportPage,
@@ -77,7 +78,7 @@ function NewImportPage() {
     },
     onError: (error) => {
       // 確定の前に帳簿が変わった。サーバーが作り直したプレビューに差し替える
-      if (error instanceof ApiError && error.code === "IMPORT_PLAN_CHANGED") {
+      if (isApiError(error, "IMPORT_PLAN_CHANGED")) {
         const changed = error.details?.preview as ImportPreview | undefined;
         if (changed) queryClient.setQueryData(previewOptions.queryKey, changed);
       }
@@ -228,7 +229,7 @@ function NewImportPage() {
                   onSaved={onSaved}
                 />
               ) : (
-                <p className="text-sm text-muted-foreground">読み込み中…</p>
+                <Loading />
               )}
             </CardContent>
           </Card>

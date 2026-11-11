@@ -9,11 +9,9 @@ import { SaveNotice } from "@/components/ui/save-notice";
 import { accountsQuery, subAccountsQuery } from "@/features/accounts/api";
 import { today } from "@/lib/dates";
 import { formatYen, parseWholeYen } from "@/lib/format";
+import { getStored, setStored, storageKeys } from "@/lib/local-storage";
 import { invalidateLedger } from "@/lib/queries";
 import { postPayment } from "./api";
-
-/** 前回使った入金先の科目を覚えておく場所（事業体ごと。011 FR-035） */
-export const depositAccountKey = (entityId: string) => `trebuchet.depositAccount.${entityId}`;
 
 /**
  * 入金の消し込み（FR-017〜019）。入金日、入金額、源泉徴収税額（013）、入金先の科目・補助科目。
@@ -64,7 +62,7 @@ export function PaymentForm({
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [accounts.data],
   );
-  const remembered = localStorage.getItem(depositAccountKey(entityId));
+  const remembered = getStored(storageKeys.depositAccount(entityId));
   const accountId =
     picked ?? (depositAccounts.some((a) => a.id === remembered) ? (remembered ?? "") : "");
   const subAccounts = useQuery({
@@ -97,7 +95,7 @@ export function PaymentForm({
         ...(treatAsFee ? { treatDifferenceAsFee: true } : {}),
       }),
     onSuccess: async () => {
-      localStorage.setItem(depositAccountKey(entityId), accountId);
+      setStored(storageKeys.depositAccount(entityId), accountId);
       setNotice("消し込みました。");
       setAmountInput(null);
       setWithholdingInput(null);

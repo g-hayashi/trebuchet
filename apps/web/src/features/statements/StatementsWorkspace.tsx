@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { StatementStatusFilter } from "@trebuchet/schema";
 import { useEffect, useRef, useState } from "react";
+import { Loading } from "@/components/loading";
 import { ReasonDialog } from "@/components/reason-dialog";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { NativeSelect } from "@/components/ui/input";
@@ -171,9 +172,7 @@ export function StatementsWorkspace({
       {status !== "unprocessed" && <div className="flex flex-wrap items-end gap-4">{filters}</div>}
 
       <ApiErrorMessage error={error} />
-      {statements.isPending && !error && (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
-      )}
+      {statements.isPending && !error && <Loading />}
       {statements.data?.length === 0 && (
         <p className="text-sm text-muted-foreground">該当する明細はありません。</p>
       )}

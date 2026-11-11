@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { Loading } from "@/components/loading";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { accountsQuery } from "@/features/accounts/api";
 import { AdjustmentPanel } from "@/features/blue-return/AdjustmentPanel";
@@ -38,7 +39,7 @@ function HomeUsePage() {
       </Link>
       <h1 className="text-xl font-semibold">家事按分・地代家賃の内訳（{year}年分）</h1>
       <ApiErrorMessage error={error} />
-      {loading && !error && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {loading && !error && <Loading />}
       {homeUse.data && (
         <HomeUseForm
           entityId={entityId}

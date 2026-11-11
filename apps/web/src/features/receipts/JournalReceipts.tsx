@@ -1,9 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import type { ReceiptSummary } from "@trebuchet/schema";
 import { formatYen } from "@/lib/format";
+import { linkClass } from "@/lib/styles";
 import { CATEGORY_LABELS } from "./labels";
-
-const linkClass = "text-primary underline underline-offset-4";
 
 /**
  * 仕訳の詳細の「元の証憑」（010 FR-011。`GET /journals/:id` の `receipts`）。

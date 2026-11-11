@@ -18,14 +18,14 @@ export const invoicingKeys = {
   billingTerms: (entityId: string) => ["entities", entityId, "billing-terms"] as const,
 };
 
-/** 発行者の設定と、次の通し番号の下限（§2.1） */
+/** 発行者の設定と、次の通し番号の下限（005/§2.1） */
 export const invoiceSettingsQuery = (entityId: string) =>
   queryOptions({
     queryKey: invoicingKeys.settings(entityId),
     queryFn: async () => unwrap(await entityApi["invoice-settings"].$get({ param: { entityId } })),
   });
 
-/** 請求の条件の一覧（§2.3。取引先の名前・敬称・使用中かつき） */
+/** 請求の条件の一覧（005/§2.3。取引先の名前・敬称・使用中かつき） */
 export const billingTermsQuery = (entityId: string) =>
   queryOptions({
     queryKey: invoicingKeys.billingTerms(entityId),
@@ -40,7 +40,7 @@ export const putInvoiceSettings = async (
   json: Parameters<(typeof entityApi)["invoice-settings"]["$put"]>[0]["json"],
 ) => unwrap(await entityApi["invoice-settings"].$put({ param: { entityId }, json }));
 
-// ---- 工数・請求書（US1。contracts §3、§6.1） ----
+// ---- 工数・請求書（005/US1。005 contracts §3、§6.1） ----
 
 export const invoiceKeys = {
   /** 全ての月の工数（取引先を登録・編集したあとの読み直し用の接頭辞） */
@@ -65,7 +65,7 @@ export type InvoiceFilters = {
   status?: InvoiceListStatus | undefined;
 };
 
-/** 対象月の工数（§3.1）。時間単価型の有効な取引先ごと。未入力は `hours: null` */
+/** 対象月の工数（005/§3.1）。時間単価型の有効な取引先ごと。未入力は `hours: null` */
 export const workHoursQuery = (entityId: string, month: string) =>
   queryOptions({
     queryKey: invoiceKeys.workHours(entityId, month),
@@ -88,7 +88,7 @@ export const putWorkHours = async (
     )
   ).entries;
 
-/** 請求書の案（§3.3）。保存しない */
+/** 請求書の案（005/§3.3）。保存しない */
 export const postInvoiceDrafts = async (entityId: string, month: string) =>
   unwrap(await entityApi.invoices.drafts.$post({ param: { entityId }, json: { month } }));
 
@@ -103,7 +103,7 @@ export const invoiceCalculationQuery = (entityId: string, input: InvoiceCalculat
     retry: false,
   });
 
-/** 発行（§3.4）。201 `{ invoice, journal }` */
+/** 発行（005/§3.4）。201 `{ invoice, journal }` */
 export const postInvoice = async (
   entityId: string,
   json: Parameters<(typeof entityApi.invoices)["$post"]>[0]["json"],
@@ -125,7 +125,7 @@ export const invoiceListQuery = (entityId: string, filters: InvoiceFilters) =>
       ),
   });
 
-/** 暦年の源泉徴収の一覧（013 contracts §4。入金日の暦年。取消でない源泉徴収つきの消し込み） */
+/** 暦年の源泉徴収の一覧（013/§4。入金日の暦年。取消でない源泉徴収つきの消し込み） */
 export const withholdingSummaryQuery = (entityId: string, year: number) =>
   queryOptions({
     queryKey: invoiceKeys.withholding(entityId, year),
@@ -144,7 +144,7 @@ export const invoiceQuery = (entityId: string, invoiceId: string) =>
       unwrap(await entityApi.invoices[":invoiceId"].$get({ param: { entityId, invoiceId } })),
   });
 
-/** 取消（§3.7） */
+/** 取消（005/§3.7） */
 export const postInvoiceVoid = async (entityId: string, invoiceId: string, reason: string) =>
   unwrap(
     await entityApi.invoices[":invoiceId"].void.$post({
@@ -153,7 +153,7 @@ export const postInvoiceVoid = async (entityId: string, invoiceId: string, reaso
     }),
   );
 
-/** 入金の消し込み（§4.1）。201 `{ payment, invoice, journal }` */
+/** 入金の消し込み（005/§4.1）。201 `{ payment, invoice, journal }` */
 export const postPayment = async (
   entityId: string,
   invoiceId: string,
@@ -166,7 +166,7 @@ export const postPayment = async (
     }),
   );
 
-/** 消し込みの取消（§4.2） */
+/** 消し込みの取消（005/§4.2） */
 export const postPaymentVoid = async (
   entityId: string,
   invoiceId: string,
@@ -180,7 +180,7 @@ export const postPaymentVoid = async (
     }),
   );
 
-/** 仕訳の出所（§6.1）。請求書・入金・定期仕訳から作られた仕訳でなければ `origin: null` */
+/** 仕訳の出所（005/§6.1）。請求書・入金・定期仕訳から作られた仕訳でなければ `origin: null` */
 export const journalOriginQuery = (entityId: string, journalId: string) =>
   queryOptions({
     queryKey: invoiceKeys.journalOrigin(entityId, journalId),

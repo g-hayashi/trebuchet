@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useId, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
@@ -31,8 +32,7 @@ export function WorkHoursTable({ entityId, month }: { entityId: string; month: s
   const terms = useQuery(billingTermsQuery(entityId));
   const error = hours.error ?? terms.error;
   if (error) return <ApiErrorMessage error={error} />;
-  if (!hours.data || !terms.data)
-    return <p className="text-sm text-muted-foreground">読み込み中…</p>;
+  if (!hours.data || !terms.data) return <Loading />;
   const names = new Map(terms.data.map((t) => [t.partnerId, t.partnerName]));
   return <HoursForm entityId={entityId} month={month} entries={hours.data} names={names} />;
 }

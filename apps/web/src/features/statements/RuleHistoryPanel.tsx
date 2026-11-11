@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { accountsQuery } from "@/features/accounts/api";
@@ -66,9 +67,7 @@ export function RuleHistoryPanel({
         </Button>
       </div>
       <ApiErrorMessage error={history.error} />
-      {history.isPending && !history.error && (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
-      )}
+      {history.isPending && <Loading />}
       {history.data && (
         <ul className="grid gap-2 text-sm">
           {history.data.map((h) => {

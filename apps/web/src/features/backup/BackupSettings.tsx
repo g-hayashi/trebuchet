@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BackupStatus } from "@trebuchet/schema";
 import { useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CsvExport } from "@/components/ui/csv-export";
@@ -48,7 +49,7 @@ export function BackupSettings() {
   return (
     <>
       <ApiErrorMessage error={error} />
-      {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {isPending && <Loading />}
       {status && (
         <>
           <RunCard status={status} />
@@ -208,7 +209,7 @@ export function BackupHistory() {
         <div>
           <CsvExport href={RUNS_CSV_HREF} disabled={!runs || runs.length === 0} />
         </div>
-        {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+        {isPending && <Loading />}
         {runs?.length === 0 && (
           <p className="text-sm text-muted-foreground">まだ実行されていません。</p>
         )}

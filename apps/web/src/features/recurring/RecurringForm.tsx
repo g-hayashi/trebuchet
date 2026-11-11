@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { JournalInput, Recurring, RecurringInput, RecurringUpdate } from "@trebuchet/schema";
 import { useId, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
@@ -167,9 +168,7 @@ export function RecurringForm({
   return (
     <div className="grid gap-4">
       <ApiErrorMessage error={loadError} />
-      {queries.some((q) => q.isPending) && !loadError && (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
-      )}
+      {queries.some((q) => q.isPending) && !loadError && <Loading />}
       {accounts.data && partners.data && taxSettings.data && taxCategories.data && (
         <JournalForm
           entityId={entityId}

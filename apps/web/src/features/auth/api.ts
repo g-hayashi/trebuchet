@@ -1,7 +1,10 @@
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import type { RegisterVerifyInput } from "@trebuchet/schema";
-import { ApiError, api, unwrap } from "@/lib/api";
+import { ApiError, api, isApiError, unwrap } from "@/lib/api";
 import { createCredential, getAssertion } from "./webauthn-client";
+
+/** Mac のローカルの名前（localhost）の RP ID。domain の `LOCAL_RP_ID` と同じ値（web は domain に依存しない） */
+export const LOCAL_RP_ID = "localhost";
 
 // 認証の API（contracts/http-api.md の「認証」）。サーバーの判定に従い、画面は結果を表示するだけ
 
@@ -34,7 +37,7 @@ export const sessionsQuery = () =>
   });
 
 /** 画面に出す最近の件数（FR-054）。全件は CSV の書き出しで取る */
-export const RECENT_EVENT_LIMIT = 5;
+const RECENT_EVENT_LIMIT = 5;
 
 /** 認証の記録の全件の CSV（server が表示用の列だけを返す。FR-054） */
 export const EVENTS_CSV_HREF = "/api/auth/events?format=csv";
@@ -119,13 +122,13 @@ export async function withReauth<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (e) {
-    if (!(e instanceof ApiError && e.code === "REAUTH_REQUIRED")) throw e;
+    if (!isApiError(e, "REAUTH_REQUIRED")) throw e;
     await reauthenticate();
     return run();
   }
 }
 
-export async function reauthenticate(): Promise<void> {
+async function reauthenticate(): Promise<void> {
   const options = await unwrap(await auth.reauth.options.$post());
   const response = await ceremony(() => getAssertion(options));
   await unwrap(await auth.reauth.verify.$post({ json: { response } }));

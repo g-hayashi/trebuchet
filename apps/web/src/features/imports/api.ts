@@ -12,7 +12,7 @@ import type {
   VoidImportInput,
 } from "@trebuchet/schema";
 import { entityKeys } from "@/features/entities/api";
-import { unwrap } from "@/lib/api";
+import { entityPath, unwrap } from "@/lib/api";
 import { untypedEndpoint, uploadForm } from "./upload";
 
 // 取込の API（contracts/http-api.md の 002）。サーバーのルートの型に頼らず、応答の型は schema の型で指定する
@@ -30,8 +30,6 @@ type GetEndpoint = { $get(): Promise<Response> };
 type PutEndpoint = { $put(args: { json: unknown }): Promise<Response> };
 type PostEndpoint = { $post(args: { json: unknown }): Promise<Response> };
 
-const entityPath = (entityId: string) => `/api/entities/${encodeURIComponent(entityId)}`;
-
 export const importsQuery = (entityId: string) =>
   queryOptions({
     queryKey: importKeys.all(entityId),
@@ -43,7 +41,7 @@ export const importsQuery = (entityId: string) =>
     },
   });
 
-export type ImportBatchDetail = { batch: ImportBatch; journals: ImportBatchJournal[] };
+type ImportBatchDetail = { batch: ImportBatch; journals: ImportBatchJournal[] };
 
 export const importBatchQuery = (entityId: string, batchId: string) =>
   queryOptions({

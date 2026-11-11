@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { z } from "zod";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -24,15 +24,13 @@ import { FixedAssetForm } from "@/features/fixed-assets/FixedAssetForm";
 import { depreciationErrorText, METHOD_SHORT_LABELS } from "@/features/fixed-assets/methods";
 import { thisYear } from "@/lib/dates";
 import { formatYen } from "@/lib/format";
+import { useYearInput, YearSearch } from "@/lib/year-search";
 
 /** 除却の種類（定額法の資産だけが持つ）の表示。ないときは何も足さない */
 const DISPOSAL_KIND_SUFFIX: Record<string, string> = { scrap: "（廃棄）", sale: "（売却）" };
 
-/** 年分は暦年（個人）。不正な値は捨てて、今年にする */
-const Search = z.object({ year: z.number().int().min(1900).max(9999).optional().catch(undefined) });
-
 export const Route = createFileRoute("/e/$entityId/fixed-assets/")({
-  validateSearch: Search,
+  validateSearch: YearSearch,
   component: FixedAssetsPage,
 });
 
@@ -42,7 +40,7 @@ function FixedAssetsPage() {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const year = search.year ?? thisYear();
-  const [yearText, setYearText] = useState(String(year));
+  const { yearText, changeYear } = useYearInput(year, (y) => navigate({ search: { year: y } }));
   const [editingId, setEditingId] = useState<string>();
   const [disposingId, setDisposingId] = useState<string>();
   // 登録・更新の成功の知らせ。保存すると入力欄を作り直すので、ここで持つ
@@ -54,11 +52,6 @@ function FixedAssetsPage() {
   const rows = assets.data ?? [];
   const editing = rows.find((a) => a.id === editingId);
   const disposing = rows.find((a) => a.id === disposingId);
-
-  const changeYear = (text: string) => {
-    setYearText(text);
-    if (/^\d{4}$/.test(text)) navigate({ search: { year: Number(text) } });
-  };
 
   return (
     <main className="grid gap-6">
@@ -84,9 +77,7 @@ function FixedAssetsPage() {
             />
           </div>
           <ApiErrorMessage error={assets.error} />
-          {assets.isPending && !assets.error && (
-            <p className="text-sm text-muted-foreground">読み込み中…</p>
-          )}
+          {assets.isPending && <Loading />}
           {assets.data && rows.length === 0 && (
             <p className="text-sm text-muted-foreground">固定資産はまだ登録されていません。</p>
           )}

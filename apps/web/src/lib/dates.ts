@@ -11,6 +11,11 @@ export function thisMonth(): string {
   return today().slice(0, 7);
 }
 
+/** 先月（ローカル時刻の YYYY-MM）。請求・工数の月の既定 */
+export function lastMonth(): string {
+  return previousMonth(thisMonth());
+}
+
 /** 今年（ローカル時刻） */
 export function thisYear(): number {
   return new Date().getFullYear();

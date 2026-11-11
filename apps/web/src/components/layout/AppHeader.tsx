@@ -1,12 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { SignOutButton } from "@/features/auth/SignOutButton";
-import { entitiesQuery } from "@/features/entities/api";
 import {
   EntitySwitcher,
   lastEntityIdOf,
   useRememberEntity,
 } from "@/features/entities/EntitySwitcher";
+import { useEntity } from "@/features/entities/use-entity";
 import { useIsMobile } from "@/lib/use-media-query";
 import { MobileNav } from "./MobileNav";
 
@@ -19,8 +18,7 @@ const LINK_CLASS = "underline-offset-4 hover:underline";
  */
 export function AppHeader() {
   const { entityId } = useParams({ strict: false });
-  const { data: entities } = useQuery(entitiesQuery());
-  const entity = entities?.find((e) => e.id === entityId);
+  const { entities, entity } = useEntity(entityId);
   const homeId = entity?.id ?? lastEntityIdOf(entities);
   const mobile = useIsMobile();
   useRememberEntity();

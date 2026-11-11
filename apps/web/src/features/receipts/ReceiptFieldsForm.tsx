@@ -1,5 +1,9 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { ReceiptDetail, ReceiptReadingView, ReceiptUpdateInput } from "@trebuchet/schema";
+import {
+  MASTER_NAME_MAX,
+  type ReceiptDetail,
+  type ReceiptReadingView,
+  type ReceiptUpdateInput,
+} from "@trebuchet/schema";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { ReasonDialog } from "@/components/reason-dialog";
 import { Button } from "@/components/ui/button";
@@ -7,9 +11,11 @@ import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SaveNotice } from "@/components/ui/save-notice";
-import { ApiError } from "@/lib/api";
+import { isApiError } from "@/lib/api";
 import { formatYen, parseWholeYen } from "@/lib/format";
-import { patchReceipt, receiptKeys } from "./api";
+import { RECEIPT_MEMO_MAX } from "@/lib/limits";
+import { patchReceipt } from "./api";
+import { useReceiptWrite } from "./use-receipt-write";
 
 type Values = { transactionDate: string; amount: string; partnerName: string; memo: string };
 
@@ -39,7 +45,6 @@ export function ReceiptFieldsForm({
   onNext?: (() => void) | undefined;
 }) {
   const id = useId();
-  const queryClient = useQueryClient();
   const [values, setValues] = useState<Values>(() => valuesOf(receipt));
   // AI の候補を入れた欄（未保存）。直す・保存すると外れる
   const [suggested, setSuggested] = useState<ReadonlySet<keyof Values>>(new Set());
@@ -74,25 +79,22 @@ export function ReceiptFieldsForm({
   const [correction, setCorrection] = useState<ReceiptUpdateInput | undefined>();
   const nextAfterSave = useRef(false);
 
-  const mutation = useMutation({
-    mutationFn: (input: ReceiptUpdateInput) => patchReceipt(entityId, receipt.id, input),
-    onSuccess: async (updated) => {
-      queryClient.setQueryData(receiptKeys.detail(entityId, receipt.id), updated);
-      setValues(valuesOf(updated));
-      setSuggested(new Set());
-      setMessage("saved");
-      // 一覧・検索の結果にも反映する
-      await queryClient.invalidateQueries({ queryKey: receiptKeys.all(entityId) });
-      if (nextAfterSave.current) onNext?.();
+  // 保存したら詳細を置き換え、一覧・検索の結果にも反映する
+  const mutation = useReceiptWrite(
+    entityId,
+    receipt.id,
+    (input: ReceiptUpdateInput) => patchReceipt(entityId, receipt.id, input),
+    {
+      onUpdated: (updated) => {
+        setValues(valuesOf(updated));
+        setSuggested(new Set());
+        setMessage("saved");
+      },
+      onInvalidated: () => {
+        if (nextAfterSave.current) onNext?.();
+      },
     },
-    onError: async (error) => {
-      if (error instanceof ApiError && error.code === "VERSION_CONFLICT") {
-        await queryClient.invalidateQueries({
-          queryKey: receiptKeys.detail(entityId, receipt.id),
-        });
-      }
-    },
-  });
+  );
 
   const set = (key: keyof Values) => (value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -141,13 +143,12 @@ export function ReceiptFieldsForm({
     // 理由が要るか（訂正か）は server が決める。422 REASON_REQUIRED を受けたら理由を求める
     mutation.mutate(input, {
       onError: (error) => {
-        if (error instanceof ApiError && error.code === "REASON_REQUIRED") setCorrection(input);
+        if (isApiError(error, "REASON_REQUIRED")) setCorrection(input);
       },
     });
   };
 
-  const needsReason =
-    mutation.error instanceof ApiError && mutation.error.code === "REASON_REQUIRED";
+  const needsReason = isApiError(mutation.error, "REASON_REQUIRED");
 
   return (
     <>
@@ -189,7 +190,7 @@ export function ReceiptFieldsForm({
             <Input
               id={`${id}-partner`}
               autoComplete="off"
-              maxLength={100}
+              maxLength={MASTER_NAME_MAX}
               value={values.partnerName}
               onChange={(e) => set("partnerName")(e.target.value)}
             />
@@ -200,7 +201,7 @@ export function ReceiptFieldsForm({
             <Input
               id={`${id}-memo`}
               autoComplete="off"
-              maxLength={500}
+              maxLength={RECEIPT_MEMO_MAX}
               value={values.memo}
               onChange={(e) => set("memo")(e.target.value)}
             />

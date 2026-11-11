@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { BlueReturn } from "@trebuchet/schema";
+import { type BlueReturn, CLOSING_NOTE_MAX } from "@trebuchet/schema";
 import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -128,7 +128,7 @@ function DifferenceNoteForm({
       <textarea
         id="opening-difference-note"
         rows={3}
-        maxLength={5000}
+        maxLength={CLOSING_NOTE_MAX}
         value={body}
         onChange={(e) => setBody(e.target.value)}
         className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"

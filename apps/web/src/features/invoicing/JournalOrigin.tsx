@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { linkClass } from "@/lib/styles";
 import { journalOriginQuery } from "./api";
-
-const linkClass = "text-primary underline underline-offset-4";
 
 /**
  * 仕訳の出所（FR-009、FR-028。`GET /journals/:id/origin`）。請求書・入金の消し込み・定期仕訳から作られた仕訳に、

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DeductionAnswersInput } from "@trebuchet/schema";
 import { type FormEvent, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -77,7 +78,7 @@ function AnswersLoader({ entityId, year }: { entityId: string; year: string }) {
   return (
     <div className="grid gap-4">
       <ApiErrorMessage error={error} />
-      {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {isPending && <Loading />}
       {data && (
         <AnswersForm
           // 保存済みの回答が読み込まれたら入力欄を作り直す

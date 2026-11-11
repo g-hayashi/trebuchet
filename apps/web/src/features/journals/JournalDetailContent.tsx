@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { JournalCorrection, JournalInput } from "@trebuchet/schema";
 import { useState } from "react";
+import { Loading } from "@/components/loading";
 import { ReasonDialog } from "@/components/reason-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,8 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { accountsQuery, subAccountsQuery } from "@/features/accounts/api";
-import { taxCategoriesQuery, taxSettingsQuery } from "@/features/entities/api";
+import { subAccountsQuery } from "@/features/accounts/api";
 import { JournalOrigin } from "@/features/invoicing/JournalOrigin";
 import {
   type HistoryEntry,
@@ -28,20 +28,18 @@ import {
 } from "@/features/journals/api";
 import { JournalForm } from "@/features/journals/JournalForm";
 import { JOURNAL_REASONS } from "@/features/journals/reasons";
-import { partnersQuery, tagsQuery } from "@/features/masters/api";
+import { useJournalMasters } from "@/features/journals/use-journal-masters";
 import { fiscalPeriodsQuery } from "@/features/periods/api";
+import { periodOf } from "@/features/periods/current";
 import { JournalReceipts } from "@/features/receipts/JournalReceipts";
 import { JournalStatements } from "@/features/statements/JournalStatements";
-import { ApiError } from "@/lib/api";
+import { SIDE_LABELS } from "@/lib/accounts";
+import { isApiError } from "@/lib/api";
 import { formatDateTime, formatYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
+import { linkClass } from "@/lib/styles";
 
-const SIDE_LABELS = { debit: "借方", credit: "貸方" } as const;
 const ACTION_LABELS = { create: "登録", correct: "訂正", void: "取消" } as const;
-
-/** 締め済みの年度の仕訳を、訂正仕訳で直すよう案内された（FR-019a） */
-const isClosedPeriodError = (e: unknown): e is ApiError =>
-  e instanceof ApiError && e.code === "PERIOD_CLOSED";
 
 type Names = {
   accounts: Map<string, string>;
@@ -78,14 +76,17 @@ export function JournalDetailContent({
   const queryClient = useQueryClient();
   const detail = useQuery(journalQuery(entityId, journalId));
   const history = useQuery(journalHistoryQuery(entityId, journalId));
-  const accounts = useQuery(accountsQuery(entityId));
-  const partners = useQuery(partnersQuery(entityId));
-  const tags = useQuery(tagsQuery(entityId));
-  const taxSettings = useQuery(taxSettingsQuery(entityId));
-  const taxCategories = useQuery(taxCategoriesQuery(entityId));
+  const {
+    accounts,
+    partners,
+    tags,
+    taxSettings,
+    taxCategories,
+    queries: masterQueries,
+    loadError,
+  } = useJournalMasters(entityId);
   const periods = useQuery(fiscalPeriodsQuery(entityId));
-  const masters = [accounts, partners, tags, taxSettings, taxCategories, periods];
-  const error = detail.error ?? history.error ?? masters.find((q) => q.error)?.error;
+  const error = detail.error ?? history.error ?? loadError ?? periods.error;
 
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState<PendingCorrection>();
@@ -104,9 +105,7 @@ export function JournalDetailContent({
   });
 
   const journal = detail.data?.journal;
-  const period = periods.data?.find(
-    (p) => journal && p.startDate <= journal.date && journal.date <= p.endDate,
-  );
+  const period = journal && periods.data ? periodOf(periods.data, journal.date) : undefined;
   const closedFiscalYear = period?.status === "closed" ? period.fiscalYear : closedYear;
   const names: Names = {
     accounts: namesOf(accounts.data, (a) => a.id),
@@ -115,8 +114,9 @@ export function JournalDetailContent({
     taxCategories: namesOf(taxCategories.data, (c) => c.code),
   };
 
+  /** 締め済みの年度の仕訳を、訂正仕訳で直すよう案内された（001/FR-019a） */
   const showClosed = (e: unknown) => {
-    if (!isClosedPeriodError(e)) return false;
+    if (!isApiError(e, "PERIOD_CLOSED")) return false;
     const year = e.details?.fiscalYear;
     setClosedYear(typeof year === "number" ? year : (period?.fiscalYear ?? 0));
     setEditing(false);
@@ -132,7 +132,7 @@ export function JournalDetailContent({
       setEditing(false);
     } catch (e) {
       // 理由の誤りはダイアログに表示し、それ以外はフォームの該当の項目に表示する
-      if (e instanceof ApiError && e.code === "REASON_REQUIRED") throw e;
+      if (isApiError(e, "REASON_REQUIRED")) throw e;
       setPending(undefined);
       if (showClosed(e)) pending.resolve();
       else pending.reject(e);
@@ -150,7 +150,7 @@ export function JournalDetailContent({
     }
   };
 
-  const loading = [detail, history, ...masters].some((q) => q.isPending);
+  const loading = [detail, history, ...masterQueries, periods].some((q) => q.isPending);
 
   return (
     <div className="grid gap-6">
@@ -184,7 +184,7 @@ export function JournalDetailContent({
         )}
       </div>
       <ApiErrorMessage error={error} />
-      {loading && !error && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {loading && !error && <Loading />}
 
       {detail.data && journal && !loading && !error && (
         <>
@@ -306,7 +306,6 @@ export function JournalDetailContent({
 function References({ entityId, detail }: { entityId: string; detail: JournalDetail }) {
   const { correctsJournal, correctingJournals } = detail;
   if (correctsJournal === null && correctingJournals.length === 0) return null;
-  const linkClass = "text-primary underline underline-offset-4";
   return (
     <div className="grid gap-1 text-sm">
       {correctsJournal && (

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { Loading } from "@/components/loading";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { invoiceSettingsQuery } from "@/features/invoicing/api";
@@ -26,7 +27,7 @@ function InvoiceSettingsPage() {
         </CardHeader>
         <CardContent>
           <ApiErrorMessage error={error} />
-          {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+          {isPending && <Loading />}
           {data && (
             <IssuerSettingsForm
               entityId={entityId}

@@ -3,6 +3,7 @@ import { createFileRoute, Link, stripSearchParams, useNavigate } from "@tanstack
 import { JournalQuery } from "@trebuchet/schema";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
@@ -30,7 +31,7 @@ import { type Partner, partnersQuery, type Tag, tagsQuery } from "@/features/mas
 import { ReceiptMark } from "@/features/receipts/JournalReceipts";
 import { useReportRange } from "@/features/reports/periods";
 import { groupAccountsBySection } from "@/lib/accounts";
-import { formatYen, parseWholeYen } from "@/lib/format";
+import { formatYen, parseAmount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -132,9 +133,7 @@ function JournalsPage() {
               </div>
             </dl>
           )}
-          {(journals.isPending || accounts.isPending) && !error && (
-            <p className="text-sm text-muted-foreground">読み込み中…</p>
-          )}
+          {(journals.isPending || accounts.isPending) && !error && <Loading />}
           {items?.length === 0 && (
             <p className="text-sm text-muted-foreground">
               {hasFilter(apiSearch)
@@ -226,11 +225,6 @@ function JournalsPage() {
 }
 
 type SearchInput = (typeof JournalSearchParams)["_zod"]["input"];
-
-/** 金額の条件の入力。空欄は指定なし、0 以上の整数でなければ null */
-function parseAmount(raw: string): number | undefined | null {
-  return raw.trim() === "" ? undefined : parseWholeYen(raw, { min: 0 });
-}
 
 type FilterValues = {
   dateFrom: string;

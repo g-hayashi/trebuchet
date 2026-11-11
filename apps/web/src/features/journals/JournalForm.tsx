@@ -26,15 +26,13 @@ import { Input, NativeSelect } from "@/components/ui/input";
 import { type Account, subAccountsQuery } from "@/features/accounts/api";
 import type { TaxCategory, TaxSetting } from "@/features/entities/api";
 import type { Partner, Tag } from "@/features/masters/api";
-import { groupAccountsBySection } from "@/lib/accounts";
+import { groupAccountsBySection, SIDE_LABELS } from "@/lib/accounts";
 import { ApiError } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CreateFiscalPeriodLink } from "./CreateFiscalPeriodLink";
 import { JournalSuggestions, type SuggestionStatus } from "./JournalSuggestions";
 import { QuickEntryForm } from "./QuickEntryForm";
-
-const SIDE_LABELS: Record<Side, string> = { debit: "借方", credit: "貸方" };
 
 /** 共有スキーマの行。入力途中の金額（未入力 = undefined）を型として許し、検証は Yen で行う */
 const LineSchema = JournalLineInput.extend({

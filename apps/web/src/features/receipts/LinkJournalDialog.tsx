@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReceiptDetail } from "@trebuchet/schema";
 import { type FormEvent, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +14,7 @@ import {
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { journalSearchQuery } from "@/features/journals/api";
-import { ApiError } from "@/lib/api";
+import { isApiError } from "@/lib/api";
 import { formatYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
 import { journalCandidatesQuery, postReceiptLink } from "./api";
@@ -72,7 +73,7 @@ export function LinkJournalDialog({
     onClose();
   };
 
-  const needReason = link.error instanceof ApiError && link.error.code === "REASON_REQUIRED";
+  const needReason = isApiError(link.error, "REASON_REQUIRED");
   const choose = (journalId: string) => {
     setChosen(journalId);
     setReason("");
@@ -111,7 +112,7 @@ export function LinkJournalDialog({
         <section aria-label="候補の仕訳" className="grid gap-2">
           <h3 className="text-sm font-medium">候補（取引年月日の前後）</h3>
           <ApiErrorMessage error={candidates.error} />
-          {candidates.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+          {candidates.isPending && <Loading />}
           {candidates.data?.length === 0 && (
             <p className="text-sm text-muted-foreground">候補の仕訳がありません。</p>
           )}

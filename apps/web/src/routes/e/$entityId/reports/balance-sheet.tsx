@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { periodOf } from "@/features/periods/current";
 import { type BalanceSheet, balanceSheetQuery } from "@/features/reports/api";
 import {
   AsOfPicker,
@@ -8,7 +9,7 @@ import {
   CsvLink,
   PreviousYearNotice,
 } from "@/features/reports/controls";
-import { periodOf, useReportAsOf } from "@/features/reports/periods";
+import { useReportAsOf } from "@/features/reports/periods";
 import { BalancedBadge, ReportPage } from "@/features/reports/ReportPage";
 import { type StatementLine, StatementTable } from "@/features/reports/StatementTable";
 import { AsOfSearch } from "@/features/reports/search";

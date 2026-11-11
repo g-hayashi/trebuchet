@@ -1,13 +1,17 @@
-import type {
-  ReceiptCategory,
-  ReceiptChannel,
-  ReceiptHistoryAction,
-  ReceiptLinkState,
-  ReceiptMediaType,
-  ReceiptWarning,
+import {
+  RECEIPT_MAX_BYTES,
+  type ReceiptCategory,
+  type ReceiptChannel,
+  type ReceiptHistoryAction,
+  type ReceiptLinkState,
+  type ReceiptMediaType,
+  type ReceiptWarning,
 } from "@trebuchet/schema";
 
 // 証憑の表示名（E1）。識別子は schema の値のまま、表示名はここの 1 か所だけに置く
+
+/** 1 件のファイルの上限（MB）。メッセージに入れる */
+export const RECEIPT_MAX_MB = RECEIPT_MAX_BYTES / (1024 * 1024);
 
 export const CATEGORY_LABELS: Record<ReceiptCategory, string> = {
   paper_scan: "紙を撮影（原本は保存）",
@@ -18,7 +22,7 @@ export const CATEGORY_LABELS: Record<ReceiptCategory, string> = {
 export const CATEGORY_OPTIONS: ReceiptCategory[] = ["paper_scan", "electronic"];
 
 /** 保存・解像度などの警告と、「紙を撮影」の説明に添える注記 */
-export const KEEP_ORIGINAL_NOTE = "紙の原本は捨てずに保存する";
+const KEEP_ORIGINAL_NOTE = "紙の原本は捨てずに保存する";
 
 /** 区分を選ぶ理由の短い説明（追加のフォームで、選ぶ前から示す） */
 export const CATEGORY_HINTS: Record<ReceiptCategory, string> = {

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ReceiptDetail } from "@trebuchet/schema";
 import type { ReactNode } from "react";
+import { Loading } from "@/components/loading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { receiptQuery } from "@/features/receipts/api";
@@ -41,7 +42,7 @@ function ReceiptDetailPage() {
         </Link>
       </div>
       <ApiErrorMessage error={query.error} />
-      {query.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {query.isPending && <Loading />}
       {receipt && <ReceiptBody entityId={entityId} receipt={receipt} />}
     </main>
   );

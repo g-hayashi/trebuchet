@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { AuthEventKind } from "@trebuchet/schema";
+import { Loading } from "@/components/loading";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CsvExport } from "@/components/ui/csv-export";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -46,7 +47,7 @@ export function EventList() {
         <div>
           <CsvExport href={EVENTS_CSV_HREF} disabled={!events || events.length === 0} />
         </div>
-        {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+        {isPending && <Loading />}
         {events && (
           <Table aria-label="認証の記録">
             <TableHeader>

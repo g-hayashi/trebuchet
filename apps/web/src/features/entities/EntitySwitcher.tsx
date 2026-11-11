@@ -3,10 +3,8 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getStored, setStored, storageKeys } from "@/lib/local-storage";
 import { entitiesQuery, entityKeys } from "./api";
-
-/** 最後に開いた事業体の ID を覚えるブラウザの鍵（011 R4） */
-const LAST_ENTITY_KEY = "trebuchet:lastEntityId";
 
 /** 切替の最後の項目「一覧・作成」の値（`/list` へ移る）。事業体の ID と重ならない */
 const LIST_VALUE = "__list__";
@@ -18,7 +16,7 @@ const LIST_VALUE = "__list__";
 export function lastEntityIdOf(
   entities: readonly { id: string }[] | undefined,
 ): string | undefined {
-  const last = localStorage.getItem(LAST_ENTITY_KEY);
+  const last = getStored(storageKeys.lastEntityId);
   return last !== null && entities?.some((e) => e.id === last) ? last : undefined;
 }
 
@@ -48,7 +46,7 @@ export function useRememberEntity(): void {
 
   useEffect(() => {
     if (current === undefined) return;
-    localStorage.setItem(LAST_ENTITY_KEY, current);
+    setStored(storageKeys.lastEntityId, current);
     // 他の事業体のキャッシュを破棄する（キーは事業体ごとに分かれているが、古いデータを持ち越さない）
     queryClient.removeQueries({
       predicate: ({ queryKey }) =>
@@ -68,7 +66,7 @@ export function EntitySwitcher({ onSelect }: { onSelect?: (() => void) | undefin
   const { data: entities } = useQuery(entitiesQuery());
   const current = entities?.some((e) => e.id === entityId) ? entityId : undefined;
 
-  // 1 件以上のとき出す（1 件でも「一覧・作成」から 2 件目を作れるように。2026-11-04 の E2E）
+  // 1 件以上のとき出す（1 件でも「一覧・作成」から 2 件目を作れるように）
   if (entities === undefined || entities.length < 1) return null;
 
   return (

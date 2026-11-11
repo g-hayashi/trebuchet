@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { HomeFigures, HomeRecentJournal, HomeTasks, Section } from "@trebuchet/schema";
 import type { ReactNode } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -55,7 +56,7 @@ function Loaded<T>({
 }) {
   if (section === undefined) {
     if (fetchError !== null && fetchError !== undefined) return <SectionError onRetry={onRetry} />;
-    return pending ? <p className="text-sm text-muted-foreground">読み込み中…</p> : null;
+    return pending ? <Loading /> : null;
   }
   if (section.status === "error") return <SectionError onRetry={onRetry} />;
   return <>{children(section.value)}</>;

@@ -8,8 +8,8 @@ export const Route = createFileRoute("/")({
     search.list === true || search.list === 1 || search.list === "1" || search.list === "true"
       ? { list: true }
       : {},
-  // 事業体が 1 件ならそのホームを開く。2 件以上は一覧、0 件は作成の案内（011 FR-010）。
-  // `list` があるときは開かない（1 件のとき 2 件目を作る画面へ行けなくなるため。2026-11-04 の E2E）
+  // 事業体が 1 件ならそのホームを開く。2 件以上は一覧、0 件は作成の案内（011/FR-010）。
+  // `list` があるときは開かない（1 件のとき 2 件目を作る画面へ行けなくなるため）
   beforeLoad: async ({ context, search }) => {
     if (search.list) return;
     const entityId = await entityToRestore(context.queryClient);

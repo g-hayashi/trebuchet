@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RemoteSettings } from "@trebuchet/schema";
 import { useId, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -91,7 +92,7 @@ export function RemoteSettingsForm() {
       </CardHeader>
       <CardContent className="grid gap-4">
         {settings.error && <ApiErrorMessage error={settings.error} />}
-        {settings.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+        {settings.isPending && <Loading />}
         {settings.data && <Fields settings={settings.data} />}
       </CardContent>
     </Card>

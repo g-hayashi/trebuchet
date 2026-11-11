@@ -9,24 +9,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
 import { describeError } from "@/lib/api-errors";
+import { getStored, setStored, storageKeys } from "@/lib/local-storage";
 import { postReceipt, receiptKeys, receiptQuery } from "./api";
-import { warningText } from "./labels";
+import { RECEIPT_MAX_MB, warningText } from "./labels";
 import { ReceiptFieldsForm } from "./ReceiptFieldsForm";
 import { CategoryFieldset, duplicateOf } from "./ReceiptFormParts";
 import { ReceiptReadingNote } from "./ReceiptReadingNote";
 import { ReceiptViewer } from "./ReceiptViewer";
 import { useAutoReceiptReading, useReceiptReading } from "./reading";
 
-const MAX_MB = RECEIPT_MAX_BYTES / (1024 * 1024);
 const PICK_ACCEPT = "image/jpeg,image/png,image/heic,image/heif,application/pdf";
-const categoryKey = (entityId: string) => `trebuchet.receiptCategory.${entityId}`;
 function storedCategory(entityId: string): ReceiptCategory | undefined {
-  try {
-    const value = localStorage.getItem(categoryKey(entityId));
-    return value === "paper_scan" || value === "electronic" ? value : undefined;
-  } catch {
-    return undefined;
-  }
+  const value = getStored(storageKeys.receiptCategory(entityId));
+  return value === "paper_scan" || value === "electronic" ? value : undefined;
 }
 
 type UploadResult = { key: number; name: string } & (
@@ -77,7 +72,7 @@ export function ReceiptUpload({ entityId }: { entityId: string }) {
         const key = nextResultKey.current++;
         try {
           if (file.size > RECEIPT_MAX_BYTES)
-            throw new Error(`ファイルが大きすぎます（${MAX_MB} MB まで）。`);
+            throw new Error(`ファイルが大きすぎます（${RECEIPT_MAX_MB} MB まで）。`);
           const { receipt } = await postReceipt(entityId, file, { category });
           queryClient.setQueryData(receiptKeys.detail(entityId, receipt.id), receipt);
           setResults((prev) => [...prev, { key, name: file.name, receipt }]);
@@ -118,7 +113,8 @@ export function ReceiptUpload({ entityId }: { entityId: string }) {
                 onChange={(event) => setFiles(Array.from(event.currentTarget.files ?? []))}
               />
               <p className="text-sm text-muted-foreground">
-                JPEG・PNG・HEIC・PDF（1件 {MAX_MB} MB まで）。スマホでは写真の撮影も選べます。
+                JPEG・PNG・HEIC・PDF（1件 {RECEIPT_MAX_MB} MB
+                まで）。スマホでは写真の撮影も選べます。
               </p>
               <p className="break-all text-sm" aria-live="polite">
                 {files.length
@@ -134,11 +130,7 @@ export function ReceiptUpload({ entityId }: { entityId: string }) {
                 error={errors.category}
                 onChange={(value) => {
                   setCategory(value);
-                  try {
-                    localStorage.setItem(categoryKey(entityId), value);
-                  } catch {
-                    /* 保存できなくても追加は続ける */
-                  }
+                  setStored(storageKeys.receiptCategory(entityId), value);
                 }}
               />
             </fieldset>

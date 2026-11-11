@@ -5,6 +5,7 @@ import { AccountPatch, SubAccountCreate } from "@trebuchet/schema";
 import { Fragment, useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
@@ -53,7 +54,7 @@ function AccountsPage() {
       <h1 className="text-xl font-semibold">勘定科目</h1>
       <AddAccountForm entityId={entityId} />
       <ApiErrorMessage error={error} />
-      {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {isPending && <Loading />}
       {accounts && (
         <Card>
           <CardHeader>
@@ -361,7 +362,7 @@ function SubAccountsPanel({ entityId, account }: { entityId: string; account: Ac
     <div className="grid gap-3">
       <ApiErrorMessage error={error} />
       {isPending ? (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
+        <Loading />
       ) : subAccounts && subAccounts.length > 0 ? (
         <ul className="flex flex-wrap gap-2" aria-label={`「${account.name}」の補助科目`}>
           {subAccounts.map((s) => (

@@ -6,18 +6,19 @@ import {
   type StatementAccount,
 } from "@trebuchet/schema";
 import { useEffect, useId, useRef, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type Account, accountsQuery } from "@/features/accounts/api";
-import { taxCategoriesQuery, taxSettingsQuery } from "@/features/entities/api";
+import type { Account } from "@/features/accounts/api";
 import { journalSearchQuery } from "@/features/journals/api";
 import { JournalForm, type JournalFormProps } from "@/features/journals/JournalForm";
-import { partnersQuery, tagsQuery } from "@/features/masters/api";
+import { useJournalMasters } from "@/features/journals/use-journal-masters";
 import { ApiError } from "@/lib/api";
 import { addDays } from "@/lib/dates";
 import { formatYen } from "@/lib/format";
+import { JOURNAL_MEMO_MAX } from "@/lib/limits";
 import { invalidateLedger } from "@/lib/queries";
 import { type ApproveBody, postApprove, type StatementView, statementAccountsQuery } from "./api";
 import { METHOD_LABELS, PURPOSE_LABELS } from "./labels";
@@ -65,7 +66,7 @@ function initialSource(
   });
   return {
     date: statement.date,
-    memo: statement.content.slice(0, 1000),
+    memo: statement.content.slice(0, JOURNAL_MEMO_MAX),
     lines: [
       line(outflow ? "debit" : "credit", "", null),
       line(outflow ? "credit" : "debit", statementAccount.accountId, statementAccount.subAccountId),
@@ -144,7 +145,7 @@ function LinkPicker({
   return (
     <div className="grid gap-2">
       <ApiErrorMessage error={journals.error} />
-      {journals.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {journals.isPending && <Loading />}
       {journals.data && options.length === 0 && (
         <p className="text-sm text-muted-foreground">
           日付の前後 {MATCH_WINDOW_DAYS} 日に、結びつけられる仕訳の行はありません。
@@ -194,16 +195,11 @@ export function CandidateEditor({
   const queryClient = useQueryClient();
   const radioName = useId();
   const candidate = statement.candidate;
-  const accounts = useQuery(accountsQuery(entityId));
-  const partners = useQuery(partnersQuery(entityId));
-  const tags = useQuery(tagsQuery(entityId));
-  const taxSettings = useQuery(taxSettingsQuery(entityId));
-  const taxCategories = useQuery(taxCategoriesQuery(entityId));
+  const masters = useJournalMasters(entityId);
+  const { accounts, partners, tags, taxSettings, taxCategories } = masters;
   const statementAccounts = useQuery(statementAccountsQuery(entityId));
   const statementAccount = statementAccounts.data?.find((a) => a.name === statement.accountName);
-  const loadError = [accounts, partners, tags, taxSettings, taxCategories, statementAccounts].find(
-    (q) => q.error,
-  )?.error;
+  const loadError = masters.loadError ?? statementAccounts.error;
 
   const learnId = useId();
   const [mode, setMode] = useState<Mode>(candidate?.method === "match" ? "link" : "create");
@@ -284,7 +280,7 @@ export function CandidateEditor({
       </fieldset>
 
       <ApiErrorMessage error={loadError} />
-      {!ready && !loadError && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {!ready && !loadError && <Loading />}
 
       {ready && mode === "create" && (
         <>

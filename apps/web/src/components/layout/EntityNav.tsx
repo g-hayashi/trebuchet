@@ -1,29 +1,9 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import type { FileRouteTypes } from "@/routeTree.gen";
 
-export type NavTo =
-  | "/e/$entityId"
-  | "/e/$entityId/journals/new"
-  | "/e/$entityId/journals"
-  | "/e/$entityId/recurring"
-  | "/e/$entityId/statements/import"
-  | "/e/$entityId/statements"
-  | "/e/$entityId/statements/rules"
-  | "/e/$entityId/statements/settings"
-  | "/e/$entityId/receipts/new"
-  | "/e/$entityId/receipts"
-  | "/e/$entityId/invoices"
-  | "/e/$entityId/work-hours"
-  | "/e/$entityId/invoice-settings"
-  | "/e/$entityId/reports/profit-and-loss"
-  | "/e/$entityId/blue-return"
-  | "/e/$entityId/fixed-assets"
-  | "/e/$entityId/deferred-assets"
-  | "/e/$entityId/settings"
-  | "/e/$entityId/accounts"
-  | "/e/$entityId/partners"
-  | "/e/$entityId/tags"
-  | "/e/$entityId/tax-settings"
-  | "/e/$entityId/periods";
+/** 事業体の下の、パスのパラメーターが `entityId` だけの画面（ルートの型から導く。存在しない画面は型エラーになる） */
+type EntityOnly<T extends string> = T extends `${string}$${string}$${string}` ? never : T;
+type NavTo = EntityOnly<Extract<FileRouteTypes["to"], `/e/$entityId${string}`>>;
 
 /**
  * `match`: この項目が「今の画面」になる、事業体の下のパス（区切りでの接頭辞）。省略時は `to` のパス。

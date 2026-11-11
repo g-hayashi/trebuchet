@@ -11,6 +11,7 @@ import type {
   StatementTableLayout,
 } from "@trebuchet/schema";
 import { useRef, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { SaveNotice } from "@/components/ui/save-notice";
@@ -24,7 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
-import { ApiError } from "@/lib/api";
+import { isApiError } from "@/lib/api";
 import { thisYear } from "@/lib/dates";
 import { AccountMappingForm } from "./AccountMappingForm";
 import { AiProgressLines } from "./AiProgressLines";
@@ -51,7 +52,7 @@ import { AppliedSource, SourceChooser } from "./SourcePicker";
 import { StatementInput, type StatementInputValue } from "./StatementInput";
 
 /**
- * 取込の手順（011 R9。FR-019）。確定の後の「確認・承認」は、候補の作成が終わったら確認の表（ReviewTable）を出す。
+ * 取込の手順（011/R9、011/FR-019）。確定の後の「確認・承認」は、候補の作成が終わったら確認の表（ReviewTable）を出す。
  * ④ では入力の欄を出さず、「入力し直す」だけを出す（007/R17）
  */
 const IMPORT_STEPS = ["入力", "列と口座", "取込", "確認・承認"] as const;
@@ -79,9 +80,7 @@ function ImportReview({ entityId }: { entityId: string }) {
   return (
     <div className="grid gap-3">
       <ApiErrorMessage error={statements.error} />
-      {statements.isPending && !statements.error && (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
-      )}
+      {statements.isPending && <Loading />}
       {statements.data && (
         <ReviewTable
           entityId={entityId}
@@ -142,7 +141,7 @@ type Input = StatementInputValue;
 
 /**
  * プレビューを作ったときの、ファイルと指定と取込元の保存。確定と、確定の失敗の後の作り直しは、これをそのまま使う。
- * `saveSource` は確定の options にそのまま入れる（null は保存しない。007 contracts §2.3）
+ * `saveSource` は確定の options にそのまま入れる（null は保存しない。007/§2.3）
  */
 type Request = {
   file: File;
@@ -171,7 +170,7 @@ const requestFromSource = (
 });
 
 /**
- * 明細の取込の画面（US1・US2）: 入力（貼り付け・ファイル）→ 列の対応 → 確認（プレビュー・口座の対応）→ 確定。
+ * 明細の取込の画面（007/US1・US2）: 入力（貼り付け・ファイル）→ 列の対応 → 確認（プレビュー・口座の対応）→ 確定。
  * 取込元（保存した列の対応）が 1 件当てはまれば列の対応を飛ばして確認へ進み、2 件以上なら取込元を選ばせる。
  * 列の対応を直す・読み直すときは自動の当てはめをしない（`manual`）。
  * 未対応の口座の対応（推定を初期値にした口座ごとの入力）はこの画面が持ち、確定の `accounts` でまとめて送る（プレビューは作り直さない）。
@@ -194,7 +193,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
   // 未対応の口座に決めている途中の対応（名前ごと）。触っていない口座は、推定を初期値にする
   const [accountDrafts, setAccountDrafts] = useState<Record<string, AccountDraft>>({});
   const [notice, setNotice] = useState("");
-  // 取込元（US2）: 自動の当てはめをしない（列の対応を直している）か、2 件以上から選んだ取込元、手で選んだ取込元、対象の年
+  // 取込元（007/US2）: 自動の当てはめをしない（列の対応を直している）か、2 件以上から選んだ取込元、手で選んだ取込元、対象の年
   const [manual, setManual] = useState(false);
   const [chosen, setChosen] = useState<StatementSource | undefined>();
   const [pickedSourceId, setPickedSourceId] = useState<string | undefined>();
@@ -287,7 +286,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
     },
     onError: (e, { r }) => {
       // プレビューの後に内容が変わったときは、作り直して見せる
-      if (e instanceof ApiError && e.code === "STATEMENT_PLAN_CHANGED") previewMutation.mutate(r);
+      if (isApiError(e, "STATEMENT_PLAN_CHANGED")) previewMutation.mutate(r);
     },
   });
 

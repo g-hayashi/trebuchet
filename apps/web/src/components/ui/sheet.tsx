@@ -32,10 +32,6 @@ export function SheetHeader({ className, ...props }: ComponentProps<"div">) {
   return <div className={cn("grid gap-1.5", className)} {...props} />;
 }
 
-export function SheetFooter({ className, ...props }: ComponentProps<"div">) {
-  return <div className={cn("flex flex-wrap justify-end gap-2", className)} {...props} />;
-}
-
 export function SheetTitle({ className, ...props }: ComponentProps<typeof DialogPrimitive.Title>) {
   return <DialogPrimitive.Title className={cn("text-lg font-semibold", className)} {...props} />;
 }

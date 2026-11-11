@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useId, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -25,12 +26,11 @@ import { billingTermsQuery } from "@/features/invoicing/api";
 import { billingSummary } from "@/features/invoicing/display";
 import { type Partner, partnersQuery } from "@/features/masters/api";
 import { PartnerProfileForm } from "@/features/masters/PartnerProfileForm";
+import { normalizeForSearch as normalize } from "@/lib/format";
 
 export const Route = createFileRoute("/e/$entityId/partners")({
   component: PartnersPage,
 });
-
-const normalize = (value: string) => value.normalize("NFKC").toLowerCase().trim();
 
 /** 名前とメモの部分一致（FR-048） */
 const matchesPartner = (partner: Partner, query: string) => {
@@ -68,7 +68,7 @@ function PartnersPage() {
         </CardHeader>
         <CardContent className="grid gap-4">
           <ApiErrorMessage error={error ?? terms.error} />
-          {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+          {isPending && <Loading />}
           {partners && partners.length === 0 && (
             <p className="text-sm text-muted-foreground">取引先はまだありません。</p>
           )}

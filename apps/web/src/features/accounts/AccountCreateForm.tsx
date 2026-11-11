@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AccountCategory, AccountCreate } from "@trebuchet/schema";
+import { AccountCategory, AccountCreate, ALLOWED_SECTIONS } from "@trebuchet/schema";
 import { useId } from "react";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ALLOWED_SECTIONS, CATEGORY_LABELS, SECTION_LABELS } from "@/lib/accounts";
+import { CATEGORY_LABELS, SECTION_LABELS } from "@/lib/accounts";
 import { cn } from "@/lib/utils";
 import { type Account, accountKeys, postAccount } from "./api";
 

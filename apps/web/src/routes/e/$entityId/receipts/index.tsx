@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, stripSearchParams, useNavigate } from "@tanstack/react-router";
 import { ReceiptQuery } from "@trebuchet/schema";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -76,9 +77,7 @@ function ReceiptsPage() {
         </CardHeader>
         <CardContent className="grid gap-4">
           <ApiErrorMessage error={receipts.error} />
-          {receipts.isPending && !receipts.error && (
-            <p className="text-sm text-muted-foreground">読み込み中…</p>
-          )}
+          {receipts.isPending && <Loading />}
           {items?.length === 0 && (
             <p className="text-sm text-muted-foreground">
               {hasFilter(search)

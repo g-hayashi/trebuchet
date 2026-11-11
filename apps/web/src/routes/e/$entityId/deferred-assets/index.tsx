@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -25,17 +24,15 @@ import { deferredAssetsQuery } from "@/features/deferred-assets/api";
 import { DeferredAssetForm } from "@/features/deferred-assets/DeferredAssetForm";
 import { thisYear } from "@/lib/dates";
 import { formatYen } from "@/lib/format";
-
-/** 年分は暦年（個人）。不正な値は捨てて、今年にする */
-const Search = z.object({ year: z.number().int().min(1900).max(9999).optional().catch(undefined) });
+import { useYearInput, YearSearch } from "@/lib/year-search";
 
 export const Route = createFileRoute("/e/$entityId/deferred-assets/")({
-  validateSearch: Search,
+  validateSearch: YearSearch,
   component: DeferredAssetsPage,
 });
 
 /**
- * 開業費の画面（009 US3。以前は固定資産台帳の下の節だった。011 FR-046）。
+ * 開業費の画面（009/US3、011/FR-046）。
  * 開業費の登録・編集と、年分ごとの償却額の決定、決算整理の仕訳の案。API・規則（009）は変えない
  */
 function DeferredAssetsPage() {
@@ -43,7 +40,7 @@ function DeferredAssetsPage() {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const year = search.year ?? thisYear();
-  const [yearText, setYearText] = useState(String(year));
+  const { yearText, changeYear } = useYearInput(year, (y) => navigate({ search: { year: y } }));
   // 編集の対象と成功の知らせ。保存すると入力欄を作り直すので、ここで持つ
   const [editingDeferredId, setEditingDeferredId] = useState<string>();
   const [deferredNotice, setDeferredNotice] = useState("");
@@ -53,11 +50,6 @@ function DeferredAssetsPage() {
   const adjustments = useQuery(adjustmentsQuery(entityId, String(year)));
   const deferredRows = deferredAssets.data ?? [];
   const editingDeferred = deferredRows.find((d) => d.id === editingDeferredId);
-
-  const changeYear = (text: string) => {
-    setYearText(text);
-    if (/^\d{4}$/.test(text)) navigate({ search: { year: Number(text) } });
-  };
 
   return (
     <main className="grid gap-6">

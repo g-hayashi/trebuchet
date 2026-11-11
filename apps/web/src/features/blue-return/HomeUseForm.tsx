@@ -1,15 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { SaveNotice } from "@/components/ui/save-notice";
@@ -297,29 +290,19 @@ export function HomeUseForm({
         </form>
         <ApiErrorMessage error={save.error} />
 
-        <Dialog open={confirmZero} onOpenChange={setConfirmZero}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>事業専用割合が 0% です</DialogTitle>
-              <DialogDescription>
-                全額が家事分になり、この科目は経費になりません。保存しますか？
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmZero(false)}>
-                戻る
-              </Button>
-              <Button
-                onClick={() => {
-                  setConfirmZero(false);
-                  save.mutate(0);
-                }}
-              >
-                保存する
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ConfirmDialog
+          open={confirmZero}
+          onOpenChange={setConfirmZero}
+          title="事業専用割合が 0% です"
+          description="全額が家事分になり、この科目は経費になりません。保存しますか？"
+          cancelLabel="戻る"
+          confirmLabel="保存する"
+          onCancel={() => setConfirmZero(false)}
+          onConfirm={() => {
+            setConfirmZero(false);
+            save.mutate(0);
+          }}
+        />
       </CardContent>
     </Card>
   );

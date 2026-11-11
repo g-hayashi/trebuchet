@@ -6,6 +6,7 @@ import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { FiscalPeriod } from "@/features/periods/api";
 import { presetRange, RANGE_PRESETS } from "@/lib/dates";
+import { type ReportKind, reportCsvUrl } from "./api";
 import type { DateRange } from "./periods";
 
 type PeriodPickerProps = {
@@ -277,14 +278,7 @@ export function JournalBookSortControls({
   );
 }
 
-export type ReportKind =
-  | "journal-book"
-  | "general-ledger"
-  | "trial-balance"
-  | "profit-and-loss"
-  | "balance-sheet";
-
-/** 表示中と同じ条件の CSV のダウンロード（FR-032）。params のキーの順にクエリ文字列にする */
+/** 表示中と同じ条件の CSV のダウンロード（FR-032） */
 export function CsvLink({
   entityId,
   kind,
@@ -294,14 +288,9 @@ export function CsvLink({
   kind: ReportKind;
   params: Record<string, string | undefined>;
 }) {
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) query.set(key, value);
-  }
-  query.set("format", "csv");
   return (
     <a
-      href={`/api/entities/${entityId}/reports/${kind}?${query}`}
+      href={reportCsvUrl(entityId, kind, params)}
       download
       className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium shadow-xs hover:bg-muted"
     >

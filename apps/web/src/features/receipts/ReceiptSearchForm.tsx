@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
-import { parseWholeYen } from "@/lib/format";
+import { parseAmount } from "@/lib/format";
 import type { ReceiptSearch } from "./api";
 import { CATEGORY_LABELS, CATEGORY_OPTIONS, LINK_FILTER_LABELS } from "./labels";
 
@@ -12,10 +12,6 @@ import { CATEGORY_LABELS, CATEGORY_OPTIONS, LINK_FILTER_LABELS } from "./labels"
 export type ReceiptSearchInput = Omit<ReceiptQueryInput, "cursor" | "limit">;
 
 const LINK_OPTIONS: ReceiptLinkState[] = ["none", "linked", "journal_voided"];
-
-/** 金額の条件の入力。空欄は指定なし、0 以上の整数でなければ null */
-const parseAmount = (raw: string): number | undefined | null =>
-  raw.trim() === "" ? undefined : parseWholeYen(raw, { min: 0 });
 
 const AMOUNT_MESSAGE = "0 以上の整数で入力してください";
 

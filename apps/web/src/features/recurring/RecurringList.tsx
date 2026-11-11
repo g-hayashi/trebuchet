@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { Loading } from "@/components/loading";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import {
   Table,
@@ -19,7 +20,7 @@ export function RecurringList({ entityId }: { entityId: string }) {
   return (
     <div className="grid gap-4">
       <ApiErrorMessage error={error} />
-      {isPending && !error && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {isPending && <Loading />}
       {data &&
         (data.length === 0 ? (
           <p className="text-sm text-muted-foreground">定期仕訳はまだありません。</p>

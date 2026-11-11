@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SOURCE_NAME_MAX } from "@/lib/limits";
 import {
   deleteStatementSource,
   patchStatementSource,
@@ -59,7 +60,7 @@ function RenameRow({
         <Input
           id={id}
           autoComplete="off"
-          maxLength={100}
+          maxLength={SOURCE_NAME_MAX}
           className="w-64"
           value={name}
           onChange={(e) => setName(e.target.value)}

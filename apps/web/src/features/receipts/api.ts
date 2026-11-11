@@ -13,7 +13,7 @@ import type {
   ReceiptUpdateInput,
 } from "@trebuchet/schema";
 import { uploadForm } from "@/features/imports/upload";
-import { api, unwrap } from "@/lib/api";
+import { api, entityPath, unwrap } from "@/lib/api";
 
 // 証憑の API（010 contracts/http-api.md §2）
 
@@ -44,7 +44,7 @@ function searchParams(search: ReceiptSearch, cursor: string | undefined): Record
   return params;
 }
 
-/** 証憑の検索（FR-008）。受領日時の新しい順で、cursor でページを続ける */
+/** 証憑の検索（010/FR-008）。受領日時の新しい順で、cursor でページを続ける */
 export const receiptSearchQuery = (entityId: string, search: ReceiptSearch) =>
   infiniteQueryOptions({
     queryKey: receiptKeys.search(entityId, search),
@@ -79,7 +79,7 @@ export const receiptFileUrl = (
   variant: "display" | "original" = "display",
   download = false,
 ): string =>
-  `/api/entities/${encodeURIComponent(entityId)}/receipts/${encodeURIComponent(receiptId)}/files/${sha256}?variant=${variant}${download ? "&download=1" : ""}`;
+  `${entityPath(entityId)}/receipts/${encodeURIComponent(receiptId)}/files/${sha256}?variant=${variant}${download ? "&download=1" : ""}`;
 
 /** 追加（multipart: `file` と `options` の JSON。007 の取込と同じ送り方）。経路は server が決める */
 export const postReceipt = async (
@@ -87,7 +87,7 @@ export const postReceipt = async (
   file: File,
   options: ReceiptCreateOptions,
 ): Promise<{ receipt: ReceiptDetail }> =>
-  uploadForm(`/api/entities/${encodeURIComponent(entityId)}/receipts`, {
+  uploadForm(`${entityPath(entityId)}/receipts`, {
     file,
     options: JSON.stringify(options),
   });
@@ -147,10 +147,10 @@ export const postReceiptFile = async (
   file: File,
   options: ReceiptReplaceOptions,
 ): Promise<{ receipt: ReceiptDetail }> =>
-  uploadForm(
-    `/api/entities/${encodeURIComponent(entityId)}/receipts/${encodeURIComponent(receiptId)}/files`,
-    { file, options: JSON.stringify(options) },
-  );
+  uploadForm(`${entityPath(entityId)}/receipts/${encodeURIComponent(receiptId)}/files`, {
+    file,
+    options: JSON.stringify(options),
+  });
 
 /** 削除（理由つき。行・ファイル・履歴は残る。H: §2） */
 export const postReceiptDelete = async (

@@ -1,7 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { fiscalPeriodsQuery } from "@/features/periods/api";
-import { currentPeriod } from "@/features/reports/periods";
+import { useCurrentPeriod } from "@/features/periods/current";
 
 const linkClass =
   "inline-flex h-9 items-center rounded-md border bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground";
@@ -11,8 +9,7 @@ const linkClass =
  * 期首残高は、今日を含む（なければ最新の）会計期間の年度の画面へ。会計期間がまだなければ会計期間の画面へ
  */
 export function LedgerShortcuts({ entityId }: { entityId: string }) {
-  const { data: periods } = useQuery(fiscalPeriodsQuery(entityId));
-  const period = periods && currentPeriod(periods);
+  const { period } = useCurrentPeriod(entityId);
 
   return (
     <nav aria-label="期首残高と照合" className="flex flex-wrap items-center gap-3">

@@ -24,7 +24,7 @@ export const backupStatusQuery = () =>
   });
 
 /** 画面に出す最近の件数（FR-054）。全件は CSV の書き出しで取る */
-export const RECENT_RUN_LIMIT = 5;
+const RECENT_RUN_LIMIT = 5;
 
 /** バックアップの履歴の全件の CSV（server が表示用の列だけを返す。FR-054） */
 export const RUNS_CSV_HREF = "/api/backup/runs?format=csv";

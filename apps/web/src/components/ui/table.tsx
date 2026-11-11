@@ -42,7 +42,3 @@ export function TableHead({ className, ...props }: ComponentProps<"th">) {
 export function TableCell({ className, ...props }: ComponentProps<"td">) {
   return <td className={cn("p-2 align-middle", className)} {...props} />;
 }
-
-export function TableCaption({ className, ...props }: ComponentProps<"caption">) {
-  return <caption className={cn("mt-4 text-sm text-muted-foreground", className)} {...props} />;
-}

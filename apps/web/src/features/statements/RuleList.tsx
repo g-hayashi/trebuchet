@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RuleStatus } from "@trebuchet/schema";
 import { useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { NativeSelect } from "@/components/ui/input";
@@ -132,7 +133,7 @@ export function RuleList({ entityId }: { entityId: string }) {
         />
       )}
 
-      {rules.isPending && !error && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {rules.isPending && !error && <Loading />}
       {rules.data?.length === 0 && (
         <p className="text-sm text-muted-foreground">該当するルールはありません。</p>
       )}

@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatYen } from "@/lib/format";
+import { badgeClass } from "@/lib/styles";
 import type { StatementView } from "./api";
 import { changedFields } from "./changes";
 import { METHOD_LABELS, STATUS_LABELS } from "./labels";
@@ -21,8 +22,6 @@ export type StatementActions = {
   onAcknowledge: (statement: StatementView) => void;
   onUnlink: (statement: StatementView) => void;
 };
-
-const badgeClass = "ml-2 rounded-md border border-amber-500/60 px-1.5 py-0.5 text-xs";
 
 function Row({
   entityId,

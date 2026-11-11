@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { api, unwrap } from "@/lib/api";
+import { api, entityPath, unwrap } from "@/lib/api";
 
 // 青色申告決算書の API（003 contracts/http-api.md「決算書」「控除の回答」）
 
@@ -97,4 +97,4 @@ export const putClosingNote = async (
 
 /** CSV のダウンロードの URL。使わない欄は常に空にする（`blankUnused=true`。様式の行の対応を保つ。FR-045） */
 export const blueReturnCsvUrl = (entityId: string, year: string) =>
-  `/api/entities/${encodeURIComponent(entityId)}/blue-return/${encodeURIComponent(year)}/csv?blankUnused=true`;
+  `${entityPath(entityId)}/blue-return/${encodeURIComponent(year)}/csv?blankUnused=true`;

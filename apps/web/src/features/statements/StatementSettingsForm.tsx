@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
@@ -112,9 +113,7 @@ export function StatementSettingsForm({ entityId }: { entityId: string }) {
   return (
     <div className="grid gap-3">
       <ApiErrorMessage error={settings.error} />
-      {settings.isPending && !settings.error && (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
-      )}
+      {settings.isPending && <Loading />}
       {settings.data && <Fields key={entityId} entityId={entityId} initial={settings.data} />}
     </div>
   );

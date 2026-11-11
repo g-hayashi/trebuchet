@@ -10,16 +10,14 @@ import { blueReturnKeys } from "@/features/blue-return/api";
 import { formatRatioAsPercent, parsePercentToRatio } from "@/features/blue-return/ratio";
 import { journalSearchQuery } from "@/features/journals/api";
 import { parseWholeYen } from "@/lib/format";
+import { parsePriorAccumulated, priorFieldsOf } from "@/lib/prior-accumulated";
 import { type FixedAssetRow, fixedAssetKeys, postFixedAsset, putFixedAsset } from "./api";
 import { type AssetMethod, METHOD_OPTIONS } from "./methods";
 
 const COST_ERROR = "取得価額は1円以上の整数で入力してください";
 const RATIO_ERROR = "事業専用割合は 0〜100 の数値を小数第2位までで入力してください";
 const LIFE_ERROR = "耐用年数は1以上の整数で入力してください";
-const PRIOR_ERROR = "前年までの償却累計額は0以上の整数で入力してください";
-const PRIOR_YEAR_ERROR = "累計が何年分までかを入力してください（4桁の年）";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const YEAR_PATTERN = /^\d{4}$/;
 
 type Values = {
   name: string;
@@ -64,8 +62,7 @@ const valuesOf = (asset: FixedAssetRow): Values => ({
   method: asset.method,
   usefulLifeYears: asset.usefulLifeYears === null ? "" : String(asset.usefulLifeYears),
   inServiceOn: asset.inServiceOn ?? "",
-  priorAccumulated: asset.priorAccumulated > 0 ? String(asset.priorAccumulated) : "",
-  priorThroughYear: asset.priorThroughYear === null ? "" : String(asset.priorThroughYear),
+  ...priorFieldsOf(asset),
   assetAccountId: asset.assetAccountId,
   linkedJournalId: asset.linkedJournalId ?? "",
   note: asset.note ?? "",
@@ -95,17 +92,9 @@ function methodFieldsOf(v: Values): MethodFields {
     };
   }
   const life = v.method === "straight_line" ? parseWholeYen(v.usefulLifeYears, { min: 1 }) : null;
-  const prior =
-    v.priorAccumulated.trim() === "" ? 0 : parseWholeYen(v.priorAccumulated, { min: 0 });
-  const yearText = v.priorThroughYear.trim();
-  const year = yearText === "" ? null : YEAR_PATTERN.test(yearText) ? Number(yearText) : undefined;
+  const { value, priorError, priorYearError } = parsePriorAccumulated(v);
   const lifeError = v.method === "straight_line" && life === null ? LIFE_ERROR : undefined;
-  const priorError = prior === null ? PRIOR_ERROR : undefined;
-  const priorYearError =
-    year === undefined || (prior !== null && prior > 0 && year === null)
-      ? PRIOR_YEAR_ERROR
-      : undefined;
-  if (lifeError || priorError || priorYearError || prior === null || year === undefined) {
+  if (lifeError || !value) {
     return {
       ok: false,
       ...(lifeError && { lifeError }),
@@ -117,8 +106,8 @@ function methodFieldsOf(v: Values): MethodFields {
     ok: true,
     usefulLifeYears: life,
     inServiceOn: v.inServiceOn === "" ? null : v.inServiceOn,
-    priorAccumulated: prior,
-    priorThroughYear: year,
+    priorAccumulated: value.prior,
+    priorThroughYear: value.year,
   };
 }
 

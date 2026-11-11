@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { EntityPatch } from "@trebuchet/schema";
 import { useForm } from "react-hook-form";
@@ -9,17 +9,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { entitiesQuery, entityKeys, patchEntity } from "@/features/entities/api";
+import { entityKeys, patchEntity } from "@/features/entities/api";
+import { useEntity } from "@/features/entities/use-entity";
 
 export const Route = createFileRoute("/e/$entityId/settings")({
   component: EntitySettings,
 });
 
-/** 事業体の設定の「基本」。事業体の名前の変更（FR-052。以前はホームにあった） */
+/** 事業体の設定の「基本」。事業体の名前の変更（011/FR-052） */
 function EntitySettings() {
   const { entityId } = Route.useParams();
-  const { data: entities } = useQuery(entitiesQuery());
-  const entity = entities?.find((e) => e.id === entityId);
+  const { entity } = useEntity(entityId);
   return (
     <main className="grid gap-6">
       <h1 className="text-xl font-semibold">基本</h1>
@@ -37,7 +37,7 @@ function RenameEntityForm({ entityId, name }: { entityId: string; name: string }
   const message = form.formState.errors.name?.message;
   const rename = useMutation({
     mutationFn: (json: EntityPatch) => patchEntity(entityId, json),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: entityKeys.all }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: entityKeys.all, exact: true }),
   });
 
   return (

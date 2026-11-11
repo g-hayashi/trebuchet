@@ -25,6 +25,17 @@ export class ApiError extends Error {
   }
 }
 
+/** `error` が、エラーコード `code` の ApiError か */
+export function isApiError<C extends ApiError["code"]>(
+  error: unknown,
+  code: C,
+): error is ApiError & { readonly code: C } {
+  return error instanceof ApiError && error.code === code;
+}
+
+/** 事業体の API のパス。hc の型つきの呼び出しを使えない箇所（multipart、ダウンロードの URL）で使う */
+export const entityPath = (entityId: string) => `/api/entities/${encodeURIComponent(entityId)}`;
+
 type JsonBody<R> = R extends { json(): Promise<infer J> } ? J : never;
 
 /**

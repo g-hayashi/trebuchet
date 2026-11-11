@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { thisYear } from "@/lib/dates";
+import { SOURCE_NAME_MAX } from "@/lib/limits";
 import { statementAccountsQuery } from "./api";
 import {
   type ColumnAiSuggestion,
@@ -514,7 +515,7 @@ export function ColumnMappingEditor({
         <Input
           id={`${id}-source-name`}
           autoComplete="off"
-          maxLength={100}
+          maxLength={SOURCE_NAME_MAX}
           className="w-64"
           value={sourceNameInput ?? defaultSourceName}
           onChange={(e) => setSourceNameInput(e.target.value)}
