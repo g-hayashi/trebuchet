@@ -12,7 +12,7 @@ import { useReceiptWrite } from "./use-receipt-write";
 const ACCEPT = "image/jpeg,image/png,image/heic,application/pdf,.jpg,.jpeg,.png,.heic,.pdf";
 
 /**
- * ファイルの差し替え（撮り直し。US5、FR-018）。新しいファイルを選び、理由を添えて送る。
+ * ファイルの差し替え（撮り直し。010/US5、010/FR-018）。新しいファイルを選び、理由を添えて送る。
  * 前の版は残り、履歴から開ける。警告（解像度など）は差し替え後の証憑の警告として詳細に出る。
  * 削除済みの証憑には出さない（呼び出し側）
  */

@@ -37,7 +37,7 @@ function changes(
     .map(([key, label, show]) => `${label}: ${show(before[key])} → ${show(after[key])}`);
 }
 
-/** ルールの履歴（H:§5.5、FR-022）。追記の順に、操作・日時・変わった項目を出す */
+/** ルールの履歴（H:§5.5、006/FR-022）。追記の順に、操作・日時・変わった項目を出す */
 export function RuleHistoryPanel({
   entityId,
   rule,

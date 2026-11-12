@@ -187,7 +187,7 @@ function FiscalPeriodSelect({
   );
 }
 
-/** 前年比較の切替（FR-030） */
+/** 前年比較の切替（001/FR-030） */
 export function CompareToggle({
   checked,
   onChange,
@@ -208,7 +208,7 @@ export function CompareToggle({
   );
 }
 
-/** 前年の値が 0 である理由と、前年の仕訳を取り込む入口への案内（FR-041）。比較の欄の近くに置く */
+/** 前年の値が 0 である理由と、前年の仕訳を取り込む入口への案内（011/FR-041）。比較の欄の近くに置く */
 export function PreviousYearNotice({ entityId, reason }: { entityId: string; reason: string }) {
   return (
     <div
@@ -232,7 +232,7 @@ export function PreviousYearNotice({ entityId, reason }: { entityId: string; rea
 const SORT_LABELS: Record<JournalBookSort, string> = { date: "取引日", created: "登録日" };
 const ORDER_LABELS: Record<JournalBookOrder, string> = { asc: "昇順", desc: "降順" };
 
-/** 仕訳帳の並べ替え（FR-038）: 取引日・登録日 × 昇順・降順 */
+/** 仕訳帳の並べ替え（011/FR-038）: 取引日・登録日 × 昇順・降順 */
 export function JournalBookSortControls({
   sort,
   order,
@@ -279,7 +279,7 @@ export function JournalBookSortControls({
   );
 }
 
-/** 表示中と同じ条件の CSV のダウンロード（FR-032） */
+/** 表示中と同じ条件の CSV のダウンロード（001/FR-032） */
 export function CsvLink({
   entityId,
   kind,

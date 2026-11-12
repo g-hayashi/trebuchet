@@ -85,7 +85,7 @@ function statementLines(report: BalanceSheet) {
   return { assets, liabilitiesAndEquity };
 }
 
-/** 貸借対照表（FR-029, FR-030） */
+/** 貸借対照表（001/FR-029, 001/FR-030） */
 function BalanceSheetPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();
@@ -103,7 +103,7 @@ function BalanceSheetPage() {
   const period = periods && asOf ? periodOf(periods, asOf) : undefined;
   const lines = data && statementLines(data);
   const compare = data?.previousAsOf != null;
-  // 科目名のリンクは、会計期間の期首から基準日までの元帳へ（FR-039）
+  // 科目名のリンクは、会計期間の期首から基準日までの元帳へ（011/FR-039）
   const ledger = period && asOf ? { entityId, from: period.startDate, to: asOf } : undefined;
 
   return (

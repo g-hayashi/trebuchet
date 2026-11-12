@@ -14,7 +14,7 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { authKeys, revokeSession, sessionsQuery } from "./api";
 
-/** 解錠中のセッション（FR-013）。現在のセッションに印を付け、他のセッションを失効できる */
+/** 解錠中のセッション（004/FR-013）。現在のセッションに印を付け、他のセッションを失効できる */
 export function SessionList() {
   const queryClient = useQueryClient();
   const { data: sessions, isPending, error } = useQuery(sessionsQuery());

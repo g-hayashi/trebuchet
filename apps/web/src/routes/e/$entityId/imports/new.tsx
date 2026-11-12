@@ -39,7 +39,7 @@ function buildOptions(fiscalYears: number[] | undefined, selection: ItemSelectio
 }
 
 /**
- * 新しい取込（US1）。ファイルを選ぶとプレビューを作り、対応表・年度・個別の指定を変えるたびに
+ * 新しい取込（002/US1）。ファイルを選ぶとプレビューを作り、対応表・年度・個別の指定を変えるたびに
  * プレビューを作り直す。「取り込む」で、見ているプレビューの件数を添えて確定する
  */
 function NewImportPage() {

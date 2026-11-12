@@ -71,7 +71,7 @@ function searchParams(search: JournalSearch, cursor: string | undefined): Record
   return params;
 }
 
-/** 仕訳の検索（FR-023）。日付の降順、同じ日付は仕訳番号の降順で、cursor でページを続ける */
+/** 仕訳の検索（001/FR-023）。日付の降順、同じ日付は仕訳番号の降順で、cursor でページを続ける */
 export const journalSearchQuery = (entityId: string, search: JournalSearch) =>
   infiniteQueryOptions({
     queryKey: journalKeys.search(entityId, search),

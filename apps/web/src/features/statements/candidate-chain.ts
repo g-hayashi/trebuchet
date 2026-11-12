@@ -3,7 +3,7 @@ import { MAX_INFER_BATCH } from "@trebuchet/schema";
 import { aiSettingsQuery } from "@/features/ai-settings/api";
 import { postBuildCandidates, postInfer, postSeedRules, statementKeys } from "./api";
 
-/** 取込の後の自動の連鎖（011 R9。FR-019）の進み。まだ済んでいない段階は省く */
+/** 取込の後の自動の連鎖（011 R9。011/FR-019）の進み。まだ済んでいない段階は省く */
 export type ChainProgress = {
   /** 過去の仕訳から作ったルールの件数 */
   seeded?: number;

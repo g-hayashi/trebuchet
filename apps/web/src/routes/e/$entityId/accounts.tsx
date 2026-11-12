@@ -42,7 +42,7 @@ function AccountsPage() {
   const { entityId } = Route.useParams();
   const { data: accounts, isPending, error } = useQuery(accountsQuery(entityId));
   const [query, setQuery] = useState("");
-  // 使用停止の科目は既定で隠す（FR-048）
+  // 使用停止の科目は既定で隠す（011/FR-048）
   const [hideInactive, setHideInactive] = useState(true);
   const searchId = useId();
   const hideId = useId();
@@ -264,7 +264,7 @@ function AccountRow({ entityId, account }: { entityId: string; account: Account 
   );
 }
 
-/** 費用の科目の決算書の欄（青色申告決算書 1ページの欄 8〜31）。選ぶとすぐ保存する（FR-006） */
+/** 費用の科目の決算書の欄（青色申告決算書 1ページの欄 8〜31）。選ぶとすぐ保存する（003/FR-006） */
 const REPORT_LINE_CHOICES = Array.from({ length: 24 }, (_, i) => i + 8);
 
 function ReportLineSelect({

@@ -47,7 +47,7 @@ export function useReceiptReading(receipt: ReceiptDetail | undefined): {
 }
 
 /**
- * 追加の直後の自動の読み取り（R13）。設定が有効なときだけ readings を呼ぶ。追加の応答は待たず、
+ * 追加の直後の自動の読み取り（010/R13）。設定が有効なときだけ readings を呼ぶ。追加の応答は待たず、
  * 失敗も示さない（記録は server が残し、証憑の詳細で読み直せる）。呼んだ後は証憑のクエリを読み直す
  */
 export function useAutoReceiptReading(entityId: string): (receiptId: string) => void {

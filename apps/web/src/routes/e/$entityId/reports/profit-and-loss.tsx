@@ -52,7 +52,7 @@ function statementLines(report: ProfitAndLoss): StatementLine[] {
   ];
 }
 
-/** 損益計算書（FR-029, FR-030） */
+/** 損益計算書（001/FR-029, 001/FR-030） */
 function ProfitAndLossPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();

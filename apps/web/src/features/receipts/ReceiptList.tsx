@@ -19,7 +19,7 @@ import {
 
 const MISSING = <span className="text-muted-foreground">未入力</span>;
 
-/** 証憑の一覧（FR-008）。未入力の値は「未入力」と示し、詳細から入力する */
+/** 証憑の一覧（010/FR-008）。未入力の値は「未入力」と示し、詳細から入力する */
 export function ReceiptList({
   entityId,
   receipts,

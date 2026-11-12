@@ -29,7 +29,7 @@ import { StatementList } from "./StatementList";
 type ReasonTarget = { kind: "unexclude" | "unlink"; statement: StatementView };
 
 /**
- * 明細の一覧の画面（US2。007/R17）: 絞り込み・候補の確認と承認・除外・結びつきを外す。
+ * 明細の一覧の画面（006/US2。007/R17）: 絞り込み・候補の確認と承認・除外・結びつきを外す。
  * 状態が「未処理」のときは確認の表（`ReviewTable`: 行を選んで承認・除外。絞り込みは選択のボタンと同じ行）、
  * ほかの状態は一覧の表（`StatementList`。絞り込みは表の上）。
  * 開いたとき（1 回）、未処理の明細があれば候補を作り直し（AI の候補は残る）、AI に回す明細を自動で推定する。

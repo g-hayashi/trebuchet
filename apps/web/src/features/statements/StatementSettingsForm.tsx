@@ -107,7 +107,7 @@ function Fields({
   );
 }
 
-/** 明細の設定（H:§6.3。FR-018・027）: 「確信度の高い行を選択」と外部へ送るしきい値。事業体ごと */
+/** 明細の設定（H:§6.3。006/FR-018・027）: 「確信度の高い行を選択」と外部へ送るしきい値。事業体ごと */
 export function StatementSettingsForm({ entityId }: { entityId: string }) {
   const settings = useQuery(statementSettingsQuery(entityId));
   return (

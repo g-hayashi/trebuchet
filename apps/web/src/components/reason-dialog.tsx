@@ -14,7 +14,7 @@ import { isApiError } from "@/lib/api";
 import { REASON_MAX } from "@/lib/limits";
 
 /**
- * 訂正・取消・締めの解除の理由を入力するダイアログ（FR-019, FR-024）。
+ * 訂正・取消・締めの解除の理由を入力するダイアログ（001/FR-019, 001/FR-024）。
  * 理由は空欄・500 文字超では確定できない。確定の失敗はダイアログの中に表示する
  */
 export function ReasonDialog({

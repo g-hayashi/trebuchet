@@ -22,7 +22,7 @@ import { journalCandidatesQuery, postReceiptLink } from "./api";
 type Pick = { journalId: string; reason?: string };
 
 /**
- * 証憑を仕訳に結びつけるダイアログ（FR-011・013）。取引年月日の前後の候補（R6）と、
+ * 証憑を仕訳に結びつけるダイアログ（010/FR-011・013）。取引年月日の前後の候補（010/R6）と、
  * キーワードで探した仕訳を示し、選ぶと link を送る。
  * 結びついた仕訳がある証憑は付け替えなので `replace: true` で送る。理由の要否は web で判断せず、
  * server が 422 `REASON_REQUIRED` を返したら理由の入力を求めて送り直す。

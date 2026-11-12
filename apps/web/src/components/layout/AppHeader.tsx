@@ -12,7 +12,7 @@ import { MobileNav } from "./MobileNav";
 const LINK_CLASS = "underline-offset-4 hover:underline";
 
 /**
- * 全画面のヘッダー（contracts/ui-shell.md §1）。解錠している間だけ描く（AuthGate の中に置く。
+ * 全画面のヘッダー（011 contracts/ui-shell.md §1）。解錠している間だけ描く（AuthGate の中に置く。
  * 施錠中・未サインインは解錠の画面だけで、右の 2 つは出さない）。
  * ロゴと事業体の名前は、最後に開いた事業体のホームへ（なければ `/`）。右は「設定」と「施錠してサインアウト」だけ
  */
@@ -44,7 +44,7 @@ export function AppHeader() {
           </Link>
         )}
         {mobile ? (
-          // スマホの幅: ロゴ・事業体の名前・メニューのボタンだけ（設定と施錠はメニューの中。FR-059）
+          // スマホの幅: ロゴ・事業体の名前・メニューのボタンだけ（設定と施錠はメニューの中。011/FR-059）
           <MobileNav entityId={homeId} />
         ) : (
           <>

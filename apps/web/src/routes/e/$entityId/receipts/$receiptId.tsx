@@ -142,7 +142,7 @@ const Row = ({ label, children }: { label: string; children: ReactNode }) => (
   </>
 );
 
-/** 受領日時・ハッシュ・元の名前・形式・大きさ・経路など、保存した時点の事実（FR-009） */
+/** 受領日時・ハッシュ・元の名前・形式・大きさ・経路など、保存した時点の事実（010/FR-009） */
 function ReceiptInfo({ entityId, receipt }: { entityId: string; receipt: ReceiptDetail }) {
   const file = receipt.currentFile;
   return (

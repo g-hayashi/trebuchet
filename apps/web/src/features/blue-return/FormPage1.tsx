@@ -11,7 +11,7 @@ import { formatSignedYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import "./print.css";
 
-/** 決算書の1ページ（損益計算書）。使わない欄の金額は常に空欄にする（FR-045） */
+/** 決算書の1ページ（損益計算書）。使わない欄の金額は常に空欄にする（011/FR-045） */
 export function FormPage1({ lines }: { lines: BlueReturn["page1"]["lines"] }) {
   return (
     <section className="print-page" aria-label="決算書 1ページ（損益計算書）">

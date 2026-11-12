@@ -2,8 +2,8 @@ import type { ReceiptDetail } from "@trebuchet/schema";
 import { receiptFileUrl } from "./api";
 
 /**
- * 証憑の表示（FR-009）。画像は `<img>`、PDF は埋め込み。HEIC は server が表示用に JPEG へ変換する。
- * 原本は変換しないまま取り出せる（R12）
+ * 証憑の表示（010/FR-009）。画像は `<img>`、PDF は埋め込み。HEIC は server が表示用に JPEG へ変換する。
+ * 原本は変換しないまま取り出せる（010/R12）
  */
 export function ReceiptViewer({
   entityId,

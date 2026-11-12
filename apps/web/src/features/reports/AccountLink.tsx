@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-/** 科目名から、同じ期間のその科目の総勘定元帳へ（FR-039） */
+/** 科目名から、同じ期間のその科目の総勘定元帳へ（011/FR-039） */
 export function AccountLink({
   entityId,
   accountId,

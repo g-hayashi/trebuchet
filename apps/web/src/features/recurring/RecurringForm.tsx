@@ -19,7 +19,7 @@ import { DAY_OPTIONS } from "./labels";
 type Body = Omit<RecurringInput, "confirm">;
 
 /**
- * 定期仕訳の入力（FR-023・029）。名前・予定日（1〜28 と末日 = 31）・開始月・終了月と、仕訳の行。
+ * 定期仕訳の入力（005/FR-023・029）。名前・予定日（1〜28 と末日 = 31）・開始月・終了月と、仕訳の行。
  * 行の入力は 001 の `JournalForm` を使う（日付の入力は出さない。日付は回ごとに予定日で決まる）。
  * 保存で今日以前に登録される回があると server が 409 `RECURRING_CONFIRM_REQUIRED` を返すので、
  * 件数と月を示し、確認を受けて `confirm: true` で同じ内容を再送する。

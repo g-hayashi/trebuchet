@@ -35,7 +35,7 @@ import { formatYen, parseAmount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * URL の検索パラメータ（FR-023）。ページの指定（cursor・limit）は URL に残さない。
+ * URL の検索パラメータ（001/FR-023）。ページの指定（cursor・limit）は URL に残さない。
  * `allDates` は利用者が日付を両方空にして探したことを表す（URL に日付がないと既定の会計期間を補うため）。
  * API へは送らない
  */

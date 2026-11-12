@@ -15,7 +15,7 @@ import { patchRule, type RuleView } from "./api";
 import { PURPOSE_LABELS } from "./labels";
 
 /**
- * ルールの編集（H:§5.3、FR-024）: 相手の科目・税区分・判定・取引先・摘要を直す。
+ * ルールの編集（H:§5.3、006/FR-024）: 相手の科目・税区分・判定・取引先・摘要を直す。
  * 適用の回数と修正の回数は直せない。補助科目は、科目を変えると外れる（サーバーの規則）
  */
 export function RuleEditor({

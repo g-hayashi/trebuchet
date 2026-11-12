@@ -14,7 +14,7 @@ export const Route = createFileRoute("/e/$entityId/imports/reconcile")({
   component: ReconcilePage,
 });
 
-/** 元帳との照合（US3）。年度と freee の総勘定元帳を選ぶと、帳簿の科目ごとに並べて比べる */
+/** 元帳との照合（002/US3）。年度と freee の総勘定元帳を選ぶと、帳簿の科目ごとに並べて比べる */
 function ReconcilePage() {
   const { entityId } = Route.useParams();
   const yearId = useId();

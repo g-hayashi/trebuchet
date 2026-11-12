@@ -25,7 +25,7 @@ const FIGURES: { key: Figure; label: string; signed: boolean }[] = [
 const amount = (value: number, signed: boolean) =>
   signed ? formatSignedYen(value) : formatYen(value);
 
-/** 照合の表（FR-021〜023）。帳簿と元帳の4つの値を並べ、不一致の行は開いて差額と原因の候補を見る */
+/** 照合の表（002/FR-021〜023）。帳簿と元帳の4つの値を並べ、不一致の行は開いて差額と原因の候補を見る */
 export function ReconcileTable({ rows }: { rows: readonly ReconciliationRow[] }) {
   const id = useId();
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());

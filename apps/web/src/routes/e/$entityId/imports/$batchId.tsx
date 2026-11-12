@@ -24,7 +24,7 @@ export const Route = createFileRoute("/e/$entityId/imports/$batchId")({
   component: ImportBatchPage,
 });
 
-/** 取込の詳細（FR-013）。取込の概要と、その取込で登録した仕訳。有効な取込は取り消せる（FR-024） */
+/** 取込の詳細（002/FR-013）。取込の概要と、その取込で登録した仕訳。有効な取込は取り消せる（002/FR-024） */
 function ImportBatchPage() {
   const { entityId, batchId } = Route.useParams();
   const queryClient = useQueryClient();

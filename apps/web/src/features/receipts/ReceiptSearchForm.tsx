@@ -15,7 +15,7 @@ const LINK_OPTIONS: ReceiptLinkState[] = ["none", "linked", "journal_voided"];
 
 const AMOUNT_MESSAGE = "0 以上の整数で入力してください";
 
-/** 証憑の検索の条件のフォーム（FR-008）。条件は URL の検索パラメーターに入れる */
+/** 証憑の検索の条件のフォーム（010/FR-008）。条件は URL の検索パラメーターに入れる */
 export function ReceiptSearchForm({
   search,
   onSearch,

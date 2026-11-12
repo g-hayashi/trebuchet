@@ -90,7 +90,7 @@ export function warningText(warning: ReceiptWarning): string {
   return NEEDS_ORIGINAL_NOTE.has(warning.code) ? `${label}。${KEEP_ORIGINAL_NOTE}。` : label;
 }
 
-/** 履歴の操作の表示名（`receipt_audit_log` の `action`。US5） */
+/** 履歴の操作の表示名（`receipt_audit_log` の `action`。010/US5） */
 export const HISTORY_ACTION_LABELS: Record<ReceiptHistoryAction, string> = {
   create: "追加",
   update: "訂正",

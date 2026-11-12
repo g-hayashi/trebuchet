@@ -14,7 +14,7 @@ const strings = (v: unknown) =>
   Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : [];
 
 /**
- * 取込の取消のダイアログ（FR-024〜026）。理由が空欄なら確定できない。
+ * 取込の取消のダイアログ（002/FR-024〜026）。理由が空欄なら確定できない。
  * 訂正済みの仕訳があると件数を示して再確認を求め、締め済みの年度があれば締めの解除を案内する
  */
 export function VoidBatchDialog({

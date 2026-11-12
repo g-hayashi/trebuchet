@@ -57,7 +57,7 @@ type Entry = {
   after: Snapshot | undefined;
 };
 
-/** freee 側の変更・削除（FR-029, FR-030）。帳簿の仕訳は変えず、比べた内容と帳簿の仕訳へのリンクを示す */
+/** freee 側の変更・削除（002/FR-029, 002/FR-030）。帳簿の仕訳は変えず、比べた内容と帳簿の仕訳へのリンクを示す */
 export function FreeeChangesPanel({
   entityId,
   warnings,

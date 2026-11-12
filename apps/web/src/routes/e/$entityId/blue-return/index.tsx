@@ -7,7 +7,7 @@ export const Route = createFileRoute("/e/$entityId/blue-return/")({
   component: BlueReturnEntryPage,
 });
 
-/** 青色申告決算書の入口（FR-043）。今日を含む会計期間（なければ最新）の年の決算書へ転送する */
+/** 青色申告決算書の入口（011/FR-043）。今日を含む会計期間（なければ最新）の年の決算書へ転送する */
 function BlueReturnEntryPage() {
   const { entityId } = Route.useParams();
   const { periods, period, error } = useCurrentPeriod(entityId);

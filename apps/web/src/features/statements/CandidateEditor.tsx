@@ -74,7 +74,7 @@ function initialSource(
   };
 }
 
-/** 明細の口座の行の合計（借方 − 貸方）が明細の金額と違えば、送らずにエラーにする（サーバーの検査と同じ。FR-015） */
+/** 明細の口座の行の合計（借方 − 貸方）が明細の金額と違えば、送らずにエラーにする（サーバーの検査と同じ。006/FR-015） */
 function checkStatementLines(
   input: JournalInput,
   statement: StatementView,
@@ -101,7 +101,7 @@ function checkStatementLines(
 
 type LineRef = { journalId: string; lineId: string };
 
-/** 結びつけ先の行の選択（FR-021a）。同じ向き・同じ金額の行（明細の口座が分かれば、その科目の行）だけを出す */
+/** 結びつけ先の行の選択（006/FR-021a）。同じ向き・同じ金額の行（明細の口座が分かれば、その科目の行）だけを出す */
 function LinkPicker({
   entityId,
   statement,
@@ -178,7 +178,7 @@ function LinkPicker({
 }
 
 /**
- * 候補の確認と承認（FR-014〜016・021a）。「仕訳を登録する」は候補の案（なければ明細の口座の行）を直して登録、
+ * 候補の確認と承認（006/FR-014〜016・021a）。「仕訳を登録する」は候補の案（なければ明細の口座の行）を直して登録、
  * 「既存の仕訳と結びつける」は二重計上を防ぐために、すでにある仕訳の行に結びつける（仕訳は増えない）
  */
 export function CandidateEditor({

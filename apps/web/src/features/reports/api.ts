@@ -70,7 +70,7 @@ export type ReportKind =
   | "profit-and-loss"
   | "balance-sheet";
 
-/** 表示中と同じ条件の CSV のダウンロードの URL（FR-032）。params のキーの順にクエリ文字列にする */
+/** 表示中と同じ条件の CSV のダウンロードの URL（001/FR-032）。params のキーの順にクエリ文字列にする */
 export function reportCsvUrl(
   entityId: string,
   kind: ReportKind,

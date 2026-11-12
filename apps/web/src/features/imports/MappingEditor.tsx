@@ -72,7 +72,7 @@ function mappingsToSave(
 }
 
 /**
- * 対応表（FR-007〜011）。freee の科目・口座・税区分の名前ごとに、帳簿の科目・補助科目・税区分を選ぶ。
+ * 対応表（002/FR-007〜011）。freee の科目・口座・税区分の名前ごとに、帳簿の科目・補助科目・税区分を選ぶ。
  * 選んだ値は親が持ち、「対応表を保存」で PUT /import-mappings に送ってから onSaved を呼ぶ
  */
 export function MappingEditor({

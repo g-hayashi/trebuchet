@@ -245,7 +245,7 @@ function Fields({ settings }: { settings: AiSettings }) {
   );
 }
 
-/** AI の設定（H:§7。FR-027・027a）: 端末内の AI の可否と、外部の接続先・モデル・API キー。端末の設定 */
+/** AI の設定（H:§7。006/FR-027・027a）: 端末内の AI の可否と、外部の接続先・モデル・API キー。端末の設定 */
 export function AiSettingsForm() {
   const settings = useQuery(aiSettingsQuery());
   return (

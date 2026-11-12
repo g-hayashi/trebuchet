@@ -94,8 +94,8 @@ function buildItems(rows: Row[]): Built {
 }
 
 /**
- * 請求書の案 1 通の編集と発行（FR-006〜016）。明細は 1〜5 行。合計の再計算は表示だけで、
- * 数量 × 単価の行の金額は server と同じ式（`itemAmountOf`）。発行日と売上の計上日は変えられる（FR-009）
+ * 請求書の案 1 通の編集と発行（005/FR-006〜016）。明細は 1〜5 行。合計の再計算は表示だけで、
+ * 数量 × 単価の行の金額は server と同じ式（`itemAmountOf`）。発行日と売上の計上日は変えられる（005/FR-009）
  */
 export function InvoiceDraftEditor({
   entityId,
@@ -107,7 +107,7 @@ export function InvoiceDraftEditor({
   entityId: string;
   draft: InvoiceDraftView;
   partnerName: string;
-  /** 「発行する」を主な操作（variant=default）にするか。案が複数あるときは先頭の未発行の案だけ true（ui-shell §7） */
+  /** 「発行する」を主な操作（variant=default）にするか。案が複数あるときは先頭の未発行の案だけ true（011 ui-shell §7） */
   primary?: boolean | undefined;
   /** 同じ取引先・対象月の発行済み（未取消）の請求書。あれば「追加で作る」を選ぶまで発行できない（011 FR-033） */
   existing?: { id: string; invoiceNo: string } | undefined;

@@ -22,10 +22,10 @@ export type StatementLine =
       accountId?: string | undefined;
     };
 
-/** 科目名のリンクの行き先（FR-039）。同じ期間の総勘定元帳 */
+/** 科目名のリンクの行き先（011/FR-039）。同じ期間の総勘定元帳 */
 export type LedgerTarget = { entityId: string; from: string; to: string };
 
-/** 損益計算書・貸借対照表の表。compare なら前年・増減の列を出す（FR-030） */
+/** 損益計算書・貸借対照表の表。compare なら前年・増減の列を出す（001/FR-030） */
 export function StatementTable({
   label,
   compare,

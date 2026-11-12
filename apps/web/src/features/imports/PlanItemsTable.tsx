@@ -31,7 +31,7 @@ const planFeatures = tableFeatures({
 });
 type PlanColumns = TableOptions<typeof planFeatures, ImportPlanItem>["columns"];
 
-/** 個別の指定（FR-004b）。include は対象外を含める、exclude は新規を外す */
+/** 個別の指定（002/FR-004b）。include は対象外を含める、exclude は新規を外す */
 export type ItemSelection = { include: readonly string[]; exclude: readonly string[] };
 
 type Toggle = { label: "含める" | "外す"; next: ItemSelection };
@@ -60,7 +60,7 @@ const DECISION_CLASSES: Record<ImportDecision, string> = {
 const amountOf = (item: ImportPlanItem) =>
   item.draft?.lines.filter((l) => l.side === "debit").reduce((sum, l) => sum + l.amount, 0);
 
-/** 仕訳ごとの判定（FR-003）。判定で絞り込み、対象外の仕訳を個別に含めたり、新規を外したりする */
+/** 仕訳ごとの判定（002/FR-003）。判定で絞り込み、対象外の仕訳を個別に含めたり、新規を外したりする */
 export function PlanItemsTable({
   items,
   selection,

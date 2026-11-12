@@ -13,7 +13,7 @@ import {
 import { recurringListQuery } from "./api";
 import { dayLabel, periodLabel, STATUS_LABELS } from "./labels";
 
-/** 定期仕訳の一覧（FR-023）。名前・予定日・期間・状態・次の予定日・登録済みの件数 */
+/** 定期仕訳の一覧（005/FR-023）。名前・予定日・期間・状態・次の予定日・登録済みの件数 */
 export function RecurringList({ entityId }: { entityId: string }) {
   const { data, isPending, error } = useQuery(recurringListQuery(entityId));
 

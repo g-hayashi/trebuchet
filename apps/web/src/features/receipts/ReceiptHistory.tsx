@@ -90,7 +90,7 @@ function EntryBody({
 }
 
 /**
- * 証憑の履歴（US5、FR-018・SC-005）。追加・訂正・差し替え・削除・結びつけを古い順に、
+ * 証憑の履歴（010/US5、010/FR-018・010/SC-005）。追加・訂正・差し替え・削除・結びつけを古い順に、
  * 日時・理由・訂正の前後の値・差し替え前のファイルへのリンクで示す。削除済みの証憑でも開ける
  */
 export function ReceiptHistory({ entityId, receiptId }: { entityId: string; receiptId: string }) {

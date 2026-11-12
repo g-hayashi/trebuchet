@@ -230,7 +230,7 @@ export function ImportWorkspace({ entityId }: { entityId: string }) {
       setYear(thisYear());
       setRequest(undefined);
       setPreview(undefined);
-      // 1 件が当てはまれば、列の画面を飛ばして確認へ進む（R8）
+      // 1 件が当てはまれば、列の画面を飛ばして確認へ進む（007/R8）
       if (result.match.kind === "one" && !keepManual) {
         previewMutation.mutate(
           requestFromSource(file, options.origin, result.encoding, result.match.source, thisYear()),

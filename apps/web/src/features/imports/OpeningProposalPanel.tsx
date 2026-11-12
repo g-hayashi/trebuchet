@@ -36,7 +36,7 @@ const difference = (proposed: number, other: number | null) =>
   other === null ? null : proposed - other;
 
 /**
- * freee の総勘定元帳から作った期首残高の案（FR-019〜020a）。
+ * freee の総勘定元帳から作った期首残高の案（002/FR-019〜020a）。
  * 案の合計、対応が未定の科目、警告、科目ごとの比較（登録済み・前年度の繰越との差）を示す。
  * 対応が未定の科目は、補助科目の作成か対応表の保存で解消し、onResolved で案を作り直す。
  * 金額は科目の通常の側を正とする符号付き（マイナスは ▲）

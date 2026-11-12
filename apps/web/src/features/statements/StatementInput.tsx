@@ -11,7 +11,7 @@ export type StatementInputValue = { file: File; origin: StatementOrigin };
 const PASTE_FILE_NAME = "paste.txt";
 
 /**
- * 明細の入力（US1）: 銀行・カードの画面からコピーした表を貼り付けるか、CSV などのファイルを選ぶ。
+ * 明細の入力（007/US1）: 銀行・カードの画面からコピーした表を貼り付けるか、CSV などのファイルを選ぶ。
  * 「読み取る」で `onRead` に渡す。何も保存しない
  */
 export function StatementInput({

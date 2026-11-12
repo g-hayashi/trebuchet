@@ -8,7 +8,7 @@ import { formatDateTime } from "@/lib/format";
 import { inspectBackup } from "./api";
 
 /**
- * 復元の前の検査（FR-024・027、research R13）。ファイルを送り、解錠中の鍵で復号した要約を表示する
+ * 復元の前の検査（004/FR-024・027、004 research R13）。ファイルを送り、解錠中の鍵で復号した要約を表示する
  * （008 の D9。パスフレーズの入力はない）。画面からは復元しない（server を止めてコマンドで行う）
  */
 export function InspectBackup() {

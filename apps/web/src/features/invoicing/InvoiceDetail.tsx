@@ -24,7 +24,7 @@ import { PaymentForm } from "./PaymentForm";
 import { INVOICE_STATUS_LABELS } from "./status";
 
 /**
- * 請求書の詳細（FR-010〜014、017〜021）。発行時の写しの表示、売上の仕訳へのリンク、印刷、取消（理由つき）、
+ * 請求書の詳細（005/FR-010〜014、017〜021）。発行時の写しの表示、売上の仕訳へのリンク、印刷、取消（理由つき）、
  * 入金の消し込みの入力・一覧・取消
  */
 export function InvoiceDetail({

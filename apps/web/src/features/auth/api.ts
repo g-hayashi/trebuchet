@@ -36,10 +36,10 @@ export const sessionsQuery = () =>
     queryFn: async () => (await unwrap(await auth.sessions.$get())).sessions,
   });
 
-/** 画面に出す最近の件数（FR-054）。全件は CSV の書き出しで取る */
+/** 画面に出す最近の件数（011/FR-054）。全件は CSV の書き出しで取る */
 const RECENT_EVENT_LIMIT = 5;
 
-/** 認証の記録の全件の CSV（server が表示用の列だけを返す。FR-054） */
+/** 認証の記録の全件の CSV（server が表示用の列だけを返す。011/FR-054） */
 export const EVENTS_CSV_HREF = "/api/auth/events?format=csv";
 
 export const eventsQuery = (limit = RECENT_EVENT_LIMIT) =>

@@ -92,7 +92,7 @@ export const postReceipt = async (
     options: JSON.stringify(options),
   });
 
-/** 結びつける仕訳の候補（取引年月日の前後。H: §3、R6） */
+/** 結びつける仕訳の候補（取引年月日の前後。H: §3、010/R6） */
 export const journalCandidatesQuery = (entityId: string, receiptId: string) =>
   queryOptions({
     queryKey: receiptKeys.candidates(entityId, receiptId),

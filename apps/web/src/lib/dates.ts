@@ -43,7 +43,7 @@ export function previousMonth(month: string): string {
   return `${y}-${pad2(pm)}`;
 }
 
-/** 帳票の期間のプリセット（FR-040）。暦の月・四半期・年 */
+/** 帳票の期間のプリセット（011/FR-040）。暦の月・四半期・年 */
 export type RangePreset = "this-month" | "last-month" | "this-quarter" | "this-year" | "last-year";
 
 export const RANGE_PRESETS: readonly { id: RangePreset; label: string }[] = [

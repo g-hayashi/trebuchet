@@ -15,7 +15,7 @@ import { blueReturnKeys } from "@/features/blue-return/api";
 import { disposeFixedAsset, type FixedAssetRow, fixedAssetKeys } from "./api";
 
 /**
- * 固定資産の除却（FR-018）。除却の日と理由を記録する。台帳から消さず、履歴に残る。
+ * 固定資産の除却（003/FR-018）。除却の日と理由を記録する。台帳から消さず、履歴に残る。
  * 取得の日より前の日付などの判定は API が行い、失敗はダイアログの中に出す
  */
 export function DisposeDialog({

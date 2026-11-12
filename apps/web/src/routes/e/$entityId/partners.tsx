@@ -32,7 +32,7 @@ export const Route = createFileRoute("/e/$entityId/partners")({
   component: PartnersPage,
 });
 
-/** 名前とメモの部分一致（FR-048） */
+/** 名前とメモの部分一致（011/FR-048） */
 const matchesPartner = (partner: Partner, query: string) => {
   const needle = normalize(query);
   return [partner.name, partner.memo ?? ""].some((v) => normalize(v).includes(needle));

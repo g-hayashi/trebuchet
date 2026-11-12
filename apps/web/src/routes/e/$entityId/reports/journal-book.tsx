@@ -72,7 +72,7 @@ const columns: ReportColumns<Row> = [
 const toRows = (entries: readonly Entry[]): Row[] =>
   entries.flatMap((entry) => entry.lines.map((line, i) => ({ entry, line, first: i === 0 })));
 
-/** 仕訳帳（FR-026, FR-038）。既定は日付・仕訳番号の昇順。取引日・登録日の昇順・降順に並べ替えられる */
+/** 仕訳帳（001/FR-026, 011/FR-038）。既定は日付・仕訳番号の昇順。取引日・登録日の昇順・降順に並べ替えられる */
 function JournalBookPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();

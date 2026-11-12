@@ -26,7 +26,7 @@ function parseHours(raw: string): number | undefined | null {
   return raw.trim() === "" ? undefined : parseHalfStep(raw);
 }
 
-/** 対象月の工数の入力。時間単価型の有効な取引先ごとに、0.5 時間単位で入れる（FR-005） */
+/** 対象月の工数の入力。時間単価型の有効な取引先ごとに、0.5 時間単位で入れる（005/FR-005） */
 export function WorkHoursTable({ entityId, month }: { entityId: string; month: string }) {
   const hours = useQuery(workHoursQuery(entityId, month));
   const terms = useQuery(billingTermsQuery(entityId));

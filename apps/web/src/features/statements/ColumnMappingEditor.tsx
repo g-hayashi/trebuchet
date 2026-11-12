@@ -79,12 +79,12 @@ const initialRoles = (layout: StatementTableLayout, columns: StatementColumnInde
 };
 
 /**
- * 列の対応（US1）: 見本の表の列ごとに役割を選ぶ。金額は 1 列か出金・入金の 2 列で、1 列なら符号の向きを選ぶ。
+ * 列の対応（007/US1）: 見本の表の列ごとに役割を選ぶ。金額は 1 列か出金・入金の 2 列で、1 列なら符号の向きを選ぶ。
  * 区切り・見出しの行・文字コードの選び直しは `onRelayout`（判定のやり直し）。年は年のない日付（`needsYear`）のときだけ、
  * 口座名の列がなければ取込の口座（既存の口座か新しい名前）を聞く。必須がそろわないときは理由を示して `onConfirm` を呼ばせない。
  * 判定のやり直しで `layout` が変わったら、呼び出し側が `key` を変えて作り直す。
  *
- * 取込元（US2）: `initial` があれば、その取込元の対応（役割・符号・口座名・取込元の名前）から始め、保存は更新（id つき）。
+ * 取込元（007/US2）: `initial` があれば、その取込元の対応（役割・符号・口座名・取込元の名前）から始め、保存は更新（id つき）。
  * `sources` があれば既存の取込元を選べる（`onPickSource` で、その取込元の署名で判定をやり直す。`pickedSourceId` は選んだ取込元で、
  * 符号・名前を引き継ぎ、保存は更新）。取込元の名前は、口座名の列がなければ取込の口座の名前が既定。空なら保存しない
  */
@@ -149,7 +149,7 @@ export function ColumnMappingEditor({
   );
   const [encoding, setEncoding] = useState<StatementEncoding | "">(encodingOverride ?? "");
 
-  // AI の案（US4）は、利用者がまだ触っていない列にだけ入れる
+  // AI の案（007/US4）は、利用者がまだ触っていない列にだけ入れる
   const touchedColumns = useRef(new Set<number>());
   const modeTouched = useRef(false);
   const modeRef = useRef(mode);

@@ -34,7 +34,7 @@ function RootContent() {
       </div>
     );
   }
-  // 画面は、解錠しているときだけ描画する（FR-001・003）。帳簿のデータを含まない静的ファイルは常に配信される
+  // 画面は、解錠しているときだけ描画する（004/FR-001・003）。帳簿のデータを含まない静的ファイルは常に配信される
   return (
     <div className="min-h-screen bg-background pb-20 text-foreground print:pb-0">
       <AuthGate>

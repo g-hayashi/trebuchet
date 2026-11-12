@@ -30,7 +30,7 @@ function ExemptWarning({ warning }: { warning: ImportWarning }) {
   );
 }
 
-/** プレビューの要約（FR-003）: 期間・件数・合計、新しく作るもの、警告の一覧 */
+/** プレビューの要約（002/FR-003）: 期間・件数・合計、新しく作るもの、警告の一覧 */
 export function PreviewSummary({
   preview,
   accounts,

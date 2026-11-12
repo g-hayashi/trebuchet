@@ -251,7 +251,7 @@ export type JournalFormProps = {
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
   /** 訂正する仕訳。その内容で始め、使っている使用停止の科目・補助科目・取引先も選べるようにする */
   journal?: JournalFormSource | undefined;
-  /** 訂正仕訳として登録するときの訂正元（FR-019a） */
+  /** 訂正仕訳として登録するときの訂正元（001/FR-019a） */
   correctsJournalId?: string | undefined;
   submitLabel?: string | undefined;
   /** フォームの名前（読み上げ・テストの検索用）。既定は「仕訳」 */
@@ -267,7 +267,7 @@ export type JournalFormProps = {
   onSubmit: (input: JournalInput) => Promise<unknown>;
 };
 
-/** 仕訳の入力フォーム（FR-013〜018）。行の追加・削除、合計と差額の表示、エラーの表示を行う */
+/** 仕訳の入力フォーム（001/FR-013〜018）。行の追加・削除、合計と差額の表示、エラーの表示を行う */
 export function JournalForm({
   entityId,
   accounts,

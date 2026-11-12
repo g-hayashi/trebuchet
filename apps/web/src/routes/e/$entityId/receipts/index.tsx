@@ -9,7 +9,7 @@ import { type ReceiptSearch, receiptSearchQuery } from "@/features/receipts/api"
 import { ReceiptList } from "@/features/receipts/ReceiptList";
 import { ReceiptSearchForm } from "@/features/receipts/ReceiptSearchForm";
 
-/** URL の検索パラメーター（FR-008）。ページの指定（cursor・limit）は URL に残さない */
+/** URL の検索パラメーター（010/FR-008）。ページの指定（cursor・limit）は URL に残さない */
 const ReceiptSearchParams = ReceiptQuery.omit({ cursor: true, limit: true });
 
 export const Route = createFileRoute("/e/$entityId/receipts/")({

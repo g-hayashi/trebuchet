@@ -8,7 +8,7 @@ import { postReceiptDelete } from "./api";
 import { useReceiptWrite } from "./use-receipt-write";
 
 /**
- * 証憑の削除（US5、FR-019）。理由つきで「削除済み」にする（行・ファイル・履歴は残り、後から開ける）。
+ * 証憑の削除（010/US5、010/FR-019）。理由つきで「削除済み」にする（行・ファイル・履歴は残り、後から開ける）。
  * 仕訳に結びついていれば server が 409 `RECEIPT_LINKED` を返すので、先に結びつきを解除するよう促す。
  * 削除済みの証憑には出さない（呼び出し側）
  */

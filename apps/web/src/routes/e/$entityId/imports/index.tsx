@@ -21,7 +21,7 @@ export const Route = createFileRoute("/e/$entityId/imports/")({
   component: ImportsPage,
 });
 
-/** 取込の履歴（FR-013）。API の順（新しい順）に並べる */
+/** 取込の履歴（002/FR-013）。API の順（新しい順）に並べる */
 function ImportsPage() {
   const { entityId } = Route.useParams();
   const { data: batches, error } = useQuery(importsQuery(entityId));

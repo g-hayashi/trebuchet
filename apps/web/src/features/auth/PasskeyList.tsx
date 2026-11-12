@@ -19,7 +19,7 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { addPasskey, authKeys, deletePasskey, passkeysQuery, renamePasskey } from "./api";
 
-/** パスキーの一覧（FR-005）。名前の変更・削除・追加。削除できるかどうかはサーバーが決める（LAST_PASSKEY） */
+/** パスキーの一覧（004/FR-005）。名前の変更・削除・追加。削除できるかどうかはサーバーが決める（LAST_PASSKEY） */
 export function PasskeyList() {
   const queryClient = useQueryClient();
   const { data: passkeys, isPending, error } = useQuery(passkeysQuery());

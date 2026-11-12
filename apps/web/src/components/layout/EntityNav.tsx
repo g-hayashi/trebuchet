@@ -8,15 +8,15 @@ type NavTo = EntityOnly<Extract<FileRouteTypes["to"], `/e/$entityId${string}`>>;
 /**
  * `match`: この項目が「今の画面」になる、事業体の下のパス（区切りでの接頭辞）。省略時は `to` のパス。
  * `""` はホーム（完全一致だけ）。
- * `mobile`: スマホのメニュー（`MobileNav`）に出すときの名前。ないものはスマホのメニューに出さない（FR-059）
+ * `mobile`: スマホのメニュー（`MobileNav`）に出すときの名前。ないものはスマホのメニューに出さない（011/FR-059）
  */
 type NavItem = { label: string; to: NavTo; match?: readonly string[]; mobile?: string };
 type NavGroup = { label: string; items: NavItem[] };
 
 /**
- * 事業体ごとの画面の 2 段のメニュー（research R1、contracts/ui-shell.md §2）。ラベルとパスはここだけに書く。
+ * 事業体ごとの画面の 2 段のメニュー（011 research R1、011 contracts/ui-shell.md §2）。ラベルとパスはここだけに書く。
  * 1 段目はグループ（押すと最初の項目へ進む）、2 段目は今いるグループの項目。
- * 項目が 1 つのグループは作らず、直接のリンクにする（FR-003）
+ * 項目が 1 つのグループは作らず、直接のリンクにする（011/FR-003）
  */
 const NAV: NavGroup[] = [
   {
@@ -89,7 +89,7 @@ const NAV: NavGroup[] = [
   },
 ];
 
-/** スマホのメニューの項目（FR-059）。ラベルとパスの正本は上の `NAV` で、ここでは絞り込むだけ */
+/** スマホのメニューの項目（011/FR-059）。ラベルとパスの正本は上の `NAV` で、ここでは絞り込むだけ */
 export function mobileNavItems(): { label: string; to: NavTo }[] {
   return NAV.flatMap((g) => g.items).flatMap((i) =>
     i.mobile === undefined ? [] : [{ label: i.mobile, to: i.to }],

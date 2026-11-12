@@ -21,7 +21,7 @@ export const fiscalPeriodsQuery = (entityId: string) =>
       (await unwrap(await periodApi.$get({ param: { entityId } }))).fiscalPeriods,
   });
 
-/** 締めと解除の履歴（FR-025, 記録の順） */
+/** 締めと解除の履歴（001/FR-025, 記録の順） */
 export const fiscalPeriodHistoryQuery = (entityId: string) =>
   queryOptions({
     queryKey: periodKeys.history(entityId),

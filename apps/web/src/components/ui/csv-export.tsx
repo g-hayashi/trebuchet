@@ -1,7 +1,7 @@
 import { Button, buttonVariants } from "@/components/ui/button";
 
 /**
- * 「CSV をダウンロード」（FR-054、FR-032）。server が返す CSV を `download` のリンクで保存する。
+ * 「CSV をダウンロード」（011/FR-054、001/FR-032）。server が返す CSV を `download` のリンクで保存する。
  * 一覧・帳票・決算書で共通。0 件なら書き出すものがないので、押せないボタンにする（リンクは無効にできない）
  */
 export function CsvExport({ href, disabled = false }: { href: string; disabled?: boolean }) {

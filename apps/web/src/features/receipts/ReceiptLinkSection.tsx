@@ -11,7 +11,7 @@ import { postReceiptUnlink } from "./api";
 import { LinkJournalDialog } from "./LinkJournalDialog";
 
 /**
- * 証憑の詳細の「仕訳との結びつき」（US3、FR-010・011・013）。結びつける・付け替える・解除する・
+ * 証憑の詳細の「仕訳との結びつき」（010/US3、010/FR-010・011・013）。結びつける・付け替える・解除する・
  * 証憑から仕訳を作る入口。削除済みの証憑には操作を出さない。
  * 結びつきの後は `invalidateLedger` で仕訳・帳票・証憑のクエリを読み直す
  */

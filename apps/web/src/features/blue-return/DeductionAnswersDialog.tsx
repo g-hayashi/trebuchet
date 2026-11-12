@@ -34,7 +34,7 @@ const NONE: DeductionAnswersInput = {
 };
 
 /**
- * 青色申告特別控除の要件の回答（FR-010、011 FR-044）。決算書の欄44の近くから開く。
+ * 青色申告特別控除の要件の回答（003/FR-010、011 FR-044）。決算書の欄44の近くから開く。
  * 上限額は API が決め、画面は結果を表示する。保存したら決算書を読み直す（欄44・45 が変わる）
  */
 export function DeductionAnswersDialog({

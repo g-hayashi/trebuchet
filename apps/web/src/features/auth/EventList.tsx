@@ -31,7 +31,7 @@ const KIND_LABELS: Record<AuthEventKind, string> = {
   remote_settings_changed: "リモートの設定の変更",
 };
 
-/** 認証の記録（FR-008）。最近の 5 件を、サーバーが返した新しい順のまま並べる。全件は CSV に書き出す（FR-054）。書き換え・削除の操作はない */
+/** 認証の記録（004/FR-008）。最近の 5 件を、サーバーが返した新しい順のまま並べる。全件は CSV に書き出す（011/FR-054）。書き換え・削除の操作はない */
 export function EventList() {
   const { data: events, isPending, error } = useQuery(eventsQuery());
   return (

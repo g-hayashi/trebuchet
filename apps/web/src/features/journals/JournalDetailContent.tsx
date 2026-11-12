@@ -302,7 +302,7 @@ export function JournalDetailContent({
   );
 }
 
-/** 訂正元の仕訳と、この仕訳を訂正した訂正仕訳へのリンク（FR-019a） */
+/** 訂正元の仕訳と、この仕訳を訂正した訂正仕訳へのリンク（001/FR-019a） */
 function References({ entityId, detail }: { entityId: string; detail: JournalDetail }) {
   const { correctsJournal, correctingJournals } = detail;
   if (correctsJournal === null && correctingJournals.length === 0) return null;
@@ -424,7 +424,7 @@ const lineText = (l: HistoryJournal["lines"][number], names: Names) =>
     .filter((v) => v !== undefined)
     .join(" ");
 
-/** 訂正の前後で変わった項目（FR-020） */
+/** 訂正の前後で変わった項目（001/FR-020） */
 function Changes({
   before,
   after,

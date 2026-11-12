@@ -88,7 +88,7 @@ function EntityList() {
       ]);
     },
   });
-  // 最後に開いた事業体を上に置き、印をつける（FR-010）
+  // 最後に開いた事業体を上に置き、印をつける（011/FR-010）
   const lastId = lastEntityIdOf(loaded);
   const entities = loaded && [
     ...loaded.filter((e) => e.id === lastId),

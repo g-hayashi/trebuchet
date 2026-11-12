@@ -34,7 +34,7 @@ export const Route = createFileRoute("/e/$entityId/fixed-assets/")({
   component: FixedAssetsPage,
 });
 
-/** 固定資産台帳（US3、FR-018〜023）。登録・編集・除却と、年分ごとの償却の計算、決算整理の仕訳の案。開業費は `deferred-assets`（011） */
+/** 固定資産台帳（003/US3、003/FR-018〜023）。登録・編集・除却と、年分ごとの償却の計算、決算整理の仕訳の案。開業費は `deferred-assets`（011） */
 function FixedAssetsPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();

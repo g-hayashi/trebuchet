@@ -110,7 +110,7 @@ export async function proposeFreeeOpening(
   return body.proposal;
 }
 
-/** 取込の取消（FR-024〜027）。訂正済みの仕訳があれば 409 CORRECTED_JOURNALS */
+/** 取込の取消（002/FR-024〜027）。訂正済みの仕訳があれば 409 CORRECTED_JOURNALS */
 export async function voidImportBatch(
   entityId: string,
   batchId: string,

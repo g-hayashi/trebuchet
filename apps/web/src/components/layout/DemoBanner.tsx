@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useEntity } from "@/features/entities/use-entity";
 
 /**
- * デモの事業体（`demo: true`。014）の全画面の上部に出す帯（FR-008・009）。架空のデータであることと、
+ * デモの事業体（`demo: true`。014）の全画面の上部に出す帯（014/FR-008・009）。架空のデータであることと、
  * 試し終わったら一覧で非表示（アーカイブ）にして、完全に削除する案内。通常の事業体では出さない
  */
 export function DemoBanner({ entityId }: { entityId: string }) {

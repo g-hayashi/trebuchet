@@ -17,7 +17,7 @@ import { today } from "@/lib/dates";
 import { invalidateLedger } from "@/lib/queries";
 
 /**
- * correctsJournalId を付けて開くと、その仕訳の訂正仕訳を起票する（FR-019a）。
+ * correctsJournalId を付けて開くと、その仕訳の訂正仕訳を起票する（001/FR-019a）。
  * receiptId を付けて開くと、その証憑の値を初期値にして仕訳を作り、証憑に結びつける（010 FR-010）
  */
 const NewJournalSearch = z.object({

@@ -1,6 +1,6 @@
 import type { Warning } from "@trebuchet/schema";
 
-/** 帳票の警告（FR-033）。マイナス残高・期首残高の未登録など。帳票は表示したまま知らせる */
+/** 帳票の警告（001/FR-033）。マイナス残高・期首残高の未登録など。帳票は表示したまま知らせる */
 export function WarningsBanner({ warnings }: { warnings: readonly Warning[] }) {
   if (warnings.length === 0) return null;
   return (

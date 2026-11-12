@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-/** スマホの幅（Tailwind の `md`（768 px）未満。contracts/ui-shell.md §4） */
+/** スマホの幅（Tailwind の `md`（768 px）未満。011 contracts/ui-shell.md §4） */
 export const MOBILE_QUERY = "(max-width: 767px)";
 
 /**

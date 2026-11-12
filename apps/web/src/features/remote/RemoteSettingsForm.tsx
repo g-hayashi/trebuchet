@@ -80,7 +80,7 @@ function Fields({ settings }: { settings: RemoteSettings }) {
 }
 
 /**
- * リモート（Tailscale）の設定（FR-010・011）。保存のあと、Host の検査は再起動なしで変わる。
+ * リモート（Tailscale）の設定（004/FR-010・011）。保存のあと、Host の検査は再起動なしで変わる。
  * 変更は Mac の localhost からだけできる（server は ts.net の Host からを 421 にする）。
  * ts.net の名前で開いているときは、保存の欄を出さずにその旨を案内する
  */

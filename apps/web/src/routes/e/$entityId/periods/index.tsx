@@ -53,7 +53,7 @@ function Stage({ label, children }: StageProps) {
 
 const stageLinkClass = "text-sm underline-offset-4 hover:underline";
 
-/** 年度のカード（FR-051）。期首残高 → 記帳 → 決算整理 → 締めの状態と、それぞれの入口 */
+/** 年度のカード（011/FR-051）。期首残高 → 記帳 → 決算整理 → 締めの状態と、それぞれの入口 */
 function PeriodCard({
   entityId,
   period: p,

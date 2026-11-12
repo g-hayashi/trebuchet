@@ -37,7 +37,7 @@ function useRefreshBackup() {
   };
 }
 
-/** バックアップの状態と置き場所の設定（FR-014・015・019・020）。鍵はデータ鍵から作る（008 の D9）。画面の最初に置く */
+/** バックアップの状態と置き場所の設定（004/FR-014・015・019・020）。鍵はデータ鍵から作る（008 の D9）。画面の最初に置く */
 export function BackupSettings() {
   const { data: status, isPending, error } = useQuery(backupStatusQuery());
   return (
@@ -58,7 +58,7 @@ export function BackupSettings() {
 const WRITE_FAILURE_CODES = new Set(["FOLDER_NOT_FOUND", "WRITE_FAILED"]);
 
 /**
- * 直近の失敗の警告（FR-020）。置き場所に書けずに失敗したときは、警告のすぐ下で置き場所を変える案内を出す
+ * 直近の失敗の警告（004/FR-020）。置き場所に書けずに失敗したときは、警告のすぐ下で置き場所を変える案内を出す
  * （既定の `bak/` に書けないときも同じ。Edge Cases）
  */
 function FailureWarning({ status }: { status: BackupStatus }) {
@@ -128,7 +128,7 @@ function RunCard({ status }: { status: BackupStatus }) {
 }
 
 /**
- * 置き場所の設定（FR-014）。バックアップの鍵は、この Mac のデータ鍵から作る（008 の D9）。パスフレーズは要らない。
+ * 置き場所の設定（004/FR-014）。バックアップの鍵は、この Mac のデータ鍵から作る（008 の D9）。パスフレーズは要らない。
  * Mac を失ったときは、回復キーで復元する
  */
 function SettingsCard({ status }: { status: BackupStatus }) {
@@ -186,7 +186,7 @@ function SettingsCard({ status }: { status: BackupStatus }) {
   );
 }
 
-/** 実行の履歴（FR-020）。最近の 5 件を、サーバーが返した新しい順のまま並べる。全件は CSV に書き出す（FR-054） */
+/** 実行の履歴（004/FR-020）。最近の 5 件を、サーバーが返した新しい順のまま並べる。全件は CSV に書き出す（011/FR-054） */
 export function BackupHistory() {
   const { data: runs, isPending, error } = useQuery(backupRunsQuery());
   return (

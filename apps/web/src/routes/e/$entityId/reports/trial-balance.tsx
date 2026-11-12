@@ -55,7 +55,7 @@ const columns = (entityId: string, range: { from: string; to: string }): ReportC
   },
 ];
 
-/** 残高試算表（FR-028）。残高は科目の通常の側を正とする */
+/** 残高試算表（001/FR-028）。残高は科目の通常の側を正とする */
 function TrialBalancePage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();
