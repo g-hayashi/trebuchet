@@ -10,6 +10,7 @@ import {
   createTestEntity,
   errorOf,
   json,
+  jsonRequest,
   makeClock,
   testHeaders,
 } from "./helpers.ts";
@@ -21,7 +22,7 @@ import {
 let tmp: TempDataDir;
 let entityId: string;
 let acc: (name: string) => string;
-const clock = makeClock("2026-10-20T09:00:00.000Z");
+const clock = makeClock();
 const KEY = "sk-live-receipt-secret-0123456789";
 const PARTNER = "合成の店ABC";
 const MEMO = "秘密のメモXYZ";
@@ -123,13 +124,8 @@ async function create(app: App, options: unknown = { category: "paper_scan" }, s
   return (await json<{ receipt: ReceiptDetail }>(res, 201)).receipt;
 }
 
-async function post(app: App, suffix: string, body?: unknown) {
-  return app.request(path(suffix), {
-    method: "POST",
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    headers: { ...(await testHeaders()), "content-type": "application/json" },
-  });
-}
+const post = (app: App, suffix: string, body?: unknown) =>
+  jsonRequest(app, "POST", path(suffix), body);
 
 async function readingsOf(app: App, id: string) {
   const res = await app.request(path(`/${id}`), { headers: await testHeaders() });

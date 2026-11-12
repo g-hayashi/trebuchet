@@ -3,10 +3,10 @@ import userEvent from "@testing-library/user-event";
 import type { AdjustmentProposal } from "@trebuchet/schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route as FixedAssetsRoute } from "@/routes/e/$entityId/fixed-assets/index";
+import { ENTITY } from "../fixtures";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const ENTITY = "/api/entities/e1";
 const ASSETS = `${ENTITY}/fixed-assets`;
 const ADJUSTMENTS = `${ENTITY}/blue-return/2025/adjustments`;
 

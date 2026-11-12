@@ -1,31 +1,19 @@
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/journals/index";
+import { advance, fakeClockUser, useFakeClock } from "../fake-timers";
+import { assetAccount, ENTITY, uuid } from "../fixtures";
 import { type ApiCall, type ApiReply, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const ENTITY = "/api/entities/e1";
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+// src の定数（journals/index.tsx の検索条件の反映待ち 300ms）。export されていない
+const SEARCH_DEBOUNCE_MS = 300;
 
-const account = (n: number, name: string, isActive = true): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  category: "asset",
-  normalSide: "debit",
-  reportSection: "BS_ASSET",
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive,
-});
-
-const bank = account(1020, "普通預金");
-const owner = account(1900, "事業主貸");
-const receivable = account(1100, "売掛金");
-const sales = account(4010, "売上高", false);
+const bank = assetAccount(1020, "普通預金");
+const owner = assetAccount(1900, "事業主貸");
+const receivable = assetAccount(1100, "売掛金");
+const sales = assetAccount(4010, "売上高", { isActive: false });
 
 type LineSpec = [side: "debit" | "credit", accountId: string, amount: number, description?: string];
 
@@ -90,8 +78,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-10-31T12:00:00+09:00"));
+  useFakeClock("2026-10-31T12:00:00+09:00");
 });
 
 describe("仕訳の一覧（US2）", () => {
@@ -196,7 +183,7 @@ describe("仕訳の検索（US3, FR-023）", () => {
 
   it("US3-4: 条件を組み合わせて検索すると URL に残し、その条件で API を呼ぶ。クリアで条件を外す", async () => {
     const calls = mockListApi(() => ok({ journals: [j(1, "2026-06-15")], nextCursor: null }));
-    const u = userEvent.setup();
+    const u = fakeClockUser();
     const { router } = renderJournals();
     const form = await screen.findByRole("search", { name: "仕訳の検索" });
     await screen.findByRole("table", { name: "仕訳の一覧" });
@@ -240,7 +227,7 @@ describe("仕訳の検索（US3, FR-023）", () => {
 
   it("金額が数値でなければ検索せず、項目にエラーを表示する", async () => {
     mockListApi(() => ok({ journals: [], nextCursor: null }));
-    const u = userEvent.setup();
+    const u = fakeClockUser();
     const { router } = renderJournals();
     const form = await screen.findByRole("search", { name: "仕訳の検索" });
     const min = within(form).getByLabelText("金額（以上）");
@@ -256,7 +243,7 @@ describe("仕訳の検索（US3, FR-023）", () => {
         ? ok({ journals: [j(3, "2026-10-03")], nextCursor: null })
         : ok({ journals: [j(5, "2026-10-05"), j(4, "2026-10-04")], nextCursor: "2026-10-04_4" }),
     );
-    const u = userEvent.setup();
+    const u = fakeClockUser();
     renderJournals(`/e/e1/journals?accountId=${receivable.id}`);
 
     await screen.findByRole("table", { name: "仕訳の一覧" });
@@ -284,7 +271,7 @@ describe("仕訳の検索（US3, FR-023）", () => {
           ok({ taxCategories: [{ code: "OUT_OF_SCOPE", name: "対象外", kind: null }] }),
       },
     );
-    const u = userEvent.setup();
+    const u = fakeClockUser();
     const { router } = renderJournals();
     const open = await screen.findByRole("button", { name: "仕訳 No.3 の詳細" });
     open.focus();
@@ -340,14 +327,14 @@ describe("仕訳の検索（US3, FR-023）", () => {
     const calls = mockListApi(() =>
       ok({ journals: [], nextCursor: null, summary: { count: 0, amount: 0 } }),
     );
-    const u = userEvent.setup();
+    const u = fakeClockUser();
     renderJournals();
     const memo = await screen.findByLabelText("摘要・メモ");
     expect(screen.queryByRole("button", { name: "検索" })).not.toBeInTheDocument();
     const initial = journalCalls(calls).length;
     await u.type(memo, "月");
     expect(journalCalls(calls)).toHaveLength(initial);
-    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 350)));
+    await advance(SEARCH_DEBOUNCE_MS);
     await waitFor(() => expect(journalCalls(calls).at(-1)?.query.q).toBe("月"));
     expect(memo).toHaveFocus();
     await u.type(memo, "額");
@@ -393,7 +380,7 @@ describe("一覧のレビューの指摘（011）", () => {
 
   it("行の日付をクリックして詳細を開き、閉じるとその行の No. ボタンへ戻る", async () => {
     mockListApi(() => ok({ journals: [entry], nextCursor: null }), detailApi);
-    const u = userEvent.setup();
+    const u = fakeClockUser();
     renderJournals();
     const table = await screen.findByRole("table", { name: "仕訳の一覧" });
     const open = within(table).getByRole("button", { name: "仕訳 No.3 の詳細" });
@@ -406,7 +393,7 @@ describe("一覧のレビューの指摘（011）", () => {
   it("摘要の文字を選択したクリックでは開かず、コピー後も選択を維持する", async () => {
     const noted = { ...entry, memo: "コピーする摘要" };
     mockListApi(() => ok({ journals: [noted], nextCursor: null }), detailApi);
-    const u = userEvent.setup();
+    const u = fakeClockUser();
     renderJournals();
     const note = await screen.findByText("コピーする摘要");
     const selection = window.getSelection();
@@ -431,7 +418,7 @@ describe("一覧のレビューの指摘（011）", () => {
 
   it("日付を両方空にして検索すると全期間で探し、API へ日付を送らない", async () => {
     const calls = mockListApi(() => ok({ journals: [entry], nextCursor: null }), periods);
-    const u = userEvent.setup();
+    const u = fakeClockUser();
     const { router } = renderJournals();
     const form = await screen.findByRole("search", { name: "仕訳の検索" });
     await waitFor(() =>
@@ -468,11 +455,11 @@ describe("一覧のレビューの指摘（011）", () => {
   it("条件を変えて読み直す間は、前の結果の行を表に残す", async () => {
     const next = deferred<ReturnType<typeof ok>>();
     mockListApi((call) => (call.query.q === "新" ? next.promise : ok({ journals: [entry] })));
-    const u = userEvent.setup();
+    const u = fakeClockUser();
     renderJournals();
     await screen.findByRole("table", { name: "仕訳の一覧" });
     await u.type(await screen.findByLabelText("摘要・メモ"), "新");
-    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 450)));
+    await advance(SEARCH_DEBOUNCE_MS);
     expect(screen.getByRole("table", { name: "仕訳の一覧" })).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("button", { name: "仕訳 No.3 の詳細" })).toBeInTheDocument();
     next.resolve(ok({ journals: [journal(4, "2026-10-04", [["debit", bank.id, 4000]])] }));
@@ -493,7 +480,7 @@ describe("一覧のレビューの指摘（011）", () => {
 
   it("訂正の入力があるまま Sheet を閉じるときは確認し、キャンセルなら残す", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValue(true);
-    const u = userEvent.setup();
+    const u = fakeClockUser();
     const sheet = await openCorrection(u);
     await u.type(within(sheet).getByLabelText("メモ"), "訂正中");
 
@@ -511,7 +498,7 @@ describe("一覧のレビューの指摘（011）", () => {
 
   it("訂正の入力がなければ確認なしで Sheet を閉じる", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    const u = userEvent.setup();
+    const u = fakeClockUser();
     const sheet = await openCorrection(u);
 
     await u.click(within(sheet).getByRole("button", { name: "閉じる" }));

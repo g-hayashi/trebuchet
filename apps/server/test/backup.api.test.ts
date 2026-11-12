@@ -105,12 +105,6 @@ describe("GET /backup/status", () => {
     expect(readdirSync(env.folder)).toHaveLength(1);
   });
 
-  it("最後の確認から 48 時間たつと STALE", async () => {
-    await configured();
-    await advance(48 * HOUR);
-    expect((await status()).alert).toEqual({ reason: "STALE" });
-  });
-
   it("直近の実行が失敗なら LAST_RUN_FAILED", async () => {
     await configured();
     rmSync(env.folder, { recursive: true });

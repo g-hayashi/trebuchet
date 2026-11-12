@@ -3,12 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Account } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/invoices/index";
+import { ENTITY as BASE } from "../fixtures";
 import { mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 011 US5（T026）: 請求の画面の入口（流れ・取引先の画面へのリンク・一覧の入金・既定の表示。取引先の登録と編集は partners.test.tsx）
 
-const BASE = "/api/entities/e1";
 const P1 = "00000000-0000-4000-8000-000000000001";
 const P2 = "00000000-0000-4000-8000-000000000002";
 const DEPOSIT_KEY = "trebuchet.depositAccount.e1";

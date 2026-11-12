@@ -5,10 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatRatioAsPercent, parsePercentToRatio } from "@/features/blue-return/ratio";
 import { Route as HomeUseRoute } from "@/routes/e/$entityId/blue-return/$year/home-use";
 import { Route as YearRoute } from "@/routes/e/$entityId/blue-return/$year/index";
+import { ENTITY } from "../fixtures";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const ENTITY = "/api/entities/e1";
 const YEAR_API = `${ENTITY}/blue-return/2025`;
 const HOME_USE = `${YEAR_API}/home-use`;
 const RENT_DETAILS = `${YEAR_API}/rent-details`;

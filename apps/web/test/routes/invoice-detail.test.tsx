@@ -2,11 +2,10 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@/routes/e/$entityId/invoices/$invoiceId";
+import { ENTITY as BASE } from "../fixtures";
 import { INVOICE_DETAIL } from "../invoicing-fixtures";
 import { apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
-
-const BASE = "/api/entities/e1";
 
 const DETAIL = INVOICE_DETAIL;
 

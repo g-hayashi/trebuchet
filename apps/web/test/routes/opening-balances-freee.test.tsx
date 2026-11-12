@@ -2,31 +2,14 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { OpeningProposal } from "@trebuchet/schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/features/accounts/api";
 import type { FiscalPeriod, OpeningBalancesData } from "@/features/periods/api";
 import { Route } from "@/routes/e/$entityId/periods/$year/opening-balances";
+import { account, ENTITY, uuid } from "../fixtures";
 import { type ApiCall, type ApiReply, apiError, formFields, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const ENTITY = "/api/entities/e1";
 const PATH = `${ENTITY}/fiscal-periods/2026/opening-balances`;
 const PROPOSAL = `${PATH}/freee-proposal`;
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-
-const account = (
-  n: number,
-  name: string,
-  rest: Pick<Account, "category" | "normalSide" | "reportSection"> & Partial<Account>,
-): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive: true,
-  ...rest,
-});
 
 const cash = account(1010, "現金", {
   category: "asset",

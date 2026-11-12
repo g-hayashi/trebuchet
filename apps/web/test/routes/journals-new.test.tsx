@@ -1,29 +1,12 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { screen, waitFor, within } from "@testing-library/react";
+import type userEvent from "@testing-library/user-event";
 import type { JournalDraft, JournalSuggestion } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/journals/new";
+import { advance, fakeClockUser, useFakeClock } from "../fake-timers";
+import { account, ENTITY, uuid } from "../fixtures";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
-
-const ENTITY = "/api/entities/e1";
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-
-const account = (
-  n: number,
-  name: string,
-  rest: Pick<Account, "category" | "normalSide" | "reportSection"> & Partial<Account>,
-): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive: true,
-  ...rest,
-});
 
 const asset = { category: "asset", normalSide: "debit", reportSection: "BS_ASSET" } as const;
 const bank = account(1020, "普通預金", asset);
@@ -152,7 +135,10 @@ function messageOf(field: HTMLElement) {
   return ids.map((id) => document.getElementById(id)?.textContent ?? "").join("");
 }
 
-const user = () => userEvent.setup();
+const user = fakeClockUser;
+// src の定数（NewJournalEntry.tsx の下書き保存 1000ms、JournalSuggestions.tsx の候補の検索 300ms）。export されていない
+const DRAFT_SAVE_MS = 1000;
+const SUGGEST_DEBOUNCE_MS = 300;
 
 describe("かんたん入力（011/T015）", () => {
   it("Enterだけで2行を登録し、自動の税は送らず日付を残して借方へ戻る", async () => {
@@ -342,8 +328,7 @@ async function fillLine(
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-10-31T10:00:00+09:00"));
+  useFakeClock("2026-10-31T10:00:00+09:00");
 });
 
 afterEach(() => {
@@ -702,7 +687,6 @@ describe("訂正仕訳の起票（US3, FR-019a）", () => {
   });
 });
 
-const pause = (ms: number) => act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
@@ -752,7 +736,7 @@ describe("下書き・複製・履歴（011/T016）", () => {
     });
     const u = user();
     renderQuick();
-    await pause(1100);
+    await advance(DRAFT_SAVE_MS);
     expect(screen.queryByRole("form", { name: "仕訳" })).not.toBeInTheDocument();
     expect(calls.some((call) => call.method === "PUT")).toBe(false);
     read.resolve(ok({ draft, updatedAt: "before" }));
@@ -763,7 +747,7 @@ describe("下書き・複製・履歴（011/T016）", () => {
     expect(screen.getByLabelText("1行目の税区分")).toHaveValue("OUT_OF_SCOPE");
     expect(screen.getByRole("button", { name: "かんたん入力" })).toBeDisabled();
     await u.type(screen.getByLabelText("1行目の摘要"), "追記");
-    await pause(1100);
+    await advance(DRAFT_SAVE_MS);
     const put = calls.find((call) => call.method === "PUT" && call.path.endsWith("/journal-draft"));
     expect(put?.body).toMatchObject({
       mode: "detailed",
@@ -785,7 +769,7 @@ describe("下書き・複製・履歴（011/T016）", () => {
     const u = user();
     renderQuick();
     await u.type(await screen.findByLabelText("摘要", { exact: true }), "未完成の仕訳");
-    await pause(1100);
+    await advance(DRAFT_SAVE_MS);
     expect(await screen.findByRole("alert")).toHaveTextContent("サーバーでエラー");
     await u.click(screen.getByRole("button", { name: "下書き保存を再試行" }));
     await waitFor(() => expect(attempt).toBe(2));
@@ -812,7 +796,7 @@ describe("下書き・複製・履歴（011/T016）", () => {
     await u.type(await screen.findByRole("combobox", { name: "借方科目" }), "6010{Enter}");
     await u.keyboard("1020{Enter}1100");
     await u.type(screen.getByLabelText("摘要", { exact: true }), "登録する入力");
-    await pause(1100);
+    await advance(DRAFT_SAVE_MS);
     expect(calls.filter((call) => call.method === "PUT")).toHaveLength(1);
     await u.click(screen.getByRole("button", { name: "登録" }));
     expect(await screen.findByText("仕訳 No.1 を登録しました。")).toBeInTheDocument();
@@ -821,7 +805,7 @@ describe("下書き・複製・履歴（011/T016）", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("サーバーでエラー");
     await u.click(screen.getByRole("button", { name: "下書き削除を再試行" }));
     await waitFor(() => expect(deletes).toBe(2));
-    await pause(1100);
+    await advance(DRAFT_SAVE_MS);
     expect(
       calls.filter((call) => call.method === "POST" && call.path.endsWith("/journals")),
     ).toHaveLength(1);
@@ -838,7 +822,7 @@ describe("下書き・複製・履歴（011/T016）", () => {
     renderQuick();
     await u.click(await screen.findByRole("button", { name: "捨てる" }));
     expect(await screen.findByLabelText("摘要", { exact: true })).toHaveValue("");
-    await pause(1100);
+    await advance(DRAFT_SAVE_MS);
     expect(calls.filter((call) => call.method === "DELETE")).toHaveLength(1);
     expect(calls.filter((call) => call.method === "PUT")).toHaveLength(0);
   });
@@ -858,7 +842,7 @@ describe("下書き・複製・履歴（011/T016）", () => {
     const first = renderQuick();
     await u.click(await screen.findByRole("button", { name: "続ける" }));
     await u.type(screen.getByLabelText("1行目の摘要"), "進行中");
-    await pause(1100);
+    await advance(DRAFT_SAVE_MS);
     first.unmount();
     renderQuick();
     await u.click(await screen.findByRole("button", { name: "捨てる" }));
@@ -940,11 +924,11 @@ describe("下書き・複製・履歴（011/T016）", () => {
     const memo = await screen.findByLabelText("摘要", { exact: true });
     await u.type(memo, "古い摘要");
     expect(calls.some((call) => call.path.endsWith("/suggestions"))).toBe(false);
-    await pause(350);
+    await advance(SUGGEST_DEBOUNCE_MS);
     await u.clear(memo);
     await u.type(memo, "新しい摘要");
     await u.type(screen.getByLabelText("金額", { exact: true }), "2200");
-    await pause(350);
+    await advance(SUGGEST_DEBOUNCE_MS);
     expect(await screen.findByRole("button", { name: "候補2を入れる" })).toBeDisabled();
     old.resolve(
       ok({
@@ -1004,12 +988,12 @@ describe("下書き・複製・履歴（011/T016）", () => {
     await screen.findByLabelText("摘要", { exact: true });
     await u.click(screen.getByText("任意項目", { exact: true }));
     await u.type(screen.getByRole("combobox", { name: "借方取引先" }), "取引先A{Enter}");
-    await pause(350);
+    await advance(SUGGEST_DEBOUNCE_MS);
     expect(calls.filter((call) => call.path.endsWith("/suggestions")).at(-1)?.query.partnerId).toBe(
       partnerA.id,
     );
     await u.type(screen.getByRole("combobox", { name: "貸方取引先" }), "取引先B{Enter}");
-    await pause(350);
+    await advance(SUGGEST_DEBOUNCE_MS);
     expect(
       (await screen.findByRole("button", { name: "候補1を入れる" })).parentElement,
     ).toHaveTextContent("売上高 ／ 普通預金");
@@ -1022,7 +1006,7 @@ describe("下書き・複製・履歴（011/T016）", () => {
     );
     await u.clear(screen.getByRole("combobox", { name: "借方取引先" }));
     await u.type(screen.getByRole("combobox", { name: "借方取引先" }), "取引先A{Enter}");
-    await pause(350);
+    await advance(SUGGEST_DEBOUNCE_MS);
     expect(
       (await screen.findByRole("button", { name: "候補1を入れる" })).parentElement,
     ).toHaveTextContent("消耗品費 ／ 普通預金");
@@ -1120,11 +1104,11 @@ describe("かんたん入力のレビューの指摘（011）", () => {
     const u = user();
     await fillUntilMemo(u);
     await u.keyboard("文房具");
-    await pause(350);
+    await advance(SUGGEST_DEBOUNCE_MS);
     const first = await screen.findByRole("button", { name: "候補1を入れる" });
     await u.keyboard("{Enter}");
     expect(first).toHaveFocus();
-    await pause(100);
+    await advance(100);
     expect(posts(calls)).toHaveLength(0);
     // 候補を使わず、既存の登録のボタンから登録できる
     await u.click(screen.getByRole("button", { name: "登録" }));
@@ -1148,7 +1132,7 @@ describe("かんたん入力のレビューの指摘（011）", () => {
     const u = user();
     await fillUntilMemo(u);
     await u.keyboard("文房具");
-    await pause(350);
+    await advance(SUGGEST_DEBOUNCE_MS);
     await u.keyboard("{Enter}");
     await waitFor(() => expect(posts(calls)).toHaveLength(1));
   });
@@ -1173,7 +1157,7 @@ describe("かんたん入力のレビューの指摘（011）", () => {
     unmount();
     await waitFor(() => expect(puts()).toHaveLength(1));
     expect(puts()[0]?.body).toMatchObject({ memo: "未完成の摘要" });
-    await pause(1100);
+    await advance(DRAFT_SAVE_MS);
     expect(puts()).toHaveLength(1);
   });
 
@@ -1184,9 +1168,9 @@ describe("かんたん入力のレビューの指摘（011）", () => {
     const u = user();
     const { unmount } = renderQuick();
     await u.type(await screen.findByLabelText("摘要", { exact: true }), "保存済み");
-    await pause(1100);
+    await advance(DRAFT_SAVE_MS);
     unmount();
-    await pause(100);
+    await advance(100);
     expect(calls.filter((call) => call.method === "PUT")).toHaveLength(1);
   });
 });

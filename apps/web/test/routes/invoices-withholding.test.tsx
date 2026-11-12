@@ -2,12 +2,12 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@/routes/e/$entityId/invoices/withholding";
+import { ENTITY as BASE } from "../fixtures";
 import { mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 013 US3: 源泉徴収の一覧（R8、contracts §4）
 
-const BASE = "/api/entities/e1";
 const P1 = "00000000-0000-4000-8000-000000000001";
 const P2 = "00000000-0000-4000-8000-000000000002";
 

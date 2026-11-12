@@ -3,12 +3,12 @@ import userEvent from "@testing-library/user-event";
 import type { AdjustmentProposal } from "@trebuchet/schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route as DeferredAssetsRoute } from "@/routes/e/$entityId/deferred-assets/index";
+import { ENTITY } from "../fixtures";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 開業費の画面（009 US3）。固定資産台帳から移した（011/T005）。見出し・主な操作の仕上げは T033
 
-const ENTITY = "/api/entities/e1";
 const DEFERRED = `${ENTITY}/deferred-assets`;
 const ADJUSTMENTS = `${ENTITY}/blue-return/2025/adjustments`;
 

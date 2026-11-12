@@ -4,6 +4,7 @@ import {
   accountLookup,
   createTestEntity,
   createTestSession,
+  NOW,
   TEST_HOST,
   TEST_ORIGIN,
 } from "./helpers.ts";
@@ -15,14 +16,10 @@ export { okBody } from "./helpers.ts";
  * `createApp({ clock })` を作り、その時刻のセッションで呼ぶ。時刻は UTC と JST の 0 時から離す（CI の `TZ` に依存させない）
  */
 
-/**
- * 日付の境目（UTC・JST の 0 時）から離した時刻。UTC 03:00 = JST 12:00（同じ暦日）で、今日は 2026-10-31。
- * domain・db のテストの `NOW`（`packages/domain/test/test-dates.ts`）とは別の値
- */
-const SAFE_NOW = "2026-10-31T03:00:00.000Z";
+// 時刻は `helpers.ts` の `NOW`（UTC 03:00 = JST 12:00。今日は 2026-10-31）
 export const TODAY = "2026-10-31";
 
-export async function createInvoicingTestContext(now = SAFE_NOW) {
+export async function createInvoicingTestContext(now = NOW) {
   const entityId = await createTestEntity();
   const session = await createTestSession({ now });
   const client = testClient(createApp({ clock: { now: () => now } }), undefined, undefined, {

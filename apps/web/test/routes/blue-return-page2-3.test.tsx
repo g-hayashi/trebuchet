@@ -3,10 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { type BlueReturn, BlueReturnWarningCode } from "@trebuchet/schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route as YearRoute } from "@/routes/e/$entityId/blue-return/$year/index";
+import { ENTITY } from "../fixtures";
 import { apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const ENTITY = "/api/entities/e1";
 const YEAR_API = `${ENTITY}/blue-return/2025`;
 const NOTES = `${YEAR_API}/notes/special_circumstances`;
 

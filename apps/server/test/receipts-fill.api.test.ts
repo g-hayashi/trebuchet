@@ -4,13 +4,13 @@ import type { ReceiptDetail, ReceiptSummary } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { jpegBytes } from "../../../packages/domain/test/fixtures/receipts/sample-files.ts";
 import { createApp } from "../src/app.ts";
-import { createTestEntity, errorOf, json, makeClock, testHeaders } from "./helpers.ts";
+import { createTestEntity, errorOf, json, jsonRequest, makeClock, testHeaders } from "./helpers.ts";
 
 // T017b: PATCH /receipts/:receiptId（contracts/http-api.md §2。未入力の値を理由なしで埋める。D1）
 
 let tmp: TempDataDir;
 let entityId: string;
-const clock = makeClock("2026-10-20T09:00:00.000Z");
+const clock = makeClock();
 const PROBE: ReceiptProbe = { width: 4032, height: 3024, fullColor: true };
 
 beforeEach(async () => {
@@ -44,13 +44,8 @@ async function create(app: App, options: unknown, seed = 1): Promise<ReceiptDeta
   return (await json<{ receipt: ReceiptDetail }>(res, 201)).receipt;
 }
 
-async function patch(app: App, id: string, body: unknown) {
-  return app.request(path(`/${id}`), {
-    method: "PATCH",
-    body: JSON.stringify(body),
-    headers: { ...(await testHeaders()), "content-type": "application/json" },
-  });
-}
+const patch = (app: App, id: string, body: unknown) =>
+  jsonRequest(app, "PATCH", path(`/${id}`), body);
 
 describe("PATCH /receipts/:receiptId（未入力の値を埋める）", () => {
   it("200 で値を埋め、version +1。一覧の検索に出る（未入力から外れる）", async () => {

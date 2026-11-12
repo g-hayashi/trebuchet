@@ -140,11 +140,10 @@ describe("POST /fiscal-periods/:year/close・reopen（US5, FR-024, FR-025）", (
     expect((await postJournal()).status).toBe(201);
   });
 
-  it("ない年度・年度の形式の誤りは 400 VALIDATION", async () => {
-    for (const res of [await close("2030"), await close("abc"), await reopen("x", "2030")]) {
-      expect(res.status).toBe(400);
-      expect((await errorOf(res)).code).toBe("VALIDATION");
-    }
+  it("ない年度は 400 VALIDATION（判定は domain。ここは HTTP の応答への対応だけ。年の形式は validator.test.ts）", async () => {
+    const res = await close("2030");
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).code).toBe("VALIDATION");
   });
 });
 

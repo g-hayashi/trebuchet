@@ -1,15 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  createMemoryHistory,
-  createRoute,
-  createRouter,
-  RouterProvider,
-} from "@tanstack/react-router";
-import { render, screen, within } from "@testing-library/react";
+import { createRoute } from "@tanstack/react-router";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route as RootRoute } from "@/routes/__root";
 import { mockApi, ok } from "../mock-api";
+import { renderTree } from "../render-route";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -23,8 +18,6 @@ function renderApp(url = "/", locked = false) {
         }
       : {}),
   });
-  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const child = createRoute({
     getParentRoute: () => RootRoute,
     path: "$",
@@ -37,16 +30,7 @@ function renderApp(url = "/", locked = false) {
       </main>
     ),
   });
-  const router = createRouter({
-    routeTree: RootRoute.addChildren([child]),
-    context: { queryClient },
-    history: createMemoryHistory({ initialEntries: [url] }),
-  });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
+  const { router } = renderTree(RootRoute.addChildren([child]), url);
   return { router, calls };
 }
 

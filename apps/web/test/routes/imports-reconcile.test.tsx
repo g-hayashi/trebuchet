@@ -5,10 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FiscalPeriod } from "@/features/periods/api";
 import { Route as ImportsRoute } from "@/routes/e/$entityId/imports/index";
 import { Route } from "@/routes/e/$entityId/imports/reconcile";
+import { ENTITY } from "../fixtures";
 import { type ApiCall, apiError, formFields, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const ENTITY = "/api/entities/e1";
 const reconcilePath = (year: number) => `${ENTITY}/fiscal-periods/${year}/reconcile/freee`;
 
 const period = (fiscalYear: number): FiscalPeriod => ({

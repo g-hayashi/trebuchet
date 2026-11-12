@@ -1,16 +1,11 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRouter,
-  RouterProvider,
-} from "@tanstack/react-router";
-import { render, screen, within } from "@testing-library/react";
+import { createRootRoute } from "@tanstack/react-router";
+import { screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route as ImportsRoute } from "@/routes/e/$entityId/imports/index";
 import { Route as EntityHomeRoute } from "@/routes/e/$entityId/index";
 import { Route as EntityRoute } from "@/routes/e/$entityId/route";
 import { mockApi, ok } from "../mock-api";
+import { renderTree } from "../render-route";
 
 const entity = {
   id: "e1",
@@ -33,11 +28,6 @@ afterEach(() => {
 
 /** 事業体のレイアウトの下に、ホームと取込の画面を置いて描画する */
 function renderEntity(url: string) {
-  // jsdom は scrollTo を実装していない（ルーターが画面の切り替えで呼ぶ）
-  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   const rootRoute = createRootRoute();
   // routeTree.gen.ts と同じく、ファイルルートに id・path・親を後から与える
   const entityRoute = EntityRoute.update({
@@ -55,16 +45,7 @@ function renderEntity(url: string) {
       } as never),
     ]),
   ]);
-  const router = createRouter({
-    routeTree: rootRoute,
-    history: createMemoryHistory({ initialEntries: [url] }),
-  });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return { router };
+  return renderTree(rootRoute, url);
 }
 
 describe("事業体のメニューの「会計期間と移行」（T017、011/T005）", () => {

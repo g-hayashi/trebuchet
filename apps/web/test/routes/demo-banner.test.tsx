@@ -1,16 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  RouterProvider,
-} from "@tanstack/react-router";
-import { render, screen } from "@testing-library/react";
+import { createRootRoute, createRoute } from "@tanstack/react-router";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route as EntityRoute } from "@/routes/e/$entityId/route";
 import { mockApi, ok } from "../mock-api";
+import { renderTree } from "../render-route";
 
 // 014 T007: 事業体の画面の骨組みの上部に、デモの事業体だけ帯を出す（contracts/http-api.md の画面、R8）
 
@@ -33,10 +27,6 @@ afterEach(() => {
 
 /** 事業体のレイアウトの下に、どのパスにも一致する空の子と、一覧の画面（`/list`）を置いて描画する */
 function renderAt(url: string) {
-  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   const rootRoute = createRootRoute();
   const entityRoute = EntityRoute.update({
     id: "/e/$entityId",
@@ -54,16 +44,7 @@ function renderAt(url: string) {
     component: () => <p>事業体の一覧の画面</p>,
   });
   rootRoute.addChildren([entityRoute.addChildren([anyChild]), list]);
-  const router = createRouter({
-    routeTree: rootRoute,
-    history: createMemoryHistory({ initialEntries: [url] }),
-  });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return { router };
+  return renderTree(rootRoute, url);
 }
 
 const BANNER = "デモ用の架空のデータです";

@@ -4,12 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.ts";
 import type { FmServer } from "../src/lib/fm-server.ts";
 import { createMemorySecretStore } from "../src/lib/keychain.ts";
-import { createTestEntity, createTestSession, errorOf, TEST_HOST, TEST_ORIGIN } from "./helpers.ts";
+import { createTestEntity, errorOf, NOW, testHeaders } from "./helpers.ts";
 
 // 011 T043（R19、contracts §1）: POST /journals/ai-suggestion。偽の fetch・キーチェーン・fm で、
 // 設定 → 呼び出し → 検証までを通す。AI は呼ばない（実際のネットワークに出ない）。候補は保存しない
 
-const NOW = "2026-10-31T03:00:00.000Z";
 const KEY = "sk-journal-secret-987654321";
 
 let tmp: TempDataDir;
@@ -31,7 +30,6 @@ const EXTERNAL = {
 
 async function setup(options: { fmAvailable?: boolean; reply?: (code: string) => string } = {}) {
   const entityId = await createTestEntity();
-  const session = await createTestSession({ now: NOW });
   const calls: { url: string; init: RequestInit }[] = [];
   let supplies = "";
   const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -59,9 +57,7 @@ async function setup(options: { fmAvailable?: boolean; reply?: (code: string) =>
     clock: { now: () => NOW },
     ai: { fetch: fetchFn as unknown as typeof fetch, secrets: createMemorySecretStore(), fm },
   });
-  const client = testClient(app, undefined, undefined, {
-    headers: { Host: TEST_HOST, Origin: TEST_ORIGIN, Cookie: session.cookie },
-  });
+  const client = testClient(app, undefined, undefined, { headers: testHeaders });
   const e = client.api.entities[":entityId"];
   const param = { entityId };
   const accounts = (await (await e.accounts.$get({ param })).json()).accounts;

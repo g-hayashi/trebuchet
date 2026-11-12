@@ -1,14 +1,13 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route as StatementsRoute } from "@/routes/e/$entityId/statements/index";
+import { advance, useFakeClock } from "../fake-timers";
+import { ENTITY as BASE, uuid } from "../fixtures";
 import { type ApiCall, type ApiReply, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 006 US5・007/R17: 一覧を開いたときの候補の作り直しの後、AI に回す明細（needsAi）を自動で 10 件ずつ推定する
 // （「AI で推定」のボタンはない）。推定は候補を変えるだけで、仕訳は変えない
-
-const BASE = "/api/entities/e1";
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const calls = (all: ApiCall[], method: string, path: string) =>
   all.filter((c) => c.method === method && c.path === `${BASE}${path}`);
@@ -187,6 +186,7 @@ describe("AI での推定（自動。H:§4.3）", () => {
         [`POST ${BASE}/statements/infer`]: (call) =>
           respond(call, { localAvailable: true, externalUsed: true }),
       });
+      useFakeClock("2026-10-26T10:00:00+09:00");
       renderStatements();
 
       await screen.findByText(/AI で推定 12 \/ 12 件/);
@@ -194,7 +194,7 @@ describe("AI での推定（自動。H:§4.3）", () => {
       expect(within(region).getByText(EXTERNAL_NOTICE, { exact: true })).toBeInTheDocument();
       expect(within(region).queryByText(LOCAL_NOTICE, { exact: true })).not.toBeInTheDocument();
       // 一覧の読み直しの後も残る
-      await new Promise((r) => setTimeout(r, 50));
+      await advance(100);
       expect(
         within(await progressRegion()).getByText(EXTERNAL_NOTICE, { exact: true }),
       ).toBeInTheDocument();

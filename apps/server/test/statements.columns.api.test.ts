@@ -5,13 +5,12 @@ import { createApp } from "../src/app.ts";
 import { AI_API_KEY_SECRET } from "../src/lib/ai-client.ts";
 import type { FmServer } from "../src/lib/fm-server.ts";
 import { createMemorySecretStore } from "../src/lib/keychain.ts";
-import { createTestEntity, createTestSession, TEST_HOST, TEST_ORIGIN } from "./helpers.ts";
+import { createTestEntity, NOW, testHeaders } from "./helpers.ts";
 import { statementForm } from "./statements-helpers.ts";
 
 // 007 US4: contracts/http-api.md §4.1 POST /statements/imports/column-suggestion。
 // 偽の fetch・キーチェーン・fm で、端末内の AI だけが呼ばれること（FR-018）を確かめる。fm・外部の AI は呼ばない
 
-const NOW = "2026-10-31T03:00:00.000Z";
 const KEY = "sk-columns-secret-246813579";
 const LOCAL_URL = "http://127.0.0.1:18790/v1/chat/completions";
 
@@ -48,7 +47,6 @@ async function setup(
   options: { fmAvailable?: boolean; reply?: Reply; localEnabled?: boolean } = {},
 ) {
   const entityId = await createTestEntity();
-  const session = await createTestSession({ now: NOW });
   const calls: { url: string; init: RequestInit }[] = [];
   const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), init: init ?? {} });
@@ -68,9 +66,7 @@ async function setup(
     clock: { now: () => NOW },
     ai: { fetch: fetchFn as unknown as typeof fetch, secrets, fm },
   });
-  const client = testClient(app, undefined, undefined, {
-    headers: { Host: TEST_HOST, Origin: TEST_ORIGIN, Cookie: session.cookie },
-  });
+  const client = testClient(app, undefined, undefined, { headers: testHeaders });
   const e = client.api.entities[":entityId"];
   const suggest = async (text: string, extra: Record<string, unknown> = {}) => {
     const res = await e.statements.imports["column-suggestion"].$post(

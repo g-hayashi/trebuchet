@@ -42,11 +42,12 @@ const deps = (
 
 describe("背景の処理を解錠に結びつける（008 の D7）", () => {
   it("施錠中に起動すると、バックアップも定期仕訳も判断しない。解錠で始め、施錠で止める", async () => {
+    vi.useFakeTimers();
     clearDataKey();
     const vault = createVault({ store: env.auth });
     const entities = vi.fn(() => [] as string[]);
     const services = startBackgroundServices(deps({ start: vi.fn() }, entities, vault));
-    await new Promise((r) => setTimeout(r, 20));
+    await vi.advanceTimersByTimeAsync(0);
     expect(entities).not.toHaveBeenCalled();
 
     vault.unlock(Buffer.from(TEST_DATA_KEY));
@@ -60,11 +61,12 @@ describe("背景の処理を解錠に結びつける（008 の D7）", () => {
     services.stop();
     await vault.lock();
     vault.unlock(Buffer.from(TEST_DATA_KEY));
-    await new Promise((r) => setTimeout(r, 20));
+    await vi.advanceTimersByTimeAsync(0);
     expect(entities).toHaveBeenCalledTimes(2);
   });
 
   it("解錠のたびに onUnlock を呼ぶ（施錠中は呼ばない。重なった解錠の知らせでは二重に呼ばない。014 T005）", async () => {
+    vi.useFakeTimers();
     clearDataKey();
     const vault = createVault({ store: env.auth });
     const onUnlock = vi.fn();
@@ -72,7 +74,7 @@ describe("背景の処理を解錠に結びつける（008 の D7）", () => {
       ...deps({ start: vi.fn() }, () => [], vault),
       onUnlock,
     });
-    await new Promise((r) => setTimeout(r, 20));
+    await vi.advanceTimersByTimeAsync(0);
     expect(onUnlock).not.toHaveBeenCalled();
 
     vault.unlock(Buffer.from(TEST_DATA_KEY));

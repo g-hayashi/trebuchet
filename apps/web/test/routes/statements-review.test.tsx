@@ -3,14 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Account } from "@/features/accounts/api";
 import { Route as StatementsRoute } from "@/routes/e/$entityId/statements/index";
+import { ENTITY as BASE, uuid } from "../fixtures";
 import { type ApiCall, type ApiReply, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 007/R17・011 FR-021: 明細の確認。未処理の行の一覧で、利用者が行を選んで承認・除外する（最初は何も選ばない）。
 // 既存の仕訳がある行（match）は選択の対象外。しきい値は「確信度の高い行を選択」の補助だけ
-
-const BASE = "/api/entities/e1";
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const account = (n: number, name: string, category: Account["category"]): Account => ({
   id: uuid(n),

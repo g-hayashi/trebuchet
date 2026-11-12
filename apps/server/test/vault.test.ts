@@ -165,7 +165,7 @@ describe("setAsideDataFiles（初回の設定で、前の DK の registry・事�
 });
 
 describe("sweepSessions（最後のセッションが消えたら施錠する）", () => {
-  const clock = makeClock("2026-10-20T09:00:00.000Z");
+  const clock = makeClock();
 
   it("有効な全権のセッションがあれば施錠しない", async () => {
     const vault = createVault({ store });

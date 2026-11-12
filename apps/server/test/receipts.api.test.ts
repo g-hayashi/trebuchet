@@ -41,7 +41,7 @@ import {
 
 let tmp: TempDataDir;
 let entityId: string;
-const clock = makeClock("2026-10-20T09:00:00.000Z");
+const clock = makeClock();
 
 const PROBE: ReceiptProbe = { width: 4032, height: 3024, fullColor: true };
 const REMOTE_HOST = "mac.tail1234.ts.net";

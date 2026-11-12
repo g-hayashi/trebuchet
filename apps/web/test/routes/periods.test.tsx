@@ -3,11 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FiscalPeriod } from "@/features/periods/api";
 import { Route } from "@/routes/e/$entityId/periods/index";
+import { ENTITY } from "../fixtures";
 import { expectLedgerInvalidated, seedLedgerQueries } from "../ledger-cache";
 import { type ApiCall, type ApiReply, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const ENTITY = "/api/entities/e1";
 const PERIODS = `${ENTITY}/fiscal-periods`;
 
 const period = (fiscalYear: number, closedAt: string | null = null): FiscalPeriod => ({

@@ -6,7 +6,7 @@ import {
   EXPECTED_BOOK_ACCOUNTS,
   EXPECTED_OPENING_PROPOSAL,
 } from "../../../packages/domain/test/fixtures/freee/expected.ts";
-import { app, errorOf } from "./helpers.ts";
+import { app, errorOf, json } from "./helpers.ts";
 
 // T038: 期首残高の案の API（contracts/http-api.md の「期首残高（総勘定元帳）」）
 
@@ -61,13 +61,6 @@ const sendJson = (method: "POST" | "PUT", path: string, body: unknown) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-
-async function json<T>(res: Response, status: number): Promise<T> {
-  if (res.status !== status) {
-    throw new Error(`expected ${status} but got ${res.status}: ${await res.text()}`);
-  }
-  return (await res.json()) as T;
-}
 
 async function proposalOf(res: Response): Promise<Proposal> {
   return (await json<{ proposal: Proposal }>(res, 200)).proposal;
@@ -258,13 +251,9 @@ describe("POST /fiscal-periods/:year/opening-balances/freee-proposal", () => {
     expect((await errorOf(res)).code).toBe("VALIDATION");
   });
 
-  it("file がない → 400 VALIDATION、5 MB を超える → 413 FILE_TOO_LARGE", async () => {
+  it("file がない → 400 VALIDATION（共通のアップロードの部品。5 MB の上限は imports.upload.api.test.ts）", async () => {
     const missing = await propose(null);
     expect(missing.status).toBe(400);
     expect((await errorOf(missing)).code).toBe("VALIDATION");
-
-    const big = await propose(new Uint8Array(5 * 1024 * 1024 + 1));
-    expect(big.status).toBe(413);
-    expect((await errorOf(big)).code).toBe("FILE_TOO_LARGE");
   });
 });

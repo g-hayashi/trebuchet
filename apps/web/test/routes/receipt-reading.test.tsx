@@ -6,16 +6,16 @@ import type { Account } from "@/features/accounts/api";
 import { Route as NewJournalRoute } from "@/routes/e/$entityId/journals/new";
 import { Route as ReceiptRoute } from "@/routes/e/$entityId/receipts/$receiptId";
 import { Route as ReceiptsRoute } from "@/routes/e/$entityId/receipts/new";
+import { advance, fakeClockUser, useFakeClock } from "../fake-timers";
+import { account, ENTITY, uuid } from "../fixtures";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { RECEIPT_ID, receiptDetail, receiptReading } from "../receipts-fixtures";
 import { renderRoute } from "../render-route";
 
 // T035: 外部の AI の読み取り（FR-014〜017、R13・R15）。候補は入力欄の初期値にとどめ、保存は利用者の操作
 
-const ENTITY = "/api/entities/e1";
 const DETAIL = `${ENTITY}/receipts/${RECEIPT_ID}`;
 const READINGS = `${DETAIL}/readings`;
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const AI_SETTINGS = {
   localEnabled: true,
@@ -47,20 +47,6 @@ const CANDIDATES: ReceiptReadingView["candidates"] = {
   taxCategory: "PURCHASE_10",
 };
 
-const account = (
-  n: number,
-  name: string,
-  rest: Pick<Account, "category" | "normalSide" | "reportSection">,
-): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive: true,
-  ...rest,
-});
 const supplies = account(6010, "消耗品費", {
   category: "expense",
   normalSide: "debit",
@@ -89,6 +75,7 @@ const renderDetail = () =>
   });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -298,10 +285,9 @@ describe("読み取りの失敗（FR-017）", () => {
 
 describe("追加の直後の自動の読み取り", () => {
   const LIST = `${ENTITY}/receipts`;
-  const upload = async () => {
+  const upload = async (user = userEvent.setup()) => {
     renderRoute(ReceiptsRoute, { path: "/e/$entityId/receipts/new", url: "/e/e1/receipts/new" });
     const form = await screen.findByRole("form", { name: "証憑を追加" });
-    const user = userEvent.setup();
     await user.upload(
       within(form).getByLabelText("ファイルを選ぶ"),
       new File([new Uint8Array(1000)], "領収書.jpg", { type: "image/jpeg" }),
@@ -342,9 +328,10 @@ describe("追加の直後の自動の読み取り", () => {
       [`POST ${LIST}`]: () => ok({ receipt: receiptDetail() }, 201),
       [`POST ${READINGS}`]: () => ok({ reading: receiptReading() }, 201),
     });
-    await upload();
-    // 呼ぶなら保存の直後。非同期の呼び出しを待つ分だけ置く
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    useFakeClock();
+    await upload(fakeClockUser());
+    // 呼ぶなら保存の直後。保留の呼び出しを流しきってから確かめる
+    await advance(100);
     expect(posts(calls, READINGS)).toHaveLength(0);
   });
 });
