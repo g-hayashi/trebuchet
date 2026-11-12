@@ -1,5 +1,4 @@
 import type { RecurringInput } from "@trebuchet/schema";
-import type { Result } from "../src/types.ts";
 import { fakeRecurringUnitOfWork, InMemoryRecurringStore } from "./fakes.ts";
 import { setupBase } from "./ledger-setup.ts";
 
@@ -34,16 +33,4 @@ export function setupRecurring(options: { taxable?: boolean } = {}) {
   });
   const journalsOf = () => t.ledger.state.journals;
   return { ...t, recurring, uow, deps, partner, inactivePartner, input, journalsOf };
-}
-
-/** 成功を取り出す（失敗ならテストを落とす） */
-export function must<T, E = unknown>(r: Result<T, E>): T {
-  if (!r.ok) throw new Error(`expected ok: ${JSON.stringify(r.error)}`);
-  return r.value;
-}
-
-/** 失敗のエラーを取り出す（成功ならテストを落とす） */
-export function errorOf<T>(r: Result<T>) {
-  if (r.ok) throw new Error("expected err");
-  return r.error;
 }

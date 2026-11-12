@@ -8,7 +8,7 @@ import { carryForward } from "../../src/carry-forward.ts";
 import { computeBalances } from "../../src/reports/balances.ts";
 import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
-import type { DeferredAmortization, DeferredAsset, FixedAsset, Result } from "../../src/types.ts";
+import type { DeferredAmortization, DeferredAsset, FixedAsset } from "../../src/types.ts";
 import {
   commitAdjustment,
   getAdjustmentProposals,
@@ -37,12 +37,8 @@ import {
   SequentialIds,
 } from "../fakes.ts";
 import { InMemoryReportRepository } from "../reports/fake-report-repository.ts";
+import { unwrap } from "../result.ts";
 import { NOW } from "../test-dates.ts";
-
-const unwrap = <T>(r: Result<T>): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
 
 const params = { rates: STRAIGHT_LINE_RATES, taxParameters: TAX_PARAMETERS };
 

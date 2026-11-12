@@ -18,8 +18,9 @@ import { openTenant, type TenantDb } from "../src/tenant-store.ts";
 import {
   accountIdOf,
   createTestEntity,
-  NOW,
   type TempDataDir,
+  testClock,
+  testIds,
   useTempDataDir,
 } from "../src/testing.ts";
 
@@ -28,8 +29,8 @@ let db: TenantDb;
 let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => NOW };
+const ids = testIds();
+const clock = testClock();
 const LATER = "2026-11-01T10:00:00.000Z";
 
 beforeEach(() => {

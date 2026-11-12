@@ -1,20 +1,23 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import type { NewJournal } from "../src/ports.ts";
-import { domainError, err, type InvoicingAuditEntry, ok } from "../src/types.ts";
+import type { NewJournal, TenantTx } from "../src/ports.ts";
+import { domainError, err, type InvoicingAuditEntry, ok, type Result } from "../src/types.ts";
 import {
+  type FakeUnitOfWorkOf,
   fakeClosingUnitOfWork,
   fakeImportUnitOfWork,
   fakeInvoicingUnitOfWork,
   fakeRecurringUnitOfWork,
+  fakeStatementUnitOfWork,
   InMemoryLedgerRepository,
   InMemoryMasterRepository,
 } from "./fakes.ts";
+import { NOW as AT } from "./test-dates.ts";
 
-// TenantUnitOfWork のフェイク（FakeUnitOfWork）の巻き戻し。db の実装と同じ性質を持つことを確かめる:
-// fn が ok を返せば確定し、err を返すか例外を投げれば fn の中の書き込みをすべて巻き戻す
-
-const AT = "2026-10-24T00:00:00.000Z";
+// TenantUnitOfWork のフェイク（FakeUnitOfWork）の巻き戻しの契約。db の実装（db の unit-of-work.test.ts）と
+// 同じ性質を、機能ごとのフェイク（取込・決算・請求・定期仕訳・明細）すべてに確かめる:
+// fn が ok を返せば確定し、err を返すか例外を投げれば fn の中の書き込みをすべて巻き戻す。
+// 機能ごとのフェイクのテストには、その機能に固有の検査だけを置く
 
 const journal = (id: string, journalNo: number): NewJournal => ({
   id,
@@ -74,7 +77,96 @@ const outcomeArb = fc.constantFrom<Outcome>("ok", "err", "throw");
 
 const failure = domainError("VALIDATION", "中止", { field: "x" });
 
-describe("FakeUnitOfWork（TenantUnitOfWork の性質）", () => {
+type Body = (tx: TenantTx<object>, writeStore: (id: string) => void) => Result<number>;
+
+/** 機能ごとのフェイクの UnitOfWork。`writeStore` は、その機能のストアへの 1 回の書き込み */
+type Kind = {
+  name: string;
+  open: () => {
+    run: (body: Body) => Result<number>;
+    nested: () => unknown;
+    /** 帳簿・マスタ・全ストアの状態の複製 */
+    state: () => unknown;
+    counts: () => { tags: number; journals: number; store: number };
+  };
+};
+
+function kind<S extends Record<string, { state: unknown }>>(
+  name: string,
+  make: () => FakeUnitOfWorkOf<S>,
+  writeStore: (tx: TenantTx<S>, id: string) => void,
+  storeCount: (uow: FakeUnitOfWorkOf<S>) => number,
+): Kind {
+  return {
+    name,
+    open: () => {
+      const uow = make();
+      return {
+        run: (body) => uow.run((tx) => body(tx, (id) => writeStore(tx, id))),
+        nested: () => uow.run(() => uow.run(() => ok(1))),
+        state: () =>
+          structuredClone({
+            ledger: uow.ledger.state,
+            masters: uow.masters.state,
+            stores: Object.values(uow.stores).map((s) => s.state),
+          }),
+        counts: () => ({
+          tags: uow.masters.listTags().length,
+          journals: uow.ledger.journals.length,
+          store: storeCount(uow),
+        }),
+      };
+    },
+  };
+}
+
+const KINDS: Kind[] = [
+  kind(
+    "取込",
+    fakeImportUnitOfWork,
+    (tx, id) => tx.imports.upsertAccountMappings([{ sourceName: `科目${id}`, accountId: "a" }], AT),
+    (uow) => uow.imports.listAccountMappings().length,
+  ),
+  kind(
+    "決算",
+    fakeClosingUnitOfWork,
+    (tx, id) =>
+      tx.closing.appendClosingAudit({ ...audit(id), targetType: "fixed_asset", action: "create" }),
+    (uow) => uow.closing.audits.length,
+  ),
+  kind(
+    "請求",
+    fakeInvoicingUnitOfWork,
+    (tx, id) => {
+      tx.invoicing.appendInvoicingAudit(audit(id));
+      tx.invoicing.registerOrigin(`j-${id}`, {
+        kind: "invoice",
+        invoiceId: "inv-1",
+        invoiceNo: "2026-1031-001",
+      });
+    },
+    (uow) => uow.invoicing.audits.length,
+  ),
+  kind(
+    "定期仕訳",
+    fakeRecurringUnitOfWork,
+    (tx, id) => tx.recurring.appendRecurringAudit({ ...audit(id), targetType: "recurring_run" }),
+    (uow) => uow.recurring.audits.length,
+  ),
+  kind(
+    "明細",
+    fakeStatementUnitOfWork,
+    (tx, id) =>
+      tx.statements.appendStatementAudit({
+        ...audit(id),
+        targetType: "statement",
+        action: "create",
+      }),
+    (uow) => uow.statements.audits.length,
+  ),
+];
+
+describe.each(KINDS)("$name の UnitOfWork（FakeUnitOfWork の契約）", ({ open }) => {
   it("ok なら fn の書き込みが残り、err・例外なら run の前の状態に戻る（err と例外はそのまま返す・投げる）", () => {
     fc.assert(
       fc.property(
@@ -82,10 +174,11 @@ describe("FakeUnitOfWork（TenantUnitOfWork の性質）", () => {
         fc.array(opArb, { maxLength: 5 }),
         outcomeArb,
         (committed, attempted, outcome) => {
-          const uow = fakeInvoicingUnitOfWork();
+          const uow = open();
           let seq = 0;
           const apply = (
-            tx: Parameters<Parameters<typeof uow.run>[0]>[0],
+            tx: TenantTx<object>,
+            writeStore: (id: string) => void,
             ops: Op[],
             prefix: string,
           ) => {
@@ -93,25 +186,20 @@ describe("FakeUnitOfWork（TenantUnitOfWork の性質）", () => {
               seq += 1;
               if (op === "tag") tx.masters.insertTag({ id: `${prefix}-t${seq}`, name: `t${seq}` });
               if (op === "journal") tx.ledger.insertJournal(journal(`${prefix}-j${seq}`, seq));
-              if (op === "audit") tx.invoicing.appendInvoicingAudit(audit(`${prefix}-a${seq}`));
+              if (op === "audit") writeStore(`${prefix}-a${seq}`);
             }
           };
-          const first = uow.run((tx) => {
-            apply(tx, committed, "c");
-            return ok("committed");
+          const first = uow.run((tx, writeStore) => {
+            apply(tx, writeStore, committed, "c");
+            return ok(committed.length);
           });
-          expect(first).toEqual(ok("committed"));
-          const state = () =>
-            structuredClone({
-              ledger: uow.ledger.state,
-              masters: uow.masters.state,
-              invoicing: uow.invoicing.state,
-            });
-          const before = state();
+          expect(first).toEqual(ok(committed.length));
+          const before = uow.state();
+          const beforeCounts = uow.counts();
           const boom = new Error("途中で失敗");
           const call = () =>
-            uow.run((tx) => {
-              apply(tx, attempted, "x");
+            uow.run((tx, writeStore) => {
+              apply(tx, writeStore, attempted, "x");
               if (outcome === "err") return err(failure);
               if (outcome === "throw") throw boom;
               return ok(attempted.length);
@@ -119,29 +207,35 @@ describe("FakeUnitOfWork（TenantUnitOfWork の性質）", () => {
 
           if (outcome === "throw") {
             expect(call).toThrow(boom);
-            expect(state()).toEqual(before);
+            expect(uow.state()).toEqual(before);
             return;
           }
           const result = call();
           if (outcome === "err") {
             expect(result).toEqual(err(failure));
-            expect(state()).toEqual(before);
+            expect(uow.state()).toEqual(before);
             return;
           }
           expect(result).toEqual(ok(attempted.length));
           const count = (op: Op) => attempted.filter((o) => o === op).length;
-          expect(uow.masters.listTags()).toHaveLength(before.masters.tags.length + count("tag"));
-          expect(uow.ledger.journals).toHaveLength(
-            before.ledger.journals.length + count("journal"),
-          );
-          expect(uow.invoicing.audits).toHaveLength(
-            before.invoicing.audits.length + count("audit"),
-          );
+          expect(uow.counts()).toEqual({
+            tags: beforeCounts.tags + count("tag"),
+            journals: beforeCounts.journals + count("journal"),
+            store: beforeCounts.store + count("audit"),
+          });
         },
       ),
     );
   });
 
+  it("同じ UnitOfWork の run の中で run を呼ぶと例外（db では入れ子のトランザクションにならない）", () => {
+    const uow = open();
+    expect(() => uow.nested()).toThrow(/入れ子/);
+    expect(uow.run(() => ok(2))).toEqual(ok(2));
+  });
+});
+
+describe("FakeUnitOfWork（請求のフェイクでの入れ子の ledger.transaction）", () => {
   it("内側の ledger.transaction の例外は内側だけを巻き戻し、外側が ok なら外側の書き込みは確定する", () => {
     const uow = fakeInvoicingUnitOfWork();
     const r = uow.run(({ ledger }) => {
@@ -156,100 +250,6 @@ describe("FakeUnitOfWork（TenantUnitOfWork の性質）", () => {
     });
     expect(r).toEqual(ok(null));
     expect(uow.ledger.journals.map((j) => j.id)).toEqual(["j-1"]);
-  });
-
-  it("同じ UnitOfWork の run の中で run を呼ぶと例外（db では入れ子のトランザクションにならない）", () => {
-    const uow = fakeInvoicingUnitOfWork();
-    expect(() => uow.run(() => uow.run(() => ok(1)))).toThrow(/入れ子/);
-    expect(uow.run(() => ok(2))).toEqual(ok(2));
-  });
-
-  it.each([
-    [
-      "取込",
-      () => {
-        const uow = fakeImportUnitOfWork();
-        return {
-          uow,
-          write: () =>
-            uow.run(({ imports }) => {
-              imports.upsertAccountMappings([{ sourceName: "現金", accountId: "a" }], AT);
-              return err(failure);
-            }),
-          extra: () => uow.imports.listAccountMappings(),
-        };
-      },
-    ],
-    [
-      "決算",
-      () => {
-        const uow = fakeClosingUnitOfWork();
-        return {
-          uow,
-          write: () =>
-            uow.run(({ closing }) => {
-              closing.appendClosingAudit({
-                ...audit("a-1"),
-                targetType: "fixed_asset",
-                action: "create",
-              });
-              return err(failure);
-            }),
-          extra: () => uow.closing.audits,
-        };
-      },
-    ],
-    [
-      "請求",
-      () => {
-        const uow = fakeInvoicingUnitOfWork();
-        return {
-          uow,
-          write: () =>
-            uow.run(({ invoicing }) => {
-              invoicing.appendInvoicingAudit(audit("a-1"));
-              return err(failure);
-            }),
-          extra: () => uow.invoicing.audits,
-        };
-      },
-    ],
-    [
-      "定期仕訳",
-      () => {
-        const uow = fakeRecurringUnitOfWork();
-        return {
-          uow,
-          write: () =>
-            uow.run(({ recurring }) => {
-              recurring.appendRecurringAudit({ ...audit("a-1"), targetType: "recurring_run" });
-              return err(failure);
-            }),
-          extra: () => uow.recurring.audits,
-        };
-      },
-    ],
-  ])("%s の UnitOfWork: 帳簿・マスタ・ストアに書いた後の err で全部が巻き戻る", (_, setup) => {
-    const { uow, write, extra } = setup();
-    const r = uow.run(({ ledger, masters }) => {
-      masters.insertTag({ id: "t-1", name: "出張" });
-      ledger.insertJournal(journal("j-1", 1));
-      return ok(null);
-    });
-    expect(r).toEqual(ok(null));
-    expect(write()).toEqual(err(failure));
-    expect(uow.ledger.journals.map((j) => j.id)).toEqual(["j-1"]);
-    expect(uow.masters.listTags().map((t) => t.id)).toEqual(["t-1"]);
-    expect(extra()).toEqual([]);
-
-    const r2 = uow.run(({ ledger, masters }) => {
-      masters.insertTag({ id: "t-2", name: "会議" });
-      ledger.insertJournal(journal("j-2", 2));
-      return err(failure);
-    });
-    expect(r2).toEqual(err(failure));
-    expect(uow.ledger.journals.map((j) => j.id)).toEqual(["j-1"]);
-    expect(uow.masters.listTags().map((t) => t.id)).toEqual(["t-1"]);
   });
 });
 

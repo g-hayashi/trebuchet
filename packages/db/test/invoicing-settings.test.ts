@@ -13,7 +13,15 @@ import { createInvoicingUnitOfWork, DrizzleInvoicingStore } from "../src/invoici
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  accountIdOf,
+  createTestEntity,
+  NOW,
+  type TempDataDir,
+  testClock,
+  testIds,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 // 005 US4: 設定・条件の保存と読み戻しの往復、条件の削除、次の通し番号の下限（R6）。
 // トリガー・CHECK・UNIQUE の個別の検査は invoicing-schema.test.ts（T002）
@@ -27,15 +35,11 @@ let deps: {
   clock: { now(): string };
 };
 
-const NOW = "2026-10-24T09:00:00.000Z";
-
 beforeEach(() => {
   tmp = useTempDataDir("invoicing-settings");
-  const ids = { next: () => randomUUIDv7() };
-  const clock = { now: () => NOW };
   db = openTenant(createTestEntity().id);
   masters = new DrizzleMasterRepository(db);
-  deps = { uow: createInvoicingUnitOfWork(db), ids, clock };
+  deps = { uow: createInvoicingUnitOfWork(db), ids: testIds(), clock: testClock() };
 });
 afterEach(() => tmp.cleanup());
 

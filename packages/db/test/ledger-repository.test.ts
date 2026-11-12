@@ -19,6 +19,8 @@ import {
   createTestEntity,
   NOW,
   type TempDataDir,
+  testClock,
+  testIds,
   useTempDataDir,
 } from "../src/testing.ts";
 
@@ -28,8 +30,8 @@ let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 let period: FiscalPeriod;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => NOW };
+const ids = testIds();
+const clock = testClock();
 
 beforeEach(() => {
   tmp = useTempDataDir("ledger-repo");

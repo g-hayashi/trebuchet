@@ -4,8 +4,8 @@ import { STRAIGHT_LINE_RATES } from "../../src/seed/depreciation-rates.ts";
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type { DeferredAmortization, DeferredAsset, FixedAsset } from "../../src/types.ts";
 import { accountIdOf, INDIVIDUAL_ACCOUNT_LIST } from "../blue-return-arbitraries.ts";
+import { NOW as AT } from "../test-dates.ts";
 
-const AT = "2026-01-10T00:00:00.000Z";
 const params = { rates: STRAIGHT_LINE_RATES, taxParameters: TAX_PARAMETERS };
 
 /** 定額法の資産（既定: 2025-07-10 に取得・供用、500,000 円、耐用年数 4 年 = 率 250。1060 工具器具備品） */

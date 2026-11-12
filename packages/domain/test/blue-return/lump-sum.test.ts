@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { lumpSumYear } from "../../src/blue-return/lump-sum.ts";
 import type { FixedAsset } from "../../src/types.ts";
 import { accountIdOf } from "../blue-return-arbitraries.ts";
+import { NOW as AT } from "../test-dates.ts";
 
-const AT = "2026-01-10T00:00:00.000Z";
 const YEARS = 3;
 
 /** 一括償却資産（既定: 2026-07-10 に取得・供用、150,000 円） */

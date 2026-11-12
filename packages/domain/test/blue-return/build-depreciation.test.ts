@@ -10,12 +10,12 @@ import type {
 } from "../../src/types.ts";
 import { makeFiscalPeriod } from "../arbitraries.ts";
 import { accountIdOf, INDIVIDUAL_ACCOUNT_LIST } from "../blue-return-arbitraries.ts";
+import { NOW as AT } from "../test-dates.ts";
 
 const EQUIPMENT = accountIdOf("1060");
 const DEPRECIATION = accountIdOf("5180");
 const DRAWINGS = accountIdOf("3090");
 const CASH = accountIdOf("1010");
-const AT = "2026-01-10T00:00:00.000Z";
 
 let seq = 0;
 const entry = (debit: string, credit: string, amount: number): PostedLine[] => {

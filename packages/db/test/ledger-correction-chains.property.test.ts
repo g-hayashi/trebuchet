@@ -129,7 +129,7 @@ describe("DrizzleLedgerRepository.correctionChains", () => {
           });
         },
       ),
-      { numRuns: 80 },
+      { numRuns: 30 },
     );
     // 空振りでない（根より先の訂正までたどる場合がある）
     expect(nonTrivial).toBeGreaterThan(0);

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeAll, openAuth, openRegistry } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 let tmp: TempDataDir;
 let registry: ReturnType<typeof openRegistry>;
@@ -26,7 +26,6 @@ const AUTH_TABLES = [
 ];
 const REGISTRY_TABLES = ["entities", "app_settings", "backup_runs", "ai_settings"];
 
-const NOW = "2026-10-20T09:00:00.000Z";
 const runOn =
   (db: { $client: { prepare(s: string): { run(...p: unknown[]): unknown } } }) =>
   (sqlText: string, ...params: unknown[]) =>

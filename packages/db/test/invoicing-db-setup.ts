@@ -5,15 +5,15 @@ import { createInvoicingUnitOfWork, DrizzleInvoicingStore } from "../src/invoici
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { openTenant } from "../src/tenant-store.ts";
-import { accountIdOf, createTestEntity, NOW } from "../src/testing.ts";
+import { accountIdOf, createTestEntity, NOW, testClock, testIds } from "../src/testing.ts";
 
 /**
  * 005 の db のテストの準備（呼ぶ前に `useTempDataDir` を使うこと）。
  * 2026 年度 1 年分の会計期間を持つ個人事業（免税）。税率は DB のマイグレーションの値
  */
 export function setupInvoicingDb(options: { taxable?: boolean } = {}) {
-  const ids = { next: () => randomUUIDv7() };
-  const clock = { now: () => NOW };
+  const ids = testIds();
+  const clock = testClock();
   const db = openTenant(createTestEntity({ ids }).id);
   const masters = new DrizzleMasterRepository(db);
   if (options.taxable === true) {

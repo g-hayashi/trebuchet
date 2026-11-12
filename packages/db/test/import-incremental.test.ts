@@ -1,4 +1,4 @@
-import { createHash, randomUUIDv7 } from "node:crypto";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { commitFreeeImport, type FreeeCommitInput, previewFreeeImport } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -11,7 +11,13 @@ import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-reposi
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  createTestEntity,
+  type TempDataDir,
+  testClock,
+  testIds,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 // T063: 差分の取込の統合テスト（v1 → v2。FR-028〜030、research R9）
 
@@ -20,8 +26,8 @@ let db: TenantDb;
 let ledger: DrizzleLedgerRepository;
 let imports: DrizzleImportStore;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-19T09:00:00.000Z" };
+const ids = testIds();
+const clock = testClock();
 
 function inputOf(fileName: string, countNew: number): FreeeCommitInput {
   const bytes = new Uint8Array(

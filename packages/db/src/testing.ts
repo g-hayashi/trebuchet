@@ -2,6 +2,7 @@ import { randomUUIDv7 } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import {
   type Account,
+  type Clock,
   createEntity,
   type EntityKind,
   type EntityProfile,
@@ -20,8 +21,19 @@ import {
 } from "./tenant-store.ts";
 
 /** テストの「今」の時刻と日付。正本は `packages/domain/test/test-dates.ts` */
-export { NOW, TODAY } from "@trebuchet/domain/testing";
+/** Result の取り出し。正本は `packages/domain/test/result.ts` */
+export { codeOf, errorOf, must, NOW, TODAY, unwrap } from "@trebuchet/domain/testing";
 export { TMP_ROOT };
+
+/** 毎回新しい UUIDv7 を返す ID 生成器 */
+export function testIds(): IdGenerator {
+  return { next: () => randomUUIDv7() };
+}
+
+/** 固定の時刻を返す時計（既定は NOW） */
+export function testClock(now: string = NOW): Clock {
+  return { now: () => now };
+}
 
 export type TempDataDir = {
   dir: string;
@@ -76,8 +88,8 @@ export function createTestEntity(options: TestEntityOptions = {}): EntityProfile
     {
       registry: new DrizzleRegistryRepository(openRegistry()),
       openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-      ids: options.ids ?? { next: () => randomUUIDv7() },
-      clock: { now: () => options.now ?? NOW },
+      ids: options.ids ?? testIds(),
+      clock: testClock(options.now ?? NOW),
     },
     {
       name: options.name ?? "個人事業",
@@ -88,6 +100,16 @@ export function createTestEntity(options: TestEntityOptions = {}): EntityProfile
   );
   if (!created.ok) throw new Error(created.error.message);
   return created.value;
+}
+
+/** 内容から明細の ID を引く。なければ例外 */
+export function statementIdOf(
+  store: { listStatements(): readonly { id: string; content: string }[] },
+  content: string,
+): string {
+  const s = store.listStatements().find((x) => x.content === content);
+  if (s === undefined) throw new Error(`明細がない: ${content}`);
+  return s.id;
 }
 
 /** 名前から勘定科目の ID を引く。なければ例外 */

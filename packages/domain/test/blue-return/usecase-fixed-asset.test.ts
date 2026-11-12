@@ -15,6 +15,7 @@ import { voidJournal } from "../../src/usecases/void-journal.ts";
 import { type FakeClosingUnitOfWork, fakeClosingUnitOfWork } from "../fakes.ts";
 import { setupLedger } from "../ledger-fixture.ts";
 import { InMemoryReportRepository } from "../reports/fake-report-repository.ts";
+import { unwrap } from "../result.ts";
 
 let fx: ReturnType<typeof setupLedger>;
 let uow: FakeClosingUnitOfWork;
@@ -35,11 +36,6 @@ const settingsDeps = () => ({
 });
 const readDeps = () => ({ ...settingsDeps(), reports: reports() });
 const commitDeps = () => ({ uow, reports: reports(), ids: fx.ids, clock: fx.clock });
-
-const unwrap = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
 
 const input = (over: Record<string, unknown> = {}) => ({
   name: "ノートパソコン",

@@ -9,8 +9,7 @@ import {
 } from "@trebuchet/domain";
 import { ReceiptQuery, type ReceiptQueryInput } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
-import { NOW } from "./receipt-db-setup.ts";
+import { NOW, type TempDataDir, testClock, testIds, useTempDataDir } from "../src/testing.ts";
 import {
   fakeSha,
   makeFile,
@@ -348,7 +347,7 @@ describe("読み取りの記録", () => {
 });
 
 describe("履歴（receipt_audit_log）", () => {
-  const ctx = { ids: { next: () => randomUUIDv7() }, clock: { now: () => NOW } };
+  const ctx = { ids: testIds(), clock: testClock(NOW) };
 
   it("receipt_id を target_id・receiptId から埋め、証憑ごとに古い順で引ける", () => {
     const a = s.add({ currentSha256: fakeSha(1) });

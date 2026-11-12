@@ -1,4 +1,3 @@
-import { randomUUIDv7 } from "node:crypto";
 import {
   addSubAccount,
   createJournal,
@@ -15,8 +14,9 @@ import { openTenant } from "../src/tenant-store.ts";
 import {
   accountIdOf,
   createTestEntity,
-  NOW,
   type TempDataDir,
+  testClock,
+  testIds,
   useTempDataDir,
 } from "../src/testing.ts";
 
@@ -24,8 +24,8 @@ let tmp: TempDataDir;
 let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => NOW };
+const ids = testIds();
+const clock = testClock();
 const deps = () => ({ ledger, masters, ids, clock });
 
 beforeEach(() => {

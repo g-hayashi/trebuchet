@@ -1,33 +1,38 @@
 import { randomUUIDv7 } from "node:crypto";
 import {
   createJournal,
-  domainError,
-  err,
   type InvoicingAuditEntry,
   type JournalDraft,
   type JournalSource,
   type LedgerRepository,
   type MasterRepository,
-  ok,
 } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createInvoicingUnitOfWork, DrizzleInvoicingStore } from "../src/invoicing-repository.ts";
+import { DrizzleInvoicingStore } from "../src/invoicing-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
-import { createRecurringUnitOfWork, DrizzleRecurringStore } from "../src/recurring-repository.ts";
+import { DrizzleRecurringStore } from "../src/recurring-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  accountIdOf,
+  createTestEntity,
+  NOW,
+  type TempDataDir,
+  testClock,
+  testIds,
+  useTempDataDir,
+} from "../src/testing.ts";
 
-// 005 R9・R23。UnitOfWork の巻き戻し、originOfJournal の往復、記録の追記を実 DB で確かめる
+// 005 R9・R23。originOfJournal の往復、記録の追記を実 DB で確かめる。
+// UnitOfWork の巻き戻し（例外・err・ok）は unit-of-work.test.ts の全機能共通の性質テストで確かめる
 
 let tmp: TempDataDir;
 let db: TenantDb;
 let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-24T09:00:00.000Z" };
-const NOW = clock.now();
+const ids = testIds();
+const clock = testClock();
 
 beforeEach(() => {
   tmp = useTempDataDir("invoicing-uow");
@@ -38,7 +43,7 @@ beforeEach(() => {
 afterEach(() => tmp.cleanup());
 
 const run = (sqlText: string, params: unknown[] = []) => db.$client.prepare(sqlText).run(...params);
-const count = (table: string) =>
+const _count = (table: string) =>
   (db.$client.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
 
 const accountId = (name: string) => accountIdOf(masters, name);
@@ -124,82 +129,6 @@ function seedRows() {
     recurringJournal,
   };
 }
-
-describe("createInvoicingUnitOfWork（R9）", () => {
-  it("中で仕訳を作った後に例外を投げると、仕訳・行・記録がすべて残らない", () => {
-    const uow = createInvoicingUnitOfWork(db);
-    const before = {
-      journals: count("journals"),
-      lines: count("journal_lines"),
-      audit: count("audit_log"),
-    };
-    expect(() =>
-      uow.run(({ ledger: l, masters: m, invoicing }) => {
-        post("invoice", { ledger: l, masters: m });
-        invoicing.appendInvoicingAudit(audit());
-        throw new Error("途中で失敗");
-      }),
-    ).toThrow("途中で失敗");
-    expect({
-      journals: count("journals"),
-      lines: count("journal_lines"),
-      audit: count("audit_log"),
-    }).toEqual(before);
-    expect(count("invoicing_audit_log")).toBe(0);
-  });
-
-  it("仕訳を作った後に err を返すと、仕訳も記録も残らず、同じ err を返す", () => {
-    const uow = createInvoicingUnitOfWork(db);
-    const failure = domainError("VALIDATION", "中止");
-    const r = uow.run(({ ledger: l, masters: m, invoicing }) => {
-      post("invoice", { ledger: l, masters: m });
-      invoicing.appendInvoicingAudit(audit());
-      return err(failure);
-    });
-    expect(r).toEqual(err(failure));
-    expect(count("journals")).toBe(0);
-    expect(count("audit_log")).toBe(0);
-    expect(count("invoicing_audit_log")).toBe(0);
-  });
-
-  it("ok なら仕訳と記録が残る", () => {
-    const uow = createInvoicingUnitOfWork(db);
-    const entry = audit();
-    uow.run(({ ledger: l, masters: m, invoicing }) => {
-      post("invoice", { ledger: l, masters: m });
-      invoicing.appendInvoicingAudit(entry);
-      return ok(null);
-    });
-    expect(count("journals")).toBe(1);
-    expect(count("invoicing_audit_log")).toBe(1);
-  });
-});
-
-describe("createRecurringUnitOfWork（R9）", () => {
-  it("中で仕訳を作った後に例外を投げると仕訳も記録も残らない", () => {
-    const uow = createRecurringUnitOfWork(db);
-    expect(() =>
-      uow.run(({ ledger: l, masters: m, recurring }) => {
-        post("recurring", { ledger: l, masters: m });
-        recurring.appendRecurringAudit(audit({ targetType: "recurring_run" }));
-        throw new Error("途中で失敗");
-      }),
-    ).toThrow("途中で失敗");
-    expect(count("journals")).toBe(0);
-    expect(count("invoicing_audit_log")).toBe(0);
-  });
-
-  it("ok なら仕訳と記録が残る", () => {
-    const uow = createRecurringUnitOfWork(db);
-    uow.run(({ ledger: l, masters: m, recurring }) => {
-      post("recurring", { ledger: l, masters: m });
-      recurring.appendRecurringAudit(audit({ targetType: "recurring_run" }));
-      return ok(null);
-    });
-    expect(count("journals")).toBe(1);
-    expect(count("invoicing_audit_log")).toBe(1);
-  });
-});
 
 describe("originOfJournal（H:§6.1）", () => {
   it("請求・入金・定期仕訳の仕訳（取消の仕訳を含む）から起点を引き、無関係の仕訳は null", () => {

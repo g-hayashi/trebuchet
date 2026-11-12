@@ -2,7 +2,7 @@ import type { Purpose } from "@trebuchet/schema";
 import type { StatementUnitOfWork } from "../src/ports.ts";
 import { journalShape } from "../src/statements/journal-shape.ts";
 import type { StatementRow } from "../src/statements/table.ts";
-import type { JournalDraft, Result } from "../src/types.ts";
+import type { JournalDraft } from "../src/types.ts";
 import {
   commitStatementImport,
   previewStatementImport,
@@ -10,19 +10,8 @@ import {
 } from "../src/usecases/statements.ts";
 import { type FakeStatementUnitOfWork, fakeStatementUnitOfWork } from "./fakes.ts";
 import { setupBase } from "./ledger-setup.ts";
+import { unwrap } from "./result.ts";
 import { statementTableOf } from "./statements-arbitraries.ts";
-
-/** Result を取り出す（失敗なら例外） */
-export const unwrap = <T>(r: Result<T>): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
-
-/** 失敗のエラーコード（成功なら例外） */
-export const codeOf = <T>(r: Result<T>): string => {
-  if (r.ok) throw new Error("成功しました（失敗を期待）");
-  return r.error.code;
-};
 
 /**
  * 006 の承認・除外などのテストが共有する準備: 3 つの取込元の口座（銀行 = business・普通預金、
@@ -99,8 +88,11 @@ export function setupStatements(
   });
 
   const statements = () => uow.statements.state.statements;
-  const idOf = (content: string) => {
-    const s = statements().find((x) => x.content === content);
+  /** 内容（と、同じ内容が複数あれば日付）から明細の ID を引く。なければ例外 */
+  const idOf = (content: string, date?: string) => {
+    const s = statements().find(
+      (x) => x.content === content && (date === undefined || x.date === date),
+    );
     if (s === undefined) throw new Error(`明細がない: ${content}`);
     return s.id;
   };

@@ -1,7 +1,7 @@
 import { randomUUIDv7 } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 // 005 の data-model §1・§2、research R15。DB のトリガー・CHECK・UNIQUE の検査はここに一本化する
 
@@ -26,7 +26,6 @@ const NEW_TABLES = [
   "invoicing_audit_log",
 ];
 
-const NOW = "2026-10-24T09:00:00.000Z";
 const run = (sqlText: string, ...params: unknown[]) => db.$client.prepare(sqlText).run(...params);
 const all = (sqlText: string, ...params: unknown[]) =>
   db.$client.prepare(sqlText).all(...params) as Record<string, unknown>[];

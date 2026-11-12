@@ -1,4 +1,3 @@
-import { randomUUIDv7 } from "node:crypto";
 import {
   commitFreeeImport,
   createJournal,
@@ -8,7 +7,6 @@ import {
   getTrialBalance,
   type LineDraft,
   previewFreeeImport,
-  type Result,
   voidImportBatch,
   voidJournal,
 } from "@trebuchet/domain";
@@ -24,7 +22,15 @@ import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-reposi
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  createTestEntity,
+  NOW,
+  type TempDataDir,
+  testClock,
+  testIds,
+  unwrap,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 // T055: 取込の取消の性質テスト（INV-15 / SC-007）
 
@@ -34,9 +40,8 @@ let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 let period: FiscalPeriod;
 
-const ids = { next: () => randomUUIDv7() };
-const NOW = "2026-10-19T09:00:00.000Z";
-const clock = { now: () => NOW };
+const ids = testIds();
+const clock = testClock();
 const RANGE = { from: "2025-01-01", to: "2025-12-31" };
 const SHA = "b".repeat(64);
 const REASONS = ["  取り込むファイルを間違えた  ", "やり直す", "期間の指定を誤った\t"];
@@ -125,11 +130,6 @@ function scenarioArb(): fc.Arbitrary<Scenario> {
 }
 
 const uow = () => createImportUnitOfWork(db);
-const unwrap = <T>(r: Result<T>): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
-
 const inputOf = (file: ImportFile) => ({
   bytes: file.bytes,
   fileName: "journal.csv",

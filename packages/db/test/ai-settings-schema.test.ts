@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeAll, openRegistry } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 // 006 の data-model §2.1（registry の ai_settings）、research R12
 
@@ -15,7 +15,6 @@ afterEach(() => {
   tmp.cleanup();
 });
 
-const NOW = "2026-10-25T09:00:00.000Z";
 type Row = Record<string, unknown>;
 
 const row = (over: Row = {}): Row => ({

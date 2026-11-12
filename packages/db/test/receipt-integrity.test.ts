@@ -1,16 +1,8 @@
 import { randomUUIDv7 } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
-import {
-  auditRow,
-  linkRow,
-  NOW,
-  type Row,
-  readingRow,
-  receiptDb,
-  SHA_B,
-} from "./receipt-db-setup.ts";
+import { NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { auditRow, linkRow, type Row, readingRow, receiptDb, SHA_B } from "./receipt-db-setup.ts";
 
 // 010 の data-model §1.1〜1.5 のトリガー（0015_receipts_integrity）。表の形は receipt-schema.test.ts
 

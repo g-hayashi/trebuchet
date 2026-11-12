@@ -12,6 +12,8 @@ import type {
 
 /** fast-check のジェネレーター。他パッケージのテストからは `@trebuchet/domain/testing` で使う */
 
+/** Result の取り出し（正本は result.ts）。db のテストは `@trebuchet/db/testing` から使う */
+export { codeOf, errorOf, must, unwrap } from "./result.ts";
 /** テストの「今」の時刻・日付（正本は test-dates.ts） */
 export { NOW, TODAY } from "./test-dates.ts";
 /** fast-check を依存に持たないパッケージ（db）のテスト用に再エクスポートする */

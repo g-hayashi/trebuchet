@@ -16,7 +16,8 @@ import {
   saveStatementSettings,
 } from "../../src/usecases/statements.ts";
 import { voidJournal } from "../../src/usecases/void-journal.ts";
-import { codeOf, type StatementsCtx, setupStatements, unwrap } from "../statements-setup.ts";
+import { codeOf, unwrap } from "../result.ts";
+import { type StatementsCtx, setupStatements } from "../statements-setup.ts";
 
 // 006 T015（R5〜R7・R15・R16、§1.5、FR-014〜018・020・021・021a）。承認・除外・結びつきの取消
 

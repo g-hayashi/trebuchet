@@ -1,12 +1,11 @@
 import { randomUUIDv7 } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 import {
   auditRow,
   fileRow,
   linkRow,
-  NOW,
   type Row,
   readingRow,
   receiptDb,

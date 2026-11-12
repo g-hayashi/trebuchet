@@ -13,7 +13,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { createStatementUnitOfWork, DrizzleStatementStore } from "../src/statement-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  accountIdOf,
+  createTestEntity,
+  type TempDataDir,
+  testClock,
+  testIds,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 // 006 T009。取込の永続化（往復、一意、INV-40・47 の取込の側）を実 DB で確かめる
 
@@ -22,8 +29,8 @@ let db: TenantDb;
 let masters: DrizzleMasterRepository;
 let store: DrizzleStatementStore;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-25T09:00:00.000Z" };
+const ids = testIds();
+const clock = testClock();
 const SHA = "a".repeat(64);
 
 beforeEach(() => {

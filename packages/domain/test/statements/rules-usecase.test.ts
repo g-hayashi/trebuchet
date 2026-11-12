@@ -18,9 +18,10 @@ import {
   unexcludeStatement,
 } from "../../src/usecases/statement-approval.ts";
 import { buildCandidates, listStatements } from "../../src/usecases/statements.ts";
+import { codeOf, unwrap } from "../result.ts";
 import { FaultInjectingStatementUnitOfWork, snapshotOf } from "../statement-fault-injection.ts";
 import { pastedRowArb } from "../statements-arbitraries.ts";
-import { codeOf, type StatementsCtx, setupStatements, unwrap } from "../statements-setup.ts";
+import { type StatementsCtx, setupStatements } from "../statements-setup.ts";
 
 // 006 T019（R9、§1.6・§1.7、FR-022〜024）。ルールの学習・候補への組み込み・管理、INV-41・47
 

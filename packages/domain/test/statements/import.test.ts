@@ -12,11 +12,10 @@ import {
   previewStatementRows,
   saveStatementAccount,
 } from "../../src/usecases/statements.ts";
-import { fakeStatementUnitOfWork } from "../fakes.ts";
 import { MFME_PASTE } from "../fixtures/statements/expected.ts";
 import { readStatementText } from "../fixtures/statements/load.ts";
-import { setupBase } from "../ledger-setup.ts";
 import { statementTableOf } from "../statements-arbitraries.ts";
+import { type StatementsCtx, setupStatements } from "../statements-setup.ts";
 
 // 006 T009（R4・R14・R18、§1.1〜§1.3、FR-002〜007）・007 T008（H:§2.1〜2.3）。
 // 口座の対応・表の判定・取込のプレビューと確定
@@ -24,13 +23,7 @@ import { statementTableOf } from "../statements-arbitraries.ts";
 const SHA = "a".repeat(64);
 const SHA2 = "b".repeat(64);
 
-function setup() {
-  const base = setupBase();
-  const uow = fakeStatementUnitOfWork(base.ledger, base.masters);
-  const deps = { uow, ids: base.ids, clock: base.clock };
-  return { ...base, uow, deps, bank: base.accountId("普通預金"), cash: base.accountId("現金") };
-}
-type Ctx = ReturnType<typeof setup>;
+type Ctx = StatementsCtx;
 
 const row = (over: Partial<StatementRow> = {}): StatementRow => ({
   accountName: "サンプル銀行",
@@ -51,7 +44,7 @@ const mapAccount = (ctx: Ctx, name: string, over: Record<string, unknown> = {}) 
   const r = saveStatementAccount(ctx.deps, name, {
     usage: "business",
     kind: "bank",
-    accountId: ctx.bank,
+    accountId: ctx.a.bank,
     ...over,
   } as never);
   if (!r.ok) throw new Error(JSON.stringify(r.error));
@@ -66,7 +59,7 @@ const expectErr = (r: Result<unknown>, code: string) => {
 
 let ctx: Ctx;
 beforeEach(() => {
-  ctx = setup();
+  ctx = setupStatements();
 });
 
 describe("saveStatementAccount / listStatementAccounts", () => {
@@ -81,10 +74,10 @@ describe("saveStatementAccount / listStatementAccounts", () => {
 
   it("同じ名前の保存は更新（ID・作成日時を保つ）。変更は監査に残る", () => {
     const first = mapAccount(ctx, "サンプル銀行");
-    const updated = mapAccount(ctx, "サンプル銀行", { usage: "mixed", accountId: ctx.cash });
+    const updated = mapAccount(ctx, "サンプル銀行", { usage: "mixed", accountId: ctx.a.cash });
     expect(updated.account.id).toBe(first.account.id);
     expect(updated.account.createdAt).toBe(first.account.createdAt);
-    expect(updated.account).toMatchObject({ usage: "mixed", accountId: ctx.cash });
+    expect(updated.account).toMatchObject({ usage: "mixed", accountId: ctx.a.cash });
     const audits = ctx.uow.statements.audits;
     expect(audits.map((a) => [a.targetType, a.action, a.targetId])).toEqual([
       ["statement_account", "create", first.account.id],
@@ -104,7 +97,11 @@ describe("saveStatementAccount / listStatementAccounts", () => {
     const priv = mapAccount(ctx, "テスト現金", { usage: "private", accountId: undefined });
     expect(priv.account).toMatchObject({ accountId: null, subAccountId: null });
     expectErr(
-      saveStatementAccount(ctx.deps, "A", { usage: "private", kind: "bank", accountId: ctx.bank }),
+      saveStatementAccount(ctx.deps, "A", {
+        usage: "private",
+        kind: "bank",
+        accountId: ctx.a.bank,
+      }),
       "VALIDATION",
     );
     expectErr(
@@ -122,16 +119,20 @@ describe("saveStatementAccount / listStatementAccounts", () => {
       saveStatementAccount(ctx.deps, "A", {
         usage: "business",
         kind: "bank",
-        accountId: ctx.cash,
+        accountId: ctx.a.cash,
         subAccountId: "nope",
       }),
       "VALIDATION",
     );
-    const account = ctx.masters.getAccount(ctx.bank);
+    const account = ctx.masters.getAccount(ctx.a.bank);
     if (account === undefined) throw new Error("科目がない");
     ctx.masters.updateAccount({ ...account, isActive: false });
     expectErr(
-      saveStatementAccount(ctx.deps, "A", { usage: "business", kind: "bank", accountId: ctx.bank }),
+      saveStatementAccount(ctx.deps, "A", {
+        usage: "business",
+        kind: "bank",
+        accountId: ctx.a.bank,
+      }),
       "ACCOUNT_INACTIVE",
     );
   });
@@ -141,7 +142,7 @@ describe("saveStatementAccount / listStatementAccounts", () => {
       saveStatementAccount(ctx.deps, "  ", {
         usage: "business",
         kind: "bank",
-        accountId: ctx.bank,
+        accountId: ctx.a.bank,
       }),
       "VALIDATION",
     );
@@ -209,7 +210,7 @@ describe("previewStatementImport", () => {
         name: "テスト現金",
         suggestion: {
           kind: "cash",
-          accountId: ctx.cash,
+          accountId: ctx.a.cash,
           subAccountId: null,
           usage: null,
           cues: ["現金"],
@@ -528,7 +529,7 @@ describe("commitStatementImport の accounts（未対応の口座の対応）", 
   ];
   const bankInput = (ctx: Ctx) => ({
     name: "サンプル銀行",
-    input: { usage: "business", kind: "bank", accountId: ctx.bank } as const,
+    input: { usage: "business", kind: "bank", accountId: ctx.a.bank } as const,
   });
   const cardInput = (ctx: Ctx) => ({
     name: "テストカードA",
@@ -562,7 +563,7 @@ describe("commitStatementImport の accounts（未対応の口座の対応）", 
     const accounts = listStatementAccounts(ctx.deps);
     if (!accounts.ok) throw new Error("一覧に失敗");
     expect(accounts.value.map((a) => [a.name, a.usage, a.kind, a.accountId])).toEqual([
-      ["サンプル銀行", "business", "bank", ctx.bank],
+      ["サンプル銀行", "business", "bank", ctx.a.bank],
       ["テストカードA", "mixed", "card", ctx.accountId("未払金")],
     ]);
     const idOf = new Map(accounts.value.map((a) => [a.name, a.id]));
@@ -645,7 +646,7 @@ describe("commitStatementImport の accounts（未対応の口座の対応）", 
     expectErr(
       commit([
         bankInput(ctx),
-        { name: "テストカードA", input: { usage: "private", kind: "card", accountId: ctx.bank } },
+        { name: "テストカードA", input: { usage: "private", kind: "card", accountId: ctx.a.bank } },
       ]),
       "VALIDATION",
     );

@@ -5,11 +5,11 @@ import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type { AdjustmentRef, HomeUseAllocation, PostedLine, RentDetail } from "../../src/types.ts";
 import { makeFiscalPeriod } from "../arbitraries.ts";
 import { accountIdOf, INDIVIDUAL_ACCOUNT_LIST } from "../blue-return-arbitraries.ts";
+import { NOW as AT } from "../test-dates.ts";
 
 const RENT = accountIdOf("5230");
 const DRAWINGS = accountIdOf("3090");
 const CASH = accountIdOf("1010");
-const AT = "2026-01-10T00:00:00.000Z";
 
 let seq = 0;
 const entry = (debit: string, credit: string, amount: number, id?: string): PostedLine[] => {

@@ -10,7 +10,8 @@ import {
 } from "@trebuchet/domain";
 import { createReceiptUnitOfWork } from "../src/receipt-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { NOW, receiptDb } from "./receipt-db-setup.ts";
+import { NOW } from "../src/testing.ts";
+import { receiptDb } from "./receipt-db-setup.ts";
 
 // 010 の db のリポジトリのテストの共通の準備（domain の行の型で作る）
 

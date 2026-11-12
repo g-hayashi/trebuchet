@@ -5,7 +5,8 @@ import type { InferenceRule } from "../../src/types.ts";
 import { createJournal } from "../../src/usecases/create-journal.ts";
 import { seedRulesFromJournals } from "../../src/usecases/inference-rules.ts";
 import { approveCandidate } from "../../src/usecases/statement-approval.ts";
-import { setupStatements, unwrap } from "../statements-setup.ts";
+import { unwrap } from "../result.ts";
+import { setupStatements } from "../statements-setup.ts";
 
 // 011 T018・INV-71（R9、data-model §1.2）。managed_by = 'user' のルールは、任意のルールの集合と
 // 承認・`seedRulesFromJournals` の列の後も、科目・税区分・状態（と内容・hits・overrides）が変わらず、履歴も増えない

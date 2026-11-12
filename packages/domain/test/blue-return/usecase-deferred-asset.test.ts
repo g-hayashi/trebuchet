@@ -14,6 +14,7 @@ import { voidJournal } from "../../src/usecases/void-journal.ts";
 import { type FakeClosingUnitOfWork, fakeClosingUnitOfWork } from "../fakes.ts";
 import { setupLedger } from "../ledger-fixture.ts";
 import { InMemoryReportRepository } from "../reports/fake-report-repository.ts";
+import { codeOf, unwrap } from "../result.ts";
 
 let fx: ReturnType<typeof setupLedger>;
 let uow: FakeClosingUnitOfWork;
@@ -35,11 +36,6 @@ const settingsDeps = () => ({
 const readDeps = () => ({ masters: fx.masters, closing: uow.closing, reports: reports() });
 const commitDeps = () => ({ uow, reports: reports(), ids: fx.ids, clock: fx.clock });
 
-const unwrap = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
-
 const input = (over: Record<string, unknown> = {}) => ({
   name: "開業準備費",
   totalAmount: 600_000,
@@ -52,7 +48,6 @@ const input = (over: Record<string, unknown> = {}) => ({
 const save = (over: Record<string, unknown> = {}) => saveDeferredAsset(settingsDeps(), input(over));
 const decide = (deferredAssetId: string, fiscalYear: number, amount: number) =>
   decideDeferredAmortization(settingsDeps(), { deferredAssetId, fiscalYear, amount });
-const codeOf = (r: { ok: boolean; error?: { code: string } }) => (r.ok ? "ok" : r.error?.code);
 const snapshot = () =>
   structuredClone({
     ledger: fx.ledger.state,

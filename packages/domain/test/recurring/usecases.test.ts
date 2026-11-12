@@ -12,7 +12,8 @@ import {
   updateRecurring,
 } from "../../src/usecases/recurring.ts";
 import { voidJournal } from "../../src/usecases/void-journal.ts";
-import { errorOf, must, setupRecurring } from "../recurring-setup.ts";
+import { setupRecurring } from "../recurring-setup.ts";
+import { errorOf, must } from "../result.ts";
 
 // 005 US3: 定期仕訳のユースケース（R16・R17・R19〜R21・R23、FR-023〜029、US3 Acceptance 1〜8）
 

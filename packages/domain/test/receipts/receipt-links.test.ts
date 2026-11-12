@@ -15,17 +15,11 @@ import {
 import { voidJournal } from "../../src/usecases/void-journal.ts";
 import { FaultInjectingReceiptUnitOfWork, receiptSnapshotOf } from "../receipt-fault-injection.ts";
 import { seedReceipt, setupReceiptsWithLedger } from "../receipt-setup.ts";
+import { codeOf, must } from "../result.ts";
 
 // T020: 結びつけ・解除・証憑から仕訳の登録・候補・仕訳側の合成（contracts/domain-module.md §3、R5・R6、FR-010〜013）
 
 type Ctx = ReturnType<typeof setupReceiptsWithLedger>;
-
-function must<T>(r: { ok: true; value: T } | { ok: false; error: { code: string } }): T {
-  if (!r.ok) throw new Error(`unexpected err: ${r.error.code}`);
-  return r.value;
-}
-const codeOf = (r: { ok: boolean; error?: { code: string } }): string | undefined =>
-  r.ok ? undefined : r.error?.code;
 
 function draftOf(ctx: Ctx, date: string, amount: number): JournalDraft {
   return {

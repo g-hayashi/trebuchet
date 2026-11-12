@@ -2,7 +2,6 @@ import type { StatementColumnMapping } from "@trebuchet/schema";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { headerSignature } from "../../src/statements/sources.ts";
-import type { Result } from "../../src/types.ts";
 import {
   commitStatementImport,
   previewStatementImport,
@@ -12,6 +11,7 @@ import { fakeStatementUnitOfWork } from "../fakes.ts";
 import { BANK_TWO_COLUMNS } from "../fixtures/statements/expected.ts";
 import { readStatementText } from "../fixtures/statements/load.ts";
 import { setupBase } from "../ledger-setup.ts";
+import { codeOf, unwrap } from "../result.ts";
 import { FaultInjectingStatementUnitOfWork, snapshotOf } from "../statement-fault-injection.ts";
 import { statementTableOf } from "../statements-arbitraries.ts";
 
@@ -77,12 +77,6 @@ const commit = (
     saveSource,
   });
 };
-
-const unwrap = <T>(r: Result<T>): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
-const codeOf = (r: Result<unknown>): string => (r.ok ? "ok" : r.error.code);
 
 describe("commitStatementImport の saveSource", () => {
   it("null なら取込元を保存しない（回の sourceName は null、応答の source は null）", () => {

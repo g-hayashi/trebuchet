@@ -24,7 +24,17 @@ import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { createStatementUnitOfWork, DrizzleStatementStore } from "../src/statement-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  accountIdOf,
+  codeOf,
+  createTestEntity,
+  statementIdOf,
+  type TempDataDir,
+  testClock,
+  testIds,
+  unwrap,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 // 006 T015（INV-47 の承認の側、INV-43）。承認の永続化を実 DB で確かめる:
 // 障害の注入での全部か無か、部分 UNIQUE、除外・確認・取消の往復
@@ -35,8 +45,8 @@ let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 let store: DrizzleStatementStore;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-25T09:00:00.000Z" };
+const ids = testIds();
+const clock = testClock();
 
 beforeEach(() => {
   tmp = useTempDataDir("statement-approve");
@@ -49,14 +59,6 @@ afterEach(() => tmp.cleanup());
 
 const count = (table: string) =>
   (db.$client.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
-const ok = <T>(r: Result<T>): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
-const codeOf = <T>(r: Result<T>): string => {
-  if (r.ok) throw new Error("成功しました（失敗を期待）");
-  return r.error.code;
-};
 
 const deps = (uow: StatementUnitOfWork = createStatementUnitOfWork(db)) => ({ uow, ids, clock });
 const bank = () => accountIdOf(masters, "普通預金");
@@ -64,7 +66,7 @@ const payable = () => accountIdOf(masters, "未払金");
 const rent = () => accountIdOf(masters, "地代家賃");
 
 const mapAccount = (name: string, over: Record<string, unknown> = {}) =>
-  ok(
+  unwrap(
     saveStatementAccount(deps(), name, {
       usage: "business",
       kind: "bank",
@@ -77,7 +79,7 @@ let shaSeq = 0;
 const importRows = (rows: StatementRow[]) => {
   shaSeq += 1;
   const sha256 = shaSeq.toString(16).padStart(64, "0");
-  ok(
+  unwrap(
     commitStatementRows(deps(), {
       origin: "paste",
       rows,
@@ -95,12 +97,7 @@ const row = (over: Partial<StatementRow> = {}): StatementRow => ({
   transferFlag: false,
   ...over,
 });
-const idOf = (content: string) => {
-  const s = store.listStatements().find((x) => x.content === content);
-  if (s === undefined) throw new Error(`明細がない: ${content}`);
-  return s.id;
-};
-const statusOf = (id: string) => ok(listStatements(deps())).find((v) => v.id === id)?.status;
+const statusOf = (id: string) => unwrap(listStatements(deps())).find((v) => v.id === id)?.status;
 const rentDraft = (date = "2026-10-12", amount = 80_000): JournalDraft => ({
   date,
   memo: "家賃",
@@ -112,7 +109,7 @@ const rentDraft = (date = "2026-10-12", amount = 80_000): JournalDraft => ({
 
 /** 既存の仕訳（出所 recurring）を 1 件作る */
 const addJournal = (draft: JournalDraft) =>
-  ok(createJournal({ ledger, masters, ids, clock }, draft, { source: "recurring" })).journal;
+  unwrap(createJournal({ ledger, masters, ids, clock }, draft, { source: "recurring" })).journal;
 
 /** 書き込みを数え、`failAt` 回目の直前に例外を投げる UnitOfWork（db の実装を包む） */
 const WRITE_METHOD =
@@ -200,8 +197,8 @@ describe("approveCandidate の永続化（実 DB）", () => {
   it("承認すると仕訳・結びつき・監査が書かれ、明細は registered。仕訳を取り消すと unprocessed に戻る", () => {
     mapAccount("サンプル銀行");
     importRows([row({ content: "家賃", amount: -80_000 })]);
-    const id = idOf("家賃");
-    const r = ok(approveCandidate(deps(), id, { draft: rentDraft() }));
+    const id = statementIdOf(store, "家賃");
+    const r = unwrap(approveCandidate(deps(), id, { draft: rentDraft() }));
     expect(r.journal?.source).toBe("statement");
     expect(count("journals")).toBe(1);
     const links = store.listStatementLinks();
@@ -211,7 +208,7 @@ describe("approveCandidate の永続化（実 DB）", () => {
     expect(statusOf(id)).toBe("registered");
 
     const j = ledger.getJournal(r.journal?.id ?? "");
-    ok(
+    unwrap(
       voidJournal({ ledger, masters, ids, clock }, j?.id ?? "", {
         reason: "取消",
         version: j?.version ?? 1,
@@ -219,7 +216,7 @@ describe("approveCandidate の永続化（実 DB）", () => {
     );
     expect(statusOf(id)).toBe("unprocessed");
     // 再承認で、古い結びつきが失効し、有効な結びつきは 1 件
-    ok(approveCandidate(deps(), id, { draft: rentDraft("2026-10-13") }));
+    unwrap(approveCandidate(deps(), id, { draft: rentDraft("2026-10-13") }));
     const all = store.listStatementLinks();
     expect(all).toHaveLength(2);
     expect(all.filter((l) => l.revokedAt === null)).toHaveLength(1);
@@ -243,12 +240,12 @@ describe("approveCandidate の永続化（実 DB）", () => {
         date: "2026-10-12",
       }),
     ]);
-    ok(buildCandidates(deps()));
-    const r = ok(approveCandidate(deps(), idOf("カード引落")));
+    unwrap(buildCandidates(deps()));
+    const r = unwrap(approveCandidate(deps(), statementIdOf(store, "カード引落")));
     expect(count("journals")).toBe(1);
-    expect(r.pairLink?.statementId).toBe(idOf("お支払い"));
+    expect(r.pairLink?.statementId).toBe(statementIdOf(store, "お支払い"));
     expect(new Set(store.listStatementLinks().map((l) => l.journalLineId)).size).toBe(2);
-    expect(statusOf(idOf("お支払い"))).toBe("registered");
+    expect(statusOf(statementIdOf(store, "お支払い"))).toBe("registered");
   });
 
   it("結びつけ先の行に別の明細が結びついていれば JOURNAL_LINE_ALREADY_LINKED（部分 UNIQUE も同じ行を拒否する）", () => {
@@ -260,17 +257,17 @@ describe("approveCandidate の永続化（実 DB）", () => {
     ]);
     const credit = j.lines.find((l) => l.side === "credit");
     const ref = { journalId: j.id, lineId: credit?.id ?? "" };
-    ok(approveCandidate(deps(), idOf("家賃"), { match: ref }));
+    unwrap(approveCandidate(deps(), statementIdOf(store, "家賃"), { match: ref }));
     const before = snapshot();
-    expect(codeOf(approveCandidate(deps(), idOf("家賃の二重"), { match: ref }))).toBe(
-      "JOURNAL_LINE_ALREADY_LINKED",
-    );
+    expect(
+      codeOf(approveCandidate(deps(), statementIdOf(store, "家賃の二重"), { match: ref })),
+    ).toBe("JOURNAL_LINE_ALREADY_LINKED");
     expect(snapshot()).toEqual(before);
     // DB の部分 UNIQUE（有効な結びつきだけ）が、ドメインの検査をすり抜けた書き込みも止める
     expect(() =>
       store.insertStatementLink({
         id: randomUUIDv7(),
-        statementId: idOf("家賃の二重"),
+        statementId: statementIdOf(store, "家賃の二重"),
         journalId: j.id,
         journalLineId: ref.lineId,
         kind: "matched",
@@ -280,8 +277,8 @@ describe("approveCandidate の永続化（実 DB）", () => {
       }),
     ).toThrow(/UNIQUE/);
     // 外せば、別の明細を結べる
-    ok(unlinkStatement(deps(), idOf("家賃"), { reason: "誤り" }));
-    ok(approveCandidate(deps(), idOf("家賃の二重"), { match: ref }));
+    unwrap(unlinkStatement(deps(), statementIdOf(store, "家賃"), { reason: "誤り" }));
+    unwrap(approveCandidate(deps(), statementIdOf(store, "家賃の二重"), { match: ref }));
     expect(store.listStatementLinks().filter((l) => l.revokedAt === null)).toHaveLength(1);
   });
 });
@@ -290,7 +287,7 @@ describe("INV-47（承認の側）: 障害の注入", () => {
   it("どの書き込みで失敗しても、仕訳・結びつき・監査が残らず、最後は成功する（新規の承認）", () => {
     mapAccount("サンプル銀行");
     importRows([row({ content: "家賃", amount: -80_000 })]);
-    const id = idOf("家賃");
+    const id = statementIdOf(store, "家賃");
     const uow = new FaultInjectingUow();
     const succeededAt = sweepFailures(
       uow,
@@ -307,10 +304,10 @@ describe("INV-47（承認の側）: 障害の注入", () => {
   it("取消のあとの再承認で、失効の書き込みの後に失敗しても失効が巻き戻る", () => {
     mapAccount("サンプル銀行");
     importRows([row({ content: "家賃", amount: -80_000 })]);
-    const id = idOf("家賃");
-    const first = ok(approveCandidate(deps(), id, { draft: rentDraft() }));
+    const id = statementIdOf(store, "家賃");
+    const first = unwrap(approveCandidate(deps(), id, { draft: rentDraft() }));
     const j = ledger.getJournal(first.journal?.id ?? "");
-    ok(
+    unwrap(
       voidJournal({ ledger, masters, ids, clock }, j?.id ?? "", {
         reason: "取消",
         version: j?.version ?? 1,
@@ -341,11 +338,11 @@ describe("INV-47（承認の側）: 障害の注入", () => {
         transferFlag: true,
       }),
     ]);
-    ok(buildCandidates(deps()));
+    unwrap(buildCandidates(deps()));
     const uow = new FaultInjectingUow();
     sweepFailures(
       uow,
-      () => approveCandidate(deps(uow), idOf("カード引落")),
+      () => approveCandidate(deps(uow), statementIdOf(store, "カード引落")),
       () => {
         expect(store.listStatementLinks()).toHaveLength(2);
         expect(count("journals")).toBe(1);
@@ -359,14 +356,14 @@ describe("INV-47（承認の側）: 障害の注入", () => {
       row({ content: "家賃A", amount: -80_000, date: "2026-10-10" }),
       row({ content: "家賃B", amount: -70_000, date: "2026-10-11" }),
     ]);
-    ok(buildCandidates(deps()));
+    unwrap(buildCandidates(deps()));
     // 候補を作る段（match）は使わず、AI の候補を直接書いて、しきい値以上にする
     for (const [content, amount] of [
       ["家賃A", 80_000],
       ["家賃B", 70_000],
     ] as const) {
       store.upsertStatementCandidate({
-        statementId: idOf(content),
+        statementId: statementIdOf(store, content),
         method: "rule",
         purpose: "business",
         confidence: 90,
@@ -381,7 +378,7 @@ describe("INV-47（承認の側）: 障害の注入", () => {
     const broken = rentDraft("2026-10-12", 70_000);
     const lines = broken.lines.map((l) => (l.side === "debit" ? { ...l, amount: 60_000 } : l));
     store.upsertStatementCandidate({
-      statementId: idOf("家賃B"),
+      statementId: statementIdOf(store, "家賃B"),
       method: "rule",
       purpose: "business",
       confidence: 90,
@@ -391,15 +388,20 @@ describe("INV-47（承認の側）: 障害の注入", () => {
       model: null,
       createdAt: clock.now(),
     });
-    const r = ok(
+    const r = unwrap(
       approveBulk(deps(), {
-        items: [{ statementId: idOf("家賃A") }, { statementId: idOf("家賃B") }],
+        items: [
+          { statementId: statementIdOf(store, "家賃A") },
+          { statementId: statementIdOf(store, "家賃B") },
+        ],
       }),
     );
-    expect(r.approved).toEqual([idOf("家賃A")]);
-    expect(r.failed.map((f) => [f.statementId, f.code])).toEqual([[idOf("家賃B"), "UNBALANCED"]]);
+    expect(r.approved).toEqual([statementIdOf(store, "家賃A")]);
+    expect(r.failed.map((f) => [f.statementId, f.code])).toEqual([
+      [statementIdOf(store, "家賃B"), "UNBALANCED"],
+    ]);
     expect(count("journals")).toBe(1);
-    expect(statusOf(idOf("家賃B"))).toBe("unprocessed");
+    expect(statusOf(statementIdOf(store, "家賃B"))).toBe("unprocessed");
   });
 });
 
@@ -407,15 +409,15 @@ describe("除外・変更の確認・結びつきの取消の永続化", () => {
   it("除外 → 除外の取消が往復し、監査に理由が残る。登録済みは除外できない", () => {
     mapAccount("サンプル銀行");
     importRows([row({ content: "A" }), row({ content: "家賃", amount: -80_000 })]);
-    const a = idOf("A");
-    const ex = ok(excludeStatement(deps(), a, { reason: "私用" }));
+    const a = statementIdOf(store, "A");
+    const ex = unwrap(excludeStatement(deps(), a, { reason: "私用" }));
     expect(ex.status).toBe("excluded");
     expect(store.listStatements().find((s) => s.id === a)).toMatchObject({
       excludedAt: clock.now(),
       excludedReason: "私用",
     });
     expect(codeOf(approveCandidate(deps(), a, { draft: rentDraft() }))).toBe("STATEMENT_EXCLUDED");
-    ok(unexcludeStatement(deps(), a, { reason: "誤り" }));
+    unwrap(unexcludeStatement(deps(), a, { reason: "誤り" }));
     expect(store.listStatements().find((s) => s.id === a)).toMatchObject({
       excludedAt: null,
       excludedReason: null,
@@ -427,17 +429,17 @@ describe("除外・変更の確認・結びつきの取消の永続化", () => {
       { action: "exclude", reason: "私用" },
       { action: "unexclude", reason: "誤り" },
     ]);
-    const rentId = idOf("家賃");
-    ok(approveCandidate(deps(), rentId, { draft: rentDraft() }));
+    const rentId = statementIdOf(store, "家賃");
+    unwrap(approveCandidate(deps(), rentId, { draft: rentDraft() }));
     expect(codeOf(excludeStatement(deps(), rentId, {}))).toBe("STATEMENT_ALREADY_REGISTERED");
   });
 
   it("変更ありの確認は changed_ack_at を書き、取込の再書き込みで NULL に戻る", () => {
     mapAccount("サンプル銀行");
     importRows([row({ content: "変更前" })]);
-    const id = idOf("変更前");
+    const id = statementIdOf(store, "変更前");
     store.markStatementChanged(id, JSON.stringify({ amount: -2000 }));
-    const v = ok(acknowledgeChange(deps(), id));
+    const v = unwrap(acknowledgeChange(deps(), id));
     expect(v.changed).toBeNull();
     expect(store.listStatements()[0]?.changedAckAt).toBe(clock.now());
     store.markStatementChanged(id, JSON.stringify({ amount: -3000 }));
@@ -448,10 +450,10 @@ describe("除外・変更の確認・結びつきの取消の永続化", () => {
     mapAccount("サンプル銀行");
     const j = addJournal(rentDraft("2026-10-12"));
     importRows([row({ content: "家賃", amount: -80_000, date: "2026-10-12" })]);
-    const id = idOf("家賃");
+    const id = statementIdOf(store, "家賃");
     const credit = j.lines.find((l) => l.side === "credit");
-    ok(approveCandidate(deps(), id, { match: { journalId: j.id, lineId: credit?.id ?? "" } }));
-    const v = ok(unlinkStatement(deps(), id, { reason: "誤って結びつけた" }));
+    unwrap(approveCandidate(deps(), id, { match: { journalId: j.id, lineId: credit?.id ?? "" } }));
+    const v = unwrap(unlinkStatement(deps(), id, { reason: "誤って結びつけた" }));
     expect(v.status).toBe("unprocessed");
     const link = store.listStatementLinks()[0];
     expect(link).toMatchObject({ revokedAt: clock.now(), revokedReason: "誤って結びつけた" });

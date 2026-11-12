@@ -13,7 +13,13 @@ import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-reposi
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  accountIdOf,
+  createTestEntity,
+  type TempDataDir,
+  testClock,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 let tmp: TempDataDir;
 let db: TenantDb;
@@ -22,7 +28,7 @@ let ledger: DrizzleLedgerRepository;
 let store: DrizzleImportStore;
 let uow: ImportUnitOfWork;
 
-const clock = { now: () => "2026-10-19T09:00:00.000Z" };
+const clock = testClock();
 const SHA = "0123456789abcdef".repeat(4);
 
 beforeEach(() => {

@@ -52,7 +52,7 @@
 ## 不変条件とテストの共通部品
 
 - **不変条件**は `specs/INVARIANTS.md`（INV-1〜77 の索引。正本は各 `data-model.md` §4）。対応するテストは fast-check の性質テストで書く。`fc.assert(fc.property(...))` を直接呼ぶ（`@fast-check/vitest` は使わない。001/R6）。
-- **テストの共通部品を使う**（同じ準備を各ファイルに書かない）。db: `packages/db/src/testing.ts` の `createTestEntity`・`accountIdOf`・`useTempDataDir`・`NOW`/`TODAY`。domain: `packages/domain/test/fakes/`（ストアごとのフェイク。`fakes.ts` は再エクスポート）、`test-dates.ts`（`NOW`/`TODAY` の正本）、`ledger-setup.ts`（`setupBase`・`accountIdOf`）。server: `apps/server/test/helpers.ts`（`createTestEntity`・`accountLookup`・`errorOf`・`json`・`okBody`・`makeClock`。`backup-helpers.ts`・`invoicing-helpers.ts` はこれを拡張する）。bench: `scripts/lib/bench-common.ts`。
+- **テストの共通部品を使う**（同じ準備を各ファイルに書かない）。db: `packages/db/src/testing.ts` の `createTestEntity`・`accountIdOf`・`useTempDataDir`・`testIds`・`testClock`・`statementIdOf`・`NOW`/`TODAY`。domain: `packages/domain/test/fakes/`（ストアごとのフェイク。`fakes.ts` は再エクスポート）、`test-dates.ts`（`NOW`/`TODAY` の正本）、`result.ts`（`unwrap`・`must`・`errorOf`・`codeOf`。db の testing.ts も再エクスポートする）、`ledger-setup.ts`（`setupBase`・`accountIdOf`）、`statements-setup.ts`（`setupStatements`）。UnitOfWork の巻き戻しは db の `unit-of-work.test.ts` と domain の `fake-unit-of-work.test.ts` の契約テストで全種をまとめて確かめる（機能ごとに書き直さない）。server: `apps/server/test/helpers.ts`（`createTestEntity`・`accountLookup`・`errorOf`・`json`・`jsonRequest`・`okBody`・`makeClock`・`NOW`。`backup-helpers.ts`・`invoicing-helpers.ts` はこれを拡張する）。web: `apps/web/test/fixtures.ts`（`uuid`・`ENTITY`・`account`）、`fake-timers.ts`（`useFakeClock`・`advance`。デバウンスや保存の待ちを実時間で待たない）、`render-route.tsx` の `renderTree`。bench: `scripts/lib/bench-common.ts`・`bench-client.ts`。
 
 ## 進め方（依存、契約の変更、マイグレーション、コミット）
 

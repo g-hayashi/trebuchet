@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { backupAlert, shouldRunAutoBackup, shouldSkipBackup } from "../../src/backup/policy.ts";
+import { NOW } from "../test-dates.ts";
 
 const HOUR = 60 * 60 * 1000;
-const NOW = "2026-10-20T12:00:00.000Z";
 const ago = (ms: number) => new Date(Date.parse(NOW) - ms).toISOString();
 const SHA = "a".repeat(64);
 

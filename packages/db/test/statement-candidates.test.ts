@@ -6,7 +6,6 @@ import {
   getStatementSettings,
   type JournalDraft,
   listStatements,
-  type Result,
   type StatementCandidateRecord,
   type StatementLinkRecord,
   type StatementRow,
@@ -19,7 +18,17 @@ import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { createStatementUnitOfWork, DrizzleStatementStore } from "../src/statement-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  accountIdOf,
+  createTestEntity,
+  NOW,
+  statementIdOf,
+  type TempDataDir,
+  testClock,
+  testIds,
+  unwrap,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 // 006 T014。候補・結びつき・設定の永続化と、候補の作成・一覧・設定を実 DB で確かめる
 
@@ -29,9 +38,8 @@ let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 let store: DrizzleStatementStore;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-25T09:00:00.000Z" };
-const NOW = clock.now();
+const ids = testIds();
+const clock = testClock();
 
 beforeEach(() => {
   tmp = useTempDataDir("statement-candidates");
@@ -45,15 +53,11 @@ afterEach(() => tmp.cleanup());
 const count = (table: string) =>
   (db.$client.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
 const deps = () => ({ uow: createStatementUnitOfWork(db), ids, clock });
-const ok = <T>(r: Result<T>): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
 
 const bank = () => accountIdOf(masters, "普通預金");
 const payable = () => accountIdOf(masters, "未払金");
 const mapAccount = (name: string, over: Record<string, unknown> = {}) =>
-  ok(
+  unwrap(
     saveStatementAccount(deps(), name, {
       usage: "business",
       kind: "bank",
@@ -66,7 +70,7 @@ let shaSeq = 0;
 const importRows = (rows: StatementRow[]) => {
   shaSeq += 1;
   const sha256 = shaSeq.toString(16).padStart(64, "0");
-  ok(
+  unwrap(
     commitStatementRows(deps(), {
       origin: "paste",
       rows,
@@ -84,11 +88,6 @@ const row = (over: Partial<StatementRow> = {}): StatementRow => ({
   transferFlag: false,
   ...over,
 });
-const idOf = (content: string) => {
-  const s = store.listStatements().find((x) => x.content === content);
-  if (s === undefined) throw new Error(`明細がない: ${content}`);
-  return s.id;
-};
 const rentDraft = (): JournalDraft => ({
   date: "2026-10-12",
   memo: "家賃",
@@ -98,7 +97,8 @@ const rentDraft = (): JournalDraft => ({
   ],
 });
 const addJournal = () =>
-  ok(createJournal({ ledger, masters, ids, clock }, rentDraft(), { source: "recurring" })).journal;
+  unwrap(createJournal({ ledger, masters, ids, clock }, rentDraft(), { source: "recurring" }))
+    .journal;
 
 const candidate = (
   statementId: string,
@@ -272,12 +272,12 @@ describe("候補の作成・一覧・設定（実 DB の通し）", () => {
       }),
       row({ content: "ショップ001", amount: -500, date: "2026-10-22" }),
     ]);
-    const built = ok(buildCandidates(deps()));
+    const built = unwrap(buildCandidates(deps()));
     expect(built.built).toBe(4);
-    expect(built.needsAi).toEqual([idOf("ショップ001")]);
+    expect(built.needsAi).toEqual([statementIdOf(store, "ショップ001")]);
     expect(count("statement_candidates")).toBe(4);
 
-    const views = ok(listStatements(deps()));
+    const views = unwrap(listStatements(deps()));
     const by = (c: string) => views.find((v) => v.content === c);
     expect(by("家賃")?.candidate).toMatchObject({
       method: "match",
@@ -291,7 +291,7 @@ describe("候補の作成・一覧・設定（実 DB の通し）", () => {
     // 結びつけると registered、仕訳を取り消すと unprocessed（INV-44）
     store.insertStatementLink({
       id: randomUUIDv7(),
-      statementId: idOf("家賃"),
+      statementId: statementIdOf(store, "家賃"),
       journalId: j.id,
       journalLineId: j.lines[1]?.id ?? "",
       kind: "matched",
@@ -299,18 +299,18 @@ describe("候補の作成・一覧・設定（実 DB の通し）", () => {
       revokedAt: null,
       revokedReason: null,
     });
-    expect(ok(listStatements(deps(), { status: "registered" })).map((v) => v.content)).toEqual([
+    expect(unwrap(listStatements(deps(), { status: "registered" })).map((v) => v.content)).toEqual([
       "家賃",
     ]);
     ledger.voidJournal(j.id, j.version, NOW);
-    expect(ok(listStatements(deps(), { status: "registered" }))).toEqual([]);
+    expect(unwrap(listStatements(deps(), { status: "registered" }))).toEqual([]);
   });
 
   it("科目の対応を変えると候補を作り直す（rebuilt）", () => {
     mapAccount("サンプル銀行");
     addJournal();
     importRows([row({ content: "家賃", amount: -80_000, date: "2026-10-12" })]);
-    ok(buildCandidates(deps()));
+    unwrap(buildCandidates(deps()));
     expect(store.listStatementCandidates()[0]?.method).toBe("match");
     const saved = mapAccount("サンプル銀行", { accountId: accountIdOf(masters, "現金") });
     expect(saved.rebuilt).toBe(1);
@@ -318,12 +318,12 @@ describe("候補の作成・一覧・設定（実 DB の通し）", () => {
   });
 
   it("設定の往復と監査", () => {
-    expect(ok(getStatementSettings(deps()))).toMatchObject({
+    expect(unwrap(getStatementSettings(deps()))).toMatchObject({
       bulkThreshold: 80,
       externalThreshold: 60,
     });
-    ok(saveStatementSettings(deps(), { bulkThreshold: 95, externalThreshold: 40 }));
-    expect(ok(getStatementSettings(deps()))).toMatchObject({
+    unwrap(saveStatementSettings(deps(), { bulkThreshold: 95, externalThreshold: 40 }));
+    expect(unwrap(getStatementSettings(deps()))).toMatchObject({
       bulkThreshold: 95,
       externalThreshold: 40,
     });

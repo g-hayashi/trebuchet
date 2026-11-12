@@ -86,4 +86,3 @@ export const fakeRecurringUnitOfWork = (
   masters = new InMemoryMasterRepository(),
   recurring = new InMemoryRecurringStore(),
 ) => fakeUnitOfWork(ledger, masters, { recurring });
-export type FakeRecurringUnitOfWork = ReturnType<typeof fakeRecurringUnitOfWork>;

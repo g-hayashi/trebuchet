@@ -1,4 +1,3 @@
-import { randomUUIDv7 } from "node:crypto";
 import {
   commitAdjustment,
   createJournal,
@@ -15,7 +14,14 @@ import { createClosingUnitOfWork, DrizzleClosingStore } from "../src/closing-rep
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  accountIdOf,
+  createTestEntity,
+  type TempDataDir,
+  testClock,
+  testIds,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 let tmp: TempDataDir;
 let db: TenantDb;
@@ -24,8 +30,8 @@ let ledger: DrizzleLedgerRepository;
 let closing: DrizzleClosingStore;
 let uow: ReturnType<typeof createClosingUnitOfWork>;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-19T09:00:00.000Z" };
+const ids = testIds();
+const clock = testClock();
 
 beforeEach(() => {
   tmp = useTempDataDir("closing-adjustment");

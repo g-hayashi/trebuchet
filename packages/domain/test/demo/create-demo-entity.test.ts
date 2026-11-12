@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildDemoPlan } from "../../src/demo/plan.ts";
 import { cleanupPreparingEntities, createDemoEntity } from "../../src/usecases/demo-entity.ts";
+import { TODAY } from "../test-dates.ts";
 import { type DemoSetup, setupDemo } from "./demo-setup.ts";
-
-const TODAY = "2026-11-08";
 
 const created = (s: DemoSetup, today = TODAY) => {
   const result = createDemoEntity(s.deps, { today });

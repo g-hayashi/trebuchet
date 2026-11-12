@@ -1,9 +1,9 @@
 import { randomUUIDv7 } from "node:crypto";
 import type { TenantDb } from "../src/tenant-store.ts";
+import { NOW } from "../src/testing.ts";
 
 // 010 の db のテストの共通の準備（生の SQL で行を入れる。表の形・トリガーの検査用）
 
-export const NOW = "2026-11-02T09:00:00.000Z";
 export const SHA_A = "a".repeat(64);
 export const SHA_B = "b".repeat(64);
 export const SHA_C = "c".repeat(64);
