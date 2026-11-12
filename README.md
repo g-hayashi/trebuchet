@@ -61,6 +61,8 @@ pnpm dev
 
 画面は [http://localhost:5173](http://localhost:5173)。`127.0.0.1` ではパスキーが使えないので、必ず `localhost` で開く。
 
+`pnpm start` は web をビルドして server だけを起動する（Vite の開発サーバーは使わない）。画面は [http://localhost:8787](http://localhost:8787)。起動のログの `127.0.0.1:8787` は待ち受けのアドレスで、ブラウザではこちらも `localhost` で開く。
+
 SQLite の暗号化に使うドライバーは、Apple silicon 向けのビルド済みのものを使う（自分でビルドする手順はない）。
 
 初回はパスキーを登録する。PRF に対応したパスキー（iCloud キーチェーン、1Password など）が必要。登録すると回復キーが一度だけ表示されるので、「控えた」を押す前に紙に書き、この Mac とは別の場所に保管する。
