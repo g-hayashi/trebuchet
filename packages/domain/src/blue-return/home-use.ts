@@ -1,4 +1,5 @@
 import type { AdjustmentProposal } from "@trebuchet/schema";
+import { accountByCode } from "../accounts.ts";
 import { DRAWINGS_ACCOUNT_CODE } from "../carry-forward.ts";
 import { blankToNull } from "../text.ts";
 import {
@@ -166,14 +167,9 @@ export function proposeHomeUseAdjustment(input: HomeUseInput): Result<HomeUseAss
       }),
     );
   }
-  const drawings = input.accounts.find((a) => a.code === DRAWINGS_ACCOUNT_CODE);
-  if (drawings === undefined) {
-    return err(
-      domainError("ACCOUNT_NOT_FOUND", "事業主貸の科目（3090）がありません", {
-        code: DRAWINGS_ACCOUNT_CODE,
-      }),
-    );
-  }
+  const drawingsResult = accountByCode(input.accounts, DRAWINGS_ACCOUNT_CODE);
+  if (!drawingsResult.ok) return drawingsResult;
+  const drawings = drawingsResult.value;
 
   const homeUseJournals = new Set(
     input.refs.filter((r) => r.kind === "home_use").map((r) => r.journalId),

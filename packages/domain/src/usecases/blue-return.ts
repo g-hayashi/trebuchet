@@ -31,7 +31,7 @@ import {
   proposeHomeUseAdjustment,
   validateHomeUseAllocation,
 } from "../blue-return/home-use.ts";
-import { yearOfDate } from "../dates.ts";
+import { isValidDate, yearOfDate } from "../dates.ts";
 import { isNonNegativeYen } from "../money.ts";
 import type {
   Clock,
@@ -700,10 +700,7 @@ function disposeFixedAssetIn(
   if (before === undefined) {
     return validation("固定資産が見つかりません", { field: "id" });
   }
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(params.disposedOn) ||
-    Number.isNaN(Date.parse(params.disposedOn))
-  ) {
+  if (!isValidDate(params.disposedOn)) {
     return validation("除却の日は YYYY-MM-DD で入力してください", { field: "disposedOn" });
   }
   const serviceOn = before.inServiceOn ?? before.acquiredOn;

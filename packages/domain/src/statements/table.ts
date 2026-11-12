@@ -47,7 +47,7 @@ const norm = (s: string): string => s.normalize("NFKC").trim();
 
 /**
  * 金額の書き方を読む（R5）。NFKC の後、`,`・`¥`・`円`・空白を除き、`−‐‑–—` を `-` にする。
- * 先頭の `△`・`▲` と全体の括弧 `(1,234)` は負。整数でなければ undefined（小数・外貨・空）。
+ * 先頭の `△`・`▲` と全体の括弧 `(1,234)` は負。整数でなければ undefined（小数・外貨・空。括弧・△の中に符号があるときも）。
  * `|金額| >= 1e12` は "large"
  */
 export function parseStatementAmount(raw: string): number | undefined | "large" {
@@ -63,7 +63,8 @@ export function parseStatementAmount(raw: string): number | undefined | "large" 
     s = s.slice(1);
     negative = true;
   }
-  if (!/^[+-]?\d+$/.test(s)) return undefined;
+  // 括弧・△で負にしたときは、中に符号を許さない（`(-1,234)` や `△-1000` は符号が重なり反転するため読まない）
+  if (!(negative ? /^\d+$/ : /^[+-]?\d+$/).test(s)) return undefined;
   const n = Number(s);
   if (Math.abs(n) >= YEN_LIMIT) return "large";
   const signed = negative ? -n : n;

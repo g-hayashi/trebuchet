@@ -1,11 +1,10 @@
 import { ACCOUNT_CODES, type InvoicePriceMode, type TaxCategoryCode } from "@trebuchet/schema";
+import { accountByCode } from "../accounts.ts";
 import {
   type Account,
-  err,
   type Journal,
   type JournalDraft,
   type LineDraft,
-  notFoundError,
   ok,
   type Result,
 } from "../types.ts";
@@ -25,17 +24,6 @@ export const INVOICING_ACCOUNT_CODES = {
   /** 事業主貸（013。源泉徴収された所得税は事業主個人の税なので入金の仕訳で借方に計上する） */
   ownerDrawing: ACCOUNT_CODES.ownerDrawing,
 } as const;
-
-export function findAccountByCode(
-  accounts: readonly Pick<Account, "id" | "code">[],
-  code: string,
-): Result<string> {
-  const found = accounts.find((a) => a.code === code);
-  if (found === undefined) {
-    return err(notFoundError("ACCOUNT_NOT_FOUND", `勘定科目（コード ${code}）`, { code }));
-  }
-  return ok(found.id);
-}
 
 /**
  * 逆仕訳（訂正仕訳）の案（R12）。締め済みの年度の請求・入金の仕訳を取り消すときに、今日付で起票する。
@@ -82,7 +70,7 @@ export function paymentJournalDraft(
   payment: PaymentJournalSource,
   accounts: readonly Pick<Account, "id" | "code">[],
 ): Result<JournalDraft> {
-  const receivable = findAccountByCode(accounts, INVOICING_ACCOUNT_CODES.receivable);
+  const receivable = accountByCode(accounts, INVOICING_ACCOUNT_CODES.receivable);
   if (!receivable.ok) return receivable;
   const lines: LineDraft[] = [
     {
@@ -94,29 +82,29 @@ export function paymentJournalDraft(
     },
   ];
   if (payment.feeAmount > 0) {
-    const fee = findAccountByCode(accounts, INVOICING_ACCOUNT_CODES.paymentFee);
+    const fee = accountByCode(accounts, INVOICING_ACCOUNT_CODES.paymentFee);
     if (!fee.ok) return fee;
     lines.push({
       side: "debit",
-      accountId: fee.value,
+      accountId: fee.value.id,
       amount: payment.feeAmount,
       partnerId: payment.partnerId,
     });
   }
   const withholding = payment.withholdingAmount ?? 0;
   if (withholding > 0) {
-    const owner = findAccountByCode(accounts, INVOICING_ACCOUNT_CODES.ownerDrawing);
+    const owner = accountByCode(accounts, INVOICING_ACCOUNT_CODES.ownerDrawing);
     if (!owner.ok) return owner;
     lines.push({
       side: "debit",
-      accountId: owner.value,
+      accountId: owner.value.id,
       amount: withholding,
       partnerId: payment.partnerId,
     });
   }
   lines.push({
     side: "credit",
-    accountId: receivable.value,
+    accountId: receivable.value.id,
     amount: payment.amount + payment.feeAmount + withholding,
     partnerId: payment.partnerId,
   });
@@ -144,9 +132,9 @@ export function invoiceJournalDraft(
   invoice: InvoiceJournalSource,
   accounts: readonly Pick<Account, "id" | "code">[],
 ): Result<JournalDraft> {
-  const receivable = findAccountByCode(accounts, INVOICING_ACCOUNT_CODES.receivable);
+  const receivable = accountByCode(accounts, INVOICING_ACCOUNT_CODES.receivable);
   if (!receivable.ok) return receivable;
-  const sales = findAccountByCode(accounts, INVOICING_ACCOUNT_CODES.sales);
+  const sales = accountByCode(accounts, INVOICING_ACCOUNT_CODES.sales);
   if (!sales.ok) return sales;
 
   const byCategory = new Map<TaxCategoryCode, number>();
@@ -177,12 +165,12 @@ export function invoiceJournalDraft(
     total += inclusive;
   }
   const lines: LineDraft[] = [
-    { side: "debit", accountId: receivable.value, amount: total, partnerId: invoice.partnerId },
+    { side: "debit", accountId: receivable.value.id, amount: total, partnerId: invoice.partnerId },
   ];
   for (const [taxCategory, amount] of byCategory) {
     lines.push({
       side: "credit",
-      accountId: sales.value,
+      accountId: sales.value.id,
       amount,
       taxCategory,
       partnerId: invoice.partnerId,

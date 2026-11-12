@@ -24,7 +24,7 @@ import {
   type SessionView,
 } from "@trebuchet/schema";
 import { Hono } from "hono";
-import { DomainException, firstRegistrationHostError } from "../errors.ts";
+import { alreadyRegisteredError, DomainException, firstRegistrationHostError } from "../errors.ts";
 import {
   type AuthSupport,
   b64,
@@ -40,8 +40,8 @@ import { csvResponse } from "../lib/csv-response.ts";
 import { expectedOriginFor, isLocalHost, rpIdFor } from "../lib/origin.ts";
 import { clearSessionCookie } from "../lib/session.ts";
 import { sweepSessions } from "../lib/session-sweeper.ts";
-import { sleep } from "../lib/util.ts";
-import { setAsideDataFiles, type Vault } from "../lib/vault.ts";
+import { errorName, sleep } from "../lib/util.ts";
+import { restoreSetAsideDataFiles, setAsideDataFiles, type Vault } from "../lib/vault.ts";
 import { readPrf } from "../lib/webauthn-response.ts";
 import { findActiveSession } from "../middleware/auth.ts";
 import type { GuardEnv } from "../middleware/host.ts";
@@ -65,8 +65,7 @@ export const RECOVERY_FAILURE_DELAY_MS = 1000;
 const DEFAULT_EVENT_LIMIT = 100;
 const MAX_EVENT_LIMIT = 500;
 
-const alreadyRegistered = () =>
-  new DomainException(domainError("ALREADY_REGISTERED", "すでに設定されています"));
+const alreadyRegistered = () => new DomainException(alreadyRegisteredError());
 
 const refsOf = (passkeys: Passkey[], rpId: string) =>
   passkeys.filter((p) => p.rpId === rpId).map(refOf);
@@ -139,8 +138,24 @@ export function authRoutes(deps: AuthRouteDeps) {
       const passkeyWrap = wrapDataKey(dk, prfOutput, "passkey", passkey.id);
       const recoveryWrap = wrapDataKey(dk, recovery.secret, "recovery", null);
       await vault.lock();
-      setAsideDataFiles(clock.now());
-      await store.initializeVault(passkey, passkeyWrap, recoveryWrap);
+      const movedDir = setAsideDataFiles(clock.now());
+      try {
+        await store.initializeVault(passkey, passkeyWrap, recoveryWrap);
+      } catch (e) {
+        // 元のデータを移したまま失敗すると、前の鍵でも開けなくなる。元の場所へ戻して元のエラーを返す
+        if (movedDir !== null) {
+          try {
+            restoreSetAsideDataFiles(movedDir);
+          } catch (restoreError) {
+            console.error(
+              "初回の設定に失敗し、移した元のデータも戻せません。手で戻してください:",
+              movedDir,
+              errorName(restoreError),
+            );
+          }
+        }
+        throw e;
+      }
       vault.unlock(dk);
       return recovery.text;
     } finally {

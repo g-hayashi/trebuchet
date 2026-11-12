@@ -77,8 +77,8 @@ describe("GET /backup/status", () => {
   it("未設定", async () => {
     const res = await call("GET", "/status");
     expect(res.status).toBe(200);
+    // 常に真の configured は応答に含めない（web は使わない）
     expect(await res.json()).toEqual({
-      configured: true,
       folder: env.defaultFolder,
       folderSource: "default",
       lastSuccess: null,
@@ -95,7 +95,6 @@ describe("GET /backup/status", () => {
     expect(((await res.json()) as { runId: string | null }).runId).toEqual(expect.any(String));
     await idle();
     const s = await status();
-    expect(s.configured).toBe(true);
     expect(s.folder).toBe(env.folder);
     expect(s.folderSource).toBe("configured");
     expect(s.lastRun?.trigger).toBe("manual");

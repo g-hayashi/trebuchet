@@ -139,8 +139,8 @@ function copyOne(
 export function receiptRefsFromSnapshotFiles(files: readonly SnapshotFile[]): ReceiptRefs[] {
   const refs: ReceiptRefs[] = [];
   for (const file of files) {
-    const match = /^tenants\/([0-9a-f-]{36})\.sqlite$/i.exec(file.path);
-    if (match === null || match[1] === undefined) continue;
+    const match = /^tenants\/([^/]+)\.sqlite$/.exec(file.path);
+    if (match === null || match[1] === undefined || !isValidEntityId(match[1])) continue;
     const db = new Database(file.bytes);
     try {
       const table = db

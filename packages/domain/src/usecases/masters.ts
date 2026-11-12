@@ -1,4 +1,4 @@
-import { MASTER_NAME_MAX, TAG_NAME_MAX } from "@trebuchet/schema";
+import { ALLOWED_SECTIONS, MASTER_NAME_MAX, TAG_NAME_MAX } from "@trebuchet/schema";
 import { type AuditInput, auditEntry } from "../audit.ts";
 import { addDays, oneYearEnd, yearOfDate } from "../dates.ts";
 import { type OpeningBalanceDraft, validateOpeningBalances } from "../opening.ts";
@@ -93,15 +93,6 @@ const CODE_PREFIX: Record<AccountCategory, number> = {
   equity: 3,
   revenue: 4,
   expense: 5,
-};
-
-/** 区分ごとに使える決算書の区分 */
-const ALLOWED_SECTIONS: Record<AccountCategory, readonly ReportSection[]> = {
-  asset: ["BS_ASSET"],
-  liability: ["BS_LIABILITY"],
-  equity: ["BS_EQUITY", "BS_ASSET"],
-  revenue: ["PL_SALES", "PL_OTHER"],
-  expense: ["PL_COGS", "PL_EXPENSE", "PL_OTHER"],
 };
 
 /**

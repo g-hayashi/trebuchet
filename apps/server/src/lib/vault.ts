@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   clearDataKey,
@@ -119,4 +119,23 @@ export function setAsideDataFiles(now: string): string | null {
     renameSync(path, join(dir, path.slice(dataDir().length + 1)));
   }
   return dir;
+}
+
+/**
+ * `setAsideDataFiles` が移したものを、元の場所へ戻す（初回の設定の失敗時）。
+ * 元の場所に何かがあれば上書きせず、そのままにして例外を投げる（移した先に残る）。
+ * すべて戻せたら、空になった移し先を消す
+ */
+export function restoreSetAsideDataFiles(movedDir: string): void {
+  let blocked = 0;
+  for (const name of readdirSync(movedDir)) {
+    const target = join(dataDir(), name);
+    if (existsSync(target)) {
+      blocked += 1;
+      continue;
+    }
+    renameSync(join(movedDir, name), target);
+  }
+  if (blocked > 0) throw new Error(`restore blocked: ${blocked} paths exist`);
+  rmdirSync(movedDir);
 }

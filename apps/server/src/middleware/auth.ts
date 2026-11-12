@@ -11,6 +11,7 @@ import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import {
+  alreadyRegisteredError,
   DomainException,
   firstRegistrationHostError,
   lockedError,
@@ -80,10 +81,7 @@ export const authCheck = (
 
     if (isRegister) {
       if ((await store.getRecoveryWrap()) !== undefined) {
-        throw new DomainException({
-          code: "ALREADY_REGISTERED",
-          message: "すでにパスキーが登録されています",
-        });
+        throw new DomainException(alreadyRegisteredError());
       }
       if (!isLocalHost(c.var.host)) {
         throw new DomainException(firstRegistrationHostError());

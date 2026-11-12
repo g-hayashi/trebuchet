@@ -42,7 +42,6 @@ export const BackupAlertReason = z.enum(["STALE", "LAST_RUN_FAILED"]);
 export type BackupAlertReason = z.infer<typeof BackupAlertReason>;
 
 export const BackupStatus = z.object({
-  configured: z.literal(true),
   folder: z.string(),
   folderSource: z.enum(["configured", "default"]),
   lastSuccess: Timestamp.nullable(),

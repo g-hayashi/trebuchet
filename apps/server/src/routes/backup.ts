@@ -66,17 +66,16 @@ export function backupRoutes(deps: BackupRouteDeps) {
       const a = auth();
       const b = backups();
       const destination = resolveBackupFolder(await a.getSetting("backup_folder"));
-      const configured = true;
       const lastSuccess = (await b.getLastSuccess())?.finishedAt ?? null;
       const lastCheck = (await b.getLastCheck())?.finishedAt ?? null;
       const lastRun = (await b.getLastRun()) ?? null;
       const status: BackupStatus = {
-        configured,
         ...destination,
         lastSuccess,
         lastCheck,
         lastRun,
-        alert: backupAlert({ configured, lastCheck, lastRun, now: clock.now() }),
+        // 置き場所は常に決まっている（未設定なら既定の置き場所）ので configured は常に真
+        alert: backupAlert({ configured: true, lastCheck, lastRun, now: clock.now() }),
         running: runner.isRunning(),
       };
       return c.json(status, 200);

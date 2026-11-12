@@ -86,7 +86,6 @@ describe("BackupStatus", () => {
   it("未設定でも既定の置き場所で実行できる", () => {
     expect(
       BackupStatus.safeParse({
-        configured: true,
         folder: "/bak",
         folderSource: "default",
         lastSuccess: null,
@@ -100,7 +99,6 @@ describe("BackupStatus", () => {
   it.each(["STALE", "LAST_RUN_FAILED"])("alert の reason %s", (reason) => {
     expect(
       BackupStatus.safeParse({
-        configured: true,
         folder: "/x",
         folderSource: "configured",
         lastSuccess: NOW,
@@ -115,7 +113,6 @@ describe("BackupStatus", () => {
     for (const reason of ["OTHER", "PASSPHRASE_NEEDED"]) {
       expect(
         BackupStatus.safeParse({
-          configured: true,
           folder: "/x",
           folderSource: "configured",
           lastSuccess: null,

@@ -246,6 +246,17 @@ describe("disposeFixedAsset", () => {
     expect(snapshot()).toEqual(before);
   });
 
+  it("実在しない除却の日（2026-02-31 など。取得の日より後）は VALIDATION（field は disposedOn）。何も書かない", () => {
+    const asset = unwrap(save());
+    const before = snapshot();
+    for (const disposedOn of ["2026-02-30", "2026-02-31", "2026-04-31"]) {
+      const r = disposeFixedAsset(settingsDeps(), { id: asset.id, disposedOn, reason: "廃棄" });
+      expect(!r.ok && r.error.code).toBe("VALIDATION");
+      expect(!r.ok && r.error.details).toMatchObject({ field: "disposedOn" });
+    }
+    expect(snapshot()).toEqual(before);
+  });
+
   it("取得して同じ年に除却した資産も同じ年の上限の合計に数える（特例を使ったため）", () => {
     for (let i = 0; i < 10; i++) unwrap(save({ acquisitionCost: 299_000, name: `備品${i}` }));
     expect(save({ acquisitionCost: 299_000 }).ok).toBe(false);

@@ -376,5 +376,6 @@ describe("proposeHomeUseAdjustment（FR-014・FR-016、R6）", () => {
       }),
     );
     expect(!r.ok && r.error.code).toBe("ACCOUNT_NOT_FOUND");
+    expect(!r.ok && r.error.message).toBe("勘定科目（コード 3090）が見つかりません");
   });
 });

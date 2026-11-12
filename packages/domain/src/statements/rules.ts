@@ -1,4 +1,5 @@
 import type { InferenceRuleView } from "@trebuchet/schema";
+import { compareText } from "../text.ts";
 import type { Account, InferenceRule, Journal, JournalLine } from "../types.ts";
 import { STATEMENT_ACCOUNT_CODES } from "./journal-shape.ts";
 import { normalizeContent } from "./normalize.ts";
@@ -177,5 +178,5 @@ export function seedRules(
       overrides: 0,
     });
   }
-  return seeded.sort((a, b) => a.normalizedContent.localeCompare(b.normalizedContent));
+  return seeded.sort((a, b) => compareText(a.normalizedContent, b.normalizedContent));
 }

@@ -75,6 +75,12 @@ function formatSummary(summary: RestoreSummary): string[] {
     const years = e.fiscalYears.map((y) => `${y.year}年度 ${y.journals}件`).join("、");
     lines.push(`  ${e.name}: ${years === "" ? "年度なし" : years}`);
   }
+  if (summary.differencesUnavailable) {
+    lines.push(
+      `今の帳簿との差を計算できませんでした（理由: ${summary.differencesError ?? "unknown"}）。` +
+        "差がないとは限りません。",
+    );
+  }
   if (summary.differences.length > 0) {
     lines.push("今の帳簿に同じ事業体があります（今の帳簿 → バックアップ）:");
     for (const d of summary.differences) {

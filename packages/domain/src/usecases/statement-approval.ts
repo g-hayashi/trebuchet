@@ -4,8 +4,8 @@ import type {
   StatementAccount,
   StatementView,
 } from "@trebuchet/schema";
+import { accountByCode } from "../accounts.ts";
 import { auditEntry } from "../audit.ts";
-import { findAccountByCode } from "../invoicing/journal-drafts.ts";
 import type { Clock, IdGenerator, StatementUnitOfWork } from "../ports.ts";
 import { STATEMENT_ACCOUNT_CODES } from "../statements/journal-shape.ts";
 import { findTransferPair } from "../statements/transfer.ts";
@@ -72,12 +72,12 @@ function ledgerAccountOf(
   inflow: boolean,
 ): Result<{ accountId: string; subAccountId: string | null }> {
   if (account.usage === "private") {
-    const owner = findAccountByCode(
+    const owner = accountByCode(
       tx.masters.listAccounts(),
       inflow ? STATEMENT_ACCOUNT_CODES.ownerDrawing : STATEMENT_ACCOUNT_CODES.ownerContribution,
     );
     if (!owner.ok) return owner;
-    return ok({ accountId: owner.value, subAccountId: null });
+    return ok({ accountId: owner.value.id, subAccountId: null });
   }
   if (account.accountId === null) {
     return validation("口座の科目が設定されていません", { field: "accountId" });

@@ -300,6 +300,7 @@ describe("proposeDeferredAmortization（FR-015〜017、INV-23）", () => {
     );
     expect(!r.ok && r.error.code).toBe("ACCOUNT_NOT_FOUND");
     expect(!r.ok && r.error.details).toMatchObject({ code: "5180" });
+    expect(!r.ok && r.error.message).toBe("勘定科目（コード 5180）が見つかりません");
   });
 });
 

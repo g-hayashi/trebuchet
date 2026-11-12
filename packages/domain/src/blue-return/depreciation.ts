@@ -1,6 +1,8 @@
 import { ACCOUNT_CODES, type AdjustmentProposal } from "@trebuchet/schema";
+import { accountByCode } from "../accounts.ts";
 import { DRAWINGS_ACCOUNT_CODE } from "../carry-forward.ts";
-import { yearOfDate } from "../dates.ts";
+import { isValidDate, yearOfDate } from "../dates.ts";
+import { isYen } from "../money.ts";
 import { formatSignedAmount } from "../reports/warnings.ts";
 import { blankToNull } from "../text.ts";
 import {
@@ -26,7 +28,6 @@ import { resolveStraightLineRate, resolveTaxParameter } from "./tax-parameters.t
 export const DEPRECIATION_ACCOUNT_CODE = ACCOUNT_CODES.depreciation;
 
 const RATIO_DENOMINATOR = 10000;
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /** 資産の登録の入力。id は更新のときだけ（編集中の資産を年間の上限の合計から除くのに使う） */
 export type FixedAssetDraft = Omit<
@@ -93,8 +94,8 @@ export function validateFixedAsset(
       }),
     );
   }
-  if (!Number.isSafeInteger(draft.acquisitionCost) || draft.acquisitionCost <= 0) {
-    return fail("acquisitionCost", "取得価額は1円以上の整数で入力してください");
+  if (!isYen(draft.acquisitionCost)) {
+    return fail("acquisitionCost", "取得価額は 1 円以上 1 兆円未満の整数で入力してください");
   }
   if (
     !Number.isInteger(draft.businessRatio) ||
@@ -103,12 +104,12 @@ export function validateFixedAsset(
   ) {
     return fail("businessRatio", "事業専用割合は 0〜100% で入力してください");
   }
-  if (!DATE_PATTERN.test(draft.acquiredOn) || Number.isNaN(Date.parse(draft.acquiredOn))) {
+  if (!isValidDate(draft.acquiredOn)) {
     return fail("acquiredOn", "取得年月日は YYYY-MM-DD で入力してください");
   }
   const inServiceOn = blankToNull(draft.inServiceOn);
   if (inServiceOn !== null) {
-    if (!DATE_PATTERN.test(inServiceOn) || Number.isNaN(Date.parse(inServiceOn))) {
+    if (!isValidDate(inServiceOn)) {
       return fail("inServiceOn", "事業の用に供した日は YYYY-MM-DD で入力してください");
     }
     if (inServiceOn < draft.acquiredOn) {
@@ -479,29 +480,6 @@ export function isDepreciationRow(
 
 /** 固定資産除却損の科目コード（初期セットの 5300。009/R9）。定額法の廃棄の年度の案だけが使う */
 export const DISPOSAL_LOSS_ACCOUNT_CODE = ACCOUNT_CODES.disposalLoss;
-
-const ACCOUNT_LABELS: Record<string, string> = {
-  [DEPRECIATION_ACCOUNT_CODE]: "減価償却費",
-  [DRAWINGS_ACCOUNT_CODE]: "事業主貸",
-  [DISPOSAL_LOSS_ACCOUNT_CODE]: "固定資産除却損",
-};
-
-/** 科目コードで科目を引く。なければ ACCOUNT_NOT_FOUND（details.code）。開業費の案（`deferred-asset.ts`）も使う */
-export function accountByCode(accounts: readonly Account[], code: string): Result<Account> {
-  const account = accounts.find((a) => a.code === code);
-  if (account === undefined) {
-    return err(
-      domainError(
-        "ACCOUNT_NOT_FOUND",
-        `${ACCOUNT_LABELS[code] ?? ""}の科目（${code}）がありません`,
-        {
-          code,
-        },
-      ),
-    );
-  }
-  return ok(account);
-}
 
 /** 千分率の償却率を 0.250 の形に（整数の演算だけ） */
 const formatRate = (permille: number) =>

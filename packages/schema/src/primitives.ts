@@ -97,7 +97,7 @@ export const ReportSection = z.enum([
 ]);
 export type ReportSection = z.infer<typeof ReportSection>;
 
-/** 科目の区分ごとに選べる決算書の区分（先頭が既定。web の選択肢に使う。domain の usecases/masters.ts の同名の値と同じ） */
+/** 科目の区分ごとに選べる決算書の区分（先頭が既定。web の選択肢と domain の usecases/masters.ts の検査に使う） */
 export const ALLOWED_SECTIONS: Record<AccountCategory, readonly ReportSection[]> = {
   asset: ["BS_ASSET"],
   liability: ["BS_LIABILITY"],

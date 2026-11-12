@@ -6,13 +6,16 @@ import { createApp } from "../src/app.ts";
 import { expectedOriginFor } from "../src/lib/origin.ts";
 import { isSecureHost, setSessionCookie } from "../src/lib/session.ts";
 import { createTestSession, errorOf, TEST_HOST, TEST_ORIGIN } from "./helpers.ts";
+import { MIN, setupPairing } from "./pairing-helpers.ts";
 
 // T016b: リモート（Tailscale）の設定。Host の検査は施錠中も auth.sqlite の設定に従い（LOCKED にならない）、
 // `GET/PUT /settings/remote`、ts.net の Host の検証、cookie の Secure、別の Origin の拒否を確かめる
 
 let tmp: TempDataDir;
+let t: ReturnType<typeof setupPairing>;
 beforeEach(() => {
   tmp = useTempDataDir("server");
+  t = setupPairing();
 });
 afterEach(() => tmp.cleanup());
 
@@ -22,22 +25,22 @@ const REMOTE_ORIGIN = `https://${REMOTE_HOST}`;
 
 const json = (body: unknown) => JSON.stringify(body);
 
+/** パスキーでサインインした直後のセッション（再認証の済んだ状態。`t.app` と同じアプリの記録を使う） */
 async function signedInLocal() {
-  const s = await createTestSession();
   return {
     Host: TEST_HOST,
     Origin: TEST_ORIGIN,
-    Cookie: s.cookie,
+    Cookie: await t.registerFirst(),
     "Content-Type": "application/json",
   };
 }
 
 const put = (headers: Record<string, string>, body: unknown) =>
-  createApp().request("/api/settings/remote", { method: "PUT", headers, body: json(body) });
+  t.app.request("/api/settings/remote", { method: "PUT", headers, body: json(body) });
 
 describe("GET/PUT /settings/remote", () => {
   it("既定は無効で名前なし", async () => {
-    const res = await createApp().request("/api/settings/remote", {
+    const res = await t.app.request("/api/settings/remote", {
       headers: await signedInLocal(),
     });
     expect(res.status).toBe(200);
@@ -55,7 +58,7 @@ describe("GET/PUT /settings/remote", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ enabled: true, host: REMOTE_HOST });
 
-    const get = await createApp().request("/api/settings/remote", { headers });
+    const get = await t.app.request("/api/settings/remote", { headers });
     expect(await get.json()).toEqual({ enabled: true, host: REMOTE_HOST });
     expect(await store().getRemoteSettings()).toEqual({ enabled: true, host: REMOTE_HOST });
 
@@ -98,6 +101,36 @@ describe("GET/PUT /settings/remote", () => {
     },
   );
 
+  it("再認証から 5 分過ぎると 403 REAUTH_REQUIRED で、何も保存せず記録も残さない", async () => {
+    const headers = await signedInLocal();
+    t.clock.advance(5 * MIN);
+    const res = await put(headers, { enabled: true, host: REMOTE_HOST });
+    expect(res.status).toBe(403);
+    expect((await errorOf(res)).code).toBe("REAUTH_REQUIRED");
+    expect(await store().getRemoteSettings()).toEqual({ enabled: false, host: null });
+    expect((await store().listEvents(10)).some((e) => e.kind === "remote_settings_changed")).toBe(
+      false,
+    );
+  });
+
+  it("ts.net の Host から（ts.net のセッションでも）は 421 HOST_NOT_ALLOWED で、何も保存しない", async () => {
+    await store().setRemoteSettings({ enabled: true, host: REMOTE_HOST }, "2026-11-02T00:00:00Z");
+    const s = await createTestSession({ rpId: REMOTE_HOST, now: t.clock.now() });
+    const res = await t.app.request("/api/settings/remote", {
+      method: "PUT",
+      headers: {
+        Host: REMOTE_HOST,
+        Origin: REMOTE_ORIGIN,
+        Cookie: s.cookie,
+        "Content-Type": "application/json",
+      },
+      body: json({ enabled: false, host: null }),
+    });
+    expect(res.status).toBe(421);
+    expect((await errorOf(res)).code).toBe("HOST_NOT_ALLOWED");
+    expect(await store().getRemoteSettings()).toEqual({ enabled: true, host: REMOTE_HOST });
+  });
+
   it("形が違う本文（enabled が真偽値でない）は 400 VALIDATION", async () => {
     const res = await put(await signedInLocal(), { enabled: "yes", host: null });
     expect(res.status).toBe(400);
@@ -125,7 +158,7 @@ describe("Host の検査は施錠中も auth.sqlite の設定に従う（FR-011�
   });
 
   it("要求ごとに読む: 再起動（createApp のやり直し）なしで設定の変更が反映される", async () => {
-    const a = createApp();
+    const a = t.app;
     const headers = await signedInLocal();
     const probe = () => a.request("/api/health", { headers: { Host: REMOTE_HOST } });
     expect((await probe()).status).toBe(421);
@@ -186,6 +219,9 @@ describe("ts.net の名前での接続（https）", () => {
       expect(res.status, origin).toBe(403);
       expect((await errorOf(res)).code).toBe("CSRF_REJECTED");
     }
-    expect((await send(REMOTE_ORIGIN)).status).toBe(200);
+    // CSRF は通るが、設定の変更は localhost の Host だけ（421 HOST_NOT_ALLOWED）
+    const ok = await send(REMOTE_ORIGIN);
+    expect(ok.status).toBe(421);
+    expect((await errorOf(ok)).code).toBe("HOST_NOT_ALLOWED");
   });
 });

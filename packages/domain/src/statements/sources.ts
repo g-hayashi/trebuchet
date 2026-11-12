@@ -5,6 +5,7 @@ import type {
   StatementSource,
   StatementTableLayout,
 } from "@trebuchet/schema";
+import { compareText } from "../text.ts";
 import { normalizeHeaderName } from "./columns.ts";
 
 // 取込元の照合（007/R7・R8）。純関数
@@ -39,9 +40,7 @@ export function applySourceToLayout(
 }
 
 const newestFirst = (a: StatementSource, b: StatementSource): number =>
-  b.lastUsedAt.localeCompare(a.lastUsedAt) ||
-  a.name.localeCompare(b.name) ||
-  (a.id < b.id ? -1 : 1);
+  compareText(b.lastUsedAt, a.lastUsedAt) || compareText(a.name, b.name) || (a.id < b.id ? -1 : 1);
 
 /**
  * 見出しの署名が今回の見出しと完全一致する取込元を探す（R8）。0 件は `none`、1 件は `one`、2 件以上は

@@ -192,6 +192,17 @@ describe("saveBillingTerms（FR-001, FR-002）", () => {
     ]);
   });
 
+  it("一覧の並びはコードポイント順（ロケールに依らない。大文字が小文字より前）", () => {
+    uow.masters.state.partners.push(
+      { id: "partner-3", name: "apple", honorific: "御中", memo: null, isActive: true },
+      { id: "partner-4", name: "Banana", honorific: "御中", memo: null, isActive: true },
+    );
+    for (const id of ["partner-3", "partner-4"]) saveBillingTerms(deps, id, hourly());
+    const list = listBillingTerms(deps);
+    if (!list.ok) throw new Error("expected ok");
+    expect(list.value.map((r) => r.partnerName)).toEqual(["Banana", "apple"]);
+  });
+
   it("月額定額型は monthlyAmount と宛名を保存し、unitPrice は null", () => {
     const saved = saveBillingTerms(deps, "partner-2", monthly());
     if (!saved.ok) throw new Error("expected ok");

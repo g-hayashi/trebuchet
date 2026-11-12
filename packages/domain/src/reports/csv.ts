@@ -24,15 +24,20 @@ const SECTION_LABELS: Record<ReportSection, string> = {
   PL_OTHER: "その他の損益",
 };
 
+/** 表計算ソフトが数式として実行する先頭の文字（OWASP の CSV injection） */
+const FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
 function field(value: CsvValue): string {
   if (value === null || value === undefined) return "";
-  const s = String(value);
+  // 数値は区切りなしの整数のまま（負の金額に ' を付けない）。文字列だけ数式にならないよう ' を前に付ける
+  const s = typeof value === "string" && FORMULA_PREFIX.test(value) ? `'${value}` : String(value);
   return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 
 /**
  * 表を CSV にする（RFC 4180）。UTF-8 の BOM を付け（Excel で文字化けしないため）、各行は CRLF で終える。
- * カンマ・引用符・改行を含む値は引用符で囲み、引用符は二重にする。数値は区切りなしの整数
+ * カンマ・引用符・改行を含む値は引用符で囲み、引用符は二重にする。数値は区切りなしの整数。
+ * 文字列のセルが `=`・`+`・`-`・`@`・タブ・CR で始まるときは、先頭に `'` を付ける（数式として実行させない）
  */
 export function encodeCsv(rows: readonly (readonly CsvValue[])[]): string {
   return BOM + rows.map((r) => r.map(field).join(",") + CRLF).join("");

@@ -5,7 +5,7 @@ import {
   type TaxCategoryCode,
   YEN_LIMIT,
 } from "@trebuchet/schema";
-import { findAccountByCode } from "../invoicing/journal-drafts.ts";
+import { accountByCode } from "../accounts.ts";
 import {
   type Account,
   type JournalDraft,
@@ -107,9 +107,9 @@ export function journalShape(input: JournalShapeInput): Result<ShapedJournal | n
   // 明細の口座の側の行（private は事業主貸・事業主借の行）
   let statementLine: LineDraft;
   if (account.usage === "private") {
-    const owner = findAccountByCode(accounts, ownerCode(statementSide));
+    const owner = accountByCode(accounts, ownerCode(statementSide));
     if (!owner.ok) return owner;
-    statementLine = line(statementSide, owner.value, abs);
+    statementLine = line(statementSide, owner.value.id, abs);
   } else {
     if (account.accountId == null) {
       return validation("口座の科目が設定されていません", { field: "accountId" });
@@ -133,9 +133,9 @@ export function journalShape(input: JournalShapeInput): Result<ShapedJournal | n
       ...(counter.description == null ? {} : { description: counter.description }),
     };
   } else {
-    const owner = findAccountByCode(accounts, ownerCode(otherSide));
+    const owner = accountByCode(accounts, ownerCode(otherSide));
     if (!owner.ok) return owner;
-    otherLine = line(otherSide, owner.value, abs);
+    otherLine = line(otherSide, owner.value.id, abs);
   }
 
   // 借方の行を先にする

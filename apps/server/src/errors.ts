@@ -195,6 +195,12 @@ export const firstRegistrationHostError = (): DomainError => ({
   message: "最初の登録は、この Mac の localhost からだけできます",
 });
 
+/** 409 ALREADY_REGISTERED（初回の設定は済んでいる。ミドルウェアとルートで同じ文言にする） */
+export const alreadyRegisteredError = (): DomainError => ({
+  code: "ALREADY_REGISTERED",
+  message: "すでに設定されています",
+});
+
 export const onError: ErrorHandler = (e, c) => {
   if (e instanceof DomainException) return fail(c, e.error);
   // 検査（middleware/auth.ts）の後に施錠された要求が registry・事業体の DB を開こうとした（008 の D5）

@@ -60,6 +60,16 @@ describe("listStatementSources", () => {
   it("last_used_at の新しい順", () => {
     expect(unwrap(listStatementSources(ctx.deps)).map((s) => s.id)).toEqual(["b", "c", "a"]);
   });
+
+  it("last_used_at が同じなら名前のコードポイント順（ロケールに依らない。大文字が小文字より前）", () => {
+    const sameAt = "2026-12-01T00:00:00.000Z";
+    ctx.state.sources.push(source("d", "apple", sameAt), source("e", "Banana", sameAt));
+    expect(
+      unwrap(listStatementSources(ctx.deps))
+        .slice(0, 2)
+        .map((s) => s.id),
+    ).toEqual(["e", "d"]);
+  });
 });
 
 describe("renameStatementSource", () => {

@@ -1,4 +1,5 @@
 import type { AdjustmentProposal, BlueReturn } from "@trebuchet/schema";
+import { accountByCode } from "../accounts.ts";
 import { addMonths, isValidDate, monthIndex, monthOfDate, yearOfDate } from "../dates.ts";
 import { isYen } from "../money.ts";
 import { blankToNull } from "../text.ts";
@@ -15,7 +16,7 @@ import {
   type TaxParameter,
   validation,
 } from "../types.ts";
-import { accountByCode, DEPRECIATION_ACCOUNT_CODE } from "./depreciation.ts";
+import { DEPRECIATION_ACCOUNT_CODE } from "./depreciation.ts";
 import { checkPriorAccumulation } from "./prior-accumulation.ts";
 import { resolveTaxParameter } from "./tax-parameters.ts";
 

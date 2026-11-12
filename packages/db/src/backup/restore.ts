@@ -78,6 +78,10 @@ export type RestoreSummary = {
   /** データ場所に帳簿（registry か事業体の DB）があるか。あれば復元前に今の帳簿をバックアップする */
   hasExistingLedger: boolean;
   differences: RestoreEntityDiff[];
+  /** 差の計算に失敗した（`differences` は空だが「差がない」ではない）。確認の画面でその旨を出す */
+  differencesUnavailable: boolean;
+  /** 失敗した例外の名前（メッセージは値や鍵のパスを含みうるので入れない）。失敗していなければ null */
+  differencesError: string | null;
 };
 
 export type RestoreResult = {
@@ -389,11 +393,14 @@ async function applyRestore(
 
   // 3. 要約と確認
   let differences: RestoreEntityDiff[] = [];
+  let differencesError: string | null = null;
   if (hasLedger && current !== null) {
     try {
       differences = withDataKeyOverride(current.dk, () => computeDifferences(dataDir, archive));
-    } catch {
+    } catch (e) {
+      // 握りつぶさない。差が出ないまま上書きに進まないよう、要約に失敗を出す
       differences = [];
+      differencesError = e instanceof Error ? e.name : "unknown";
     }
   }
   const summary: RestoreSummary = {
@@ -403,6 +410,8 @@ async function applyRestore(
     entities: archive.manifest.entities,
     hasExistingLedger: hasLedger,
     differences,
+    differencesUnavailable: differencesError !== null,
+    differencesError,
   };
   if (!(await options.confirm(summary))) return fail("CANCELLED");
 

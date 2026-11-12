@@ -216,7 +216,7 @@ export function listBillingTerms(
     return ok(
       rows.sort(
         (a, b) =>
-          a.partnerName.localeCompare(b.partnerName) || a.partnerId.localeCompare(b.partnerId),
+          compareText(a.partnerName, b.partnerName) || compareText(a.partnerId, b.partnerId),
       ),
     );
   });
@@ -335,7 +335,7 @@ export function deleteBillingTerms(deps: InvoicingSettingsDeps, partnerId: strin
 
 // ---- 工数（US1。H:§3.1・§3.2） ----
 
-const byName = (a: Partner, b: Partner) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+const byName = (a: Partner, b: Partner) => compareText(a.name, b.name) || compareText(a.id, b.id);
 
 /** 工数を入れる取引先 = 時間単価型の請求の条件がある有効な取引先（名前の順） */
 function hourlyPartners(
@@ -1147,8 +1147,7 @@ export function withholdingSummary(
     }
 
     const partners = [...byPartner.values()].sort(
-      (x, y) =>
-        x.partnerName.localeCompare(y.partnerName) || x.partnerId.localeCompare(y.partnerId),
+      (x, y) => compareText(x.partnerName, y.partnerName) || compareText(x.partnerId, y.partnerId),
     );
     return ok({
       year,

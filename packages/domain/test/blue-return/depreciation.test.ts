@@ -122,6 +122,23 @@ describe("validateFixedAsset（FR-018〜020、R7）", () => {
     expect(errorOf(validate(draft({ acquiredOn: "2025/06/15" }))).code).toBe("VALIDATION");
   });
 
+  it("実在しない日付（2024-02-30 など）は取得年月日・供用日とも VALIDATION", () => {
+    for (const day of ["2024-02-30", "2023-02-31", "2024-04-31"]) {
+      const acquired = errorOf(validate(draft({ acquiredOn: day })));
+      expect(acquired.code).toBe("VALIDATION");
+      expect(acquired.details).toMatchObject({ field: "acquiredOn" });
+      const service = errorOf(validate(draft({ acquiredOn: "2020-01-01", inServiceOn: day })));
+      expect(service.code).toBe("VALIDATION");
+      expect(service.details).toMatchObject({ field: "inServiceOn" });
+    }
+  });
+
+  it("取得価額は 10^12 円未満（開業費の総額と同じ）", () => {
+    const e = errorOf(validate(draft({ acquisitionCost: 1e12 })));
+    expect(e.code).toBe("VALIDATION");
+    expect(e.details).toMatchObject({ field: "acquisitionCost" });
+  });
+
   describe("基準額（取得の日に適用される値。シナリオ2）", () => {
     it("2026-03-31 取得の 350,000 円は拒否し、基準額と適用開始日を示す", () => {
       const e = errorOf(validate(draft({ acquiredOn: "2026-03-31", acquisitionCost: 350_000 })));
@@ -770,6 +787,7 @@ describe("proposeDepreciationAdjustment: 定額法（FR-009、FR-016、R8、data
     );
     expect(!r.ok && r.error).toMatchObject({
       code: "ACCOUNT_NOT_FOUND",
+      message: "勘定科目（コード 5300）が見つかりません",
       details: { code: "5300" },
     });
   });

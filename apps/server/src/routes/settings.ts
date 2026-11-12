@@ -2,6 +2,7 @@ import { type AuthStore, type Clock, domainError } from "@trebuchet/domain";
 import { RemoteSettings, RemoteSettingsInput, TailscaleServeInput } from "@trebuchet/schema";
 import { Hono } from "hono";
 import { DomainException, fail } from "../errors.ts";
+import { type AuthSupport, sessionOf } from "../lib/auth-support.ts";
 import { ids } from "../lib/ids.ts";
 import { isLocalHost, rpIdFor } from "../lib/origin.ts";
 import { type TailscaleCli, TailscaleError } from "../lib/tailscale.ts";
@@ -30,19 +31,20 @@ export function remoteSettingsRoutes({
   store,
   clock,
   tailscale,
+  support,
 }: {
   store: () => AuthStore;
   clock: Clock;
   tailscale: TailscaleCli;
+  /** 再認証の確認（`routes/auth.ts`・`pairing.ts` と共有） */
+  support: AuthSupport;
 }) {
-  const requireLocal = (host: string | undefined) => {
+  const requireLocal = (
+    host: string | undefined,
+    message = "Tailscale の操作は、この Mac の localhost からだけできます",
+  ) => {
     if (!isLocalHost(host)) {
-      throw new DomainException(
-        domainError(
-          "HOST_NOT_ALLOWED",
-          "Tailscale の操作は、この Mac の localhost からだけできます",
-        ),
-      );
+      throw new DomainException(domainError("HOST_NOT_ALLOWED", message));
     }
   };
 
@@ -63,6 +65,10 @@ export function remoteSettingsRoutes({
       return c.json(status, 200);
     })
     .put("/remote", validate("json", RemoteSettingsInput), async (c) => {
+      // 許す Host を書き換えるので、ペアリングの発行と同じ（localhost の Host、直近 5 分の再認証）
+      const session = sessionOf(c);
+      requireLocal(c.var.host, "リモートの設定の変更は、この Mac の localhost からだけできます");
+      support.requireReauth(session);
       const parsed = RemoteSettings.safeParse(c.req.valid("json"));
       if (!parsed.success) {
         return fail(

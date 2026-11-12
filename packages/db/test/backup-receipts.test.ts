@@ -264,6 +264,14 @@ describe("receiptRefsFromSnapshotFiles", () => {
       rmSync(snapDir, { recursive: true, force: true });
     }
   });
+
+  it("事業体の ID が UUID の形でない `tenants/<36 字>.sqlite` は読まない（isValidEntityId と同じ検査）", () => {
+    const refs = receiptRefsFromSnapshotFiles([
+      { path: `tenants/${"-".repeat(36)}.sqlite`, bytes: Buffer.from("not a database") },
+      { path: `tenants/${"a".repeat(36)}.sqlite`, bytes: Buffer.from("not a database") },
+    ]);
+    expect(refs).toEqual([]);
+  });
 });
 
 // ---- バックアップ → 復元の往復（INV-68、SC-006） ----

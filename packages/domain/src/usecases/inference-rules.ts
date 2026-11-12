@@ -11,6 +11,7 @@ import { auditEntry } from "../audit.ts";
 import type { Clock, IdGenerator, StatementUnitOfWork } from "../ports.ts";
 import { STATEMENT_ACCOUNT_CODES } from "../statements/journal-shape.ts";
 import { learnRule, type RuleBody, seedRules, toRuleView } from "../statements/rules.ts";
+import { compareText } from "../text.ts";
 import {
   accountNotFoundError,
   domainError,
@@ -176,8 +177,8 @@ export function listRules(
         .filter((r) => query.status === undefined || r.status === query.status)
         .sort(
           (a, b) =>
-            a.normalizedContent.localeCompare(b.normalizedContent) ||
-            (a.statementAccountId ?? "").localeCompare(b.statementAccountId ?? ""),
+            compareText(a.normalizedContent, b.normalizedContent) ||
+            compareText(a.statementAccountId ?? "", b.statementAccountId ?? ""),
         )
         .map(toRuleView),
     ),
