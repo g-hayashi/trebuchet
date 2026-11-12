@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FiscalPeriod } from "@/features/periods/api";
 import { Route } from "@/routes/e/$entityId/periods/index";
+import { expectLedgerInvalidated, seedLedgerQueries } from "../ledger-cache";
 import { type ApiCall, type ApiReply, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
@@ -195,6 +196,33 @@ describe("会計期間の画面（US5）", () => {
     expect(items[0]).toHaveTextContent("2026年度");
     expect(items[0]).toHaveTextContent("締め");
     expect(items[0]?.querySelector("time")).toHaveAttribute("datetime", "2027-03-15T01:00:00.000Z");
+  });
+
+  it("締めると、帳票・決算書・ホームを読み直す", async () => {
+    mockPeriodsApi([period(2025), period(2026)]);
+    const u = userEvent.setup();
+    const { queryClient } = renderPeriods();
+    await u.click(await screen.findByRole("button", { name: "2026年度を締める" }));
+    seedLedgerQueries(queryClient);
+    const dialog = await screen.findByRole("dialog", { name: "2026年度を締める" });
+    await u.click(within(dialog).getByRole("button", { name: "締める" }));
+
+    await waitFor(async () => expect(await rowOf(2026)).toHaveTextContent("締め済み"));
+    expectLedgerInvalidated(queryClient);
+  });
+
+  it("締めを解除すると、帳票・決算書・ホームを読み直す", async () => {
+    mockPeriodsApi([period(2025, "2026-03-15T01:00:00.000Z"), period(2026)]);
+    const u = userEvent.setup();
+    const { queryClient } = renderPeriods();
+    await u.click(await screen.findByRole("button", { name: "2025年度の締めを解除" }));
+    seedLedgerQueries(queryClient);
+    const dialog = await screen.findByRole("dialog", { name: "2025年度の締めの解除" });
+    await u.type(within(dialog).getByLabelText("理由"), "修正申告のため");
+    await u.click(within(dialog).getByRole("button", { name: "解除を確定" }));
+
+    await waitFor(async () => expect(await rowOf(2025)).toHaveTextContent("未締め"));
+    expectLedgerInvalidated(queryClient);
   });
 
   it("締めの確認のダイアログで戻ると送らない", async () => {

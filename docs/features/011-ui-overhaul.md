@@ -31,7 +31,7 @@
 
 ## 組織の一覧と削除
 
-一覧のURLは `/list`（従来の `/?list=1` でも表示）。作成フォームの「個人・法人の違い」は展開式で、期首月・個人限定の決算機能・共通の初期設定を説明する。
+一覧のURLは `/list`。作成フォームの「個人・法人の違い」は展開式で、期首月・個人限定の決算機能・共通の初期設定を説明する。
 
 - 非表示: `POST /api/entities/:entityId/archive`。registry の `entities.status` を `archived` にして通常の一覧・切替・自動処理から外す。帳簿・証憑は保持するが、事業体配下のAPIは404にする。
 - 復元: `POST /api/entities/:entityId/restore`。`GET /api/entities/archived` の「非表示の組織」から一覧へ戻す。

@@ -20,7 +20,6 @@ afterEach(() => {
 });
 
 const status = (patch: Partial<BackupStatus> = {}): BackupStatus => ({
-  configured: true,
   folderSource: "configured",
   folder: "/Users/me/backup",
   lastSuccess: "2026-10-19T10:00:00.000Z",
@@ -202,17 +201,17 @@ describe("実行の履歴", () => {
     expect(callsTo(calls, "GET", "/api/backup/runs").map((c) => c.query)).toEqual([{ limit: "5" }]);
   });
 
-  it("「CSV に書き出す」は全件の CSV（format=csv）へのリンク", async () => {
+  it("「CSV をダウンロード」は全件の CSV（format=csv）へのリンク", async () => {
     open({}, status(), [run({})]);
-    const link = await screen.findByRole("link", { name: "CSV に書き出す" });
+    const link = await screen.findByRole("link", { name: "CSV をダウンロード" });
     expect(link).toHaveAttribute("href", "/api/backup/runs?format=csv");
     expect(link).toHaveAttribute("download");
   });
 
-  it("0 件なら「CSV に書き出す」は無効（リンクではなく押せないボタン）", async () => {
+  it("0 件なら「CSV をダウンロード」は無効（リンクではなく押せないボタン）", async () => {
     open();
-    expect(await screen.findByRole("button", { name: "CSV に書き出す" })).toBeDisabled();
-    expect(screen.queryByRole("link", { name: "CSV に書き出す" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "CSV をダウンロード" })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: "CSV をダウンロード" })).not.toBeInTheDocument();
   });
   it("成功・変更なし・失敗を表に示す", async () => {
     open({}, status(), [

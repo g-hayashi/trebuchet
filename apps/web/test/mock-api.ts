@@ -34,7 +34,6 @@ export const DEFAULT_AUTH_STATUS = {
 
 /** バックアップの状態（004）の既定の応答。設定済みで、知らせなし */
 const DEFAULT_BACKUP_STATUS = {
-  configured: true,
   folderSource: "configured",
   folder: "/Users/me/backup",
   lastSuccess: null,

@@ -31,6 +31,7 @@ import {
 } from "@/features/accounts/api";
 import { filterAccounts } from "@/lib/account-search";
 import { CATEGORY_LABELS, groupAccountsBySection } from "@/lib/accounts";
+import { invalidateLedger } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/e/$entityId/accounts")({
@@ -151,7 +152,8 @@ function AccountRow({ entityId, account }: { entityId: string; account: Account 
     mutationFn: (json: AccountPatch) => patchAccount(entityId, account.id, json),
     onSuccess: async () => {
       setEditing(false);
-      await invalidate();
+      // 名称・使用停止は帳票・決算書・仕訳・ホームの表示にも出る
+      await Promise.all([invalidate(), invalidateLedger(queryClient, entityId)]);
     },
   });
   const remove = useMutation({

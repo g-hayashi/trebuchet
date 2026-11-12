@@ -444,13 +444,20 @@ describe("トップ（/）の移動（FR-010、R4）", () => {
     await waitFor(() => expect(path(router)).toBe(`/e/${entityA.id}`));
   });
 
-  it("事業体が 1 件でも `?list=1`（切替の「一覧・作成」）なら、移動せず一覧と作成のフォームを出す", async () => {
-    const { router } = renderApp("/?list=1", {
+  it("事業体が 1 件でも `/list`（切替の「一覧・作成」）なら、移動せず一覧と作成のフォームを出す", async () => {
+    const { router } = renderApp("/list", {
       "GET /api/entities": () => ok({ entities: [entityA] }),
     });
     expect(await screen.findByRole("link", { name: "個人事業A" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "作成する" })).toBeInTheDocument();
-    expect(path(router)).toBe("/");
+    expect(path(router)).toBe("/list");
+  });
+
+  it("従来の `/?list=1` は特別扱いせず、事業体が 1 件ならそのホームを開く", async () => {
+    const { router } = renderApp("/?list=1", {
+      "GET /api/entities": () => ok({ entities: [entityA] }),
+    });
+    await waitFor(() => expect(path(router)).toBe(`/e/${entityA.id}`));
   });
 
   it("事業体が 2 件以上なら、移動せず一覧を出し、最後に開いたものを上に目立たせる", async () => {

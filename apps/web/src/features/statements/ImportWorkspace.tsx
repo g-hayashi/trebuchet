@@ -27,6 +27,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { isApiError } from "@/lib/api";
 import { thisYear } from "@/lib/dates";
+import { formatDateTime } from "@/lib/format";
 import { AccountMappingForm } from "./AccountMappingForm";
 import { AiProgressLines } from "./AiProgressLines";
 import { type AccountDraft, draftFromSuggestion, inputFromDraft } from "./account-draft";
@@ -118,7 +119,7 @@ function BatchHistory({ entityId }: { entityId: string }) {
             <TableBody>
               {data.map((b) => (
                 <TableRow key={b.id}>
-                  <TableCell>{new Date(b.createdAt).toLocaleString("ja-JP")}</TableCell>
+                  <TableCell>{formatDateTime(b.createdAt)}</TableCell>
                   <TableCell>{ORIGIN_LABELS[b.origin]}</TableCell>
                   <TableCell>{b.sourceName ?? "—"}</TableCell>
                   <TableCell>

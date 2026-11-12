@@ -37,6 +37,7 @@ import {
   type TaxHelp,
 } from "@/features/entities/tax-help";
 import { previousDay } from "@/lib/dates";
+import { invalidateLedger } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/tax-settings")({
   component: TaxSettingsPage,
@@ -88,7 +89,11 @@ function TaxSettingsPage() {
     mutationFn: (json: TaxSettingsPut) => putTaxSettings(entityId, json),
     onSuccess: async (taxSettings) => {
       queryClient.setQueryData(entityKeys.taxSettings(entityId), taxSettings);
-      await queryClient.invalidateQueries({ queryKey: entityKeys.taxSettings(entityId) });
+      // 消費税の設定は帳票・決算書・ホームの消費税の数字に関わる
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: entityKeys.taxSettings(entityId) }),
+        invalidateLedger(queryClient, entityId),
+      ]);
     },
   });
 

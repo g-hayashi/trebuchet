@@ -29,9 +29,12 @@ export const remoteSettingsQuery = () =>
     queryFn: async () => unwrap(await remote.$get()),
   });
 
-/** 保存する。名前が `*.ts.net` の形でなければ 422 REMOTE_HOST_INVALID */
-export const putRemoteSettings = async (json: { enabled: boolean; host: string | null }) =>
-  unwrap(await remote.$put({ json }));
+/**
+ * 保存する。直近 5 分以内の再認証が要る（なければパスキーで確認してからやり直す）。
+ * 名前が `*.ts.net` の形でなければ 422 REMOTE_HOST_INVALID
+ */
+export const putRemoteSettings = (json: { enabled: boolean; host: string | null }) =>
+  withReauth(async () => unwrap(await remote.$put({ json })));
 
 /**
  * ペアリングの URL を発行する（Mac から。直近 5 分以内の再認証が要る。なければ確認してからやり直す）。

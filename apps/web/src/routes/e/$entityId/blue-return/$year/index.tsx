@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { CsvExport } from "@/components/ui/csv-export";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { NativeSelect } from "@/components/ui/input";
 import { blueReturnCsvUrl, blueReturnQuery } from "@/features/blue-return/api";
@@ -87,13 +88,7 @@ function BlueReturnPage() {
             <Button variant="outline" onClick={() => window.print()}>
               印刷
             </Button>
-            <a
-              href={blueReturnCsvUrl(entityId, year)}
-              download
-              className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium shadow-xs hover:bg-muted"
-            >
-              CSV をダウンロード
-            </a>
+            <CsvExport href={blueReturnCsvUrl(entityId, year)} />
           </div>
         )}
       </div>

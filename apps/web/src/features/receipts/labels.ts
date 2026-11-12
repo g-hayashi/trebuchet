@@ -109,6 +109,3 @@ export const HISTORY_VALUE_LABELS = {
   partnerName: "取引先",
   memo: "メモ",
 } as const;
-
-/** ファイルの大きさ（バイト数を 3 桁区切りで） */
-export const formatBytes = (bytes: number): string => `${bytes.toLocaleString("ja-JP")} バイト`;

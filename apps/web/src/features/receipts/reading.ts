@@ -52,12 +52,13 @@ export function useReceiptReading(receipt: ReceiptDetail | undefined): {
  */
 export function useAutoReceiptReading(entityId: string): (receiptId: string) => void {
   const queryClient = useQueryClient();
-  const settings = useQuery(aiSettingsQuery());
-  const enabled = isReadingEnabled(settings.data);
+  // 設定を読み込む前に追加が終わっても、読み込みを待ってから判定する（読み込み前を無効とみなして飛ばさない）
   return (receiptId) => {
-    if (!enabled) return;
-    void postReceiptReading(entityId, receiptId)
-      .then(() => queryClient.invalidateQueries({ queryKey: receiptKeys.all(entityId) }))
-      .catch(() => undefined);
+    void (async () => {
+      const settings = await queryClient.ensureQueryData(aiSettingsQuery());
+      if (!isReadingEnabled(settings)) return;
+      await postReceiptReading(entityId, receiptId);
+      await queryClient.invalidateQueries({ queryKey: receiptKeys.all(entityId) });
+    })().catch(() => undefined);
   };
 }

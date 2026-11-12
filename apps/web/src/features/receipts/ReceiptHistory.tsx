@@ -3,7 +3,7 @@ import type { ReceiptHistoryEntry } from "@trebuchet/schema";
 import { Loading } from "@/components/loading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatYen } from "@/lib/format";
 import { receiptFileUrl, receiptHistoryQuery } from "./api";
 import { CATEGORY_LABELS, HISTORY_ACTION_LABELS, HISTORY_VALUE_LABELS } from "./labels";
 
@@ -22,7 +22,7 @@ function valueText(key: keyof typeof HISTORY_VALUE_LABELS, value: unknown): stri
   if (key === "category" && (value === "paper_scan" || value === "electronic")) {
     return CATEGORY_LABELS[value];
   }
-  if (key === "amount" && typeof value === "number") return `${value.toLocaleString("ja-JP")} 円`;
+  if (key === "amount" && typeof value === "number") return `${formatYen(value)} 円`;
   return String(value);
 }
 

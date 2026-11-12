@@ -1,24 +1,20 @@
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 /**
- * 「CSV に書き出す」（FR-054）。server が返す CSV を `download` のリンクで保存する。
- * 0 件なら書き出すものがないので、押せないボタンにする（リンクは無効にできない）
+ * 「CSV をダウンロード」（FR-054、FR-032）。server が返す CSV を `download` のリンクで保存する。
+ * 一覧・帳票・決算書で共通。0 件なら書き出すものがないので、押せないボタンにする（リンクは無効にできない）
  */
-export function CsvExport({ href, disabled }: { href: string; disabled: boolean }) {
+export function CsvExport({ href, disabled = false }: { href: string; disabled?: boolean }) {
   if (disabled) {
     return (
-      <Button variant="outline" size="sm" disabled>
-        CSV に書き出す
+      <Button variant="outline" disabled>
+        CSV をダウンロード
       </Button>
     );
   }
   return (
-    <a
-      href={href}
-      download
-      className="inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium shadow-xs hover:bg-muted"
-    >
-      CSV に書き出す
+    <a href={href} download className={buttonVariants({ variant: "outline" })}>
+      CSV をダウンロード
     </a>
   );
 }

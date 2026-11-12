@@ -96,6 +96,49 @@ describe("設定 → リモート", () => {
     });
   });
 
+  it("保存で再認証が要る（403 REAUTH_REQUIRED）ときは、パスキーで確認してから同じ内容で保存し直す", async () => {
+    vi.mocked(startAuthentication).mockResolvedValue({ id: "pk1" } as never);
+    let reauthed = false;
+    const calls = openRemote(
+      { enabled: false, host: null },
+      {
+        "POST /api/auth/reauth/options": () => ok({ challenge: "ra1" }),
+        "POST /api/auth/reauth/verify": () => {
+          reauthed = true;
+          return { status: 204, body: undefined };
+        },
+        "PUT /api/settings/remote": (call) =>
+          reauthed ? ok(call.body) : apiError(403, "REAUTH_REQUIRED", "再認証が必要です"),
+      },
+    );
+    await userEvent.click(await screen.findByRole("checkbox", { name: "リモートを有効にする" }));
+    await userEvent.type(screen.getByLabelText("ts.net の名前"), HOST);
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    expect(await screen.findByText("保存しました。")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path}`)).toEqual([
+      "PUT /api/settings/remote",
+      "POST /api/auth/reauth/options",
+      "POST /api/auth/reauth/verify",
+      "PUT /api/settings/remote",
+    ]);
+    expect(callsTo(calls, "PUT", "/api/settings/remote")[1]?.body).toEqual({
+      enabled: true,
+      host: HOST,
+    });
+  });
+
+  it("ts.net の名前で開いているときは、保存の欄を出さず「この Mac で操作してください」と案内する", async () => {
+    openRemote(
+      { enabled: true, host: HOST },
+      { "GET /api/auth/status": () => ok({ ...DEFAULT_AUTH_STATUS, rpId: HOST }) },
+    );
+    const card = await screen.findByRole("region", { name: "リモートの設定" });
+    expect(await within(card).findByText(/この Mac（localhost）で操作してください/)).toBeVisible();
+    expect(within(card).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: "保存" })).not.toBeInTheDocument();
+  });
+
   it("保存済みの設定を表示し、無効化しても名前は残して送る", async () => {
     const calls = openRemote(
       { enabled: true, host: HOST },

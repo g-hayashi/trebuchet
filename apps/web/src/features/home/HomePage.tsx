@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import type { HomeFigures, HomeRecentJournal, HomeTasks, Section } from "@trebuchet/schema";
 import type { ReactNode } from "react";
 import { Loading } from "@/components/loading";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { backupStatusQuery } from "@/features/backup/api";
@@ -13,8 +13,7 @@ import { homeQuery } from "./api";
 // ホーム（011 US1。contracts/ui-shell.md §3、FR-006〜009）。件数・金額は server（domain）が決める。画面は表示と移動だけ
 
 const linkClass = "text-primary underline-offset-4 hover:underline";
-const shortcutClass =
-  "inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium shadow-xs hover:bg-accent";
+const shortcutClass = buttonVariants({ variant: "outline" });
 
 /** 1 項目の枠。見出しを `aria-labelledby` に結ぶ（読み上げと、テストが名前で探す） */
 function Block({ id, title, children }: { id: string; title: string; children: ReactNode }) {

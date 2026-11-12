@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDateTime } from "@/lib/format";
+import { formatBytes, formatDateTime } from "@/lib/format";
 import {
   backupKeys,
   backupRunsQuery,
@@ -26,13 +26,7 @@ import {
   runBackup,
   saveBackupSettings,
 } from "./api";
-import {
-  ALERT_MESSAGES,
-  describeFailure,
-  formatBytes,
-  STATUS_LABELS,
-  TRIGGER_LABELS,
-} from "./labels";
+import { ALERT_MESSAGES, describeFailure, STATUS_LABELS, TRIGGER_LABELS } from "./labels";
 
 /** 状態と実行の履歴を取り直す（設定・実行のあと） */
 function useRefreshBackup() {

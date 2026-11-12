@@ -4,7 +4,7 @@ import { JournalQuery } from "@trebuchet/schema";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { Loading } from "@/components/loading";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
@@ -88,11 +88,7 @@ function JournalsPage() {
     <main className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">仕訳</h1>
-        <Link
-          to="/e/$entityId/journals/new"
-          params={{ entityId }}
-          className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90"
-        >
+        <Link to="/e/$entityId/journals/new" params={{ entityId }} className={buttonVariants()}>
           仕訳を入力
         </Link>
       </div>

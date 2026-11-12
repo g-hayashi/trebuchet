@@ -9,7 +9,6 @@ import { receiptQuery } from "@/features/receipts/api";
 import {
   CATEGORY_LABELS,
   CHANNEL_LABELS,
-  formatBytes,
   LINK_STATE_LABELS,
   MEDIA_TYPE_LABELS,
   warningText,
@@ -22,7 +21,7 @@ import { ReceiptReadingNote } from "@/features/receipts/ReceiptReadingNote";
 import { ReceiptReplaceSection } from "@/features/receipts/ReceiptReplaceSection";
 import { ReceiptViewer } from "@/features/receipts/ReceiptViewer";
 import { useReceiptReading } from "@/features/receipts/reading";
-import { formatDateTime } from "@/lib/format";
+import { formatBytes, formatDateTime, formatYen } from "@/lib/format";
 
 export const Route = createFileRoute("/e/$entityId/receipts/$receiptId")({
   component: ReceiptDetailPage,
@@ -129,9 +128,7 @@ function ValueSummary({ receipt }: { receipt: ReceiptDetail }) {
   return (
     <dl className="grid grid-cols-[8rem_1fr] gap-2 text-sm">
       <Row label="取引年月日">{receipt.transactionDate ?? "未入力"}</Row>
-      <Row label="金額">
-        {receipt.amount === null ? "未入力" : receipt.amount.toLocaleString("ja-JP")}
-      </Row>
+      <Row label="金額">{receipt.amount === null ? "未入力" : formatYen(receipt.amount)}</Row>
       <Row label="取引先">{receipt.partnerName ?? "未入力"}</Row>
       <Row label="メモ">{receipt.memo ?? ""}</Row>
     </dl>

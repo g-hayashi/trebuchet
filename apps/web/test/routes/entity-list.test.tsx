@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { Route } from "@/routes/index";
+import { Route } from "@/routes/list";
 import { apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
@@ -28,7 +28,7 @@ const DESCRIPTION = "架空のデータで機能を試せる事業体を作り�
 
 it("事業体が 0 件のとき、説明とボタン（variant=outline）が出る", async () => {
   mockApi({ "GET /api/entities": () => ok({ entities: [] }) });
-  renderRoute(Route, { path: "/", url: "/?list=1" });
+  renderRoute(Route, { path: "/list", url: "/list" });
   const button = await screen.findByRole("button", { name: BUTTON });
   expect(screen.getByText(DESCRIPTION)).toBeInTheDocument();
   expect(button).toBeEnabled();
@@ -39,7 +39,7 @@ it("事業体が 0 件のとき、説明とボタン（variant=outline）が出�
 
 it("事業体が 1 件以上あるときは出ない", async () => {
   mockApi({ "GET /api/entities": () => ok({ entities: [entity] }) });
-  renderRoute(Route, { path: "/", url: "/?list=1" });
+  renderRoute(Route, { path: "/list", url: "/list" });
   await screen.findByText("合成事業");
   expect(screen.queryByRole("button", { name: BUTTON })).not.toBeInTheDocument();
   expect(screen.queryByText(DESCRIPTION)).not.toBeInTheDocument();
@@ -59,7 +59,7 @@ it("押すと無効になって「作成中…」、成功でデモのホーム�
       return ok({ entity: demo }, 201);
     },
   });
-  const { router } = renderRoute(Route, { path: "/", url: "/?list=1" });
+  const { router } = renderRoute(Route, { path: "/list", url: "/list" });
   await userEvent.click(await screen.findByRole("button", { name: BUTTON }));
   const pending = await screen.findByRole("button", { name: "作成中…" });
   expect(pending).toBeDisabled();
@@ -77,7 +77,7 @@ it.each([
     "GET /api/entities": () => ok({ entities: [] }),
     "POST /api/entities/demo": () => apiError(status, code, "サーバーの文言"),
   });
-  renderRoute(Route, { path: "/", url: "/?list=1" });
+  renderRoute(Route, { path: "/list", url: "/list" });
   await userEvent.click(await screen.findByRole("button", { name: BUTTON }));
   const alert = await screen.findByRole("alert");
   expect(alert).toHaveTextContent(text);
@@ -87,7 +87,7 @@ it.each([
 it("デモ事業を完全に削除して 0 件に戻ると、またボタンが出る（014 T007 の足しどころ）", async () => {
   let entities: unknown[] = [demo];
   mockApi({ "GET /api/entities": () => ok({ entities }) });
-  const { queryClient } = renderRoute(Route, { path: "/", url: "/?list=1" });
+  const { queryClient } = renderRoute(Route, { path: "/list", url: "/list" });
   await screen.findByText("デモ事業");
   expect(screen.queryByRole("button", { name: BUTTON })).not.toBeInTheDocument();
   entities = [];
@@ -95,9 +95,17 @@ it("デモ事業を完全に削除して 0 件に戻ると、またボタンが�
   expect(await screen.findByRole("button", { name: BUTTON })).toBeInTheDocument();
 });
 
+it("作成日時は共通の日時の表記（0 埋めの年/月/日 時:分）で出す", async () => {
+  mockApi({ "GET /api/entities": () => ok({ entities: [entity] }) });
+  renderRoute(Route, { path: "/list", url: "/list" });
+  const row = (await screen.findByText("合成事業")).closest("tr");
+  if (row === null) throw new Error("行がない");
+  expect(row.textContent).toMatch(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}/);
+});
+
 it("demo の事業体だけ、名前の横に「デモ」の印が出る（014 T007）", async () => {
   mockApi({ "GET /api/entities": () => ok({ entities: [entity, demo] }) });
-  renderRoute(Route, { path: "/", url: "/?list=1" });
+  renderRoute(Route, { path: "/list", url: "/list" });
   const demoRow = (await screen.findByText("デモ事業")).closest("tr");
   const normalRow = screen.getByText("合成事業").closest("tr");
   if (demoRow === null || normalRow === null) throw new Error("行がない");

@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
+import { buttonVariants } from "@/components/ui/button";
 import { useCurrentPeriod } from "@/features/periods/current";
 
-const linkClass =
-  "inline-flex h-9 items-center rounded-md border bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground";
+const linkClass = buttonVariants({ variant: "outline" });
 
 /**
  * 取込の画面の上に置く入口（011 FR-051）。期首残高（freee の元帳から作る）と、元帳との照合へ 1 回で届く。

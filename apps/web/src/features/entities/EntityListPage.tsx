@@ -39,6 +39,7 @@ import {
 } from "@/features/entities/api";
 import { lastEntityIdOf } from "@/features/entities/EntitySwitcher";
 import { thisYear } from "@/lib/dates";
+import { formatDateTime } from "@/lib/format";
 import { getStored, removeStored, storageKeys } from "@/lib/local-storage";
 
 const KIND_LABELS = { individual: "個人", corporation: "法人" } as const;
@@ -139,7 +140,7 @@ function EntityList() {
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">{KIND_LABELS[e.kind]}</TableCell>
                   <TableCell className="hidden text-muted-foreground sm:table-cell">
-                    {new Date(e.createdAt).toLocaleDateString("ja-JP")}
+                    {formatDateTime(e.createdAt)}
                   </TableCell>
                   <TableCell>
                     <Link

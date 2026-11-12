@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import type { JournalBookOrder, JournalBookSort } from "@trebuchet/schema";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { CsvExport } from "@/components/ui/csv-export";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { FiscalPeriod } from "@/features/periods/api";
@@ -288,13 +289,5 @@ export function CsvLink({
   kind: ReportKind;
   params: Record<string, string | undefined>;
 }) {
-  return (
-    <a
-      href={reportCsvUrl(entityId, kind, params)}
-      download
-      className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium shadow-xs hover:bg-muted"
-    >
-      CSV をダウンロード
-    </a>
-  );
+  return <CsvExport href={reportCsvUrl(entityId, kind, params)} />;
 }

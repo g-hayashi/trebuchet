@@ -43,6 +43,7 @@ import {
 } from "@/features/periods/api";
 import { groupAccountsBySection, SIDE_LABELS } from "@/lib/accounts";
 import { formatYen, parseYenInput } from "@/lib/format";
+import { invalidateLedger } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/e/$entityId/periods/$year/opening-balances")({
@@ -161,7 +162,11 @@ function OpeningBalancesForm({
       queryClient.setQueryData(periodKeys.openingBalances(entityId, year), saved);
       form.reset({ rows: toFormRows(saved) });
       closeProposal();
-      await queryClient.invalidateQueries({ queryKey: periodKeys.openingBalances(entityId, year) });
+      // 期首残高は帳票・決算書・ホームの数字の元
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: periodKeys.openingBalances(entityId, year) }),
+        invalidateLedger(queryClient, entityId),
+      ]);
     },
   });
 

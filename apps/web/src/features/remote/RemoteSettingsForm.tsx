@@ -8,7 +8,7 @@ import { ApiErrorMessage } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SaveNotice } from "@/components/ui/save-notice";
-import { authKeys } from "../auth/api";
+import { authKeys, authStatusQuery, LOCAL_RP_ID } from "../auth/api";
 import { putRemoteSettings, remoteKeys, remoteSettingsQuery, tailscaleStatusQuery } from "./api";
 
 function Fields({ settings }: { settings: RemoteSettings }) {
@@ -79,9 +79,15 @@ function Fields({ settings }: { settings: RemoteSettings }) {
   );
 }
 
-/** リモート（Tailscale）の設定（FR-010・011）。保存のあと、Host の検査は再起動なしで変わる */
+/**
+ * リモート（Tailscale）の設定（FR-010・011）。保存のあと、Host の検査は再起動なしで変わる。
+ * 変更は Mac の localhost からだけできる（server は ts.net の Host からを 421 にする）。
+ * ts.net の名前で開いているときは、保存の欄を出さずにその旨を案内する
+ */
 export function RemoteSettingsForm() {
   const settings = useQuery(remoteSettingsQuery());
+  const status = useQuery(authStatusQuery());
+  const local = status.data?.rpId === LOCAL_RP_ID;
   return (
     <Card aria-label="リモートの設定">
       <CardHeader>
@@ -92,8 +98,15 @@ export function RemoteSettingsForm() {
       </CardHeader>
       <CardContent className="grid gap-4">
         {settings.error && <ApiErrorMessage error={settings.error} />}
-        {settings.isPending && <Loading />}
-        {settings.data && <Fields settings={settings.data} />}
+        <ApiErrorMessage error={status.error} />
+        {(settings.isPending || status.isPending) && <Loading />}
+        {status.data && !local && (
+          <p className="text-sm text-muted-foreground">
+            リモートの設定の変更は、この Mac（localhost）で操作してください。ts.net
+            の名前で開いているときは変更できません。
+          </p>
+        )}
+        {settings.data && local && <Fields settings={settings.data} />}
       </CardContent>
     </Card>
   );

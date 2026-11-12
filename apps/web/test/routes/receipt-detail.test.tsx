@@ -62,7 +62,7 @@ describe("証憑の詳細", () => {
     expect(value("SHA-256")).toHaveTextContent(RECEIPT_SHA);
     expect(value("元の名前")).toHaveTextContent("領収書.jpg");
     expect(value("形式")).toHaveTextContent("JPEG");
-    expect(value("大きさ")).toHaveTextContent("2,500,000 バイト");
+    expect(value("大きさ")).toHaveTextContent("2.4 MB");
     expect(value("経路")).toHaveTextContent("この Mac から");
     expect(value("区分")).toHaveTextContent("電子取引");
     expect(value("画像の大きさ")).toHaveTextContent("4032×3024");

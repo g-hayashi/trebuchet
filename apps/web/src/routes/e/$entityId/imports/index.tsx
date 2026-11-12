@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import {
@@ -29,11 +30,7 @@ function ImportsPage() {
     <main className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">取込</h1>
-        <Link
-          to="/e/$entityId/imports/new"
-          params={{ entityId }}
-          className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90"
-        >
+        <Link to="/e/$entityId/imports/new" params={{ entityId }} className={buttonVariants()}>
           新しい取込
         </Link>
       </div>

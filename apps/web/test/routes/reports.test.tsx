@@ -128,6 +128,8 @@ describe("試算表（US4, FR-028）", () => {
       `${ENTITY}/reports/trial-balance?from=2026-01-01&to=2026-06-30&format=csv`,
     );
     expect(link).toHaveAttribute("download");
+    // ボタン（outline）と同じ見た目（hover の色もそろう）
+    expect(link.className).toContain("hover:bg-accent");
   });
 
   it("期間の指定がなければ、今日を含む会計期間を表示する。会計期間を選ぶと取り直す", async () => {

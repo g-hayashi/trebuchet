@@ -4,7 +4,7 @@ import { type ReactNode, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Loading } from "@/components/loading";
 import { ReasonDialog } from "@/components/reason-dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import {
@@ -27,6 +27,7 @@ import {
   reopenPeriod,
 } from "@/features/periods/api";
 import { formatDateTime } from "@/lib/format";
+import { invalidateLedger } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/periods/")({
   component: PeriodsPage,
@@ -164,6 +165,8 @@ function PeriodsPage() {
 
   // 会計期間のキーの前方一致で、一覧・履歴・期首残高をまとめて読み直す
   const invalidate = () => queryClient.invalidateQueries({ queryKey: periodKeys.list(entityId) });
+  // 締め・解除は帳票・決算書・ホーム（締めの状態・知らせ）にも関わる
+  const invalidateAll = () => Promise.all([invalidate(), invalidateLedger(queryClient, entityId)]);
 
   const createNext = useMutation({
     mutationFn: () => createNextPeriod(entityId),
@@ -171,12 +174,12 @@ function PeriodsPage() {
   });
   const close = useMutation({
     mutationFn: (year: number) => closePeriod(entityId, year),
-    onSuccess: invalidate,
+    onSuccess: invalidateAll,
   });
   const reopen = useMutation({
     mutationFn: ({ year, reason }: { year: number; reason: string }) =>
       reopenPeriod(entityId, year, reason),
-    onSuccess: invalidate,
+    onSuccess: invalidateAll,
   });
 
   const startClosing = (p: FiscalPeriod) => {
@@ -205,7 +208,7 @@ function PeriodsPage() {
         <Link
           to="/e/$entityId/imports"
           params={{ entityId }}
-          className="inline-flex h-9 items-center rounded-md border bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground"
+          className={buttonVariants({ variant: "outline" })}
         >
           freee の取込
         </Link>

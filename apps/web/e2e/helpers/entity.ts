@@ -10,13 +10,13 @@ import { entityIdOf, mainOf } from "./ui.ts";
 
 /**
  * 作成の画面（一覧）で事業体を作る（個人・1 月始まり）。作成後の事業体のホームに移る。事業体の ID を返す。
- * 事業体が 1 件だとトップはそのホームへ移るので、一覧と作成は `/?list=1` で開く
+ * 事業体が 1 件だとトップはそのホームへ移るので、一覧と作成は `/list` で開く
  */
 export async function createEntityViaUi(
   page: Page,
   options: { name: string; firstFiscalYear: number },
 ): Promise<string> {
-  await page.goto("/?list=1");
+  await page.goto("/list");
   const form = mainOf(page)
     .locator("form")
     .filter({ has: page.getByRole("button", { name: "作成する", exact: true }) });
