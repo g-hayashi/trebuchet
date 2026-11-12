@@ -31,7 +31,7 @@ const planFeatures = tableFeatures({
 });
 type PlanColumns = TableOptions<typeof planFeatures, ImportPlanItem>["columns"];
 
-/** 個別の指定（002/FR-004b）。include は対象外を含める、exclude は新規を外す */
+/** 個別の指定。include は対象外を含める、exclude は新規を外す */
 export type ItemSelection = { include: readonly string[]; exclude: readonly string[] };
 
 type Toggle = { label: "含める" | "外す"; next: ItemSelection };
