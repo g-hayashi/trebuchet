@@ -163,15 +163,16 @@ test("事業体の作成から期首残高・仕訳の登録・貸借不一致�
     await page.mouse.down();
     await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2, { steps: 15 });
     await page.mouse.up();
+    // 摘要の末尾までドラッグすると、ブラウザによっては行末の改行も選択に入る。選んだ文字だけを比べる
     await expect
-      .poll(() => page.evaluate(() => window.getSelection()?.toString()))
+      .poll(() => page.evaluate(() => window.getSelection()?.toString().trim()))
       .toBe("10月分 取引先A");
     const sheet = page.getByRole("dialog", { name: "仕訳の詳細", exact: true });
     await expect(sheet).toBeHidden();
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.keyboard.press("ControlOrMeta+c");
     await expect
-      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .poll(() => page.evaluate(async () => (await navigator.clipboard.readText()).trim()))
       .toBe("10月分 取引先A");
     await page.evaluate(() => window.getSelection()?.removeAllRanges());
     await row.getByRole("cell", { name: "2026-10-31", exact: true }).click();

@@ -104,9 +104,7 @@ test("銀行の CSV の取込から、列の確認、口座の対応、候補の
   }
 
   await test.step("ファイルを選ぶと列の案が出て、確認へ進むとプレビューが出る（帳簿はまだ変わらない）", async () => {
-    await openNav(page, "明細", "一覧と確認");
-    await expect(main.getByRole("heading", { name: "明細", exact: true })).toBeVisible();
-    await main.getByRole("link", { name: "明細を取り込む", exact: true }).click();
+    await openNav(page, "明細", "取り込む");
     await expect(main.getByRole("heading", { name: "明細の取込", exact: true })).toBeVisible();
 
     await readFileAndConfirm(BANK);
