@@ -3,7 +3,8 @@ import { createFileRoute, Link, stripSearchParams, useNavigate } from "@tanstack
 import { JournalQuery } from "@trebuchet/schema";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { Button } from "@/components/ui/button";
+import { Loading } from "@/components/loading";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
@@ -30,11 +31,11 @@ import { type Partner, partnersQuery, type Tag, tagsQuery } from "@/features/mas
 import { ReceiptMark } from "@/features/receipts/JournalReceipts";
 import { useReportRange } from "@/features/reports/periods";
 import { groupAccountsBySection } from "@/lib/accounts";
-import { formatYen, parseWholeYen } from "@/lib/format";
+import { formatYen, parseAmount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * URL の検索パラメータ（FR-023）。ページの指定（cursor・limit）は URL に残さない。
+ * URL の検索パラメータ（001/FR-023）。ページの指定（cursor・limit）は URL に残さない。
  * `allDates` は利用者が日付を両方空にして探したことを表す（URL に日付がないと既定の会計期間を補うため）。
  * API へは送らない
  */
@@ -87,11 +88,7 @@ function JournalsPage() {
     <main className="grid gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">仕訳</h1>
-        <Link
-          to="/e/$entityId/journals/new"
-          params={{ entityId }}
-          className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90"
-        >
+        <Link to="/e/$entityId/journals/new" params={{ entityId }} className={buttonVariants()}>
           仕訳を入力
         </Link>
       </div>
@@ -132,9 +129,7 @@ function JournalsPage() {
               </div>
             </dl>
           )}
-          {(journals.isPending || accounts.isPending) && !error && (
-            <p className="text-sm text-muted-foreground">読み込み中…</p>
-          )}
+          {(journals.isPending || accounts.isPending) && !error && <Loading />}
           {items?.length === 0 && (
             <p className="text-sm text-muted-foreground">
               {hasFilter(apiSearch)
@@ -226,11 +221,6 @@ function JournalsPage() {
 }
 
 type SearchInput = (typeof JournalSearchParams)["_zod"]["input"];
-
-/** 金額の条件の入力。空欄は指定なし、0 以上の整数でなければ null */
-function parseAmount(raw: string): number | undefined | null {
-  return raw.trim() === "" ? undefined : parseWholeYen(raw, { min: 0 });
-}
 
 type FilterValues = {
   dateFrom: string;

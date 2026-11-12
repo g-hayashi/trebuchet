@@ -11,7 +11,7 @@ import { formatDateTime, formatYen } from "@/lib/format";
 import { postReceiptReading, receiptKeys } from "./api";
 import { useReceiptReading } from "./reading";
 
-/** 失敗の表示（FR-017）。`errorCode` は domain の `RECEIPT_READING_ERROR` の文字列 */
+/** 失敗の表示（010/FR-017）。`errorCode` は domain の `RECEIPT_READING_ERROR` の文字列 */
 function failureText(reading: ReceiptReadingView): string {
   switch (reading.errorCode) {
     case "RECEIPT_READ_UNSUPPORTED":
@@ -38,7 +38,7 @@ function failureText(reading: ReceiptReadingView): string {
 const NONE = "候補なし";
 
 /**
- * 証憑の詳細の「AI の読み取り」（US4、FR-014〜017）。設定「証憑の画像を外部の AI に送る」が有効なときだけ
+ * 証憑の詳細の「AI の読み取り」（010/US4、010/FR-014〜017）。設定「証憑の画像を外部の AI に送る」が有効なときだけ
  * 読み取りの操作を出す。候補は AI の候補として示し（入力欄の初期値になるのは `ReceiptFieldsForm`）、
  * 失敗しても証憑は保存されていて、手入力で続けられる
  */

@@ -6,18 +6,19 @@ import {
   type StatementAccount,
 } from "@trebuchet/schema";
 import { useEffect, useId, useRef, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type Account, accountsQuery } from "@/features/accounts/api";
-import { taxCategoriesQuery, taxSettingsQuery } from "@/features/entities/api";
+import type { Account } from "@/features/accounts/api";
 import { journalSearchQuery } from "@/features/journals/api";
 import { JournalForm, type JournalFormProps } from "@/features/journals/JournalForm";
-import { partnersQuery, tagsQuery } from "@/features/masters/api";
+import { useJournalMasters } from "@/features/journals/use-journal-masters";
 import { ApiError } from "@/lib/api";
 import { addDays } from "@/lib/dates";
 import { formatYen } from "@/lib/format";
+import { JOURNAL_MEMO_MAX } from "@/lib/limits";
 import { invalidateLedger } from "@/lib/queries";
 import { type ApproveBody, postApprove, type StatementView, statementAccountsQuery } from "./api";
 import { METHOD_LABELS, PURPOSE_LABELS } from "./labels";
@@ -65,7 +66,7 @@ function initialSource(
   });
   return {
     date: statement.date,
-    memo: statement.content.slice(0, 1000),
+    memo: statement.content.slice(0, JOURNAL_MEMO_MAX),
     lines: [
       line(outflow ? "debit" : "credit", "", null),
       line(outflow ? "credit" : "debit", statementAccount.accountId, statementAccount.subAccountId),
@@ -73,7 +74,7 @@ function initialSource(
   };
 }
 
-/** 明細の口座の行の合計（借方 − 貸方）が明細の金額と違えば、送らずにエラーにする（サーバーの検査と同じ。FR-015） */
+/** 明細の口座の行の合計（借方 − 貸方）が明細の金額と違えば、送らずにエラーにする（サーバーの検査と同じ。006/FR-015） */
 function checkStatementLines(
   input: JournalInput,
   statement: StatementView,
@@ -100,7 +101,7 @@ function checkStatementLines(
 
 type LineRef = { journalId: string; lineId: string };
 
-/** 結びつけ先の行の選択（FR-021a）。同じ向き・同じ金額の行（明細の口座が分かれば、その科目の行）だけを出す */
+/** 結びつけ先の行の選択（006/FR-021a）。同じ向き・同じ金額の行（明細の口座が分かれば、その科目の行）だけを出す */
 function LinkPicker({
   entityId,
   statement,
@@ -144,7 +145,7 @@ function LinkPicker({
   return (
     <div className="grid gap-2">
       <ApiErrorMessage error={journals.error} />
-      {journals.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {journals.isPending && <Loading />}
       {journals.data && options.length === 0 && (
         <p className="text-sm text-muted-foreground">
           日付の前後 {MATCH_WINDOW_DAYS} 日に、結びつけられる仕訳の行はありません。
@@ -177,7 +178,7 @@ function LinkPicker({
 }
 
 /**
- * 候補の確認と承認（FR-014〜016・021a）。「仕訳を登録する」は候補の案（なければ明細の口座の行）を直して登録、
+ * 候補の確認と承認（006/FR-014〜016・021a）。「仕訳を登録する」は候補の案（なければ明細の口座の行）を直して登録、
  * 「既存の仕訳と結びつける」は二重計上を防ぐために、すでにある仕訳の行に結びつける（仕訳は増えない）
  */
 export function CandidateEditor({
@@ -194,16 +195,11 @@ export function CandidateEditor({
   const queryClient = useQueryClient();
   const radioName = useId();
   const candidate = statement.candidate;
-  const accounts = useQuery(accountsQuery(entityId));
-  const partners = useQuery(partnersQuery(entityId));
-  const tags = useQuery(tagsQuery(entityId));
-  const taxSettings = useQuery(taxSettingsQuery(entityId));
-  const taxCategories = useQuery(taxCategoriesQuery(entityId));
+  const masters = useJournalMasters(entityId);
+  const { accounts, partners, tags, taxSettings, taxCategories } = masters;
   const statementAccounts = useQuery(statementAccountsQuery(entityId));
   const statementAccount = statementAccounts.data?.find((a) => a.name === statement.accountName);
-  const loadError = [accounts, partners, tags, taxSettings, taxCategories, statementAccounts].find(
-    (q) => q.error,
-  )?.error;
+  const loadError = masters.loadError ?? statementAccounts.error;
 
   const learnId = useId();
   const [mode, setMode] = useState<Mode>(candidate?.method === "match" ? "link" : "create");
@@ -284,7 +280,7 @@ export function CandidateEditor({
       </fieldset>
 
       <ApiErrorMessage error={loadError} />
-      {!ready && !loadError && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {!ready && !loadError && <Loading />}
 
       {ready && mode === "create" && (
         <>

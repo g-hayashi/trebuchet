@@ -1,4 +1,11 @@
 import { spawn as nodeSpawn } from "node:child_process";
+import { LOOPBACK_HOST } from "./origin.ts";
+import { sleep } from "./util.ts";
+
+/** 端末内の AI（`fm serve`）のモデル名。候補の `model` にも記録する */
+export const LOCAL_AI_MODEL = "system";
+/** `fm serve` の既定のポート（環境変数 `TREBUCHET_FM_PORT` は deps.ts が読む） */
+export const FM_DEFAULT_PORT = 18790;
 
 // 端末内の AI（Apple のオンデバイスモデル）を OpenAI 互換の API で出す `fm serve` の管理（006 R10）。
 // 最初の推定のときに `fm models` の出力で確かめ、使えれば `fm serve` を子プロセスで起動して `/health` を待つ。
@@ -45,7 +52,7 @@ const defaultSpawn: FmSpawn = (command, args, options) => {
 const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
 
 /** `fm models` の出力で、`model` の行が使える（`✓`）か。ANSI の色は除いて見る */
-export function modelAvailable(output: string, model: string): boolean {
+function modelAvailable(output: string, model: string): boolean {
   const plain = output.replace(ANSI, "");
   return plain.split(/\r?\n/).some((line) => {
     const m = /^\s*✓\s+(\S+)/u.exec(line);
@@ -58,14 +65,14 @@ export type FmServerOptions = {
   fetch?: typeof fetch;
   /** 既定は `fm`（PATH から探す） */
   command?: string;
-  /** 既定は 18790（環境変数 `TREBUCHET_FM_PORT` は deps.ts が読む） */
+  /** 既定は `FM_DEFAULT_PORT`（環境変数 `TREBUCHET_FM_PORT` は deps.ts が読む） */
   port?: number;
   /** `/health` を待つ上限（既定 30 秒） */
   healthTimeoutMs?: number;
   pollMs?: number;
   /** `fm models` を待つ上限（既定 10 秒） */
   availableTimeoutMs?: number;
-  /** 使えるかを見るモデル名（既定 `system`。`ai-runtime.ts` の `LOCAL_AI_MODEL` と同じ） */
+  /** 使えるかを見るモデル名（既定 `LOCAL_AI_MODEL`） */
   model?: string;
   /** 起動に失敗してから、次に試すまでの間（既定 60 秒。1 件ごとに待たせない） */
   retryAfterMs?: number;
@@ -75,26 +82,24 @@ export type FmServerOptions = {
 export type FmServer = {
   /** `fm models` の出力に、使えるモデル（`✓ system`）の行があるか。最初の結果を覚える */
   available(): Promise<boolean>;
-  /** 使えれば `fm serve` を（なければ）起動し、接続先（`http://127.0.0.1:<port>`）を返す。使えなければ undefined */
+  /** 使えれば `fm serve` を（なければ）起動し、接続先（`http://<ループバック>:<port>`）を返す。使えなければ undefined */
   ensureStarted(): Promise<string | undefined>;
   /** 起動した子プロセスを止める（server の終了時） */
   stop(): void;
 };
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 export function createFmServer(options: FmServerOptions = {}): FmServer {
   const spawn = options.spawn ?? defaultSpawn;
   const fetchFn = options.fetch ?? ((...args) => globalThis.fetch(...args));
   const command = options.command ?? "fm";
-  const model = options.model ?? "system";
-  const port = options.port ?? 18790;
+  const model = options.model ?? LOCAL_AI_MODEL;
+  const port = options.port ?? FM_DEFAULT_PORT;
   const healthTimeoutMs = options.healthTimeoutMs ?? 30_000;
   const pollMs = options.pollMs ?? 250;
   const availableTimeoutMs = options.availableTimeoutMs ?? 10_000;
   const retryAfterMs = options.retryAfterMs ?? 60_000;
   const now = options.now ?? Date.now;
-  const baseUrl = `http://127.0.0.1:${port}`;
+  const baseUrl = `http://${LOOPBACK_HOST}:${port}`;
 
   let availability: Promise<boolean> | undefined;
   let child: FmChild | undefined;
@@ -139,7 +144,7 @@ export function createFmServer(options: FmServerOptions = {}): FmServer {
     if (!(await server.available())) return undefined;
     let mine: FmChild;
     try {
-      mine = spawn(command, ["serve", "--host", "127.0.0.1", "--port", String(port)]);
+      mine = spawn(command, ["serve", "--host", LOOPBACK_HOST, "--port", String(port)]);
     } catch {
       return undefined;
     }

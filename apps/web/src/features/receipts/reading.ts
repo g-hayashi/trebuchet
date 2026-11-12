@@ -5,6 +5,11 @@ import { postReceiptReading, receiptKeys } from "./api";
 
 // 外部の AI の読み取り（010 US4）の、画面が共有する部品
 
+/** 設定「外部の AI を使う」と「証憑の画像を外部の AI に送る」の両方が有効か（読み込み前は false） */
+const isReadingEnabled = (
+  settings: { externalEnabled: boolean; receiptImagesEnabled: boolean } | undefined,
+) => settings?.externalEnabled === true && settings.receiptImagesEnabled === true;
+
 /**
  * 今のファイルの版に対する読み取りの記録（`readAt` が版の追加以降のもの）。古い版を読んだ候補は使わない
  */
@@ -28,8 +33,7 @@ export function useReceiptReading(receipt: ReceiptDetail | undefined): {
 } {
   const settings = useQuery(aiSettingsQuery());
   const ready = !settings.isPending;
-  const enabled =
-    settings.data?.externalEnabled === true && settings.data.receiptImagesEnabled === true;
+  const enabled = isReadingEnabled(settings.data);
   if (!enabled || receipt === undefined) {
     return { ready, enabled, latest: undefined, usable: undefined };
   }
@@ -43,18 +47,18 @@ export function useReceiptReading(receipt: ReceiptDetail | undefined): {
 }
 
 /**
- * 追加の直後の自動の読み取り（R13）。設定が有効なときだけ readings を呼ぶ。追加の応答は待たず、
+ * 追加の直後の自動の読み取り（010/R13）。設定が有効なときだけ readings を呼ぶ。追加の応答は待たず、
  * 失敗も示さない（記録は server が残し、証憑の詳細で読み直せる）。呼んだ後は証憑のクエリを読み直す
  */
 export function useAutoReceiptReading(entityId: string): (receiptId: string) => void {
   const queryClient = useQueryClient();
-  const settings = useQuery(aiSettingsQuery());
-  const enabled =
-    settings.data?.externalEnabled === true && settings.data.receiptImagesEnabled === true;
+  // 設定を読み込む前に追加が終わっても、読み込みを待ってから判定する（読み込み前を無効とみなして飛ばさない）
   return (receiptId) => {
-    if (!enabled) return;
-    void postReceiptReading(entityId, receiptId)
-      .then(() => queryClient.invalidateQueries({ queryKey: receiptKeys.all(entityId) }))
-      .catch(() => undefined);
+    void (async () => {
+      const settings = await queryClient.ensureQueryData(aiSettingsQuery());
+      if (!isReadingEnabled(settings)) return;
+      await postReceiptReading(entityId, receiptId);
+      await queryClient.invalidateQueries({ queryKey: receiptKeys.all(entityId) });
+    })().catch(() => undefined);
   };
 }

@@ -96,7 +96,7 @@ export type FreeeJournalLine = {
   taxName: string;
   taxAmount: number;
   partnerName?: string | undefined;
-  /** メモタグ。区切り文字はなく、列の値全体を1つのタグとする（T005） */
+  /** メモタグ。区切り文字はなく、列の値全体を1つのタグとする（002/T005） */
   tagNames: string[];
   description: string;
 };

@@ -16,8 +16,6 @@
  * モデル名・URL・キー・明細・AIの回答や失敗の本文は表示も保存もしない。
  * プロンプトや推定経路を変える前後で実行する。異なる外部有効状態/fixture版は比較しない。
  */
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import {
   type AiEndpoint,
   createOpenAiProvider,
@@ -39,7 +37,8 @@ import {
   STATEMENT_EVAL_SPLIT_DATE,
 } from "../packages/domain/test/fixtures/statements/statement-evals.ts";
 import { isAllowedAiBaseUrl } from "../packages/schema/src/ai.ts";
-import { positiveNumber } from "./lib/bench-common.ts";
+import { evalFmPort } from "./lib/env.ts";
+import { delta, evalDir, evalFetch, pct, readPrevious, saveEval } from "./lib/eval-history.ts";
 import { createEvalProviderGuard, EvalProviderError } from "./lib/eval-provider.ts";
 
 type SavedEval = StatementSceneEvaluation & {
@@ -47,7 +46,7 @@ type SavedEval = StatementSceneEvaluation & {
   fixtureVersion: number;
   threshold: number;
 };
-const OUT_DIR = fileURLToPath(new URL("../.tmp/eval-statements/", import.meta.url));
+const OUT_DIR = evalDir("eval-statements");
 const FIXTURE_VERSION = 1;
 class EvalSetupError extends Error {}
 
@@ -79,26 +78,12 @@ async function loadEndpoint(): Promise<AiEndpoint | undefined> {
   return { baseUrl, model, apiKey };
 }
 
-function readPrevious(): SavedEval | undefined {
-  try {
-    const last = readdirSync(OUT_DIR)
-      .filter((f) => f.endsWith(".json"))
-      .sort()
-      .at(-1);
-    if (last === undefined) return undefined;
-    const saved = JSON.parse(readFileSync(`${OUT_DIR}${last}`, "utf8")) as SavedEval;
-    return Array.isArray(saved.scenes) && saved.ai !== undefined ? saved : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-const pct = (value: number) => `${(value / 10).toFixed(1)}%`;
-function delta(value: number, previous: number | undefined): string {
-  if (previous === undefined) return "";
-  const diff = (value - previous) / 10;
-  return `（前回比 ${diff >= 0 ? "+" : ""}${diff.toFixed(1)}pt）`;
-}
+/** 前回の結果。形が違うもの（場面か AI の状態がない）は使わない */
+const previousEval = (): SavedEval | undefined =>
+  readPrevious<SavedEval>(
+    OUT_DIR,
+    (saved) => Array.isArray(saved.scenes) && saved.ai !== undefined,
+  );
 
 function report(saved: SavedEval, previous: SavedEval | undefined): void {
   const comparable =
@@ -132,20 +117,20 @@ function report(saved: SavedEval, previous: SavedEval | undefined): void {
   );
 }
 
-const fm = createFmServer({ port: positiveNumber("TREBUCHET_FM_PORT", 18791) });
+const fm = createFmServer({ port: evalFmPort() });
 try {
   const endpoint = await loadEndpoint();
   const baseUrl = await fm.ensureStarted();
   if (baseUrl === undefined) throw new EvalSetupError("端末内AI（fm）が使えないか起動できません");
   const local = createOpenAiProvider({
-    fetch: (...args) => globalThis.fetch(...args),
+    fetch: evalFetch,
     timeoutMs: LOCAL_TIMEOUT_MS,
     responseFormat: false,
     available: () => fm.available(),
     endpoint: async () => ({ baseUrl, model: LOCAL_AI_MODEL }),
   });
   const external = createOpenAiProvider({
-    fetch: (...args) => globalThis.fetch(...args),
+    fetch: evalFetch,
     timeoutMs: EXTERNAL_TIMEOUT_MS,
     available: async () => endpoint !== undefined,
     endpoint: async () => endpoint,
@@ -182,11 +167,8 @@ try {
     threshold,
     ...result,
   };
-  report(saved, readPrevious());
-  mkdirSync(OUT_DIR, { recursive: true });
-  const name = `${saved.at.replaceAll(":", "-").replaceAll(".", "-")}.json`;
-  writeFileSync(`${OUT_DIR}${name}`, `${JSON.stringify(saved, null, 2)}\n`);
-  console.log(`  保存: .tmp/eval-statements/${name}`);
+  report(saved, previousEval());
+  console.log(`  保存: .tmp/eval-statements/${saveEval(OUT_DIR, saved)}`);
 } catch (error) {
   console.error(
     error instanceof EvalSetupError || error instanceof EvalProviderError

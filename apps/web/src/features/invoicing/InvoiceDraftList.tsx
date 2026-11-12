@@ -28,7 +28,7 @@ export function InvoiceDraftList({
   const skipped = result.skipped.filter((s) => active(s.partnerId));
   const keyOf = (d: { partnerId: string; targetMonth: string }) =>
     `${d.partnerId}-${d.targetMonth}`;
-  // 主な操作（variant=default）の「発行する」は、先頭の未発行の案だけ。発行すると次の案に移る（ui-shell §7）
+  // 主な操作（variant=default）の「発行する」は、先頭の未発行の案だけ。発行すると次の案に移る（011 ui-shell §7）
   const primaryKey = drafts.map(keyOf).find((key) => !issuedInvoices?.has(key));
   return (
     <div className="grid gap-4">

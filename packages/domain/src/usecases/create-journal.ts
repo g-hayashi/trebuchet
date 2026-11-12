@@ -14,6 +14,7 @@ import {
   type Partner,
   type Result,
   type ValidLine,
+  validationError,
 } from "../types.ts";
 
 /** 仕訳のユースケースの依存。ledger と masters は同じテナントの DB */
@@ -68,9 +69,7 @@ export function checkCorrectsTarget(
 ): DomainError | undefined {
   const target = ledger.getJournal(correctsJournalId);
   if (target === undefined) {
-    return domainError("VALIDATION", "訂正元の仕訳が見つかりません", {
-      field: "correctsJournalId",
-    });
+    return validationError("訂正元の仕訳が見つかりません", { field: "correctsJournalId" });
   }
   // 請求・入金の仕訳は、同じ source の仕訳（請求・入金の取消）だけが訂正元にできる（005 R13）
   if (isLinkedSource(target.source) && target.source !== source) {
@@ -78,7 +77,7 @@ export function checkCorrectsTarget(
   }
   const period = checkPeriod(target.date, ctx.periods);
   if (period.ok || period.error.code !== "PERIOD_CLOSED") {
-    return domainError("VALIDATION", "訂正仕訳は締め済みの年度の仕訳にだけ起票できます", {
+    return validationError("訂正仕訳は締め済みの年度の仕訳にだけ起票できます", {
       field: "correctsJournalId",
     });
   }

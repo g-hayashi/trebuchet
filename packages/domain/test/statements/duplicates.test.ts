@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { excludeStatement } from "../../src/usecases/statement-approval.ts";
 import { listStatements } from "../../src/usecases/statements.ts";
-import { type StatementsCtx, setupStatements, unwrap } from "../statements-setup.ts";
+import { unwrap } from "../result.ts";
+import { type StatementsCtx, setupStatements } from "../statements-setup.ts";
 
 // 006 T016（H:§4.1 の `duplicateOf`）: 重複の疑い（R3）を明細の一覧にも出す。判定は取込の計画と同じ
 

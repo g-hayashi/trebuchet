@@ -43,7 +43,6 @@ interface JournalRepository extends AuditLog {     // 仕訳の登録（US2）�
   lastJournal(): Journal | undefined
   insertJournal(j: NewJournal): Journal
   getJournal(id: string): Journal | undefined
-  recentJournals(limit: number): Journal[]
 }
 
 interface LedgerRepository extends JournalRepository {   // 訂正・取消・履歴・検索（US3）

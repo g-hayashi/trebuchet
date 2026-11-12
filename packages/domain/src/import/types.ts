@@ -1,3 +1,4 @@
+import type { ImportBatchStatus } from "@trebuchet/schema";
 import type { Side, TaxCategoryCode } from "../types.ts";
 
 // 取込の記録と対応表（specs/002-freee-import/data-model.md §2）。ImportStore（ports.ts）が読み書きする
@@ -17,7 +18,7 @@ export type TaxMapping = {
   taxCategory: TaxCategoryCode;
 };
 
-export type ImportBatchStatus = "active" | "voided";
+export type { ImportBatchStatus };
 
 /** 取込の回（import_batches） */
 export type ImportBatch = {

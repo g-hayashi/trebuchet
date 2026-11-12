@@ -2,10 +2,10 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@/routes/e/$entityId/invoices/new";
+import { ENTITY as BASE } from "../fixtures";
 import { type ApiReply, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const BASE = "/api/entities/e1";
 const PARTNERS = [
   { id: "p1", name: "株式会社A", honorific: "御中", memo: null, isActive: true },
   { id: "p2", name: "B 商事", honorific: null, memo: null, isActive: true },

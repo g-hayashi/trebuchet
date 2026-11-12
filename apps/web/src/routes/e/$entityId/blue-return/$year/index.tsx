@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { CsvExport } from "@/components/ui/csv-export";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { NativeSelect } from "@/components/ui/input";
 import { blueReturnCsvUrl, blueReturnQuery } from "@/features/blue-return/api";
@@ -18,7 +19,7 @@ export const Route = createFileRoute("/e/$entityId/blue-return/$year/")({
   component: BlueReturnPage,
 });
 
-/** 年度の切り替え（FR-043）。会計期間のある年度を新しい順に並べる。開いている年度は必ず含める */
+/** 年度の切り替え（011/FR-043）。会計期間のある年度を新しい順に並べる。開いている年度は必ず含める */
 function YearSwitcher({ entityId, year }: { entityId: string; year: string }) {
   const id = useId();
   const navigate = useNavigate();
@@ -68,11 +69,11 @@ function TransferValue({ label, amount }: { label: string; amount: number | null
   );
 }
 
-/** 青色申告決算書（一般用）。1ページ（損益計算書）と、第一表に転記する値（FR-001〜004, FR-008） */
+/** 青色申告決算書（一般用）。1ページ（損益計算書）と、第一表に転記する値（003/FR-001〜004, 003/FR-008） */
 function BlueReturnPage() {
   const { entityId, year } = Route.useParams();
   const { data, error } = useQuery(blueReturnQuery(entityId, year));
-  // 控除の要件の回答のダイアログ（FR-044）
+  // 控除の要件の回答のダイアログ（011/FR-044）
   const [answersOpen, setAnswersOpen] = useState(false);
 
   return (
@@ -87,13 +88,7 @@ function BlueReturnPage() {
             <Button variant="outline" onClick={() => window.print()}>
               印刷
             </Button>
-            <a
-              href={blueReturnCsvUrl(entityId, year)}
-              download
-              className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium shadow-xs hover:bg-muted"
-            >
-              CSV をダウンロード
-            </a>
+            <CsvExport href={blueReturnCsvUrl(entityId, year)} />
           </div>
         )}
       </div>

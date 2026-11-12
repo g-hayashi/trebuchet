@@ -1,19 +1,11 @@
 /**
- * bench（`bench-reports.ts`・`bench-import.ts`・`bench-backup.ts`）と `freee-import-runner.ts` の共通部品。
- * しきい値の環境変数の読み取り、実時計・実 ID、ベンチ用の事業体の作成、終了コードの扱い。
+ * bench（`bench-reports.ts`・`bench-import.ts`・`bench-backup.ts`・`bench-statements.ts`）と
+ * `freee-import-runner.ts`（`pnpm verify:freee`・`verify:tax-return` の本体）の共通部品。
+ * 実時計・実 ID、ベンチ用の事業体の作成、測定の集計、終了コードの扱い。環境変数の読み取りは `env.ts`。
  */
 import { randomUUIDv7 } from "node:crypto";
 import { createTestEntity } from "../../packages/db/src/testing.ts";
 import type { Clock, EntityProfile, IdGenerator } from "../../packages/domain/src/index.ts";
-
-/** 環境変数 `name` の正の数（未設定・空なら fallback）。正の数でなければ例外 */
-export function positiveNumber(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw === undefined || raw === "") return fallback;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} は正の数: ${raw}`);
-  return value;
-}
 
 /** 実 ID（UUIDv7）と実時計。bench は固定の時計を使わない */
 export const benchIds: IdGenerator = { next: () => randomUUIDv7() };
@@ -28,6 +20,30 @@ export function createBenchEntity(options: {
   firstFiscalYear: number;
 }): EntityProfile {
   return createTestEntity({ ...options, now: benchClock.now(), ids: benchIds });
+}
+
+/** 測定値（ミリ秒）の中央値と最大値（小数 1 桁に丸める） */
+export function summarize(values: readonly number[]): { median: number; max: number } {
+  const sorted = [...values].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] ?? Number.NaN;
+  const max = sorted[sorted.length - 1] ?? Number.NaN;
+  return { median: Number(median.toFixed(1)), max: Number(max.toFixed(1)) };
+}
+
+/**
+ * ウォームアップを 1 回してから `run`（所要ミリ秒を返す）を `runs` 回測り、中央値・最大値・判定を返す。
+ * 判定は丸める前の最大値が `limitMs` 以下なら OK
+ */
+export async function measureStats(
+  run: () => Promise<number>,
+  runs: number,
+  limitMs: number,
+): Promise<{ median: number; max: number; result: "OK" | "NG" }> {
+  await run(); // ウォームアップ
+  const times: number[] = [];
+  for (let i = 0; i < runs; i++) times.push(await run());
+  const rawMax = Math.max(...times);
+  return { ...summarize(times), result: rawMax <= limitMs ? "OK" : "NG" };
 }
 
 /**

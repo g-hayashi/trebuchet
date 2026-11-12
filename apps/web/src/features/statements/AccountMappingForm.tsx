@@ -14,7 +14,7 @@ import type { AccountDraft } from "./account-draft";
 import { KIND_LABELS, USAGE_LABELS } from "./labels";
 
 /**
- * 取込元の口座（明細の口座名）の対応（FR-003、007 US3）: 用途・種類・科目・補助科目。
+ * 取込元の口座（明細の口座名）の対応（006/FR-003、007 US3）: 用途・種類・科目・補助科目。
  * 値は親（取込の画面）が持ち、確定のときに commit の `accounts` でまとめて送る。保存のボタンはない。
  * 案（`suggestion`）があれば、推定であることと手がかりの語を示す。
  * `private`（帳簿の外の口座）は科目を持たないので、科目と補助科目を出さない

@@ -19,6 +19,8 @@ import {
   createTestEntity,
   NOW,
   type TempDataDir,
+  testClock,
+  testIds,
   useTempDataDir,
 } from "../src/testing.ts";
 
@@ -28,8 +30,8 @@ let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 let period: FiscalPeriod;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => NOW };
+const ids = testIds();
+const clock = testClock();
 
 beforeEach(() => {
   tmp = useTempDataDir("ledger-repo");
@@ -180,15 +182,12 @@ describe("DrizzleLedgerRepository（US2）", () => {
     expect(count("journal_lines")).toBe(2);
   });
 
-  it("lastJournal は仕訳番号が最大の仕訳、recentJournals は日付の降順・仕訳番号の降順", () => {
+  it("lastJournal は仕訳番号が最大の仕訳", () => {
     expect(ledger.lastJournal()).toBeUndefined();
-    const a = ledger.insertJournal(newJournal(sale(1, "2026-10-31"), 1));
-    const b = ledger.insertJournal(newJournal(sale(2, "2026-01-05"), 2));
+    ledger.insertJournal(newJournal(sale(1, "2026-10-31"), 1));
+    ledger.insertJournal(newJournal(sale(2, "2026-01-05"), 2));
     const c = ledger.insertJournal(newJournal(sale(3, "2026-10-31"), 3));
     expect(ledger.lastJournal()).toEqual(c);
-    expect(ledger.recentJournals(10).map((j) => j.journalNo)).toEqual([3, 1, 2]);
-    expect(ledger.recentJournals(2)).toEqual([c, a]);
-    expect(b.journalNo).toBe(2);
   });
 
   it("recentRegistered（011 ホーム）は取消を除き、登録日時（同じなら仕訳番号）の新しい順に limit 件", () => {

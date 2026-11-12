@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { Loading } from "@/components/loading";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import {
   Table,
@@ -12,14 +13,14 @@ import {
 import { recurringListQuery } from "./api";
 import { dayLabel, periodLabel, STATUS_LABELS } from "./labels";
 
-/** 定期仕訳の一覧（FR-023）。名前・予定日・期間・状態・次の予定日・登録済みの件数 */
+/** 定期仕訳の一覧（005/FR-023）。名前・予定日・期間・状態・次の予定日・登録済みの件数 */
 export function RecurringList({ entityId }: { entityId: string }) {
   const { data, isPending, error } = useQuery(recurringListQuery(entityId));
 
   return (
     <div className="grid gap-4">
       <ApiErrorMessage error={error} />
-      {isPending && !error && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {isPending && <Loading />}
       {data &&
         (data.length === 0 ? (
           <p className="text-sm text-muted-foreground">定期仕訳はまだありません。</p>

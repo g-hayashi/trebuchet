@@ -1,14 +1,15 @@
 import { expect, test } from "@playwright/test";
 import {
-  acknowledgeRecoveryKey,
   enterVault,
   lockVault,
-  ORIGIN_HEADERS,
   readVaultState,
+  recoverWithKey,
+  settingsLink,
   submitRecoveryKey,
   unlockWithPasskey,
   writeVaultState,
 } from "./helpers/auth.ts";
+import { createEntityViaApi } from "./helpers/entity.ts";
 
 // E2E の実行は1つのデータ場所を共有し、他のファイルも同じ帳簿を使う。
 // 初回の設定は、このファイルが最初に動いたときだけここで通る（順序に依存しない作り）。
@@ -55,11 +56,7 @@ test("初回の設定から、施錠・パスキーでの解錠・回復キー�
     ).entities.map((e) => e.name);
 
   await test.step("帳簿を操作する（事業体を作る）", async () => {
-    const res = await page.request.post("/api/entities", {
-      headers: ORIGIN_HEADERS,
-      data: { name: entityName, kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 },
-    });
-    expect(res.status()).toBe(201);
+    await createEntityViaApi(page, { name: entityName, firstFiscalYear: 2026 });
     expect(await entityNames()).toContain(entityName);
   });
 
@@ -80,23 +77,14 @@ test("初回の設定から、施錠・パスキーでの解錠・回復キー�
 
   await test.step("施錠し、回復キーで解錠する。新しいパスキーを登録するまで帳簿は読めない", async () => {
     await lockVault(page);
-    await submitRecoveryKey(page, oldKey);
-    const register = page.getByRole("main").getByRole("button", {
-      name: "新しいパスキーを登録",
-      exact: true,
+    // 既存のパスキーは登録の除外に入るので、recoverWithKey がパスキーを持たない別の認証器に取り替えて登録する
+    newKey = await recoverWithKey(page, authenticator, oldKey, async () => {
+      // 回復用の一時セッションでは、帳簿の API はまだ使えない
+      expect((await page.request.get("/api/entities")).status()).toBe(401);
     });
-    await expect(register).toBeVisible();
-    // 回復用の一時セッションでは、帳簿の API はまだ使えない
-    expect((await page.request.get("/api/entities")).status()).toBe(401);
-
-    // 既存のパスキーは登録の除外に入るので、パスキーを持たない別の認証器に取り替える
-    await authenticator.replace();
-    await register.click();
-    newKey = await acknowledgeRecoveryKey(page);
-    expect(newKey).not.toBe(oldKey);
     // 後のテストが、新しい回復キーで始められるようにする
     await writeVaultState({ recoveryKey: newKey });
-    await expect(page.getByRole("link", { name: "設定", exact: true })).toBeVisible();
+    await expect(settingsLink(page)).toBeVisible();
     // 回復キーで開けても、データの鍵は同じ（施錠の前の帳簿が読める）
     expect(await entityNames()).toContain(entityName);
   });

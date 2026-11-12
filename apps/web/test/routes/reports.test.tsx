@@ -6,11 +6,9 @@ import { Route as GeneralLedgerRoute } from "@/routes/e/$entityId/reports/genera
 import { Route as JournalBookRoute } from "@/routes/e/$entityId/reports/journal-book";
 import { Route as ProfitAndLossRoute } from "@/routes/e/$entityId/reports/profit-and-loss";
 import { Route as TrialBalanceRoute } from "@/routes/e/$entityId/reports/trial-balance";
+import { ENTITY, uuid } from "../fixtures";
 import { type ApiCall, type ApiReply, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
-
-const ENTITY = "/api/entities/e1";
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const period = (fiscalYear: number) => ({
   id: uuid(fiscalYear),
@@ -128,6 +126,8 @@ describe("試算表（US4, FR-028）", () => {
       `${ENTITY}/reports/trial-balance?from=2026-01-01&to=2026-06-30&format=csv`,
     );
     expect(link).toHaveAttribute("download");
+    // ボタン（outline）と同じ見た目（hover の色もそろう）
+    expect(link.className).toContain("hover:bg-accent");
   });
 
   it("期間の指定がなければ、今日を含む会計期間を表示する。会計期間を選ぶと取り直す", async () => {

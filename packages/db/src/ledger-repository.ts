@@ -1,6 +1,7 @@
 import {
   type AuditEntry,
   type Journal,
+  type JournalChainRef,
   type JournalLine,
   type JournalQuery,
   type JournalReplacement,
@@ -13,7 +14,7 @@ import {
   RepositoryConflictError,
   type Result,
 } from "@trebuchet/domain";
-import type { JournalSummary } from "@trebuchet/schema";
+import { DEFAULT_JOURNAL_LIMIT, type JournalSummary } from "@trebuchet/schema";
 import { and, asc, between, desc, eq, inArray, max, type SQL, sql } from "drizzle-orm";
 import { asTaxCategory, rowidOf, type TenantConn } from "./internal.ts";
 import { inTransaction } from "./rollback.ts";
@@ -31,7 +32,8 @@ import {
 
 type JournalRow = typeof journals.$inferSelect;
 
-const DEFAULT_LIMIT = 50;
+/** `correctionChains` の 1 回の問い合わせの根の数（SQLite の変数の上限より十分に小さく） */
+const CHAIN_ROOTS_PER_QUERY = 500;
 
 /**
  * LedgerRepository と帳票の読み出し（ReportRepository）の Drizzle（better-sqlite3）による実装。
@@ -137,8 +139,27 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
     return this.withLines(rows);
   }
 
+  /** 根の仕訳から訂正（`corrects_journal_id`。索引 `journals_corrects`）を再帰の CTE でたどる。根は分けて読む */
+  correctionChains(rootIds: readonly string[]): JournalChainRef[] {
+    const found = new Map<string, JournalChainRef>();
+    for (let i = 0; i < rootIds.length; i += CHAIN_ROOTS_PER_QUERY) {
+      const roots = rootIds.slice(i, i + CHAIN_ROOTS_PER_QUERY).map((id) => sql`${id}`);
+      const rows = this.db.all<JournalChainRef>(sql`
+        WITH RECURSIVE chain(id) AS (
+          SELECT id FROM journals WHERE id IN (${sql.join(roots, sql`, `)})
+          UNION
+          SELECT j.id FROM journals j JOIN chain c ON j.corrects_journal_id = c.id
+        )
+        SELECT j.id AS id, j.status AS status, j.corrects_journal_id AS correctsJournalId
+        FROM journals j WHERE j.id IN (SELECT id FROM chain)
+      `);
+      for (const row of rows) found.set(row.id, row);
+    }
+    return [...found.values()];
+  }
+
   findJournals(query: JournalQuery): Page<Journal> {
-    const limit = query.limit ?? DEFAULT_LIMIT;
+    const limit = query.limit ?? DEFAULT_JOURNAL_LIMIT;
     const conditions = searchConditions(query);
     if (query.cursor !== undefined) {
       const [date, no] = query.cursor.split("_");
@@ -198,16 +219,6 @@ export class DrizzleLedgerRepository implements LedgerRepository, ReportReposito
       .select()
       .from(journals)
       .where(inArray(journals.id, [...ids]))
-      .all();
-    return this.withLines(rows);
-  }
-
-  recentJournals(limit: number): Journal[] {
-    const rows = this.db
-      .select()
-      .from(journals)
-      .orderBy(desc(journals.date), desc(journals.journalNo))
-      .limit(limit)
       .all();
     return this.withLines(rows);
   }

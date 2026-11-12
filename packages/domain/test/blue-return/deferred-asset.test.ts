@@ -9,8 +9,8 @@ import {
 import { TAX_PARAMETERS } from "../../src/seed/tax-parameters.ts";
 import type { DeferredAmortization, DeferredAsset } from "../../src/types.ts";
 import { accountIdOf, INDIVIDUAL_ACCOUNT_LIST } from "../blue-return-arbitraries.ts";
+import { NOW as AT } from "../test-dates.ts";
 
-const AT = "2026-01-10T00:00:00.000Z";
 const accounts = INDIVIDUAL_ACCOUNT_LIST;
 const taxParameters = TAX_PARAMETERS;
 
@@ -300,6 +300,7 @@ describe("proposeDeferredAmortization（FR-015〜017、INV-23）", () => {
     );
     expect(!r.ok && r.error.code).toBe("ACCOUNT_NOT_FOUND");
     expect(!r.ok && r.error.details).toMatchObject({ code: "5180" });
+    expect(!r.ok && r.error.message).toBe("勘定科目（コード 5180）が見つかりません");
   });
 });
 

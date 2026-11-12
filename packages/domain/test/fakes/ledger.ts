@@ -1,5 +1,6 @@
 import type { JournalSummary } from "@trebuchet/schema";
 import {
+  type JournalChainRef,
   type JournalReplacement,
   type LedgerRepository,
   type NewJournal,
@@ -68,13 +69,6 @@ export class InMemoryLedgerRepository implements LedgerRepository {
     return found === undefined ? undefined : structuredClone(found);
   }
 
-  recentJournals(limit: number): Journal[] {
-    return [...this.state.journals]
-      .sort((a, b) => b.date.localeCompare(a.date) || b.journalNo - a.journalNo)
-      .slice(0, limit)
-      .map((j) => structuredClone(j));
-  }
-
   replaceJournal(
     id: string,
     journal: JournalReplacement,
@@ -113,6 +107,23 @@ export class InMemoryLedgerRepository implements LedgerRepository {
       .filter((j) => j.correctsJournalId === id)
       .sort((a, b) => a.journalNo - b.journalNo)
       .map((j) => structuredClone(j));
+  }
+
+  correctionChains(rootIds: readonly string[]): JournalChainRef[] {
+    const found = new Map<string, JournalChainRef>();
+    const stack = [...rootIds];
+    for (let id = stack.pop(); id !== undefined; id = stack.pop()) {
+      if (found.has(id)) continue;
+      const journal = this.state.journals.find((j) => j.id === id);
+      if (journal === undefined) continue;
+      found.set(id, {
+        id: journal.id,
+        status: journal.status,
+        correctsJournalId: journal.correctsJournalId,
+      });
+      for (const j of this.state.journals) if (j.correctsJournalId === id) stack.push(j.id);
+    }
+    return [...found.values()];
   }
 
   /**

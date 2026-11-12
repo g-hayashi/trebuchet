@@ -3,12 +3,19 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:f
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Database } from "../driver.ts";
-import { type DbKeyScope, isValidEntityId, openEncryptedSqlite } from "../tenant-store.ts";
-import { sha256Hex } from "./archive.ts";
+import {
+  type DbKeyScope,
+  isValidEntityId,
+  openEncryptedSqlite,
+  REGISTRY_FILE_NAME,
+  registryFile,
+  tenantRelPath,
+} from "../tenant-store.ts";
+import { sha256Hex } from "../util.ts";
 import type { AppVersion, ManifestEntity, Snapshot, SnapshotFile } from "./types.ts";
 
 /** 平文の写しの作業場所の名前。`.tmp/backup-snapshot-<乱数>/` */
-export const SNAPSHOT_DIR_PREFIX = "backup-snapshot-";
+const SNAPSHOT_DIR_PREFIX = "backup-snapshot-";
 
 /**
  * バックアップに含めない registry の表（すべて端末に結びつく。R9・FR-028）。
@@ -45,16 +52,24 @@ export function createSnapshotDir(tmpRoot: string): string {
   return dir;
 }
 
-/** 前回の異常終了で残った平文の写し（`backup-snapshot-*` のフォルダ）を消す。消した数を返す */
-export function removeStaleSnapshots(tmpRoot: string): number {
-  if (!existsSync(tmpRoot)) return 0;
+/**
+ * `root` の直下にある、名前が `prefix` で始まるフォルダを消す（前回の異常終了で残った平文の作業場所の掃除）。
+ * 消した数を返す。`root` がなければ 0
+ */
+export function removeStaleDirs(root: string, prefix: string): number {
+  if (!existsSync(root)) return 0;
   let removed = 0;
-  for (const entry of readdirSync(tmpRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !entry.name.startsWith(SNAPSHOT_DIR_PREFIX)) continue;
-    rmSync(join(tmpRoot, entry.name), { recursive: true, force: true });
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith(prefix)) continue;
+    rmSync(join(root, entry.name), { recursive: true, force: true });
     removed += 1;
   }
   return removed;
+}
+
+/** 前回の異常終了で残った平文の写し（`backup-snapshot-*` のフォルダ）を消す。消した数を返す */
+export function removeStaleSnapshots(tmpRoot: string): number {
+  return removeStaleDirs(tmpRoot, SNAPSHOT_DIR_PREFIX);
 }
 
 const quote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
@@ -156,31 +171,30 @@ function fiscalYears(tenantCopy: string): ManifestEntity["fiscalYears"] {
  */
 export function snapshotDataDir(dataDir: string, tmpDir: string): Snapshot {
   try {
-    const registrySource = join(dataDir, "registry.sqlite");
-    if (!existsSync(registrySource)) throw new Error("registry.sqlite が見つからない");
+    const registrySource = registryFile(dataDir);
+    if (!existsSync(registrySource)) throw new Error(`${REGISTRY_FILE_NAME} が見つからない`);
     mkdirSync(join(tmpDir, "tenants"), { recursive: true });
 
     // registry を先に写す。写した後に追加された事業体は、registry にないのでどちらにも載らない
-    const registryCopy = join(tmpDir, "registry.sqlite");
+    const registryCopy = registryFile(tmpDir);
     vacuumInto(registrySource, registryCopy, "registry");
-    sanitizeRegistryCopy(registryCopy, (id) =>
-      existsSync(join(dataDir, "tenants", `${id}.sqlite`)),
-    );
+    sanitizeRegistryCopy(registryCopy, (id) => existsSync(join(dataDir, tenantRelPath(id))));
 
     const files: SnapshotFile[] = [];
     const entities: ManifestEntity[] = [];
     const tenantFiles: SnapshotFile[] = [];
     for (const entity of listEntities(registryCopy)) {
       if (!isValidEntityId(entity.id)) continue;
-      const source = join(dataDir, "tenants", `${entity.id}.sqlite`);
+      const relPath = tenantRelPath(entity.id);
+      const source = join(dataDir, relPath);
       if (!existsSync(source)) continue;
-      const copy = join(tmpDir, "tenants", `${entity.id}.sqlite`);
+      const copy = join(tmpDir, relPath);
       vacuumInto(source, copy, { tenant: entity.id });
       closeAsSingleFile(new Database(copy, { fileMustExist: true }));
       entities.push({ id: entity.id, name: entity.name, fiscalYears: fiscalYears(copy) });
-      tenantFiles.push({ path: `tenants/${entity.id}.sqlite`, bytes: readFileSync(copy) });
+      tenantFiles.push({ path: relPath, bytes: readFileSync(copy) });
     }
-    files.push({ path: "registry.sqlite", bytes: readFileSync(registryCopy) }, ...tenantFiles);
+    files.push({ path: REGISTRY_FILE_NAME, bytes: readFileSync(registryCopy) }, ...tenantFiles);
 
     return {
       files,

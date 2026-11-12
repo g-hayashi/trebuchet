@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import type { Result, WrappedKey } from "@trebuchet/domain";
 import { parseRecoveryKey } from "../recovery-key.ts";
+import { isRecord } from "../util.ts";
 import { DK_BYTES, unwrapDataKey } from "../vault-crypto.ts";
 import type { AppVersion } from "./types.ts";
 
@@ -83,9 +84,6 @@ export function encryptBackup(
 
 const isInt = (v: unknown, min: number, max: number): v is number =>
   typeof v === "number" && Number.isSafeInteger(v) && v >= min && v <= max;
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
 
 function decodeBase64(value: unknown, bytes: number): Buffer | undefined {
   if (typeof value !== "string") return undefined;

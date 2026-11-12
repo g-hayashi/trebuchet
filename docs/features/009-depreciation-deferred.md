@@ -10,7 +10,7 @@
 | HTTP | `apps/server/src/routes/deferred-assets.ts`（資産は 003 の `fixed-assets.ts`） |
 | 画面 | `apps/web/src/features/deferred-assets/`（`api.ts`、`DeferredAssetForm.tsx`、`AmortizationDecision.tsx`）、資産の画面 `routes/e/$entityId/fixed-assets/` |
 
-- **償却率の表の足し方**（耐用年数省令の改正など）: `seed/depreciation-rates.ts`（正本）と、マイグレーション（`drizzle-kit generate --custom` の空の SQL に `INSERT` を手で書く。既存の行は書き換えず、適用の終了日を足すか新しい行を足す）の**両方**に、適用の期間と出典の URL つきの行を足す。`packages/db/test/closing-repository.test.ts`（`listStraightLineRates`）が値の一致を確かめる。率は取得日で選ぶ（009/R2）。
+- **償却率の表の足し方**（耐用年数省令の改正など）: 手順は[003](003-tax-return.md)の「税制の値の足し方」と同じ（`seed/depreciation-rates.ts` が正本。マイグレーションの両方に、適用の期間と出典の URL つきで足す）。`packages/db/test/closing-repository.test.ts`（`listStraightLineRates`）が値の一致を確かめる。率は取得日で選ぶ（009/R2）。
 - **定額法・一括償却の各年度の償却費は、資産の属性（取得価額、方法、耐用年数、供用日、前年までの累計、除却日）と税制の値から計算し、保存しない**（ADR 0012）。登録した仕訳の金額を計算に使わない。償却を忘れた年度も償却したものとして残高が減る（強制償却）。
 - **開業費だけ、年度ごとの償却額の決定（0 円を含む）を `deferred_amortizations` に保存する**。上限は期首の未償却残高（取り消されていない仕訳に結びつく決定を差し引く）、目安は 60 か月の均等。上限を超えれば 422 `DEFERRED_AMORTIZATION_OVER_LIMIT`（`details.limit`）。0 円は記録だけで、仕訳の案を作らない（任意償却）。
 - **登録済みの償却の仕訳がある資産・開業費は、計算に効く項目を変えると 409 `DEPRECIATION_JOURNAL_EXISTS`**（`details.years`）。仕訳を取り消してから変える。名称・備考だけの変更は通る。

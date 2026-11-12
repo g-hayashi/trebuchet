@@ -29,6 +29,7 @@ import {
   type RouteOptions,
 } from "../deps.ts";
 import { respond } from "../errors.ts";
+import { csvResponse } from "../lib/csv-response.ts";
 import type { TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
 
@@ -52,10 +53,7 @@ export function blueReturnRoutes({ clock }: RouteOptions) {
           const result = getBlueReturn(blueReturnDeps(c.var.db), { fiscalYear: year });
           const { blankUnused } = c.req.valid("query");
           return respond(c, result, (blueReturn) =>
-            c.text(blueReturnToCsv(blueReturn, { blankUnused }), 200, {
-              "Content-Type": "text/csv; charset=utf-8",
-              "Content-Disposition": `attachment; filename="blue-return-${year}.csv"`,
-            }),
+            csvResponse(c, blueReturnToCsv(blueReturn, { blankUnused }), `blue-return-${year}.csv`),
           );
         },
       )

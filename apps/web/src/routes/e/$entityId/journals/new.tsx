@@ -3,14 +3,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Id, type JournalInput } from "@trebuchet/schema";
 import { useState } from "react";
 import { z } from "zod";
+import { Loading } from "@/components/loading";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { accountsQuery } from "@/features/accounts/api";
-import { taxCategoriesQuery, taxSettingsQuery } from "@/features/entities/api";
 import { journalQuery, postJournal } from "@/features/journals/api";
 import { JournalForm } from "@/features/journals/JournalForm";
 import { NewJournalEntry } from "@/features/journals/NewJournalEntry";
-import { partnersQuery, tagsQuery } from "@/features/masters/api";
+import { useJournalMasters } from "@/features/journals/use-journal-masters";
 import { postReceiptJournal, receiptQuery } from "@/features/receipts/api";
 import { journalSourceOf, suggestionOf } from "@/features/receipts/journal-source";
 import { useReceiptReading } from "@/features/receipts/reading";
@@ -18,7 +17,7 @@ import { today } from "@/lib/dates";
 import { invalidateLedger } from "@/lib/queries";
 
 /**
- * correctsJournalId を付けて開くと、その仕訳の訂正仕訳を起票する（FR-019a）。
+ * correctsJournalId を付けて開くと、その仕訳の訂正仕訳を起票する（001/FR-019a）。
  * receiptId を付けて開くと、その証憑の値を初期値にして仕訳を作り、証憑に結びつける（010 FR-010）
  */
 const NewJournalSearch = z.object({
@@ -44,13 +43,8 @@ function NewJournalPage() {
     enabled: receiptId !== undefined,
   });
   const queryClient = useQueryClient();
-  const accounts = useQuery(accountsQuery(entityId));
-  const partners = useQuery(partnersQuery(entityId));
-  const tags = useQuery(tagsQuery(entityId));
-  const taxSettings = useQuery(taxSettingsQuery(entityId));
-  const taxCategories = useQuery(taxCategoriesQuery(entityId));
-  const queries = [accounts, partners, tags, taxSettings, taxCategories];
-  const loadError = queries.find((q) => q.error)?.error;
+  const { accounts, partners, tags, taxSettings, taxCategories, queries, loadError } =
+    useJournalMasters(entityId);
 
   const [formKey, setFormKey] = useState(0);
   const [defaultDate, setDefaultDate] = useState(today);
@@ -164,9 +158,7 @@ function NewJournalPage() {
         </CardHeader>
         <CardContent>
           <ApiErrorMessage error={loadError ?? corrects.error ?? receipt.error} />
-          {queries.some((q) => q.isPending) && !loadError && (
-            <p className="text-sm text-muted-foreground">読み込み中…</p>
-          )}
+          {queries.some((q) => q.isPending) && !loadError && <Loading />}
           {receiptId !== undefined && receipt.data?.deleted && (
             <p role="note" className="text-sm">
               この証憑は削除済みのため、仕訳を作れません。

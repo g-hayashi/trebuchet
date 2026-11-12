@@ -73,15 +73,12 @@ interface AuthStore {               // passkeys・recovery_codes・sessions・au
   revokeSession(id: string, at: string): Promise<void>
   revokeSessionsByPasskey(passkeyId: string, at: string): Promise<string[]>   // 失効したセッションの id
   listActiveSessions(now: string): Promise<Session[]>
-  deleteStaleSessions(before: string): Promise<number>  // 失効済みで before より古いもの
   // 認証の記録（追記のみ）
   appendEvent(event: NewAuthEvent): Promise<void>
   listEvents(limit: number): Promise<AuthEvent[]>                               // 新しい順
-  listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]>  // recoveryLocked の入力
   // ペアリングのトークン（ハッシュは hashToken）
   createPairingToken(token: { id: string; tokenHash: string; rpId: string; now: string; expiresAt: string }): Promise<void>
   isPairingTokenValid(tokenHash: string, rpId: string, now: string): Promise<boolean>
-  consumePairingToken(tokenHash: string, rpId: string, now: string): Promise<boolean>  // 有効なら used_at を付けて true（単回）
   deleteExpiredPairingTokens(before: string): Promise<number>
   // アプリの設定（app_settings の読み書きはここに寄せる）
   getSetting(key: AppSettingKey): Promise<string | undefined>

@@ -7,7 +7,7 @@ import type {
   ReconciliationCause,
 } from "@trebuchet/schema";
 
-// 取込の判定・理由・警告などのコードの日本語の表示（画面はすべてここを使う。data-model §3）
+// 取込の判定・理由・警告などのコードの日本語の表示（画面はすべてここを使う。002 data-model §3）
 
 export const DECISION_LABELS: Record<ImportDecision, string> = {
   new: "新規",
@@ -53,7 +53,7 @@ export const BATCH_STATUS_LABELS: Record<ImportBatchStatus, string> = {
   voided: "取消済み",
 };
 
-/** 照合の差の原因の候補（FR-023） */
+/** 照合の差の原因の候補（002/FR-023） */
 export const RECONCILIATION_CAUSE_LABELS: Record<ReconciliationCause, string> = {
   EXCLUDED: "取込対象外",
   REJECTED: "取込不可",

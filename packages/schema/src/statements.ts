@@ -1,16 +1,13 @@
 import { z } from "zod";
 import { JournalInput } from "./journals.ts";
-import { DateString, Id, TaxCategoryCode } from "./primitives.ts";
+import { DateString, Id, Percent, Sha256, TaxCategoryCode } from "./primitives.ts";
 
 // 006-mfme-ai-journal（contracts/http-api.md §2〜§6、data-model §1）
 
 const Timestamp = z.string().min(1);
 const Count = z.number().int().nonnegative();
-/** 確信度・しきい値（0〜100 の整数） */
-const Percent = z.number().int().min(0).max(100);
 /** 明細の金額（符号つき。入金が正、出金が負） */
 const SignedYen = z.number().int();
-const Sha256 = z.string().regex(/^[0-9a-f]{64}$/, "SHA-256 の形式が正しくありません");
 
 // ---- 取込元の口座（§2） ----
 
@@ -237,6 +234,7 @@ export const STATEMENT_COLUMN_UNAVAILABLE = [
   "timeout",
   "invalid",
 ] as const;
+export type StatementColumnUnavailable = (typeof STATEMENT_COLUMN_UNAVAILABLE)[number];
 
 /** POST /statements/imports/column-suggestion の応答（contracts §4.1）。`unavailable` は AI の案がないときだけ付く。案と一緒に付くときは、AI を使えず列の中身から推定しただけの案（confidence は 0。007/R16） */
 export const StatementColumnSuggestionResponse = z.object({
@@ -244,7 +242,7 @@ export const StatementColumnSuggestionResponse = z.object({
     .object({
       columns: StatementColumnIndexes,
       amountSign: StatementAmountSign.nullable(),
-      confidence: z.number().int().min(0).max(100),
+      confidence: Percent,
     })
     .nullable(),
   unavailable: z.enum(STATEMENT_COLUMN_UNAVAILABLE).optional(),

@@ -32,9 +32,6 @@ export class InMemoryRegistry implements RegistryRepository {
   listEntities(): EntitySummary[] {
     return this.entities.filter((e) => !this.isPreparing(e.id));
   }
-  getEntity(id: string): EntitySummary | undefined {
-    return this.listEntities().find((e) => e.id === id);
-  }
   insertEntity(entity: EntitySummary & { status?: "active" | "preparing" | undefined }): void {
     if (this.failOnInsert) throw new Error("registry insert failed");
     const { status, ...summary } = entity;

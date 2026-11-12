@@ -17,7 +17,7 @@ import type {
   StatementTableLayout,
 } from "@trebuchet/schema";
 import { uploadForm } from "@/features/imports/upload";
-import { api, type QueryItem, unwrap } from "@/lib/api";
+import { api, entityPath, type QueryItem, unwrap } from "@/lib/api";
 
 // 明細の取込・候補・承認の API（006 contracts/http-api.md §2〜§4・§6.3）
 
@@ -41,7 +41,7 @@ export const statementKeys = {
     ["entities", entityId, "statements", "rules", "history", ruleId] as const,
 };
 
-/** 取込元の口座の一覧（§2.1） */
+/** 取込元の口座の一覧（006/§2.1） */
 export const statementAccountsQuery = (entityId: string) =>
   queryOptions({
     queryKey: statementKeys.accounts(entityId),
@@ -49,7 +49,7 @@ export const statementAccountsQuery = (entityId: string) =>
       (await unwrap(await entityApi["statement-accounts"].$get({ param: { entityId } }))).accounts,
   });
 
-/** 取込の履歴（§3.3。新しい順） */
+/** 取込の履歴（006/§3.3。新しい順） */
 export const importBatchesQuery = (entityId: string) =>
   queryOptions({
     queryKey: statementKeys.batches(entityId),
@@ -61,9 +61,9 @@ export const importBatchesQuery = (entityId: string) =>
 // hc の型つきの `form` に頼らず、002 と同じ `uploadForm` で送り、応答の型は schema の型で指定する
 
 const importPath = (entityId: string, last: string) =>
-  `/api/entities/${encodeURIComponent(entityId)}/statements/imports${last}`;
+  `${entityPath(entityId)}/statements/imports${last}`;
 
-/** 表の判定（§2.1。何も保存しない）。区切り・見出しの行・文字コードの選び直しは `options` で渡す */
+/** 表の判定（006/§2.1。何も保存しない）。区切り・見出しの行・文字コードの選び直しは `options` で渡す */
 export const postImportLayout = async (
   entityId: string,
   file: File,
@@ -72,7 +72,7 @@ export const postImportLayout = async (
   uploadForm(importPath(entityId, "/layout"), { file, options: JSON.stringify(options) });
 
 /**
- * 列の対応の案（007 §4.1。端末内の AI。何も保存しない）。辞書の案で必須がそろわない表だけで呼ぶ。
+ * 列の対応の案（007/§4.1。端末内の AI。何も保存しない）。辞書の案で必須がそろわない表だけで呼ぶ。
  * キーは `statements` の下に置かない（仕訳が変わる操作の後に AI を呼び直さない）
  */
 export const columnSuggestionQuery = (
@@ -98,7 +98,7 @@ export const columnSuggestionQuery = (
     retry: false,
   });
 
-/** プレビュー（§2.2。POST だが何も保存しない） */
+/** プレビュー（006/§2.2。POST だが何も保存しない） */
 export const postImportPreview = async (
   entityId: string,
   file: File,
@@ -106,7 +106,7 @@ export const postImportPreview = async (
 ): Promise<StatementImportPreview> =>
   uploadForm(importPath(entityId, "/preview"), { file, options: JSON.stringify(options) });
 
-/** 確定（§2.3）。プレビューと同じファイルと指定に、プレビューが返したハッシュと新規の件数を添える */
+/** 確定（006/§2.3）。プレビューと同じファイルと指定に、プレビューが返したハッシュと新規の件数を添える */
 export const postImportCommit = async (
   entityId: string,
   file: File,
@@ -114,7 +114,7 @@ export const postImportCommit = async (
 ): Promise<StatementImportCommitted> =>
   uploadForm(importPath(entityId, ""), { file, options: JSON.stringify(options) });
 
-/** 取込元（列の対応の保存）の一覧（007 §3。最後に使った日時の新しい順） */
+/** 取込元（列の対応の保存）の一覧（007/§3。最後に使った日時の新しい順） */
 export const statementSourcesQuery = (entityId: string) =>
   queryOptions({
     queryKey: statementKeys.sources(entityId),
@@ -130,12 +130,12 @@ export const patchStatementSource = async (entityId: string, id: string, name: s
     await entityApi["statement-sources"][":id"].$patch({ param: { entityId, id }, json: { name } }),
   );
 
-/** 取込元を削除する（007 §3。明細・取込の回・仕訳は変わらない） */
+/** 取込元を削除する（007/§3。明細・取込の回・仕訳は変わらない） */
 export const deleteStatementSource = async (entityId: string, id: string) => {
   await unwrap(await entityApi["statement-sources"][":id"].$delete({ param: { entityId, id } }));
 };
 
-// ---- 明細と候補（§4） ----
+// ---- 明細と候補（006/§4） ----
 
 /** 一覧の絞り込み。`status` を省くと、すべての状態 */
 export type StatementFilter = {
@@ -144,7 +144,7 @@ export type StatementFilter = {
   accountId?: string | undefined;
 };
 
-/** 明細の一覧（§4.1）。日付の新しい順 */
+/** 明細の一覧（006/§4.1）。日付の新しい順 */
 export const statementsQuery = (entityId: string, filter: StatementFilter) =>
   queryOptions({
     queryKey: statementKeys.list(entityId, filter),
@@ -164,7 +164,7 @@ export const statementsQuery = (entityId: string, filter: StatementFilter) =>
 
 export type StatementView = QueryItem<typeof statementsQuery>;
 
-/** 候補を作る（§4.2）。省略で未処理すべて */
+/** 候補を作る（006/§4.2）。省略で未処理すべて */
 export const postBuildCandidates = async (entityId: string) =>
   unwrap(await entityApi.statements.candidates.$post({ param: { entityId }, json: {} }));
 
@@ -179,7 +179,7 @@ export type ApproveBody = {
   partnerId?: string | undefined;
 };
 
-/** 承認する（§4.4）。仕訳が変わるので、呼び出し側が `invalidateLedger` を呼ぶ */
+/** 承認する（006/§4.4）。仕訳が変わるので、呼び出し側が `invalidateLedger` を呼ぶ */
 export const postApprove = async (entityId: string, statementId: string, json: ApproveBody) =>
   unwrap(
     await entityApi.statements[":statementId"].approve.$post({
@@ -189,13 +189,13 @@ export const postApprove = async (entityId: string, statementId: string, json: A
   );
 
 /**
- * AI で推定する（§4.3。10 件まで）。候補だけが変わり、仕訳は変わらない。
+ * AI で推定する（006/§4.3。10 件まで）。候補だけが変わり、仕訳は変わらない。
  * 10 件を超える分は、呼び出し側が繰り返して呼ぶ
  */
 export const postInfer = async (entityId: string, statementIds: string[]) =>
   unwrap(await entityApi.statements.infer.$post({ param: { entityId }, json: { statementIds } }));
 
-/** 選んだ行の承認（§4.5。007/R17）。各 item は候補のまま、または `draft`・`match` つき */
+/** 選んだ行の承認（006/§4.5。007/R17）。各 item は候補のまま、または `draft`・`match` つき */
 export const postApproveBulk = async (
   entityId: string,
   items: { statementId: string; draft?: JournalInput | undefined; match?: ApproveBody["match"] }[],
@@ -207,7 +207,7 @@ export const postApproveBulk = async (
     }),
   );
 
-/** 選んだ行の除外（§4.5a。007/R17）。理由は任意で、選んだ全部に同じものを残す。明細ごとに別のトランザクション */
+/** 選んだ行の除外（006/§4.5a。007/R17）。理由は任意で、選んだ全部に同じものを残す。明細ごとに別のトランザクション */
 export const postExcludeBulk = async (
   entityId: string,
   statementIds: string[],
@@ -220,7 +220,7 @@ export const postExcludeBulk = async (
     }),
   );
 
-/** 除外する（§4.6。理由は任意） */
+/** 除外する（006/§4.6。理由は任意） */
 export const postExclude = async (entityId: string, statementId: string) =>
   unwrap(
     await entityApi.statements[":statementId"].exclude.$post({
@@ -229,7 +229,7 @@ export const postExclude = async (entityId: string, statementId: string) =>
     }),
   );
 
-/** 除外を取り消す（§4.7。理由は必須） */
+/** 除外を取り消す（006/§4.7。理由は必須） */
 export const postUnexclude = async (entityId: string, statementId: string, reason: string) =>
   unwrap(
     await entityApi.statements[":statementId"].unexclude.$post({
@@ -238,7 +238,7 @@ export const postUnexclude = async (entityId: string, statementId: string, reaso
     }),
   );
 
-/** 「変更あり」を確認した印を付ける（§4.8） */
+/** 「変更あり」を確認した印を付ける（006/§4.8） */
 export const postAcknowledgeChange = async (entityId: string, statementId: string) =>
   unwrap(
     await entityApi.statements[":statementId"]["acknowledge-change"].$post({
@@ -246,7 +246,7 @@ export const postAcknowledgeChange = async (entityId: string, statementId: strin
     }),
   );
 
-/** 既存の仕訳への結びつきを外す（§4.9。理由は必須） */
+/** 既存の仕訳への結びつきを外す（006/§4.9。理由は必須） */
 export const postUnlink = async (entityId: string, statementId: string, reason: string) =>
   unwrap(
     await entityApi.statements[":statementId"].unlink.$post({
@@ -255,9 +255,9 @@ export const postUnlink = async (entityId: string, statementId: string, reason: 
     }),
   );
 
-// ---- ルール（§5） ----
+// ---- ルール（006/§5） ----
 
-/** ルールの一覧（§5.1）。`status` を省くと、有効と停止中の両方 */
+/** ルールの一覧（006/§5.1）。`status` を省くと、有効と停止中の両方 */
 export const rulesQuery = (entityId: string, status?: RuleStatus) =>
   queryOptions({
     queryKey: statementKeys.rules(entityId, status),
@@ -274,7 +274,7 @@ export const rulesQuery = (entityId: string, status?: RuleStatus) =>
 
 export type RuleView = QueryItem<typeof rulesQuery>;
 
-/** ルールの履歴（§5.5。追記の順） */
+/** ルールの履歴（006/§5.5。追記の順） */
 export const ruleHistoryQuery = (entityId: string, ruleId: string) =>
   queryOptions({
     queryKey: statementKeys.ruleHistory(entityId, ruleId),
@@ -290,7 +290,7 @@ export const ruleHistoryQuery = (entityId: string, ruleId: string) =>
 
 export type RuleHistoryEntry = QueryItem<typeof ruleHistoryQuery>;
 
-/** ルールの初期作成（§5.2）。`dryRun` は何も作らず案だけを返す */
+/** ルールの初期作成（006/§5.2）。`dryRun` は何も作らず案だけを返す */
 export const postSeedRules = async (entityId: string, dryRun: boolean) =>
   unwrap(
     await entityApi["inference-rules"].seed.$post({
@@ -299,7 +299,7 @@ export const postSeedRules = async (entityId: string, dryRun: boolean) =>
     }),
   );
 
-/** ルールを直す（§5.3） */
+/** ルールを直す（006/§5.3） */
 export const patchRule = async (entityId: string, ruleId: string, json: InferenceRuleUpdateInput) =>
   (
     await unwrap(
@@ -307,7 +307,7 @@ export const patchRule = async (entityId: string, ruleId: string, json: Inferenc
     )
   ).rule;
 
-/** ルールを止める・再開する（§5.4） */
+/** ルールを止める・再開する（006/§5.4） */
 export const postRuleStatus = async (
   entityId: string,
   ruleId: string,
@@ -321,7 +321,7 @@ export const postRuleStatus = async (
     )
   ).rule;
 
-// ---- 設定（§6.3） ----
+// ---- 設定（006/§6.3） ----
 
 export const statementSettingsQuery = (entityId: string) =>
   queryOptions({

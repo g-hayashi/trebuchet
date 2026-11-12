@@ -47,7 +47,7 @@ describe("previousMonth", () => {
   });
 });
 
-describe("presetRange（FR-040）", () => {
+describe("presetRange（011/FR-040）", () => {
   it("今月・先月は暦の月の初日〜末日（2 月、うるう年、1 月の先月は前年 12 月）", () => {
     expect(presetRange("this-month", "2026-11-04")).toEqual({
       from: "2026-11-01",

@@ -1,6 +1,6 @@
 # 不変条件の索引（INV-1〜77）
 
-不変条件の番号は機能をまたいで通し番号。**正本は各機能の `data-model.md` §4**（検証の手段もそこにある。008 は `data-model.md` がなく、[design.md D10](008-passkey-vault/design.md)）。この表は索引で、説明は一行に要約している。食い違いがあれば `data-model.md` が正しい。テストは fast-check の性質テストか統合テスト（[AGENTS.md](../AGENTS.md)「開発の進め方」）。
+不変条件の番号は機能をまたいで通し番号。**正本は各機能の `data-model.md` §4**（検証の手段もそこにある。008 は `data-model.md` がなく、[design.md D10](008-passkey-vault/design.md)）。この表は索引で、説明は一行に要約している。食い違いがあれば `data-model.md` が正しい。テストは fast-check の性質テストか統合テスト（[docs/development.md](../docs/development.md)「不変条件とテストの共通部品」）。
 
 ## 001 帳簿コア（INV-1〜10）— [data-model §4](001-ledger-core/data-model.md)
 

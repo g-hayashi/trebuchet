@@ -3,10 +3,10 @@ import userEvent from "@testing-library/user-event";
 import type { ImportPlanItem, ImportPreview } from "@trebuchet/schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@/routes/e/$entityId/imports/new";
+import { ENTITY } from "../fixtures";
 import { mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const ENTITY = "/api/entities/e1";
 const PREVIEW = `${ENTITY}/imports/freee/preview`;
 
 /** packages/domain の canonicalSnapshot と同じ形の正準 JSON */

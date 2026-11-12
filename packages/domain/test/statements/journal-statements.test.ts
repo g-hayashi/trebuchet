@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createJournal } from "../../src/usecases/create-journal.ts";
 import { approveCandidate, unlinkStatement } from "../../src/usecases/statement-approval.ts";
 import { buildCandidates, listJournalStatements } from "../../src/usecases/statements.ts";
-import { type StatementsCtx, setupStatements, unwrap } from "../statements-setup.ts";
+import { unwrap } from "../result.ts";
+import { type StatementsCtx, setupStatements } from "../statements-setup.ts";
 
 // 006 T016（FR-020）: 仕訳から元の明細へ。001 の `GET /journals/:journalId` の `statements`
 

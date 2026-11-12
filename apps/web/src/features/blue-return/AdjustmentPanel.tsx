@@ -30,7 +30,7 @@ const debitTotal = (proposal: AdjustmentProposal) =>
   proposal.journal.lines.filter((l) => l.side === "debit").reduce((s, l) => s + l.amount, 0);
 
 /**
- * 決算整理の仕訳の案（FR-014〜016）。帳簿の金額・割合・事業分・家事分と仕訳の案を見せ、
+ * 決算整理の仕訳の案（003/FR-014〜016）。帳簿の金額・割合・事業分・家事分と仕訳の案を見せ、
  * 「仕訳を登録」で確定する。案は API が作る。画面は計算しない
  */
 export function AdjustmentPanel({

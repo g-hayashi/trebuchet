@@ -2,9 +2,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Database } from "../src/driver.ts";
+import { NOW } from "../src/testing.ts";
 
 const DIR = fileURLToPath(new URL("../drizzle/tenant/", import.meta.url));
-const NOW = "2026-10-19T09:00:00.000Z";
 
 function statements(file: string): string[] {
   return readFileSync(`${DIR}${file}`, "utf8")

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Account, SubAccount } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/accounts";
+import { expectLedgerInvalidated, seedLedgerQueries } from "../ledger-cache";
 import { apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
@@ -254,6 +255,31 @@ describe("勘定科目の画面", () => {
     expect(await screen.findByText("事務用品費")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ name: "事務用品費" });
     expect(screen.queryByLabelText("「消耗品費」の新しい名称")).not.toBeInTheDocument();
+  });
+
+  it("科目の名称を変更すると、帳票・決算書・ホームを読み直す", async () => {
+    mockApi({
+      [`GET ${BASE}`]: () => ok({ accounts: initialAccounts() }),
+      [`PATCH ${BASE}/supplies`]: () =>
+        ok({
+          account: { ...initialAccounts().find((a) => a.id === "supplies"), name: "事務用品費" },
+        }),
+    });
+    const user = userEvent.setup();
+    const { queryClient } = renderAccounts();
+    await screen.findByText("消耗品費");
+    seedLedgerQueries(queryClient);
+
+    await user.click(screen.getByRole("button", { name: "名称変更（消耗品費）" }));
+    const input = screen.getByLabelText("「消耗品費」の新しい名称");
+    await user.clear(input);
+    await user.type(input, "事務用品費");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText("「消耗品費」の新しい名称")).not.toBeInTheDocument(),
+    );
+    expectLedgerInvalidated(queryClient);
   });
 
   it("科目を使用停止・使用再開する（隠す表示を外すと行が残る）", async () => {

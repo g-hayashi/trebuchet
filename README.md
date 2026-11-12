@@ -27,7 +27,7 @@
 |---|---|
 | 仕訳・帳票 | 仕訳の入力（かんたん入力あり）、仕訳帳、総勘定元帳、試算表、損益計算書、貸借対照表、前年との比較 |
 | 明細の取込 | 銀行・カードの明細を貼り付けかファイルで取り込む。列の対応は見出しごとに覚える。銀行の自動連携はしない |
-| 仕訳の案 | ルール → この Mac の中の AI → 外部の AI（任意）の順で科目の案を出す。外部に送る前に口座番号などを伏せる。金額と日付は AI に作らせない |
+| 仕訳の案 | ルール → この Mac の中の AI（任意。既定は無効）→ 外部の AI（任意）の順で科目の案を出す。外部に送る前に口座番号などを伏せる。金額と日付は AI に作らせない |
 | 請求 | 稼働時間（30 分単位）または月額から請求書を作り、印刷・PDF 保存。発行で仕訳、入金で消し込み。源泉徴収に対応 |
 | 定期仕訳 | 家賃・通信費などを毎月の期日に自動で登録し、登録したことを知らせる |
 | 証憑 | 領収書を Mac からファイルで、またはスマホで撮って保存。取引年月日・金額・取引先で探せ、仕訳と結びつける。外部の AI による値の読み取り（任意）。紙を撮ったものは紙の原本も保存する |
@@ -74,7 +74,7 @@ SQLite の暗号化に使うドライバーは、Apple silicon 向けのビル�
 既定ではこの Mac の中だけで動く。スマホからは、Tailscale の tailnet の中に限って開ける。
 
 1. `pnpm start` で web をビルドして server を起動する。画面は [http://localhost:8787](http://localhost:8787)（web と API を同じ場所から返す。待ち受けは `127.0.0.1:8787` のまま）。
-2. `localhost` で開いた画面の「リモート」の「Tailscale」の欄で状態を確かめ、「開始」を押す（`tailscale serve` が始まる。止めるときは「停止」）。手で行うなら、別のターミナルで `tailscale serve --bg --https=443 http://127.0.0.1:8787` を実行する（止めるときは `tailscale serve reset`）。**Funnel は使わない**（公開インターネットに出さない）。
+2. `localhost` で開いた画面の「リモート」の「Tailscale」の欄で状態を確かめ、「開始」を押す（`tailscale serve` が始まる。止めるときは「停止」）。手で行うなら、別のターミナルで `tailscale serve --bg --https=443 http://127.0.0.1:8787` を実行する（止めるときは `tailscale serve --https=443 off`。`reset` は他の設定も消すので使わない）。**Funnel は使わない**（公開インターネットに出さない）。
 3. 同じ画面の「リモートの設定」で `*.ts.net` の名前を入れる（「この Mac の名前を入れる」で入る。例: `mac.tail1234.ts.net`）。「リモートを有効にする」にチェックを入れて保存する。
 4. 同じ画面の「ペアリング」で「この名前で使うパスキーを追加（ペアリング）」を押す。パスキーでもう一度確認すると、ペアリングの URL と QR コードが出る。URL は 10 分間・1 回だけ有効。
 5. その URL をスマホで開き（QR コードでもよい）、「このスマホのパスキーを登録」でパスキーを登録する。スマホのパスキーが PRF に対応していないと登録できない。
@@ -114,7 +114,7 @@ Mac が施錠されている間は `ts.net` の名前では使えない（先に
 | 源泉徴収 | [specs/013-withholding-tax/](specs/013-withholding-tax/) |
 | デモ事業 | [specs/014-demo-entity/](specs/014-demo-entity/) |
 
-開発の規約は [AGENTS.md](AGENTS.md)、機能ごとの置き場所と規則は [docs/features/](docs/features/)。要件の状態は [docs/requirements.md](docs/requirements.md)。設計の判断は [docs/adr/](docs/adr/)。不変条件の索引は [specs/INVARIANTS.md](specs/INVARIANTS.md)。
+開発の規約は [AGENTS.md](AGENTS.md)（詳細は [docs/development.md](docs/development.md)）、機能ごとの置き場所と規則は [docs/features/](docs/features/)。要件の状態は [docs/requirements.md](docs/requirements.md)。設計の判断は [docs/adr/](docs/adr/)。不変条件の索引は [specs/INVARIANTS.md](specs/INVARIANTS.md)。
 
 ## 免責と問い合わせ
 

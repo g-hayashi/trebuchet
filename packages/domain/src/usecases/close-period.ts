@@ -1,15 +1,8 @@
 import { auditEntry } from "../audit.ts";
 import type { MasterRepository } from "../ports.ts";
-import {
-  type AuditAction,
-  err,
-  type FiscalPeriod,
-  ok,
-  periodNotFound,
-  type Result,
-} from "../types.ts";
+import { type AuditAction, type FiscalPeriod, ok, type Result } from "../types.ts";
 import { checkReason } from "./journal-edit.ts";
-import type { MasterDeps } from "./masters.ts";
+import { type MasterDeps, requirePeriod } from "./masters.ts";
 
 export type ReopenPeriodInput = { reason: string };
 
@@ -20,11 +13,6 @@ export type FiscalPeriodHistoryEntry = {
   action: Extract<AuditAction, "close" | "reopen">;
   reason: string | null;
 };
-
-function findPeriod(repo: MasterRepository, fiscalYear: number): Result<FiscalPeriod> {
-  const period = repo.getFiscalPeriodByYear(fiscalYear);
-  return period === undefined ? err(periodNotFound(fiscalYear)) : ok(period);
-}
 
 function transition(
   deps: MasterDeps,
@@ -56,7 +44,7 @@ function transition(
  */
 export function closePeriod(deps: MasterDeps, fiscalYear: number): Result<FiscalPeriod> {
   return deps.repo.transaction((tx) => {
-    const found = findPeriod(tx, fiscalYear);
+    const found = requirePeriod(tx, fiscalYear);
     if (!found.ok) return found;
     const before = found.value;
     if (before.status === "closed") return ok(before);
@@ -78,7 +66,7 @@ export function reopenPeriod(
   const reason = checkReason(input.reason);
   if (!reason.ok) return reason;
   return deps.repo.transaction((tx) => {
-    const found = findPeriod(tx, fiscalYear);
+    const found = requirePeriod(tx, fiscalYear);
     if (!found.ok) return found;
     const before = found.value;
     if (before.status === "open") return ok(before);

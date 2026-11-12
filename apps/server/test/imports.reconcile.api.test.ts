@@ -119,17 +119,13 @@ describe("POST /fiscal-periods/:year/reconcile/freee", () => {
     expect(await books()).toEqual(before);
   });
 
-  it("journal に元帳を送る → 422 IMPORT_WRONG_KIND、5 MB を超える → 413 FILE_TOO_LARGE", async () => {
+  it("journal に元帳を送る → 422 IMPORT_WRONG_KIND", async () => {
     const wrong = await reconcile(LEDGER, "2025", LEDGER);
     expect(wrong.status).toBe(422);
     expect(await errorOf(wrong)).toMatchObject({
       code: "IMPORT_WRONG_KIND",
       details: { expected: "journal", actual: "ledger" },
     });
-
-    const big = await reconcile(LEDGER, "2025", new Uint8Array(5 * 1024 * 1024 + 1));
-    expect(big.status).toBe(413);
-    expect((await errorOf(big)).code).toBe("FILE_TOO_LARGE");
   });
 
   it("UTF-8 の元帳も読める", async () => {
@@ -187,13 +183,9 @@ describe("POST /fiscal-periods/:year/reconcile/freee", () => {
     expect((await errorOf(res)).code).toBe("VALIDATION");
   });
 
-  it("file がない → 400 VALIDATION、5 MB を超える → 413 FILE_TOO_LARGE", async () => {
+  it("file がない → 400 VALIDATION（共通のアップロードの部品。5 MB の上限は imports.upload.api.test.ts）", async () => {
     const missing = await reconcile(null);
     expect(missing.status).toBe(400);
     expect((await errorOf(missing)).code).toBe("VALIDATION");
-
-    const big = await reconcile(new Uint8Array(5 * 1024 * 1024 + 1));
-    expect(big.status).toBe(413);
-    expect((await errorOf(big)).code).toBe("FILE_TOO_LARGE");
   });
 });

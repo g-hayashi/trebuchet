@@ -14,7 +14,7 @@ import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SaveNotice } from "@/components/ui/save-notice";
-import { ApiError } from "@/lib/api";
+import { isApiError } from "@/lib/api";
 import { formatYen, parseHalfStep, parseWholeYen, parseYenInput } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
 import { type InvoiceDraftView, invoiceCalculationQuery, postInvoice } from "./api";
@@ -93,11 +93,9 @@ function buildItems(rows: Row[]): Built {
   return { items };
 }
 
-const isCode = (error: unknown, code: string) => error instanceof ApiError && error.code === code;
-
 /**
- * 請求書の案 1 通の編集と発行（FR-006〜016）。明細は 1〜5 行。合計の再計算は表示だけで、
- * 数量 × 単価の行の金額は server と同じ式（`itemAmountOf`）。発行日と売上の計上日は変えられる（FR-009）
+ * 請求書の案 1 通の編集と発行（005/FR-006〜016）。明細は 1〜5 行。合計の再計算は表示だけで、
+ * 数量 × 単価の行の金額は server と同じ式（`itemAmountOf`）。発行日と売上の計上日は変えられる（005/FR-009）
  */
 export function InvoiceDraftEditor({
   entityId,
@@ -109,7 +107,7 @@ export function InvoiceDraftEditor({
   entityId: string;
   draft: InvoiceDraftView;
   partnerName: string;
-  /** 「発行する」を主な操作（variant=default）にするか。案が複数あるときは先頭の未発行の案だけ true（ui-shell §7） */
+  /** 「発行する」を主な操作（variant=default）にするか。案が複数あるときは先頭の未発行の案だけ true（011 ui-shell §7） */
   primary?: boolean | undefined;
   /** 同じ取引先・対象月の発行済み（未取消）の請求書。あれば「追加で作る」を選ぶまで発行できない（011 FR-033） */
   existing?: { id: string; invoiceNo: string } | undefined;
@@ -137,7 +135,7 @@ export function InvoiceDraftEditor({
       }),
     // 案を作った後に同じ月の請求書ができていたとき（409）も、確認のチェックを出す
     onError: (e) => {
-      if (isCode(e, "INVOICE_DUPLICATE_MONTH")) setDuplicateSeen(true);
+      if (isApiError(e, "INVOICE_DUPLICATE_MONTH")) setDuplicateSeen(true);
     },
     onSuccess: () => invalidateLedger(queryClient, entityId),
   });
@@ -476,7 +474,7 @@ export function InvoiceDraftEditor({
         </div>
         <ApiErrorMessage error={issue.error} />
         <ApiErrorMessage error={calculation.error} />
-        {isCode(issue.error, "INVOICE_ISSUER_INCOMPLETE") && (
+        {isApiError(issue.error, "INVOICE_ISSUER_INCOMPLETE") && (
           <Link
             to="/e/$entityId/invoice-settings"
             params={{ entityId }}

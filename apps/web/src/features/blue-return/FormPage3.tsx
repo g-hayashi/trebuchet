@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { BlueReturn } from "@trebuchet/schema";
+import { type BlueReturn, CLOSING_NOTE_MAX } from "@trebuchet/schema";
 import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -29,7 +29,7 @@ const METHOD_LABELS: Record<Page3["depreciation"][number]["method"], string> = {
 };
 
 /**
- * 売上先の明細（FR-025〜026）。個別の行、上記以外の売上先の計（雑収入・取引先なしを含む）、合計。
+ * 売上先の明細（003/FR-025〜026）。個別の行、上記以外の売上先の計（雑収入・取引先なしを含む）、合計。
  * 取引先が付いていない売上があるときは、件数と金額を知らせる。値は API のとおりに表示する（計算しない）
  */
 function SalesPartnersTable({ salesPartners }: { salesPartners: Page3["salesPartners"] }) {
@@ -64,7 +64,7 @@ function SalesPartnersTable({ salesPartners }: { salesPartners: Page3["salesPart
         </TableFooter>
       </Table>
       {withoutPartner !== null && (
-        <p className="text-sm text-amber-900 dark:text-amber-100">
+        <p className="text-sm text-amber-900">
           取引先が付いていない売上: {withoutPartner.count} 件、
           {formatSignedYen(withoutPartner.amount)} 円
         </p>
@@ -73,7 +73,7 @@ function SalesPartnersTable({ salesPartners }: { salesPartners: Page3["salesPart
   );
 }
 
-/** 本年中における特殊事情のメモの入力と保存（FR-027） */
+/** 本年中における特殊事情のメモの入力と保存（003/FR-027） */
 function SpecialCircumstancesForm({
   entityId,
   year,
@@ -103,7 +103,7 @@ function SpecialCircumstancesForm({
         <textarea
           id="special-circumstances-note"
           rows={3}
-          maxLength={5000}
+          maxLength={CLOSING_NOTE_MAX}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -131,8 +131,8 @@ function SpecialCircumstancesForm({
 }
 
 /**
- * 決算書の3ページ。売上先の明細（FR-025〜026）、減価償却費の計算の表（FR-023）、本年中における
- * 特殊事情のメモ（FR-027）。値は API が作った決算書のとおりに表示する（計算しない）
+ * 決算書の3ページ。売上先の明細（003/FR-025〜026）、減価償却費の計算の表（003/FR-023）、本年中における
+ * 特殊事情のメモ（003/FR-027）。値は API が作った決算書のとおりに表示する（計算しない）
  */
 export function FormPage3({
   entityId,

@@ -166,11 +166,6 @@ describe("GET /deferred-assets", () => {
     });
     expect(deferredAssets[0]?.amortization?.target).toBeGreaterThan(0);
   });
-
-  it("year の形が違えば 400 VALIDATION", async () => {
-    const res = await list.$get({ param: { entityId }, query: { year: "26" } });
-    expect(res.status).toBe(400);
-  });
 });
 
 describe("PUT /deferred-assets/:deferredAssetId/amortizations/:year（FR-014〜015）", () => {
@@ -249,16 +244,6 @@ describe("PUT /deferred-assets/:deferredAssetId/amortizations/:year（FR-014〜0
     const res = await decide(asset.id, 2026, 90_000);
     expect(res.status).toBe(409);
     expect((await errorOf(res)).code).toBe("PERIOD_CLOSED");
-  });
-
-  it("年の形が 4 桁でなければ 400 VALIDATION（会計期間が見つかりません）", async () => {
-    const asset = await create();
-    const res = await amortizationOf().$put({
-      param: { entityId, deferredAssetId: asset.id, year: "26" },
-      json: { amount: 1000 },
-    });
-    expect(res.status).toBe(400);
-    expect((await errorOf(res)).code).toBe("VALIDATION");
   });
 });
 

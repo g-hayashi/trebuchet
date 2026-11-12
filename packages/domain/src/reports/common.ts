@@ -1,4 +1,5 @@
-import type { ReportAccount, StatementRow } from "@trebuchet/schema";
+import type { ReportAccount, StatementRow, StatementSection } from "@trebuchet/schema";
+import { compareText } from "../text.ts";
 import type { Account, PostedLine, ReportSection, Side } from "../types.ts";
 
 /** 帳票の関数が受け取る期首残高（OpeningBalance の一部） */
@@ -42,11 +43,25 @@ export const debitNet = (line: { side: Side; amount: number }) =>
 export const isActive = (line: PostedLine) => line.status === "active";
 
 /** 決算書の科目順（sortOrder → コード） */
-export function sortAccounts<A extends Pick<Account, "sortOrder" | "code">>(accounts: A[]): A[] {
-  return [...accounts].sort(
-    (a, b) => a.sortOrder - b.sortOrder || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0),
-  );
+export function sortAccounts<A extends Pick<Account, "sortOrder" | "code">>(
+  accounts: readonly A[],
+): A[] {
+  return [...accounts].sort((a, b) => a.sortOrder - b.sortOrder || compareText(a.code, b.code));
 }
+
+/** 科目 ID → 決算書の科目順の位置。一覧にない ID は最後 */
+export function accountOrder(accounts: readonly Account[]): (accountId: string) => number {
+  const order = new Map(sortAccounts(accounts).map((a, i) => [a.id, i]));
+  return (accountId) => order.get(accountId) ?? Number.MAX_SAFE_INTEGER;
+}
+
+/** 行の金額の合計 */
+export const sumAmounts = (rows: readonly { amount: number }[]): number =>
+  rows.reduce((s, r) => s + r.amount, 0);
+
+/** 区分（`PL_SALES` など）の合計。区分がなければ 0 */
+export const sectionTotal = (sections: readonly StatementSection[], section: string): number =>
+  sections.find((s) => s.section === section)?.total.amount ?? 0;
 
 /** 日付 → 仕訳番号 → 行番号の順（分析メモ U4） */
 export function compareLines(
@@ -83,16 +98,4 @@ export function sectionRows(
     .map((a) => ({ account: a, amount: amountOf(a.id) }))
     .filter(({ account, amount }) => account.isActive || amount !== 0)
     .map(({ account, amount }) => statementRow(account, amount));
-}
-
-/**
- * `YYYY-MM-DD` を years 年ずらす。存在しない日（2/29 → 平年）は月末にする
- */
-export function shiftYears(date: string, years: number): string {
-  const y = Number(date.slice(0, 4)) + years;
-  const m = Number(date.slice(5, 7));
-  const d = Number(date.slice(8, 10));
-  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
-  return `${pad(y, 4)}-${pad(m)}-${pad(Math.min(d, last))}`;
 }

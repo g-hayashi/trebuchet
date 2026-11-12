@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { postSkipRun, recurringKeys } from "./api";
 
 /**
- * 「この回は登録しない」（FR-027）。登録できなかった回・未登録の回を、理由つきで確定する。
+ * 「この回は登録しない」（005/FR-027）。登録できなかった回・未登録の回を、理由つきで確定する。
  * 理由が空かどうかの検査は server（`REASON_REQUIRED`）が行う
  */
 export function SkipRunForm({

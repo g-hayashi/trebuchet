@@ -1,5 +1,7 @@
 import type { AdjustmentProposal } from "@trebuchet/schema";
+import { accountByCode } from "../accounts.ts";
 import { DRAWINGS_ACCOUNT_CODE } from "../carry-forward.ts";
+import { blankToNull } from "../text.ts";
 import {
   type Account,
   type AdjustmentRef,
@@ -12,6 +14,7 @@ import {
   type PostedLine,
   type Result,
   type SubAccount,
+  validation,
 } from "../types.ts";
 
 const RATIO_DENOMINATOR = 10000;
@@ -49,11 +52,6 @@ export type HomeUseAllocationDraft = {
   changeReason: string | null;
 };
 
-const blankToNull = (s: string | null | undefined): string | null => {
-  const t = s?.trim() ?? "";
-  return t === "" ? null : t;
-};
-
 /**
  * 按分の登録を検証する（FR-012〜013）。対象は区分が費用の科目（HOME_USE_ACCOUNT_INVALID）、
  * 補助科目はその科目のもの、割合は 0〜10000 の整数、根拠は必須（HOME_USE_BASIS_REQUIRED）、
@@ -81,11 +79,7 @@ export function validateHomeUseAllocation(
   if (draft.subAccountId !== null) {
     const sub = ctx.subAccounts.find((s) => s.id === draft.subAccountId);
     if (sub === undefined || sub.accountId !== draft.accountId) {
-      return err(
-        domainError("VALIDATION", "補助科目がこの勘定科目のものではありません", {
-          field: "subAccountId",
-        }),
-      );
+      return validation("補助科目がこの勘定科目のものではありません", { field: "subAccountId" });
     }
   }
   if (
@@ -93,11 +87,7 @@ export function validateHomeUseAllocation(
     draft.businessRatio < 0 ||
     draft.businessRatio > RATIO_DENOMINATOR
   ) {
-    return err(
-      domainError("VALIDATION", "事業専用割合は 0〜100% で入力してください", {
-        field: "businessRatio",
-      }),
-    );
+    return validation("事業専用割合は 0〜100% で入力してください", { field: "businessRatio" });
   }
   const basis = blankToNull(draft.basis);
   if (basis === null) {
@@ -177,14 +167,9 @@ export function proposeHomeUseAdjustment(input: HomeUseInput): Result<HomeUseAss
       }),
     );
   }
-  const drawings = input.accounts.find((a) => a.code === DRAWINGS_ACCOUNT_CODE);
-  if (drawings === undefined) {
-    return err(
-      domainError("ACCOUNT_NOT_FOUND", "事業主貸の科目（3090）がありません", {
-        code: DRAWINGS_ACCOUNT_CODE,
-      }),
-    );
-  }
+  const drawingsResult = accountByCode(input.accounts, DRAWINGS_ACCOUNT_CODE);
+  if (!drawingsResult.ok) return drawingsResult;
+  const drawings = drawingsResult.value;
 
   const homeUseJournals = new Set(
     input.refs.filter((r) => r.kind === "home_use").map((r) => r.journalId),

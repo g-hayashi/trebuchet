@@ -1,30 +1,14 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/features/accounts/api";
 import type { FiscalPeriod, OpeningBalancesData } from "@/features/periods/api";
 import { Route } from "@/routes/e/$entityId/periods/$year/opening-balances";
+import { account, ENTITY } from "../fixtures";
+import { expectLedgerInvalidated, seedLedgerQueries } from "../ledger-cache";
 import { apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const ENTITY = "/api/entities/e1";
 const PATH = `${ENTITY}/fiscal-periods/2026/opening-balances`;
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-
-const account = (
-  n: number,
-  name: string,
-  rest: Pick<Account, "category" | "normalSide" | "reportSection"> & Partial<Account>,
-): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive: true,
-  ...rest,
-});
 
 const cash = account(1010, "現金", {
   category: "asset",
@@ -149,6 +133,30 @@ describe("期首残高の画面", () => {
 
     // 保存の知らせは toast（5 秒で消える）。入力を変えても消さない
     await user.clear(screen.getByLabelText("1行目の金額"));
+  });
+
+  it("保存すると、帳票・決算書・ホームを読み直す", async () => {
+    mockOpeningBalances({ fiscalPeriod: period("open"), openingBalances: [] }, (call) => {
+      const rows = call.body as { accountId: string; side: "debit" | "credit"; amount: number }[];
+      return ok({
+        fiscalPeriod: period("open"),
+        openingBalances: rows.map((r, i) => balance(i, r.accountId, r.side, r.amount)),
+      });
+    });
+    const user = userEvent.setup();
+    const { queryClient } = renderOpeningBalances();
+    const save = await screen.findByRole("button", { name: "保存する" });
+    await user.click(screen.getByRole("button", { name: "行を追加" }));
+    await user.selectOptions(screen.getByLabelText("1行目の勘定科目"), "現金");
+    await user.type(screen.getByLabelText("1行目の金額"), "100");
+    await user.click(screen.getByRole("button", { name: "行を追加" }));
+    await user.selectOptions(screen.getByLabelText("2行目の勘定科目"), "元入金");
+    await user.type(screen.getByLabelText("2行目の金額"), "100");
+    seedLedgerQueries(queryClient);
+    await user.click(save);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("保存しました。");
+    expectLedgerInvalidated(queryClient);
   });
 
   it("締め済みの期間は表示だけで、変更できない", async () => {

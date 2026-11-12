@@ -15,6 +15,7 @@ import { voidJournal } from "../../src/usecases/void-journal.ts";
 import { type FakeClosingUnitOfWork, fakeClosingUnitOfWork } from "../fakes.ts";
 import { setupLedger } from "../ledger-fixture.ts";
 import { InMemoryReportRepository } from "../reports/fake-report-repository.ts";
+import { unwrap } from "../result.ts";
 
 let fx: ReturnType<typeof setupLedger>;
 let uow: FakeClosingUnitOfWork;
@@ -35,11 +36,6 @@ const settingsDeps = () => ({
 });
 const readDeps = () => ({ ...settingsDeps(), reports: reports() });
 const commitDeps = () => ({ uow, reports: reports(), ids: fx.ids, clock: fx.clock });
-
-const unwrap = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
 
 const input = (over: Record<string, unknown> = {}) => ({
   name: "ノートパソコン",
@@ -243,6 +239,17 @@ describe("disposeFixedAsset", () => {
       reason: "売却",
     });
     expect(!early.ok && early.error.code).toBe("VALIDATION");
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("実在しない除却の日（2026-02-31 など。取得の日より後）は VALIDATION（field は disposedOn）。何も書かない", () => {
+    const asset = unwrap(save());
+    const before = snapshot();
+    for (const disposedOn of ["2026-02-30", "2026-02-31", "2026-04-31"]) {
+      const r = disposeFixedAsset(settingsDeps(), { id: asset.id, disposedOn, reason: "廃棄" });
+      expect(!r.ok && r.error.code).toBe("VALIDATION");
+      expect(!r.ok && r.error.details).toMatchObject({ field: "disposedOn" });
+    }
     expect(snapshot()).toEqual(before);
   });
 

@@ -15,16 +15,17 @@
  *   TREBUCHET_EVAL_AI_API_KEY   API キー。なければ 006 と同じキーチェーン（設定画面で保存したキー）から読む。
  *                               キーは出力・ファイルに書かない。localhost の接続先ならキーなしでもよい
  *
- * 画像は `eval/` の下に置き（用意は T042）、正解は `fixtures/receipts/expected.ts` に同じファイル名で書く。
+ * 画像は `eval/` の下に置き（用意は 010/T042）、正解は `fixtures/receipts/expected.ts` に同じファイル名で書く。
  * 画像がない・正解と食い違うときは、AI を呼ばずに終了コード 1 で止まる。実データ（`work/`・`data/`）は読まない。
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む（eval-column-suggestions.ts と同じ）。
  */
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createReceiptReader, RECEIPT_READ_TIMEOUT_MS } from "../apps/server/src/lib/ai-client.ts";
 import { readApiKey } from "../apps/server/src/lib/ai-runtime.ts";
 import { createImageTool } from "../apps/server/src/lib/image-tool.ts";
 import { createKeychainSecretStore } from "../apps/server/src/lib/keychain.ts";
+import { TMP_ROOT } from "../packages/db/src/tenant-store.ts";
 import {
   evaluateReceiptReadings,
   RECEIPT_EVAL_FIELDS,
@@ -38,32 +39,22 @@ import { INDIVIDUAL_ACCOUNTS } from "../packages/domain/src/seed/accounts.indivi
 import { counterAccounts } from "../packages/domain/src/statements/prompt.ts";
 import { RECEIPT_EVAL_EXPECTED } from "../packages/domain/test/fixtures/receipts/expected.ts";
 import { isAllowedAiBaseUrl, TaxCategoryCode } from "../packages/schema/src/index.ts";
+import { delta, evalDir, evalFetch, pct, readPrevious, saveEval } from "./lib/eval-history.ts";
 
-/** 保存する形（件数と千分率だけ） */
+/** 保存する形（件数と千分率だけ。モデル名・URL・キーは残さない） */
 type SavedEval = ReceiptEvalResult & {
   at: string;
-  model: string;
   maxPx: number;
   timeoutMs: number;
 };
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const IMAGE_DIR = `${ROOT}packages/domain/test/fixtures/receipts/eval/`;
-const OUT_DIR = `${ROOT}.tmp/eval-receipts/`;
+const OUT_DIR = evalDir("eval-receipts");
 const IMAGE_FILE = /\.(jpe?g|png|heic|pdf)$/i;
 
 /** 停止の理由を出して終了コード 1 にする（AI は呼ばない・何も保存しない） */
 class EvalSetupError extends Error {}
-
-/** 千分率を「87.5%」の形に */
-const pct = (rate: number): string => `${(rate / 10).toFixed(1)}%`;
-
-/** 前回との差（ポイント）。符号つき */
-function delta(current: number, previous: number | undefined): string {
-  if (previous === undefined) return "";
-  const diff = (current - previous) / 10;
-  return ` (前回比 ${diff >= 0 ? "+" : ""}${diff.toFixed(1)}pt)`;
-}
 
 /** `eval/` の画像と `expected.ts` の正解から例を作る。画像がない・食い違いは `EvalSetupError` */
 function loadCases(): ReceiptEvalCase[] {
@@ -77,7 +68,7 @@ function loadCases(): ReceiptEvalCase[] {
   }
   if (files.length === 0) {
     throw new EvalSetupError(
-      "評価用の画像がありません（packages/domain/test/fixtures/receipts/eval/）。合成の画像 20 枚の用意は T042 です",
+      "評価用の画像がありません（packages/domain/test/fixtures/receipts/eval/）。合成の画像 20 枚の用意は 010/T042 です",
     );
   }
   const expectedNames = Object.keys(RECEIPT_EVAL_EXPECTED);
@@ -119,25 +110,6 @@ async function loadEndpoint(): Promise<{ baseUrl: string; model: string; apiKey?
   return apiKey === undefined ? { baseUrl, model } : { baseUrl, model, apiKey };
 }
 
-/** 前回の結果（日時つきのファイル名の最後）。なければ undefined。読めない・形が違うときも undefined */
-function readPrevious(): SavedEval | undefined {
-  let files: string[];
-  try {
-    files = readdirSync(OUT_DIR)
-      .filter((f) => f.endsWith(".json"))
-      .sort();
-  } catch {
-    return undefined;
-  }
-  const last = files.at(-1);
-  if (last === undefined) return undefined;
-  try {
-    return JSON.parse(readFileSync(`${OUT_DIR}${last}`, "utf8")) as SavedEval;
-  } catch {
-    return undefined;
-  }
-}
-
 function report(current: SavedEval, previous: SavedEval | undefined): void {
   const prevField = (field: string) => previous?.fields.find((f) => f.field === field)?.matchRate;
   console.log(
@@ -168,31 +140,27 @@ try {
   const cases = loadCases();
   const endpoint = await loadEndpoint();
   const reader = createReceiptReader({
-    fetch: (...args) => globalThis.fetch(...args),
+    fetch: evalFetch,
     endpoint: async () => endpoint,
   });
-  const images = createImageTool({ tmpRoot: `${ROOT}.tmp/` });
+  const images = createImageTool({ tmpRoot: TMP_ROOT });
   const context = {
     accounts: counterAccounts(INDIVIDUAL_ACCOUNTS.map((a) => ({ ...a, isActive: true }))).map(
       (a) => ({ code: a.code, name: a.name }),
     ),
     taxCategories: TaxCategoryCode.options,
   };
-  const previous = readPrevious();
+  const previous = readPrevious<SavedEval>(OUT_DIR);
   console.log(`${cases.length} 枚を外部の AI に送ります（1 枚ずつ。時間がかかります）`);
   const result = await evaluateReceiptReadings(cases, { reader, images, context });
   const saved: SavedEval = {
     at: new Date().toISOString(),
-    model: endpoint.model,
     maxPx: RECEIPT_AI_MAX_PX,
     timeoutMs: RECEIPT_READ_TIMEOUT_MS,
     ...result,
   };
   report(saved, previous);
-  mkdirSync(OUT_DIR, { recursive: true });
-  const file = `${OUT_DIR}${saved.at.replaceAll(":", "-").replaceAll(".", "-")}.json`;
-  writeFileSync(file, `${JSON.stringify(saved, null, 2)}\n`);
-  console.log(`  保存: ${file.slice(OUT_DIR.length)}（.tmp/eval-receipts/）`);
+  console.log(`  保存: ${saveEval(OUT_DIR, saved)}（.tmp/eval-receipts/）`);
 } catch (error) {
   // 例外の中身（URL・キーを含みうる）は出さない
   console.error(

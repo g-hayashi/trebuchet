@@ -13,7 +13,7 @@ import type { TaxRate } from "../types.ts";
  */
 
 /** 明細の税区分の既定 = 計上日の設定による売上高（収益の科目）の既定値（免税・設定の空白は対象外） */
-export function defaultSalesTaxCategory(
+function defaultSalesTaxCategory(
   salesDate: string,
   taxSettings: readonly TaxSettingDraft[],
 ): TaxCategoryCode {
@@ -47,13 +47,12 @@ export function itemTaxRate(
   return resolveTaxRate(taxCategory, salesDate, taxRates) ?? null;
 }
 
+/** 請求書の設定がないときの消費税の表示（税込のみ） */
+export const DEFAULT_TAX_DISPLAY: InvoiceTaxDisplay = "inclusive_only";
+
 /**
  * 写しに残す消費税の表示。免税でも設定した消費税相当額の別記を許す。
  */
-export function effectiveTaxDisplay(
-  configured: InvoiceTaxDisplay | undefined,
-  _salesDate: string,
-  _taxSettings: readonly TaxSettingDraft[],
-): InvoiceTaxDisplay {
-  return configured ?? "inclusive_only";
+export function effectiveTaxDisplay(configured: InvoiceTaxDisplay | undefined): InvoiceTaxDisplay {
+  return configured ?? DEFAULT_TAX_DISPLAY;
 }

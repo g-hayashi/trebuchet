@@ -17,7 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { DrizzleRegistryRepository } from "../src/registry-repository.ts";
 import { openRegistry, openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { type TempDataDir, testClock, testIds, useTempDataDir } from "../src/testing.ts";
 
 let tmp: TempDataDir;
 let db: TenantDb;
@@ -406,11 +406,9 @@ describe("DrizzleRegistryRepository", () => {
     registry.insertEntity(later);
     registry.insertEntity(first);
     expect(registry.listEntities()).toEqual([first, later]);
-    expect(registry.getEntity(later.id)).toEqual(later);
-    expect(registry.getEntity(randomUUIDv7())).toBeUndefined();
 
     registry.renameEntity(first.id, "個人（屋号）");
-    expect(registry.getEntity(first.id)).toEqual({ ...first, name: "個人（屋号）" });
+    expect(registry.listEntities()).toEqual([{ ...first, name: "個人（屋号）" }, later]);
   });
 
   it("DB ファイルは data ディレクトリからの相対パスで記録される", () => {
@@ -435,8 +433,8 @@ describe("createEntity と DB のリポジトリの結合", () => {
       {
         registry,
         openTenant: (entityId) => new DrizzleMasterRepository(openTenant(entityId)),
-        ids: { next: () => randomUUIDv7() },
-        clock: { now: () => "2026-10-18T00:00:00.000Z" },
+        ids: testIds(),
+        clock: testClock("2026-10-18T00:00:00.000Z"),
       },
       { name: "個人事業", kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 },
     );

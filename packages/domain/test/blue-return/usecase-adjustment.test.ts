@@ -18,6 +18,7 @@ import { voidJournal } from "../../src/usecases/void-journal.ts";
 import { type FakeClosingUnitOfWork, fakeClosingUnitOfWork } from "../fakes.ts";
 import { setupLedger } from "../ledger-fixture.ts";
 import { InMemoryReportRepository } from "../reports/fake-report-repository.ts";
+import { unwrap } from "../result.ts";
 
 let fx: ReturnType<typeof setupLedger>;
 let uow: FakeClosingUnitOfWork;
@@ -46,11 +47,6 @@ const payRent = (amount: number, date = "2025-06-30") =>
     memo: "家賃",
     lines: [fx.line("debit", "地代家賃", amount), fx.line("credit", "現金", amount)],
   });
-
-const unwrap = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
 
 const saveRent = (businessRatio = 3000, fiscalYear = 2025, changeReason?: string) =>
   unwrap(

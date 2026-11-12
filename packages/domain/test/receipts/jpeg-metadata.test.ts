@@ -7,13 +7,9 @@ import {
   pdfBytes,
   readExif,
 } from "../fixtures/receipts/sample-files.ts";
+import { must } from "../result.ts";
 
 // T031: AI に送る前の JPEG のメタデータの除去（research R12、INV-66）
-
-const must = (r: { ok: true; value: Uint8Array } | { ok: false; error: { code: string } }) => {
-  if (!r.ok) throw new Error(`unexpected err: ${r.error.code}`);
-  return r.value;
-};
 
 const concat = (...parts: Uint8Array[]): Uint8Array => {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));

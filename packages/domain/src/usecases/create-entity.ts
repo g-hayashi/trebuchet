@@ -1,14 +1,21 @@
-import { ENTITY_NAME_MAX } from "@trebuchet/schema";
+import {
+  ENTITY_NAME_MAX,
+  FIRST_FISCAL_YEAR_MAX,
+  FIRST_FISCAL_YEAR_MIN,
+  FISCAL_START_MONTH_MAX,
+  FISCAL_START_MONTH_MIN,
+} from "@trebuchet/schema";
 import { fiscalYearStart, oneYearEnd } from "../dates.ts";
 import type { Clock, IdGenerator, MasterRepository, RegistryRepository } from "../ports.ts";
 import { INDIVIDUAL_ACCOUNTS } from "../seed/accounts.individual.ts";
 import {
-  domainError,
   type EntityKind,
   type EntityProfile,
+  entityNotFoundError,
   err,
   ok,
   type Result,
+  validation,
 } from "../types.ts";
 
 export type CreateEntityInput = {
@@ -33,31 +40,27 @@ export type CreateEntityDeps = {
 function validateInput(input: CreateEntityInput): Result<CreateEntityInput> {
   const name = input.name.trim();
   if (name.length === 0 || name.length > ENTITY_NAME_MAX) {
-    return err(
-      domainError("VALIDATION", `名称は 1〜${ENTITY_NAME_MAX} 文字で入力してください`, {
-        field: "name",
-      }),
-    );
+    return validation(`名称は 1〜${ENTITY_NAME_MAX} 文字で入力してください`, { field: "name" });
   }
   const month = input.fiscalStartMonth;
-  if (!Number.isInteger(month) || month < 1 || month > 12) {
-    return err(
-      domainError("VALIDATION", "期首月は 1〜12 で入力してください", { field: "fiscalStartMonth" }),
+  if (
+    !Number.isInteger(month) ||
+    month < FISCAL_START_MONTH_MIN ||
+    month > FISCAL_START_MONTH_MAX
+  ) {
+    return validation(
+      `期首月は ${FISCAL_START_MONTH_MIN}〜${FISCAL_START_MONTH_MAX} で入力してください`,
+      { field: "fiscalStartMonth" },
     );
   }
   if (input.kind === "individual" && month !== 1) {
-    return err(
-      domainError("VALIDATION", "個人事業の会計期間は 1 月始まりです", {
-        field: "fiscalStartMonth",
-      }),
-    );
+    return validation("個人事業の会計期間は 1 月始まりです", { field: "fiscalStartMonth" });
   }
   const year = input.firstFiscalYear;
-  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
-    return err(
-      domainError("VALIDATION", "最初の年度は 2000〜2100 で入力してください", {
-        field: "firstFiscalYear",
-      }),
+  if (!Number.isInteger(year) || year < FIRST_FISCAL_YEAR_MIN || year > FIRST_FISCAL_YEAR_MAX) {
+    return validation(
+      `最初の年度は ${FIRST_FISCAL_YEAR_MIN}〜${FIRST_FISCAL_YEAR_MAX} で入力してください`,
+      { field: "firstFiscalYear" },
     );
   }
   return ok({ ...input, name });
@@ -141,7 +144,7 @@ export function renameEntity(
   return deps.tenant.transaction((tx) => {
     const profile = tx.getProfile();
     if (profile === undefined) {
-      return err(domainError("ENTITY_NOT_FOUND", "事業体が見つかりません"));
+      return err(entityNotFoundError());
     }
     const updated = { ...profile, name };
     tx.saveProfile(updated);

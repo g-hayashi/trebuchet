@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { Route } from "@/routes/index";
+import { Route } from "@/routes/list";
 import { mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
@@ -19,7 +19,7 @@ it("種別の説明を展開し、法人の制約を確認できる", async () =
     "GET /api/entities": () => ok({ entities: [] }),
     "GET /api/entities/archived": () => ok({ entities: [] }),
   });
-  renderRoute(Route, { path: "/", url: "/?list=1" });
+  renderRoute(Route, { path: "/list", url: "/list" });
   const summary = await screen.findByText("個人・法人の違い");
   expect(summary.closest("details")).not.toHaveAttribute("open");
   await userEvent.click(summary);
@@ -42,7 +42,7 @@ it("初期一覧から非表示→非表示の組織→名称確認→完全削�
       return ok({ ok: true });
     },
   });
-  renderRoute(Route, { path: "/", url: "/?list=1" });
+  renderRoute(Route, { path: "/list", url: "/list" });
   expect(screen.queryByRole("button", { name: "完全に削除" })).not.toBeInTheDocument();
   await userEvent.click(await screen.findByRole("button", { name: "非表示にする" }));
   await waitFor(() => expect(status).toBe("archived"));

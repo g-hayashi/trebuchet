@@ -9,8 +9,7 @@ import type {
 } from "../src/types.ts";
 import { ok } from "../src/types.ts";
 import { fakeClosingUnitOfWork } from "./fakes.ts";
-
-const AT = "2026-10-19T00:00:00.000Z";
+import { NOW as AT } from "./test-dates.ts";
 
 const journal = (id: string, journalNo: number): NewJournal => ({
   id,

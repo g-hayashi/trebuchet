@@ -1,34 +1,18 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/features/accounts/api";
 import { Route as DetailRoute } from "@/routes/e/$entityId/recurring/$recurringId";
 import { Route as ListRoute } from "@/routes/e/$entityId/recurring/index";
 import { Route as NewRoute } from "@/routes/e/$entityId/recurring/new";
 import { Route as LayoutRoute } from "@/routes/e/$entityId/route";
+import { assetAccount, ENTITY as BASE, uuid } from "../fixtures";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 005 US3: 定期仕訳の画面と、事業体の画面の上部の知らせ（FR-023〜029。H:§5）
 
-const BASE = "/api/entities/e1";
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-
-const account = (n: number, name: string, over: Partial<Account> = {}): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  category: "asset",
-  normalSide: "debit",
-  reportSection: "BS_ASSET",
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive: true,
-  ...over,
-});
-const BANK = account(1020, "普通預金");
-const RENT = account(6010, "地代家賃", {
+const BANK = assetAccount(1020, "普通預金");
+const RENT = assetAccount(6010, "地代家賃", {
   category: "expense",
   reportSection: "PL_EXPENSE",
 });

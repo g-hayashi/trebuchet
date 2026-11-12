@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { PasskeyView } from "@trebuchet/schema";
 import { useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -18,7 +19,7 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { addPasskey, authKeys, deletePasskey, passkeysQuery, renamePasskey } from "./api";
 
-/** パスキーの一覧（FR-005）。名前の変更・削除・追加。削除できるかどうかはサーバーが決める（LAST_PASSKEY） */
+/** パスキーの一覧（004/FR-005）。名前の変更・削除・追加。削除できるかどうかはサーバーが決める（LAST_PASSKEY） */
 export function PasskeyList() {
   const queryClient = useQueryClient();
   const { data: passkeys, isPending, error } = useQuery(passkeysQuery());
@@ -73,7 +74,7 @@ export function PasskeyList() {
       </CardHeader>
       <CardContent className="grid gap-4">
         <ApiErrorMessage error={error} />
-        {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+        {isPending && <Loading />}
         {passkeys && (
           <Table aria-label="パスキーの一覧">
             <TableHeader>

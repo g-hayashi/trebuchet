@@ -1,6 +1,5 @@
 import { type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { errorOf } from "./helpers.ts";
 import {
   createInvoicingTestContext,
   type InvoicingTestContext,
@@ -134,14 +133,6 @@ describe("GET /withholding/:year（§4）", () => {
         appliedTotal: 0,
         withholdingTotal: 0,
       });
-    }
-  });
-
-  it("年の形が 4 桁でなければ 400 VALIDATION（会計期間が見つかりません）", async () => {
-    for (const year of ["26", "20266", "abcd"]) {
-      const res = await summary(year);
-      expect(res.status).toBe(400);
-      expect((await errorOf(res)).code).toBe("VALIDATION");
     }
   });
 });

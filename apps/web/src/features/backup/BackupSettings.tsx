@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BackupStatus } from "@trebuchet/schema";
 import { useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CsvExport } from "@/components/ui/csv-export";
@@ -16,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDateTime } from "@/lib/format";
+import { formatBytes, formatDateTime } from "@/lib/format";
 import {
   backupKeys,
   backupRunsQuery,
@@ -25,13 +26,7 @@ import {
   runBackup,
   saveBackupSettings,
 } from "./api";
-import {
-  ALERT_MESSAGES,
-  describeFailure,
-  formatBytes,
-  STATUS_LABELS,
-  TRIGGER_LABELS,
-} from "./labels";
+import { ALERT_MESSAGES, describeFailure, STATUS_LABELS, TRIGGER_LABELS } from "./labels";
 
 /** 状態と実行の履歴を取り直す（設定・実行のあと） */
 function useRefreshBackup() {
@@ -42,13 +37,13 @@ function useRefreshBackup() {
   };
 }
 
-/** バックアップの状態と置き場所の設定（FR-014・015・019・020）。鍵はデータ鍵から作る（008 の D9）。画面の最初に置く */
+/** バックアップの状態と置き場所の設定（004/FR-014・015・019・020）。鍵はデータ鍵から作る（008 の D9）。画面の最初に置く */
 export function BackupSettings() {
   const { data: status, isPending, error } = useQuery(backupStatusQuery());
   return (
     <>
       <ApiErrorMessage error={error} />
-      {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {isPending && <Loading />}
       {status && (
         <>
           <RunCard status={status} />
@@ -63,7 +58,7 @@ export function BackupSettings() {
 const WRITE_FAILURE_CODES = new Set(["FOLDER_NOT_FOUND", "WRITE_FAILED"]);
 
 /**
- * 直近の失敗の警告（FR-020）。置き場所に書けずに失敗したときは、警告のすぐ下で置き場所を変える案内を出す
+ * 直近の失敗の警告（004/FR-020）。置き場所に書けずに失敗したときは、警告のすぐ下で置き場所を変える案内を出す
  * （既定の `bak/` に書けないときも同じ。Edge Cases）
  */
 function FailureWarning({ status }: { status: BackupStatus }) {
@@ -133,7 +128,7 @@ function RunCard({ status }: { status: BackupStatus }) {
 }
 
 /**
- * 置き場所の設定（FR-014）。バックアップの鍵は、この Mac のデータ鍵から作る（008 の D9）。パスフレーズは要らない。
+ * 置き場所の設定（004/FR-014）。バックアップの鍵は、この Mac のデータ鍵から作る（008 の D9）。パスフレーズは要らない。
  * Mac を失ったときは、回復キーで復元する
  */
 function SettingsCard({ status }: { status: BackupStatus }) {
@@ -191,7 +186,7 @@ function SettingsCard({ status }: { status: BackupStatus }) {
   );
 }
 
-/** 実行の履歴（FR-020）。最近の 5 件を、サーバーが返した新しい順のまま並べる。全件は CSV に書き出す（FR-054） */
+/** 実行の履歴（004/FR-020）。最近の 5 件を、サーバーが返した新しい順のまま並べる。全件は CSV に書き出す（011/FR-054） */
 export function BackupHistory() {
   const { data: runs, isPending, error } = useQuery(backupRunsQuery());
   return (
@@ -208,7 +203,7 @@ export function BackupHistory() {
         <div>
           <CsvExport href={RUNS_CSV_HREF} disabled={!runs || runs.length === 0} />
         </div>
-        {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+        {isPending && <Loading />}
         {runs?.length === 0 && (
           <p className="text-sm text-muted-foreground">まだ実行されていません。</p>
         )}

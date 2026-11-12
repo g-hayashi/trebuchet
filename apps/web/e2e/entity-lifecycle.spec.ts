@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { enterVault } from "./helpers/auth.ts";
+import { MOBILE_VIEWPORT } from "./helpers/viewports.ts";
 
 test("/listで種別説明・非表示・復元・完全削除を操作し、別組織を保持する", async ({ page }) => {
   await enterVault(page);
@@ -36,8 +37,10 @@ test("/listで種別説明・非表示・復元・完全削除を操作し、別
   await expect(main.getByRole("link", { name: "合成保持組織", exact: true })).toBeVisible();
   await main.getByText("非表示の組織", { exact: true }).click();
   await expect(main.getByText("非表示の組織はありません。", { exact: true })).toBeVisible();
-  await page.screenshot({ path: "../../.tmp/entity-lifecycle-desktop.png", fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(main.getByRole("button", { name: "非表示にする", exact: true })).toBeVisible();
-  await page.screenshot({ path: "../../.tmp/entity-lifecycle-mobile.png", fullPage: true });
+  await page.setViewportSize(MOBILE_VIEWPORT);
+  // 先の spec が作った事業体も並ぶので、残した組織の行に絞る
+  const kept = main.getByRole("row").filter({
+    has: page.getByRole("link", { name: "合成保持組織", exact: true }),
+  });
+  await expect(kept.getByRole("button", { name: "非表示にする", exact: true })).toBeVisible();
 });

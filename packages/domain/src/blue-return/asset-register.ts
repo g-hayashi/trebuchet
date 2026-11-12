@@ -1,6 +1,7 @@
 import type { BlueReturnWarning } from "@trebuchet/schema";
 import { debitNet, type OpeningInput } from "../reports/common.ts";
 import { formatSignedAmount } from "../reports/warnings.ts";
+import { compareText } from "../text.ts";
 import type { Account, DeferredAmortization, DeferredAsset, FixedAsset } from "../types.ts";
 import { deferredAmortizationYear } from "./deferred-asset.ts";
 import { type DepreciationParams, depreciate } from "./depreciation.ts";
@@ -59,7 +60,7 @@ export function checkAssetRegister(input: AssetRegisterInput): BlueReturnWarning
   ];
   const accountOf = new Map(accounts.map((a) => [a.id, a]));
   const keyOf = (id: string) => accountOf.get(id)?.code ?? id;
-  targetAccountIds.sort((a, b) => (keyOf(a) < keyOf(b) ? -1 : keyOf(a) > keyOf(b) ? 1 : 0));
+  targetAccountIds.sort((a, b) => compareText(keyOf(a), keyOf(b)));
 
   const warnings: BlueReturnWarning[] = [];
   for (const accountId of targetAccountIds) {

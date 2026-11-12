@@ -4,15 +4,13 @@ import type { StatementSource } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createStatementUnitOfWork, DrizzleStatementStore } from "../src/statement-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { createTestEntity, NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 // 007 T004。取込元（statement_sources）の永続化を実 DB で確かめる（data-model §1.1）
 
 let tmp: TempDataDir;
 let db: TenantDb;
 let store: DrizzleStatementStore;
-
-const NOW = "2026-10-26T09:00:00.000Z";
 
 beforeEach(() => {
   tmp = useTempDataDir("statement-sources");

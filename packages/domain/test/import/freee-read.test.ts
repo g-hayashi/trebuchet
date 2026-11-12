@@ -6,7 +6,6 @@ import {
   LEDGER_COLUMN_NAMES,
 } from "../../src/import/freee/columns.ts";
 import { type FreeeFile, normalizeName, readFreeeFile } from "../../src/import/freee/read.ts";
-import { encodeCsv } from "../../src/reports/csv.ts";
 import { EXPECTED_JOURNAL, EXPECTED_LEDGER, FIXTURE_FILES } from "../fixtures/freee/expected.ts";
 import { FREEE_JOURNAL_HEADER, FREEE_LEDGER_HEADER } from "../fixtures/freee/headers.ts";
 import { readFixture } from "../fixtures/freee/load.ts";
@@ -19,7 +18,14 @@ function readOk(bytes: Uint8Array): FreeeFile {
   return result.value;
 }
 
-/** CSV の列を並べ替えたバイト列（encodeCsv は BOM 付き・CRLF） */
+/**
+ * BOM 付き・CRLF・全セルを引用符で囲む CSV（テストの入力用）。
+ * 金額の文字列 "-500" が数式の対策の ' で変わる reports の encodeCsv は使わない
+ */
+const encodeQuotedCsv = (rows: readonly (readonly string[])[]): string =>
+  `﻿${rows.map((r) => `${r.map((v) => `"${v.replaceAll('"', '""')}"`).join(",")}\r\n`).join("")}`;
+
+/** CSV の列を並べ替えたバイト列（BOM 付き・CRLF） */
 function permuteColumns(bytes: Uint8Array, headerIndex: number): Uint8Array {
   const rows = parseCsv(decodeText(bytes).text);
   const width = rows[headerIndex]?.length ?? 0;
@@ -28,7 +34,7 @@ function permuteColumns(bytes: Uint8Array, headerIndex: number): Uint8Array {
   const mid = Math.floor(width / 2);
   [order[0], order[mid]] = [order[mid] as number, order[0] as number];
   const permuted = rows.map((row, i) => (i < headerIndex ? row : order.map((j) => row[j] ?? "")));
-  return utf8(encodeCsv(permuted));
+  return utf8(encodeQuotedCsv(permuted));
 }
 
 function withoutColumns(bytes: Uint8Array, headerIndex: number, names: string[]): Uint8Array {
@@ -36,7 +42,7 @@ function withoutColumns(bytes: Uint8Array, headerIndex: number, names: string[])
   const header = rows[headerIndex] ?? [];
   const keep = header.map((h, i) => (names.includes(h) ? -1 : i)).filter((i) => i >= 0);
   return utf8(
-    encodeCsv(rows.map((row, i) => (i < headerIndex ? row : keep.map((j) => row[j] ?? "")))),
+    encodeQuotedCsv(rows.map((row, i) => (i < headerIndex ? row : keep.map((j) => row[j] ?? "")))),
   );
 }
 
@@ -167,7 +173,7 @@ describe("readFreeeFile: 判別できないファイル", () => {
   });
 
   it("ヘッダは先頭5行の中から探す（6行目より後のヘッダは見ない）", () => {
-    const header = encodeCsv([[...LEDGER_COLUMN_NAMES]]).replace(/^\uFEFF/, "");
+    const header = encodeQuotedCsv([[...LEDGER_COLUMN_NAMES]]).replace(/^\uFEFF/, "");
     expect(readOk(utf8(`"a"\n"b"\n"c"\n"d"\n${header}`)).kind).toBe("ledger");
     expect(readFreeeFile(utf8(`"a"\n"b"\n"c"\n"d"\n"e"\n${header}`)).ok).toBe(false);
   });

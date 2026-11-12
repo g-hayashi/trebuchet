@@ -1,4 +1,3 @@
-import { randomUUIDv7 } from "node:crypto";
 import {
   createClosingUnitOfWork,
   createImportUnitOfWork,
@@ -37,7 +36,6 @@ import {
   cleanupPreparingEntities,
   type DemoAssets,
   type DemoEntityDeps,
-  domainError,
   err,
   type HomeDeps,
   type IdGenerator,
@@ -60,15 +58,14 @@ import {
   type StatementUnitOfWork,
   type SuggestionProvider,
 } from "@trebuchet/domain";
+import { aiNotConfiguredError } from "./lib/ai-client.ts";
 import { type BackupRunner, createBackupRunner } from "./lib/backup-run.ts";
-import { createFmServer } from "./lib/fm-server.ts";
+import { createFmServer, FM_DEFAULT_PORT } from "./lib/fm-server.ts";
+import { ids } from "./lib/ids.ts";
 import { createImageTool } from "./lib/image-tool.ts";
 import { createKeychainSecretStore, createMemorySecretStore } from "./lib/keychain.ts";
 import { todayOf } from "./lib/today.ts";
 import { createVault, type Vault } from "./lib/vault.ts";
-
-/** R8: 主キーは UUIDv7 */
-export const ids: IdGenerator = { next: () => randomUUIDv7() };
 
 /**
  * 既定の時計。`createApp({ clock })` と main・バックアップの実行が既定値として使う。
@@ -83,7 +80,7 @@ export const registryRepository = () => new DrizzleRegistryRepository(openRegist
 
 /**
  * 認証の情報（auth.sqlite。暗号化しないので施錠中も使える。008 の D2）。要求のたびに今のデータの置き場所を開く。
- * リモートの設定とペアリングのトークンも auth.sqlite なので施錠中も使える（004/T016）。
+ * リモートの設定とペアリングのトークンも auth.sqlite なので施錠中も使える。
  * app_settings だけは registry から読むので、施錠中は VaultLockedError
  */
 export const authStore = (): AuthStore => new DrizzleAuthStore(openAuth(), openRegistry);
@@ -107,10 +104,10 @@ export const aiSettingsStore = (): DrizzleAiSettingsStore =>
 
 /**
  * 端末内の AI（`fm serve`）。最初の推定で起動し、server の終了で止める（006 R10）。
- * ポートは環境変数 `TREBUCHET_FM_PORT`（既定 18790）
+ * ポートは環境変数 `TREBUCHET_FM_PORT`（既定は `FM_DEFAULT_PORT`）
  */
 export const fmServer = createFmServer({
-  port: Number.parseInt(process.env.TREBUCHET_FM_PORT ?? "", 10) || 18790,
+  port: Number.parseInt(process.env.TREBUCHET_FM_PORT ?? "", 10) || FM_DEFAULT_PORT,
 });
 
 /** バックアップの実行（同時に 1 つだけ）。app と自動のスケジューラーが同じものを使う */
@@ -254,10 +251,10 @@ export function recurringDeps(
 /** 端末内・外部の AI の推定（006 R10）。実物は `lib/ai-runtime.ts` が作り、`createApp` が差す */
 export type SuggestionProviders = { local: SuggestionProvider; external: SuggestionProvider };
 
-/** 「使えない」を返す SuggestionProvider（実物を差すまでの既定。006 T006） */
+/** 「使えない」を返す SuggestionProvider（実物を差すまでの既定） */
 export const unavailableSuggestionProvider: SuggestionProvider = {
   available: async () => false,
-  suggest: async () => err(domainError("AI_NOT_CONFIGURED", "AI を使えません")),
+  suggest: async () => err(aiNotConfiguredError()),
 };
 
 /**
@@ -286,14 +283,13 @@ export function statementDeps(
 }
 
 /** 証憑（010）の日付は `Asia/Tokyo` の暦日で決める（R2、I2。実行環境のタイムゾーンによらない） */
-export const RECEIPT_TIME_ZONE = "Asia/Tokyo";
+const RECEIPT_TIME_ZONE = "Asia/Tokyo";
 
 /** ISO 8601（UTC）の日時を `Asia/Tokyo` の `YYYY-MM-DD` にする（`ReceiptDeps.dateOf`） */
-export const receiptDateOf = (iso: string): string =>
-  todayOf({ now: () => iso }, RECEIPT_TIME_ZONE);
+const receiptDateOf = (iso: string): string => todayOf({ now: () => iso }, RECEIPT_TIME_ZONE);
 
 /** 証憑の画像の変換器（sips。010/R12）。作業ファイルは `.tmp/` の下 */
-export const receiptImageTool: ReceiptImageTool = createImageTool({ tmpRoot: TMP_ROOT });
+const receiptImageTool: ReceiptImageTool = createImageTool({ tmpRoot: TMP_ROOT });
 
 /**
  * 証憑のルートが使う、差し替えられる部品（`createApp({ receipts })`。010/X3）。

@@ -16,6 +16,16 @@ function fileTooLarge(maxBytes: number) {
   } as const;
 }
 
+/** フィールド `name` がファイルでない（400 VALIDATION。本文のメッセージも「ファイルを選んでください」） */
+function fileRequired(name: string): DomainException {
+  const message = "ファイルを選んでください";
+  return new DomainException({
+    code: "VALIDATION",
+    message,
+    details: { issues: [{ path: [name], message }] },
+  });
+}
+
 /**
  * 要求のボディの大きさを制限する（413 FILE_TOO_LARGE）。
  * ボディには multipart の境界などが含まれるため少し余裕を持たせ、ファイルそのものの大きさは readUpload で確かめる
@@ -42,14 +52,7 @@ export type Upload = {
  */
 export async function readUpload(c: Context, maxFileBytes = MAX_UPLOAD_BYTES): Promise<Upload> {
   const upload = await readOptionalUpload(c, "file", maxFileBytes);
-  if (upload === undefined) {
-    const message = "ファイルを選んでください";
-    throw new DomainException({
-      code: "VALIDATION",
-      message,
-      details: { issues: [{ path: ["file"], message }] },
-    });
-  }
+  if (upload === undefined) throw fileRequired("file");
   return upload;
 }
 
@@ -65,14 +68,7 @@ export async function readOptionalUpload(
   const body = await c.req.parseBody();
   const file = body[name];
   if (file === undefined) return undefined;
-  if (!(file instanceof File)) {
-    const message = "ファイルを選んでください";
-    throw new DomainException({
-      code: "VALIDATION",
-      message,
-      details: { issues: [{ path: [name], message }] },
-    });
-  }
+  if (!(file instanceof File)) throw fileRequired(name);
   if (file.size > maxFileBytes) throw new DomainException(fileTooLarge(maxFileBytes));
   return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
 }

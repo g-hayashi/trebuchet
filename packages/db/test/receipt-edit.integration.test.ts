@@ -1,4 +1,3 @@
-import { randomUUIDv7 } from "node:crypto";
 import {
   addReceipt,
   deleteReceipt,
@@ -6,7 +5,6 @@ import {
   linkReceipt,
   type ReceiptDeps,
   type ReceiptUnitOfWork,
-  type Result,
   replaceReceiptFile,
   replayReceiptHistory,
   unlinkReceipt,
@@ -16,7 +14,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createReceiptFileStore } from "../src/receipt-files.ts";
 import { createReceiptUnitOfWork } from "../src/receipt-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  createTestEntity,
+  NOW,
+  type TempDataDir,
+  testClock,
+  testIds,
+  unwrap,
+  useTempDataDir,
+} from "../src/testing.ts";
 import { receiptDb } from "./receipt-db-setup.ts";
 
 // T027（INV-62・63）: 訂正・差し替え・削除を、実際の drizzleUnitOfWork・暗号化したファイルの置き場所で確かめる。
@@ -27,9 +33,8 @@ let db: TenantDb;
 let raw: ReturnType<typeof receiptDb>;
 let entityId: string;
 
-const NOW = "2026-11-02T09:00:00.000Z";
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => NOW };
+const ids = testIds();
+const clock = testClock();
 
 beforeEach(() => {
   tmp = useTempDataDir("receipt-edit");
@@ -46,11 +51,6 @@ const deps = (uow: ReceiptUnitOfWork = createReceiptUnitOfWork(db)): ReceiptDeps
   ids,
   dateOf: (iso) => iso.slice(0, 10),
 });
-
-const unwrap = <T>(r: Result<T>): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
 
 /** 先頭が JPEG のマーカーの合成のバイト列（中身の判定だけを通す） */
 const jpeg = (label: string) =>

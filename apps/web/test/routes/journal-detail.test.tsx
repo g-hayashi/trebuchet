@@ -1,29 +1,11 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/journals/$journalId";
 import { Route as ListRoute } from "@/routes/e/$entityId/journals/index";
+import { account, ENTITY, uuid } from "../fixtures";
 import { type ApiCall, type ApiReply, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
-
-const ENTITY = "/api/entities/e1";
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-
-const account = (
-  n: number,
-  name: string,
-  rest: Pick<Account, "category" | "normalSide" | "reportSection"> & Partial<Account>,
-): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive: true,
-  ...rest,
-});
 
 const asset = { category: "asset", normalSide: "debit", reportSection: "BS_ASSET" } as const;
 const bank = account(1020, "普通預金", asset);

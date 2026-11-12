@@ -1,3 +1,4 @@
+import { ACCOUNT_CODES } from "@trebuchet/schema";
 import { describe, expect, it } from "vitest";
 import { INDIVIDUAL_ACCOUNTS } from "../src/seed/accounts.individual.ts";
 
@@ -134,6 +135,27 @@ describe("勘定科目の初期セット（個人事業）", () => {
       .map((x) => x.code);
     expect(sorted.indexOf("5300")).toBe(sorted.indexOf("5290") + 1);
     expect(sorted.indexOf("5310")).toBe(sorted.indexOf("5300") + 1);
+  });
+
+  it("schema の ACCOUNT_CODES が seed の科目と一致する", () => {
+    const names: Record<keyof typeof ACCOUNT_CODES, string> = {
+      cash: "現金",
+      ordinaryDeposit: "普通預金",
+      receivable: "売掛金",
+      startupCosts: "開業費",
+      accountsPayable: "未払金",
+      ownerContribution: "事業主借",
+      capital: "元入金",
+      ownerDrawing: "事業主貸",
+      sales: "売上高",
+      miscIncome: "雑収入",
+      depreciation: "減価償却費",
+      paymentFee: "支払手数料",
+      disposalLoss: "固定資産除却損",
+    };
+    for (const [key, name] of Object.entries(names)) {
+      expect(byName(name)?.code, name).toBe(ACCOUNT_CODES[key as keyof typeof ACCOUNT_CODES]);
+    }
   });
 
   it("経費は欄番号の順に並ぶ", () => {

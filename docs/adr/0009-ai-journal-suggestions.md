@@ -1,8 +1,10 @@
 # ADR 0009: AI による仕訳の推定は、ルール → 端末内 → 外部の順に、マスクした情報だけを送り、人が承認してから登録する
 
-- 状態: 採用
+- 状態: 採用（一部を置き換え: 011/R10。置き換わったのは、決定の「評価」の項。評価はアプリの中（`eval_runs`）から `pnpm eval:statements` のスクリプトに移った）
 - 日付: 2026-10-26
-- 関連: specs/006-mfme-ai-journal/research.md R8, R10, R11, R12, R13, R17、ADR 0007
+- 関連: specs/006-mfme-ai-journal/research.md R8, R10, R11, R12, R13, R17、ADR 0007、specs/011-ui-overhaul/research.md R10
+
+> **端末内の AI は既定で無効（2026-11-07 利用者の判断）**。全項目一致が 0% だったため、`ai_settings.local_enabled` の既定を 0 にし、外部の AI を既定の使い方とした（外部も接続先・モデルの入力が要るので既定は無効）。推定の順序・送る情報・承認は、この ADR のまま。端末内を使うかは設定で選ぶ。詳細は `docs/features/006-mfme-ai-journal.md`。
 
 ## 状況
 

@@ -1,33 +1,18 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/features/accounts/api";
 import { Route as ImportRoute } from "@/routes/e/$entityId/statements/import";
+import { assetAccount, ENTITY as BASE, uuid } from "../fixtures";
 import { type ApiCall, apiError, formFields, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 006 US1・007 US1: 明細の取込の画面（入力 → 列の対応 → 確認 → 確定。H:§2.1〜§2.3）
 
-const BASE = "/api/entities/e1";
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const SHA = "a".repeat(64);
 const TEXT = "日付\t内容\t金額（円）\t保有金融機関\n05/10(日)\tショップ001\t-1,200\tサンプル銀行";
 
-const account = (n: number, name: string, over: Partial<Account> = {}): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  category: "asset",
-  normalSide: "debit",
-  reportSection: "BS_ASSET",
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive: true,
-  ...over,
-});
-const BANK = account(1020, "普通預金");
-const CASH = account(1010, "現金");
+const BANK = assetAccount(1020, "普通預金");
+const CASH = assetAccount(1010, "現金");
 
 /** 日付・内容・金額（円）・保有金融機関のタブ区切り（見出しは先頭の行）の判定 */
 const LAYOUT = {

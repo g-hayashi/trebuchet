@@ -3,7 +3,6 @@ import { isSessionActive } from "../../src/auth/session.ts";
 import type {
   AppSettingKey,
   AuthEvent,
-  AuthEventKind,
   BackupRun,
   KeyWrap,
   NewAuthEvent,
@@ -177,12 +176,6 @@ export class FakeAuthStore implements AuthStore {
   async listActiveSessions(now: string): Promise<Session[]> {
     return this.sessions.filter((s) => isSessionActive(s, now)).map((s) => ({ ...s }));
   }
-  async deleteStaleSessions(before: string): Promise<number> {
-    const keep = this.sessions.filter((s) => s.revokedAt === null || s.revokedAt >= before);
-    const n = this.sessions.length - keep.length;
-    this.sessions = keep;
-    return n;
-  }
   async deleteAllSessions(): Promise<number> {
     const n = this.sessions.length;
     this.sessions = [];
@@ -212,9 +205,6 @@ export class FakeAuthStore implements AuthStore {
   async listEvents(limit?: number): Promise<AuthEvent[]> {
     return this.newestFirst().slice(0, limit);
   }
-  async listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]> {
-    return this.newestFirst().filter((e) => e.occurredAt >= since && kinds.includes(e.kind));
-  }
 
   async createPairingToken(t: {
     id: string;
@@ -242,12 +232,6 @@ export class FakeAuthStore implements AuthStore {
   }
   async isPairingTokenValid(tokenHash: string, rpId: string, now: string): Promise<boolean> {
     return this.findValidPairing(tokenHash, rpId, now) !== undefined;
-  }
-  async consumePairingToken(tokenHash: string, rpId: string, now: string): Promise<boolean> {
-    const t = this.findValidPairing(tokenHash, rpId, now);
-    if (!t) return false;
-    t.usedAt = now;
-    return true;
   }
   async addPasskeyWithPairingToken(
     passkey: NewPasskey,

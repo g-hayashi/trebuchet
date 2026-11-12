@@ -7,7 +7,7 @@ import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { generateRecoveryKey } from "../src/recovery-key.ts";
 import { openAuth, openRegistry, openTenant } from "../src/tenant-store.ts";
-import { createTestEntity, NOW } from "../src/testing.ts";
+import { createTestEntity, testClock } from "../src/testing.ts";
 import { wrapDataKey } from "../src/vault-crypto.ts";
 
 /** 回復キー（本文）と、それで DK を包んだ recovery の包み。テストが DK ごとに作る */
@@ -29,7 +29,7 @@ export type EntitySpec = {
 
 export type SeededEntity = { id: string; name: string };
 
-const clock = { now: () => NOW };
+const clock = testClock();
 
 /** 事業体を作り、仕訳と決算の表（closing_notes）の行を入れる */
 export function seedEntities(specs: EntitySpec[]): SeededEntity[] {

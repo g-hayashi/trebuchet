@@ -11,9 +11,10 @@ import {
 } from "../../src/usecases/statement-approval.ts";
 import { buildCandidates, listStatements } from "../../src/usecases/statements.ts";
 import { voidJournal } from "../../src/usecases/void-journal.ts";
+import { unwrap } from "../result.ts";
 import { FaultInjectingStatementUnitOfWork, snapshotOf } from "../statement-fault-injection.ts";
 import { pastedRowArb, purposeArb } from "../statements-arbitraries.ts";
-import { type StatementsCtx, setupStatements, unwrap } from "../statements-setup.ts";
+import { type StatementsCtx, setupStatements } from "../statements-setup.ts";
 
 // 006 T015。INV-41（承認以外の操作で仕訳帳・試算表が変わらない）、INV-43（結びつきは明細ごと・行ごとに高々 1 件）、
 // INV-47 の承認の側（途中の失敗で全部巻き戻る）、突合（明細の口座の行の動きの合計 = 明細の金額）、

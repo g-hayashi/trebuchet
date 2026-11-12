@@ -1,7 +1,6 @@
 import {
   createCipheriv,
   createDecipheriv,
-  createHash,
   hkdfSync,
   randomBytes,
   timingSafeEqual,
@@ -9,6 +8,8 @@ import {
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import type { ReceiptFileStore } from "@trebuchet/domain";
 import { receiptFile, receiptsDir, withDataKey } from "./tenant-store.ts";
+import { isNotFound, sha256Hex } from "./util.ts";
+import { DK_BYTES } from "./vault-crypto.ts";
 
 /**
  * 証憑のファイルの暗号化（010/R8、data-model §1.8、INV-61）。
@@ -24,7 +25,6 @@ const SALT_BYTES = 16;
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 const KEY_BYTES = 32;
-const DK_BYTES = 32;
 const HEADER_BYTES = MAGIC.length + SALT_BYTES + NONCE_BYTES;
 const MIN_FILE_BYTES = HEADER_BYTES + TAG_BYTES;
 
@@ -35,8 +35,6 @@ export class ReceiptFileUnreadableError extends Error {
     this.name = "ReceiptFileUnreadableError";
   }
 }
-
-const sha256Of = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
 function deriveFileKey(dk: Uint8Array, salt: Uint8Array, entityId: string): Buffer {
   if (dk.length !== DK_BYTES) throw new RangeError(`data key must be ${DK_BYTES} bytes`);
@@ -79,7 +77,7 @@ export function sealReceipt(
 
 /** 平文を暗号化する。名前 = `sha256(bytes)` を AAD に束ねる */
 export function encryptReceipt(bytes: Uint8Array, entityId: string, dk: Uint8Array): Buffer {
-  return sealReceipt(bytes, entityId, sha256Of(bytes), dk);
+  return sealReceipt(bytes, entityId, sha256Hex(bytes), dk);
 }
 
 /**
@@ -113,7 +111,7 @@ export function decryptReceipt(
   } finally {
     key.fill(0);
   }
-  const actual = Buffer.from(sha256Of(plain), "utf8");
+  const actual = Buffer.from(sha256Hex(plain), "utf8");
   const expected = Buffer.from(sha256, "utf8");
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
     plain.fill(0);
@@ -121,9 +119,6 @@ export function decryptReceipt(
   }
   return plain;
 }
-
-const isNotFound = (e: unknown): boolean =>
-  typeof e === "object" && e !== null && (e as { code?: unknown }).code === "ENOENT";
 
 /**
  * 事業体の `ReceiptFileStore`（data-model §1.8）。置き場所は `receiptFile(entityId, sha256)`。
@@ -135,7 +130,7 @@ export function createReceiptFileStore(entityId: string): ReceiptFileStore {
   receiptsDir(entityId);
 
   return {
-    digest: sha256Of,
+    digest: sha256Hex,
 
     has(sha256) {
       // 施錠中は存在も教えない（読み書きと同じ扱い）
@@ -146,7 +141,7 @@ export function createReceiptFileStore(entityId: string): ReceiptFileStore {
     put(sha256, bytes) {
       withDataKey((dk) => {
         const path = receiptFile(entityId, sha256);
-        if (sha256Of(bytes) !== sha256) {
+        if (sha256Hex(bytes) !== sha256) {
           throw new Error("receipt file name does not match its content");
         }
         if (existsSync(path)) return;

@@ -8,6 +8,7 @@
 ```
 apps/web ──────────────→ packages/schema
 apps/server ──→ packages/db ──→ packages/domain ──→ packages/schema
+packages/db ──→ packages/schema
 apps/server ──→ packages/domain
 apps/server ──→ packages/schema
 ```
@@ -16,13 +17,13 @@ apps/server ──→ packages/schema
 |---|---|---|
 | `packages/schema` | Zod スキーマ（API と入力の形）、共有の定数 | 他のパッケージに依存しない |
 | `packages/domain` | 業務ルール（仕訳の検証、締め、帳票、ユースケース） | **純粋関数のみ**。`node:fs` / `node:sqlite`、DB、Hono、React を import しない |
-| `packages/db` | SQLite（better-sqlite3 + Drizzle）、マイグレーション、リポジトリ実装 | DB へのアクセスはここに閉じる |
+| `packages/db` | SQLite（better-sqlite3-multiple-ciphers + Drizzle。`src/driver.ts`、ADR 0001・0011）、マイグレーション、リポジトリ実装 | DB へのアクセスはここに閉じる |
 | `apps/server` | Hono の API サーバー（`127.0.0.1:8787`） | HTTP の入出力と DI の組み立て。業務ルールは書かない |
 | `apps/web` | React + Vite の画面（`http://localhost:5173`、`/api` は 8787 へ proxy） | 業務ルールを持たない。`@trebuchet/schema` に依存する |
 
 - `packages/domain` の import 禁止は `biome.json` の `noRestrictedImports` が機械的に止める（止まるのは列挙した import だけ。`node:` の他のモジュールや `zod` の直接 import はレビューで確認する）。
 - パッケージ名は `@trebuchet/schema`・`domain`・`db`・`server`・`web`。
-- `packages/domain` は `@trebuchet/schema` に依存する。`schema` は Zod に依存する。
+- `packages/domain`・`packages/db` は `@trebuchet/schema` に依存する。`schema` は Zod に依存する。
 - `apps/web` は `@trebuchet/server` を devDependency に持つ。`hc<AppType>` のために型だけを import する（`import type`）。実行時のコードは参照しない。
 
 ## コマンド
@@ -36,53 +37,51 @@ apps/server ──→ packages/schema
 | 型チェック（全パッケージ + scripts） | `pnpm typecheck` |
 | Lint（Biome） | `pnpm lint` |
 | 整形（Biome で書き換え） | `pnpm format` |
-| 性能計測（SC-004 の仕訳 2,000 件、003 の SC-006 の決算書、009 の SC-005 の資産の画面、010 の SC-002 の証憑 5,000 件の検索、011 の SC-003 の `GET /home`。認証つき） | `pnpm bench:reports` |
-| 性能計測（freee 取込の 500 仕訳、002 の SC-002） | `pnpm bench:import` |
-| 性能計測（バックアップ、004 の SC-005） | `pnpm bench:backup`（環境変数でしきい値と件数を変えられる。使い方は `scripts/bench-backup.ts` の先頭のコメント） |
-| 性能計測（明細 500 件の CSV の読み取り・確認・候補、007 の SC-006。AI は呼ばない） | `pnpm bench:statements`（環境変数でしきい値・回数・件数を変えられる。使い方は `scripts/bench-statements.ts` の先頭のコメント） |
-| 列の案の評価（端末内の AI `fm serve` を呼ぶ。合成の例。CI に含まれない） | `pnpm eval:columns`（結果を `.tmp/eval-columns/` に残し前回と比べる。使い方は `scripts/eval-column-suggestions.ts` の先頭のコメント） |
-| 明細の推定の評価（ルール → 端末内 → 外部。合成の明細。CI に含まれない） | `pnpm eval:statements`（接続先は環境変数。結果を `.tmp/eval-statements/` に残し前回と比べる。使い方は `scripts/eval-statements.ts` の先頭のコメント） |
-| 証憑の読み取りの評価（外部の AI を呼ぶ。合成の画像。CI に含まれない） | `pnpm eval:receipts`（接続先は環境変数。結果を `.tmp/eval-receipts/` に残し前回と比べる。使い方は `scripts/eval-receipts.ts` の先頭のコメント） |
-| バックアップ（`.tbk`）の復元（server を止めて行う） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--receipts-dir <dir>] [--allow-missing-receipts] [--yes]`（回復キーを標準入力から読む。証憑のフラグは `docs/features/010-receipts.md`。`scripts/restore-backup.ts` の先頭のコメント） |
-| freee の書き出しの確認と照合（実データ、ローカル専用） | `pnpm verify:freee`（`work/` を読む。`scripts/verify-freee-import.ts` の先頭のコメント。`--continue` は 008 以降使えない: 実行ごとに乱数の DK で作るため） |
-| 青色申告決算書の照合（実データ、ローカル専用） | `pnpm verify:tax-return`（`work/` を読む。`scripts/verify-tax-return.ts` の先頭のコメント） |
-| 宣伝動画（MP4 約30秒と GIF。日本語・英語の字幕。AI・Tailscale は架空の応答に差し替える。`docs/promo/` に出力。CI に含まれない） | `pnpm promo:record`（録画 `promo:capture` は `PROMO_LANG=ja\|en`、変換 `promo:encode`。`apps/web/e2e/promo.capture.ts`、`scripts/promo-encode.ts` の先頭のコメント。ffmpeg が要る） |
+| マニュアルの更新漏れの検知（CI に含まれる。012） | `pnpm manual:check` |
+| マニュアルの画像の撮影と確認版の更新（`manual:capture` → `manual:record`。012。手順は `docs/features/012-app-manual.md`） | `pnpm manual:update` |
+| 性能計測（帳票・決算書・資産・証憑の検索・`GET /home`。001・003・009・010・011） | `pnpm bench:reports` |
+| 性能計測（freee 取込。002） | `pnpm bench:import` |
+| 性能計測（バックアップ。004） | `pnpm bench:backup` |
+| 性能計測（明細の CSV の読み取り・確認・候補。007。AI は呼ばない） | `pnpm bench:statements` |
+| 列の案の評価（端末内の AI を呼ぶ。007） | `pnpm eval:columns` |
+| 明細の推定の評価（ルール → 端末内 → 外部。011） | `pnpm eval:statements` |
+| 証憑の読み取りの評価（外部の AI を呼ぶ。010） | `pnpm eval:receipts` |
+| バックアップ（`.tbk`）の復元（server を止めて行う。回復キーを標準入力から読む） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--receipts-dir <dir>] [--allow-missing-receipts] [--yes]` |
+| freee の書き出しの確認と照合（実データ、ローカル専用。`work/` を読む。一時の事業体は実行ごとに作って消す。`--continue`・`--keep` はない: 008） | `pnpm verify:freee` |
+| 青色申告決算書の照合（実データ、ローカル専用。`work/` を読む） | `pnpm verify:tax-return` |
+| 宣伝動画（MP4 と GIF、日本語・英語。ffmpeg が要る） | `pnpm promo:record` |
 | E2E（Playwright、Chromium） | `pnpm --filter @trebuchet/web e2e` |
 | web のビルド（`routeTree.gen.ts` を再生成する） | `pnpm --filter @trebuchet/web build` |
 
-- CI（`.github/workflows/ci.yml`）は `pnpm typecheck`、`pnpm lint`、`pnpm test` を実行する。E2E、bench、`verify:*` は CI に含まれない。
-- 変更を終える前に、少なくとも `pnpm typecheck`、`pnpm lint`、`pnpm test` を通す。
+- bench・eval・restore・verify・promo の使い方（環境変数、しきい値、フラグ）は、`scripts/` の各スクリプトの先頭のコメント（`promo:capture` は `apps/web/e2e/promo.capture.ts`）と該当の機能の文書（`docs/features/`。restore の証憑のフラグは 010）にある。`eval:*`・`verify:*`・`promo:*`・E2E・bench は、AI や実データや端末の環境が要るので CI に含まれない。評価の結果は `.tmp/eval-*/` に残り前回と比べる。
+- CI（`.github/workflows/ci.yml`）は `pnpm typecheck`、`pnpm lint`、`pnpm manual:check`、`pnpm test` を実行する。
+- 変更を終える前に、少なくとも `pnpm typecheck`、`pnpm lint`、`pnpm test` を通す。マニュアルに関わる変更は `pnpm manual:check` も通す。
 
 ## 開発の進め方
 
-全機能（001〜）の `tasks.md` に共通のルール。各 `tasks.md` の「全タスク共通のルール」は、これに従うことと、その機能に固有の規則だけを書く。
+全機能（001〜）の `tasks.md` に共通のルール。**各規則の詳細（関数名、置き場所、例外の扱い）は [docs/development.md](docs/development.md)**。各 `tasks.md` の「全タスク共通のルール」は、これに従うことと、その機能に固有の規則だけを書く。
 
 - **テストを先に書く（TDD）**（Constitution V）。失敗するテストを確認してから実装する。
-- **複数回書くユースケースは `TenantUnitOfWork` の中で書く**（`packages/domain/src/ports.ts`。db の実装は `drizzleUnitOfWork`、domain のテストの偽物は `FakeUnitOfWork`）。`uow.run(fn)` の fn が `err` を返すか例外を投げれば、fn の中の書き込みはすべて巻き戻る（書く順序で原子性を守る必要はない）。ユースケースが自分で UnitOfWork を使い、ルートで `db.transaction` を張らない。UnitOfWork を受け取るユースケースを、別の `run` の中から呼ばない（入れ子のトランザクションにならない）。001 のリポジトリ 1 つの `ledger.transaction`・`repo.transaction` も同じく `err` か例外で巻き戻る（入れ子は SAVEPOINT。db の実装はどれも `packages/db/src/rollback.ts` の `inTransaction` を通す）。
-- **監査の記録は `auditEntry`（`packages/domain/src/audit.ts`）で作る**。before・after は値のまま渡す（null・undefined は null、それ以外は JSON）。書き込みと同じ日時にするときは `at` を渡す。型は `AuditEntry<対象, 操作>`。
-- **月・日付（`YYYY-MM`、`YYYY-MM-DD`）の計算は `packages/domain/src/dates.ts` に集める**（`addDays`、`monthEnd`、`dateInMonth`、`addMonths`、`monthIndex`、`monthOfDate` など）。ユースケース・各機能で月の計算・`pad`・月の正規表現を書き直さない。
-- **db のリポジトリの共通部品は `packages/db/src/internal.ts`**（`TenantConn`、`insertionOrder`・`rowidOf`、`asTaxCategory`）。リポジトリごとに型や `rowid` の並びを書き直さない（外へは export しない）。
-- **server のルートは `respond(c, result, (v) => c.json(..., status))`**（`apps/server/src/errors.ts`）で結果を返す（失敗は `fail`）。パスの `:year` は `validate("param", FiscalYearParam)`（`validator.ts` が 4 桁でない年を「会計期間が見つかりません」にする）。時刻を使うルートは `routes(options: RouteOptions)` で clock を受け取り、`createApp({ clock })` が全ルートに渡す。Zod の issue は `validationError`（`errors.ts`）で `details.issues` にする。
-- **不変条件**は `specs/INVARIANTS.md`（INV-1〜77 の索引。正本は各 `data-model.md` §4）。対応するテストは fast-check の性質テストで書く。`fc.assert(fc.property(...))` を直接呼ぶ（`@fast-check/vitest` は使わない。001/R6）。
-- **テストの共通部品を使う**（同じ準備を各ファイルに書かない）。db: `packages/db/src/testing.ts` の `createTestEntity`・`accountIdOf`・`useTempDataDir`・`NOW`/`TODAY`。domain: `packages/domain/test/fakes/`（ストアごとのフェイク。`fakes.ts` は再エクスポート）、`test-dates.ts`（`NOW`/`TODAY` の正本）、`ledger-setup.ts`（`setupBase`・`accountIdOf`）。server: `apps/server/test/helpers.ts`（`createTestEntity`・`accountLookup`・`errorOf`・`json`・`okBody`・`makeClock`。`backup-helpers.ts`・`invoicing-helpers.ts` はこれを拡張する）。bench: `scripts/lib/bench-common.ts`。
-- **web のテストはコンポーネントテスト**（Testing Library + jsdom。`apps/web/test/render-route.tsx`、`mock-api.ts`、置き場所は `apps/web/test/routes/`）。テストのためだけに node 専用のロジックを別ファイルに切り出さない。新しい API を呼ぶ画面を足したら `mock-api.ts` に既定の応答を足し、既存の web のテストが落ちないことを確かめる。ルートを足したら `pnpm --filter @trebuchet/web build` で `routeTree.gen.ts` を再生成してから typecheck する。
-- **web の API 呼び出しと query key は `features/<機能>/api.ts`**。画面・ルートのファイルで `api.api...` や `unwrap(...)` を直接呼ばない。`lib/queries.ts` には機能をまたぐ `invalidateLedger` だけを置く。
-- **web で仕訳が変わる操作（登録・訂正・取消、請求・入金・定期仕訳・決算整理による登録）の後は `invalidateLedger(queryClient, entityId)`**（`lib/queries.ts`）。仕訳・帳票・請求・定期仕訳・決算書の query をまとめて読み直す。
-- **server のテスト**は `apps/server/test/helpers.ts` の `createTestSession`・`testHeaders`（と `createTestEntity`）を使い、`app.request()` で呼ぶ。サンドボックスではローカルのポートを開けないので、server を起動する手順（dev サーバー、E2E）は利用者の端末で行う。
-- **Node 26 の型の除去で直接実行する**（`tsx` は使わない）。次を守る:
-  - 相対 import は `.ts` を付ける（`allowImportingTsExtensions`。web は bundler の書き方）
-  - `enum`、パラメーター・プロパティ、`namespace` を使わない（`erasableSyntaxOnly`）
-  - 型だけの import は `import type` と書く（`verbatimModuleSyntax`）
-  - 任意プロパティは `?: T | undefined`（`exactOptionalPropertyTypes`）
-- **金額は整数**（`0 < amount < 1e12`）。浮動小数で金額を計算しない。ID は `IdGenerator`、日時は `Clock` のポートで domain に渡す。domain で `Date.now()`・`new Date()`・`randomUUIDv7` を直接呼ばない。
-- **依存（npm パッケージ）を足すときは、`pnpm add` の前に利用者の承認を得る**。各機能の plan が足してよいものを決める。
-- **エラーコード・共有の型・契約を変えるタスクでは、同じ値を参照するテストと実装を `grep -rn <値> packages apps scripts` で探し、担当外のプロジェクトも含めて直す**。
-- **マイグレーションの再生成**: `drizzle-kit generate` は `STRICT` を出力しない。生成後、新しい表の `);` を `) STRICT;` に置き換える（001/R2、001/T024）。再生成のたびに同じ置き換えが必要。`tenant-store` のテストが `STRICT` を確認する。
-- **トリガー・ビュー・部分 UNIQUE**は `drizzle-kit generate --custom` で手書きの SQL として追加する（001/R2）。
+- **複数回書くユースケースは `TenantUnitOfWork` の中で書く**。fn が `err` か例外で全部巻き戻る。ルートで `db.transaction` を張らず、UnitOfWork を別の `run` の中から呼ばない。
+- **監査の記録は `auditEntry`（domain の `audit.ts`）で作る**。
+- **月・日付の計算は domain の `dates.ts` に集める**。月の計算・`pad`・月の正規表現を書き直さない。
+- **db のリポジトリの共通部品は `packages/db/src/internal.ts`**（外へは export しない）。
+- **server のルートは `respond(c, result, ...)` で結果を返す**（失敗は `fail`）。`:year` は `validate("param", FiscalYearParam)`、時刻を使うルートは `routes(options: RouteOptions)` で clock を受け取る。
+- **不変条件**は `specs/INVARIANTS.md`（INV-1〜77 の索引。正本は各 `data-model.md` §4）。対応するテストは fast-check の性質テスト（`fc.assert(fc.property(...))` を直接呼ぶ。`@fast-check/vitest` は使わない。001/R6）。
+- **テストの共通部品を使う**（db・domain・server・bench。同じ準備を各ファイルに書かない）。
+- **web のテストはコンポーネントテスト**。新しい API を呼ぶ画面は `mock-api.ts` に既定の応答を足し、ルートを足したら `pnpm --filter @trebuchet/web build` で `routeTree.gen.ts` を再生成してから typecheck する。
+- **web の API 呼び出しと query key は `features/<機能>/api.ts`**。画面・ルートで `api.api...`・`unwrap(...)` を直接呼ばない。
+- **web で仕訳が変わる操作の後は `invalidateLedger(queryClient, entityId)`**（`lib/queries.ts`）。
+- **server のテストは `apps/server/test/helpers.ts` を使い、`app.request()` で呼ぶ**。サンドボックスではローカルのポートを開けないので、server を起動する手順（dev サーバー、E2E）は利用者の端末で行う。
+- **Node 26 の型の除去で直接実行する**（`tsx` は使わない）。相対 import に `.ts`、`enum`・パラメーター・プロパティ・`namespace` を使わない、型だけの import は `import type`、任意プロパティは `?: T | undefined`。
+- **金額は整数**（`0 < amount < 1e12`）。ID は `IdGenerator`、日時は `Clock` のポートで domain に渡す（domain で `Date.now()`・`new Date()`・`randomUUIDv7` を直接呼ばない）。
+- **依存（npm パッケージ）を足すときは、`pnpm add` の前に利用者の承認を得る**。
+- **エラーコード・共有の型・契約を変えるタスクでは、`grep -rn <値> packages apps scripts` で同じ値を参照するテストと実装を探し、担当外のプロジェクトも含めて直す**。
+- **マイグレーション**: `drizzle-kit generate` の後、新しい表の `);` を `) STRICT;` に置き換える（001/R2、001/T024）。トリガー・ビュー・部分 UNIQUE は `--custom` の手書きの SQL。
 - **開発中は利用者がいない**ため、既存データの移行・旧版との互換は考えない。帳簿の不変条件（Constitution I）は守る。
-- **部下（サブエージェント）への指示**: 担当のプロジェクトのテストだけを実行させる（`pnpm vitest run --project <name>`）。整形は触ったファイルだけに掛け、ファイルの変更は Edit / Write で行う。全体の検証（lint、型、全テスト、ビルド、E2E）は最後にメインが 1 回行う。
+- **部下（サブエージェント）への指示**: 担当のプロジェクトのテストだけを実行させる（`pnpm vitest run --project <name>`）。整形は触ったファイルだけ、変更は Edit / Write で行う。全体の検証は最後にメインが 1 回行う。
 - **コミットメッセージは Conventional Commits**（タスク ID を入れる）。
-- **tasks.md は 1 タスク 1 行を 500 字程度までにする**。長くなる細部は research・data-model・contracts の節に置き、タスクからは節の番号で参照する。
+- **tasks.md は 1 タスク 1 行を 500 字程度までにする**。細部は research・data-model・contracts の節に置き、節の番号で参照する。
 
 ## 機能ごとの文書
 
@@ -90,7 +89,7 @@ apps/server ──→ packages/schema
 
 | 機能 | 文書 | 主な ADR |
 |---|---|---|
-| 001 帳簿の中核 | `specs/001-ledger-core/`（このファイルの「開発の進め方」） | 0001〜0003 |
+| 001 帳簿の中核 | `specs/001-ledger-core/`（開発の規約は `docs/development.md`） | 0001〜0003 |
 | 002 freee の取込 | `docs/features/002-freee-import.md` | 0004 |
 | 003 決算書（按分、少額の特例、税制の値の足し方） | `docs/features/003-tax-return.md` | 0005 |
 | 004 認証とバックアップ、リモート（Tailscale） | `docs/features/004-auth-backup.md` | 0006・0007（鍵は 008 で置換） |
@@ -118,7 +117,7 @@ apps/server ──→ packages/schema
 - **仕訳を作る機能の仕訳**: 請求・入金の仕訳は `JOURNAL_LINKED` で通常の訂正・取消を拒む（005）。決算整理（按分・償却）は案を利用者が確かめて `createJournal` で登録する（003・009）。明細の承認だけが明細から仕訳を作る（006）。
 - **作らないもの**: 銀行の自動連携（006）、申告の控えの表とアプリの中の評価（011 で削除）、互換の別名（007）。
 - **web**: 各画面で `variant="default"` のボタンは 1 つ（011 の ui-shell §7）。ブラウザに覚える値は `localStorage`（DB・API に足さない）。
-- **マニュアル**: 利用者の操作・表示・制約を変えたら `$app-manual` の手順で対象の記事と画像を更新し、`pnpm manual:check` を通す。撮影と確認版の更新は `pnpm manual:update`（`docs/features/012-app-manual.md`）。画像と本文の確認はコミットの前に行う。
+- **マニュアル**: 利用者の操作・表示・制約を変えたら、`docs/features/012-app-manual.md` の「更新手順」に従って対象の記事と画像を更新し、`pnpm manual:check` を通す（Codex では `$app-manual` が同じ手順を行う）。画像と本文の確認はコミットの前に行う。
 
 ## データと一時ファイル
 
@@ -128,7 +127,7 @@ apps/server ──→ packages/schema
 
 ## 仕様と文書
 
-- Spec Kit の成果物は `specs/<NNN-feature>/`（001〜011）に置く: `spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`tasks.md`（`contracts/`、`checklists/` がある機能もある）。完了した機能の `tasks.md` と `checklists/` は記録として残す。
+- Spec Kit の成果物は `specs/<NNN-feature>/`（001〜011、013、014）に置く: `spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`tasks.md`、`contracts/`、`checklists/`。例外: 008 は `design.md` と `tasks.md` だけ、012 は `docs/features/012-app-manual.md` だけ（`specs/` にない）。完了した機能の `tasks.md` と `checklists/` は記録として残す。
 - **番号は機能ごとに振り直される**（research の R、タスクの T）。他の機能の番号を指すときは `001/R6`、`005/T024` の形で機能の番号をつける。不変条件の INV だけは通し番号（`specs/INVARIANTS.md`）。
 - Spec Kit のテンプレート、スクリプト、憲法（`.specify/memory/constitution.md`）は `.specify/` に置く。
 - Spec Kit のスキルは、Claude Code 用が `.claude/skills/speckit-*`、GitHub Copilot CLI 用が `.github/skills/speckit-*` にある。どちらも `uvx --from git+https://github.com/github/spec-kit.git@v1.2.1 specify integration upgrade <claude|copilot>` で更新する（手で片方だけを直さない）。

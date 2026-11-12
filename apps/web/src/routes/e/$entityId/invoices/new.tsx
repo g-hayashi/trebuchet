@@ -13,7 +13,7 @@ import {
 } from "@/features/invoicing/api";
 import { InvoiceDraftList } from "@/features/invoicing/InvoiceDraftList";
 import { partnersQuery } from "@/features/masters/api";
-import { previousMonth, thisMonth } from "@/lib/dates";
+import { lastMonth } from "@/lib/dates";
 
 export const Route = createFileRoute("/e/$entityId/invoices/new")({
   validateSearch: WorkHoursQuery.partial(),
@@ -24,7 +24,7 @@ function NewInvoicesPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
-  const month = search.month ?? previousMonth(thisMonth());
+  const month = search.month ?? lastMonth();
   const partners = useQuery(partnersQuery(entityId));
   // 案は対象月ごとに作る。月を変えたら、前の月の案は出さない
   const [made, setMade] = useState<{ month: string; result: InvoiceDraftResult }>();

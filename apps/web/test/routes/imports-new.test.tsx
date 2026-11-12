@@ -4,10 +4,10 @@ import type { ImportBatch, ImportPlanItem, ImportPreview, MappingRow } from "@tr
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Account } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/imports/new";
+import { ENTITY, TAX_CATEGORIES } from "../fixtures";
 import { type ApiCall, apiError, formFields, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const ENTITY = "/api/entities/e1";
 const PREVIEW = `${ENTITY}/imports/freee/preview`;
 const COMMIT = `${ENTITY}/imports/freee/commit`;
 const MAPPINGS = `${ENTITY}/import-mappings`;
@@ -52,12 +52,6 @@ const supplies = account("supplies", "消耗品費", {
   sortOrder: 5170,
 });
 const initialAccounts = () => [bank, sales, entertainment, supplies];
-
-const TAX_CATEGORIES = [
-  { code: "OUT_OF_SCOPE", name: "対象外", kind: null },
-  { code: "SALES_10", name: "課税売上 10%", kind: "sales" },
-  { code: "PURCHASE_10", name: "課税仕入 10%", kind: "purchase" },
-];
 
 const draft = (date: string, amount: number, debit: string, credit: string) => ({
   date,

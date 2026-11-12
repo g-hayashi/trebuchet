@@ -22,7 +22,7 @@ export type BalancesInput = {
 };
 
 /**
- * 科目・補助科目別の 期首・借方・貸方・期末 を集計する（T093）。
+ * 科目・補助科目別の 期首・借方・貸方・期末 を集計する。
  * 取消済みの仕訳と、periodStart より前・to より後の仕訳は含めない（INV-6）
  */
 export function computeBalances(input: BalancesInput): Balance[] {

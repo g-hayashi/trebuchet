@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -13,7 +14,7 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { authKeys, revokeSession, sessionsQuery } from "./api";
 
-/** 解錠中のセッション（FR-013）。現在のセッションに印を付け、他のセッションを失効できる */
+/** 解錠中のセッション（004/FR-013）。現在のセッションに印を付け、他のセッションを失効できる */
 export function SessionList() {
   const queryClient = useQueryClient();
   const { data: sessions, isPending, error } = useQuery(sessionsQuery());
@@ -35,7 +36,7 @@ export function SessionList() {
       </CardHeader>
       <CardContent className="grid gap-4">
         <ApiErrorMessage error={error ?? revoke.error} />
-        {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+        {isPending && <Loading />}
         {sessions && (
           <Table aria-label="セッションの一覧">
             <TableHeader>

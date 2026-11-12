@@ -15,6 +15,7 @@ import {
   ok,
   type Result,
   type SubAccount,
+  validation,
 } from "../../types.ts";
 import type { AccountMapping, ImportRef } from "../types.ts";
 import { isPriorYearClosing } from "./closing.ts";
@@ -72,14 +73,12 @@ export function reconcile(input: ReconcileInput): Result<ReconciliationResult> {
       (d) => d !== null && !inPeriod(d),
     );
     if (outside !== undefined && outside !== null) {
-      return err(
-        domainError("VALIDATION", `${fiscalYear}年度の総勘定元帳ではありません`, {
-          fiscalYear,
-          startDate: period.startDate,
-          endDate: period.endDate,
-          ledgerDate: outside,
-        }),
-      );
+      return validation(`${fiscalYear}年度の総勘定元帳ではありません`, {
+        fiscalYear,
+        startDate: period.startDate,
+        endDate: period.endDate,
+        ledgerDate: outside,
+      });
     }
   }
 

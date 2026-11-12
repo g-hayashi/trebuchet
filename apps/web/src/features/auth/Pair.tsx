@@ -39,7 +39,7 @@ function PairError({ error }: { error: unknown }) {
 }
 
 /**
- * ペアリングの URL（`/pair?token=…`）を開いたスマホの画面（FR-012）。サインインなしで開く（`__root` の例外）。
+ * ペアリングの URL（`/pair?token=…`）を開いたスマホの画面（004/FR-012）。サインインなしで開く（`__root` の例外）。
  * パスキーの作成には利用者の操作が要るので、ボタンで始める。成功すると server がセッションを始めているので、帳簿へ進む
  */
 export function Pair({ token }: { token: string | undefined }) {

@@ -1,5 +1,5 @@
 import { isYen, sumYen } from "./money.ts";
-import { domainError, err, ok, type Result, type Side } from "./types.ts";
+import { domainError, err, ok, type Result, type Side, validation } from "./types.ts";
 
 /** 期首残高の入力の1行 */
 export type OpeningBalanceDraft = {
@@ -28,23 +28,19 @@ export function validateOpeningBalances(
   const valid: ValidOpeningBalance[] = [];
   for (const [index, row] of rows.entries()) {
     if (!isYen(row.amount)) {
-      return err(
-        domainError("VALIDATION", "金額は 1 円以上 1 兆円未満の整数で入力してください", {
-          index,
-          amount: row.amount,
-        }),
-      );
+      return validation("金額は 1 円以上 1 兆円未満の整数で入力してください", {
+        index,
+        amount: row.amount,
+      });
     }
     const subAccountId = row.subAccountId ?? null;
     const key = JSON.stringify([row.accountId, subAccountId]);
     if (seen.has(key)) {
-      return err(
-        domainError("VALIDATION", "同じ科目・補助科目の行が重複しています", {
-          index,
-          accountId: row.accountId,
-          subAccountId,
-        }),
-      );
+      return validation("同じ科目・補助科目の行が重複しています", {
+        index,
+        accountId: row.accountId,
+        subAccountId,
+      });
     }
     seen.add(key);
     valid.push({ accountId: row.accountId, subAccountId, side: row.side, amount: row.amount });

@@ -1,3 +1,4 @@
+import type { StatementRowStatus } from "@trebuchet/schema";
 import { addDays } from "../dates.ts";
 import { assignKeys } from "./keys.ts";
 import { normalizeContent } from "./normalize.ts";
@@ -19,7 +20,7 @@ export type ExistingStatement = {
   memo: string | null;
 };
 
-export type PlannedRowStatus = "new" | "existing" | "changed";
+export type PlannedRowStatus = StatementRowStatus;
 
 /** 変更ありの変更前後（内容の項目。値がなければ null） */
 export type StatementContent = {

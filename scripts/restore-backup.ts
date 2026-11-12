@@ -22,6 +22,7 @@
  */
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
+import { TMP_ROOT } from "../packages/db/src/tenant-store.ts";
 import { isServerRunning, runRestoreCli } from "./lib/restore-cli.ts";
 
 /** 標準入力から 1 行読む。端末なら入力は画面に出さない。パイプなら 1 行目（空なら失敗） */
@@ -81,7 +82,7 @@ async function askYesNo(question: string): Promise<boolean> {
 const code = await runRestoreCli(process.argv.slice(2), {
   env: process.env,
   defaultDataDir: fileURLToPath(new URL("../data", import.meta.url)),
-  tmpRoot: fileURLToPath(new URL("../.tmp/", import.meta.url)),
+  tmpRoot: TMP_ROOT,
   readRecoveryKey: () => readHiddenLine("回復キー: "),
   confirm: askYesNo,
   isServerRunning: () => isServerRunning(),

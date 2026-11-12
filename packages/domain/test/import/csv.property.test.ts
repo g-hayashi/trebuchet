@@ -40,7 +40,9 @@ describe("parseCsv (INV-17)", () => {
   it("parseCsv(toCsv(rows)) は rows と一致する（BOM を除いて比べる）", () => {
     fc.assert(
       fc.property(rowsArb, (rows) => {
-        expect(parseCsv(withoutBom(toCsvRows(rows)))).toEqual(rows);
+        // encodeCsv は数式の先頭（= + - @ タブ CR）の文字列に ' を付ける
+        const neutralized = rows.map((r) => r.map((v) => (/^[=+\-@\t\r]/.test(v) ? `'${v}` : v)));
+        expect(parseCsv(withoutBom(toCsvRows(rows)))).toEqual(neutralized);
       }),
     );
   });

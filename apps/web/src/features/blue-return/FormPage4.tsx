@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { BlueReturn } from "@trebuchet/schema";
+import { type BlueReturn, CLOSING_NOTE_MAX } from "@trebuchet/schema";
 import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
@@ -99,7 +99,7 @@ function BsTable({
   );
 }
 
-/** 期首と前期末の差の説明の入力と保存（FR-030）。説明を保存しても差額は変わらない */
+/** 期首と前期末の差の説明の入力と保存（003/FR-030）。説明を保存しても差額は変わらない */
 function DifferenceNoteForm({
   entityId,
   year,
@@ -128,7 +128,7 @@ function DifferenceNoteForm({
       <textarea
         id="opening-difference-note"
         rows={3}
-        maxLength={5000}
+        maxLength={CLOSING_NOTE_MAX}
         value={body}
         onChange={(e) => setBody(e.target.value)}
         className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -145,7 +145,7 @@ function DifferenceNoteForm({
 }
 
 /**
- * 決算書の4ページ。期首・期末の貸借対照表と、元入金の繰越の検査（FR-028〜030）。
+ * 決算書の4ページ。期首・期末の貸借対照表と、元入金の繰越の検査（003/FR-028〜030）。
  * 値は API が作った決算書のとおりに表示する（計算しない）
  */
 export function FormPage4({

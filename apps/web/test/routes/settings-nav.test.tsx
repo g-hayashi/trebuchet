@@ -1,14 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  RouterProvider,
-} from "@tanstack/react-router";
-import { render, screen, within } from "@testing-library/react";
+import { createRootRoute, createRoute } from "@tanstack/react-router";
+import { screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route as SettingsRoute } from "@/routes/settings/route";
+import { renderTree } from "../render-route";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -16,7 +10,6 @@ afterEach(() => {
 
 /** 設定のレイアウトの下に、どのパスにも一致する空の子を置いて描画する（メニューだけを確かめる） */
 function renderAt(url: string) {
-  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   const rootRoute = createRootRoute();
   const settingsRoute = SettingsRoute.update({
     id: "/settings",
@@ -29,15 +22,7 @@ function renderAt(url: string) {
     component: () => null,
   });
   rootRoute.addChildren([settingsRoute.addChildren([anyChild])]);
-  const router = createRouter({
-    routeTree: rootRoute,
-    history: createMemoryHistory({ initialEntries: [url] }),
-  });
-  render(
-    <QueryClientProvider client={new QueryClient()}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
+  renderTree(rootRoute, url);
 }
 
 describe("設定のメニュー（contracts/ui-shell.md §6）", () => {

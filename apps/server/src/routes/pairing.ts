@@ -3,9 +3,9 @@ import { hashToken, wrapDataKey } from "@trebuchet/db";
 import { type AuthStore, type Clock, domainError, LOCAL_RP_ID } from "@trebuchet/domain";
 import { PairingRegisterOptionsInput, PairingRegisterVerifyInput } from "@trebuchet/schema";
 import { Hono } from "hono";
-import { ids } from "../deps.ts";
 import { DomainException, lockedError } from "../errors.ts";
-import { type AuthSupport, type Ctx, toPasskeyView } from "../lib/auth-support.ts";
+import { type AuthSupport, type Ctx, sessionOf, toPasskeyView } from "../lib/auth-support.ts";
+import { ids } from "../lib/ids.ts";
 import { expectedOriginFor, isLocalHost, rpIdFor } from "../lib/origin.ts";
 import type { Vault } from "../lib/vault.ts";
 import type { GuardEnv } from "../middleware/host.ts";
@@ -61,10 +61,7 @@ export function pairingRoutes(deps: PairingRouteDeps) {
   return new Hono<GuardEnv>()
     .post("/pairing", async (c) => {
       const store = deps.store();
-      const session = c.var.session;
-      if (session === undefined) {
-        throw new DomainException(domainError("UNAUTHENTICATED", "サインインが必要です"));
-      }
+      const session = sessionOf(c);
       if (!isLocalHost(c.var.host)) {
         throw new DomainException(
           domainError(

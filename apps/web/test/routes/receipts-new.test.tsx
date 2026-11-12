@@ -268,6 +268,34 @@ describe("証憑の追加と連続入力（T023）", () => {
     });
   });
 
+  it("AI の設定を読み込む前に追加が終わっても、読み込んだ後で設定が有効なら自動の読み取りを呼ぶ", async () => {
+    const receipt = receiptDetail(EMPTY);
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const calls = mockApi({
+      "GET /api/settings/ai": async () => {
+        await gate;
+        return ok({ externalEnabled: true, receiptImagesEnabled: true });
+      },
+      [`POST ${LIST}`]: () => ok({ receipt }, 201),
+      [`GET ${DETAIL}`]: () => ok({ receipt }),
+      [`POST ${DETAIL}/readings`]: () => ok({ reading: receiptReading() }, 201),
+    });
+    renderNew();
+    await addFiles(["one.jpg"]);
+    // 追加の応答が返っても、設定の応答はまだ（読み込み中）
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === "POST" && c.path === LIST)).toBe(true),
+    );
+    expect(calls.some((c) => c.path === `${DETAIL}/readings`)).toBe(false);
+    release();
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === "POST" && c.path === `${DETAIL}/readings`)).toBe(true),
+    );
+  });
+
   it.each([
     [true, true],
     [false, true],

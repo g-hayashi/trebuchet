@@ -1,12 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  RouterProvider,
-} from "@tanstack/react-router";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { createRootRoute, createRoute } from "@tanstack/react-router";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route as RootRoute } from "@/routes/__root";
@@ -14,6 +7,7 @@ import { Route as EntityRoute } from "@/routes/e/$entityId/route";
 import { Route as HomeRoute } from "@/routes/index";
 import { Route as ListRoute } from "@/routes/list";
 import { type ApiCall, DEFAULT_AUTH_STATUS, mockApi, ok } from "../mock-api";
+import { renderTree } from "../render-route";
 
 const entity = {
   id: "e1",
@@ -35,10 +29,6 @@ afterEach(() => {
 
 /** 事業体のレイアウトの下に、どのパスにも一致する空の子を置いて描画する（メニューだけを確かめる） */
 function renderAt(url: string) {
-  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   const rootRoute = createRootRoute();
   const entityRoute = EntityRoute.update({
     id: "/e/$entityId",
@@ -51,16 +41,7 @@ function renderAt(url: string) {
     component: () => null,
   });
   rootRoute.addChildren([entityRoute.addChildren([anyChild])]);
-  const router = createRouter({
-    routeTree: rootRoute,
-    history: createMemoryHistory({ initialEntries: [url] }),
-  });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return { router };
+  return renderTree(rootRoute, url);
 }
 
 const groupNav = () => screen.findByRole("navigation", { name: "事業体のメニュー" });
@@ -280,10 +261,6 @@ function renderApp(url: string, handlers: Parameters<typeof mockApi>[0] = {}) {
     "GET /api/entities": () => ok({ entities: [entityA, entityB] }),
     ...handlers,
   });
-  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   // routeTree.gen.ts と同じく、ファイルルートに id・path・親を後から与える
   const routeTree = RootRoute.addChildren([
     HomeRoute.update({ id: "/", path: "/", getParentRoute: () => RootRoute } as never),
@@ -294,16 +271,7 @@ function renderApp(url: string, handlers: Parameters<typeof mockApi>[0] = {}) {
       getParentRoute: () => RootRoute,
     } as never),
   ]);
-  const router = createRouter({
-    routeTree,
-    context: { queryClient },
-    history: createMemoryHistory({ initialEntries: [url] }),
-  });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
+  const { router } = renderTree(routeTree, url);
   return { router, calls };
 }
 
@@ -444,13 +412,20 @@ describe("トップ（/）の移動（FR-010、R4）", () => {
     await waitFor(() => expect(path(router)).toBe(`/e/${entityA.id}`));
   });
 
-  it("事業体が 1 件でも `?list=1`（切替の「一覧・作成」）なら、移動せず一覧と作成のフォームを出す", async () => {
-    const { router } = renderApp("/?list=1", {
+  it("事業体が 1 件でも `/list`（切替の「一覧・作成」）なら、移動せず一覧と作成のフォームを出す", async () => {
+    const { router } = renderApp("/list", {
       "GET /api/entities": () => ok({ entities: [entityA] }),
     });
     expect(await screen.findByRole("link", { name: "個人事業A" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "作成する" })).toBeInTheDocument();
-    expect(path(router)).toBe("/");
+    expect(path(router)).toBe("/list");
+  });
+
+  it("従来の `/?list=1` は特別扱いせず、事業体が 1 件ならそのホームを開く", async () => {
+    const { router } = renderApp("/?list=1", {
+      "GET /api/entities": () => ok({ entities: [entityA] }),
+    });
+    await waitFor(() => expect(path(router)).toBe(`/e/${entityA.id}`));
   });
 
   it("事業体が 2 件以上なら、移動せず一覧を出し、最後に開いたものを上に目立たせる", async () => {

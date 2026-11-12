@@ -27,7 +27,7 @@ type Row = {
 const AMOUNT_ERROR = "賃借料と必要経費算入額は 0 以上の整数（円）で入力してください";
 
 /**
- * 地代家賃の内訳（FR-017）。全件を置き換えて保存する。必要経費算入額の合計と決算書の欄23の
+ * 地代家賃の内訳（003/FR-017）。全件を置き換えて保存する。必要経費算入額の合計と決算書の欄23の
  * 一致は API が判定し、決算書の警告（RENT_DETAILS_MISMATCH）で知らせる
  */
 export function RentDetailsTable({

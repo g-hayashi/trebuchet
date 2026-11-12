@@ -12,12 +12,12 @@ import { loadDemoAssets } from "../demo-assets.ts";
 import {
   defaultReceiptRuntime,
   demoEntityDeps,
-  ids,
   type ReceiptRuntime,
   type RouteOptions,
   registryRepository,
 } from "../deps.ts";
 import { fail, respond } from "../errors.ts";
+import { ids } from "../lib/ids.ts";
 import { todayOf } from "../lib/today.ts";
 import { hasActiveEntityRequests, type TenantEnv } from "../tenant.ts";
 import { validate } from "../validator.ts";
@@ -44,7 +44,7 @@ export function entitiesRoutes({
       if (creatingDemo) {
         return fail(c, {
           code: "DEMO_NOT_AVAILABLE",
-          message: "事業体があるため、デモ事業は作れません",
+          message: "デモ事業を作成中です",
         });
       }
       // 排他は await の前に取る（寸法の読み取りの間に 2 つ目が入らないように）

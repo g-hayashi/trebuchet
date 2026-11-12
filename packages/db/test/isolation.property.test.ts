@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { openTenant, tenantFile } from "../src/tenant-store.ts";
-import { createTestEntity, NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { createTestEntity, type TempDataDir, testClock, useTempDataDir } from "../src/testing.ts";
 
 type Tenant = {
   entityId: string;
@@ -36,7 +36,7 @@ let tmp: TempDataDir;
 let a: Tenant;
 let b: Tenant;
 
-const clock = { now: () => NOW };
+const clock = testClock();
 
 function setupTenant(name: string, kind: EntityKind): Tenant {
   const entity = createTestEntity({ name, kind });

@@ -17,5 +17,5 @@ export const aiSettingsQuery = () =>
     queryFn: async () => unwrap(await settings.$get()),
   });
 
-/** 保存する（§7.2）。`apiKey` は省略で変えない、空文字で削除 */
+/** 保存する（006 §7.2）。`apiKey` は省略で変えない、空文字で削除 */
 export const putAiSettings = async (json: AiSettingsInput) => unwrap(await settings.$put({ json }));

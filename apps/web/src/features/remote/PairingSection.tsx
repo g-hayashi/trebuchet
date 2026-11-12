@@ -7,10 +7,8 @@ import { ApiErrorMessage } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDateTime } from "@/lib/format";
-import { authKeys, authStatusQuery, passkeysQuery } from "../auth/api";
+import { authKeys, authStatusQuery, LOCAL_RP_ID, passkeysQuery } from "../auth/api";
 import { issuePairing } from "./api";
-
-const LOCAL_RP_ID = "localhost";
 
 /** URL の QR コード。SVG は uqr の出力だけを入れる（URL の文字列そのものは HTML にしない） */
 function PairingQr({ url }: { url: string }) {
@@ -26,7 +24,7 @@ function PairingQr({ url }: { url: string }) {
 }
 
 /**
- * ペアリング（FR-012）。ts.net の名前で使うパスキーを、スマホなどで登録する URL を発行する。
+ * ペアリング（004/FR-012）。ts.net の名前で使うパスキーを、スマホなどで登録する URL を発行する。
  * 発行できるのは、localhost でサインイン中・リモートが有効・名前が登録済みのとき。
  * その名前のパスキーがすでにあっても、本数を示して追加できる。発行は再認証つき
  * （サーバーが 403 を返したら確認してやり直す）。URL は一度だけ・10 分有効で、画面を離れると二度と表示されない

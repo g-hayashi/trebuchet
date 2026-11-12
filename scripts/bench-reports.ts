@@ -21,15 +21,24 @@ import { createReceiptUnitOfWork } from "../packages/db/src/receipt-repository.t
 import { openTenant } from "../packages/db/src/tenant-store.ts";
 import { useTempDataDir } from "../packages/db/src/testing.ts";
 import { normalizeReceiptText, ok, type ReceiptRow } from "../packages/domain/src/index.ts";
-import { positiveNumber, runBench } from "./lib/bench-common.ts";
+import { createBenchClient, createEntityViaApi } from "./lib/bench-client.ts";
+import { measureStats, runBench } from "./lib/bench-common.ts";
 import { createBenchHeaders } from "./lib/bench-session.ts";
+import { positiveNumber } from "./lib/env.ts";
 
 const JOURNALS = 2_000;
 const FISCAL_YEAR = 2026;
 const LIMIT_MS = positiveNumber("BENCH_LIMIT_MS", 1_000);
 const RUNS = positiveNumber("BENCH_RUNS", 5);
 
-type Line = { side: "debit" | "credit"; accountId: string; amount: number };
+/** 仕訳の行。科目は名前で持ち、事業体ごとの ID に引き直す（`withAccountIds`） */
+type Line = { side: "debit" | "credit"; account: string; amount: number };
+
+// 普通預金の残高 3,000,000 円（元入金と対）から始める
+const OPENING_BALANCES = [
+  { account: "普通預金", side: "debit", amount: 3_000_000 },
+  { account: "元入金", side: "credit", amount: 3_000_000 },
+] as const;
 
 // TREBUCHET_DATA_DIR を設定してから app を読み込む
 const tmp = useTempDataDir("bench");
@@ -38,71 +47,20 @@ await runBench(
     const { app } = await import("../apps/server/src/app.ts");
 
     // 認証（Host → CSRF → セッション）を通すためのヘッダー
-    const authHeaders = await createBenchHeaders();
-
-    async function call(method: string, path: string, body?: unknown): Promise<Response> {
-      const init: RequestInit =
-        body === undefined
-          ? { method, headers: authHeaders }
-          : {
-              method,
-              headers: { ...authHeaders, "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-            };
-      return app.request(`/api${path}`, init);
-    }
-
-    async function json<T>(res: Response, expected: number, what: string): Promise<T> {
-      if (res.status !== expected) {
-        throw new Error(`${what} が失敗しました: ${res.status} ${await res.text()}`);
-      }
-      return (await res.json()) as T;
-    }
+    const client = createBenchClient(app, await createBenchHeaders());
+    const { call, json } = client;
 
     // 事業体（会計期間と勘定科目の初期セットは作成時に用意される）
-    const { entity } = await json<{ entity: { id: string } }>(
-      await call("POST", "/entities", {
-        name: "ベンチマーク",
-        kind: "individual",
-        fiscalStartMonth: 1,
-        firstFiscalYear: FISCAL_YEAR,
-      }),
-      201,
-      "事業体の作成",
-    );
-    const base = `/entities/${entity.id}`;
-
-    const { accounts } = await json<{ accounts: { id: string; name: string }[] }>(
-      await call("GET", `${base}/accounts`),
-      200,
-      "勘定科目の取得",
-    );
-    const ids = new Map(accounts.map((a) => [a.name, a.id]));
-    const acc = (name: string): string => {
-      const id = ids.get(name);
-      if (id === undefined) throw new Error(`科目がありません: ${name}`);
-      return id;
-    };
-
-    await json(
-      await call("PUT", `${base}/fiscal-periods/${FISCAL_YEAR}/opening-balances`, [
-        { accountId: acc("普通預金"), side: "debit", amount: 3_000_000 },
-        { accountId: acc("元入金"), side: "credit", amount: 3_000_000 },
-      ]),
-      200,
-      "期首残高の登録",
-    );
-
-    const debit = (name: string, amount: number): Line => ({
-      side: "debit",
-      accountId: acc(name),
-      amount,
+    const { base, acc } = await createEntityViaApi(client, {
+      name: "ベンチマーク",
+      firstFiscalYear: FISCAL_YEAR,
+      openingBalances: OPENING_BALANCES,
     });
-    const credit = (name: string, amount: number): Line => ({
-      side: "credit",
-      accountId: acc(name),
-      amount,
-    });
+
+    const debit = (account: string, amount: number): Line => ({ side: "debit", account, amount });
+    const credit = (account: string, amount: number): Line => ({ side: "credit", account, amount });
+    const withAccountIds = (lines: Line[], accountId: (name: string) => string) =>
+      lines.map((l) => ({ side: l.side, accountId: accountId(l.account), amount: l.amount }));
 
     /** 2 行と 4 行を交互にして平均 3 行にする。金額は件ごとに変える（重複の警告を避ける） */
     function linesOf(i: number): Line[] {
@@ -141,7 +99,10 @@ await runBench(
       const lines = linesOf(i);
       lineCount += lines.length;
       await json(
-        await call("POST", `${base}/journals`, { date: dateOf(i), lines }),
+        await call("POST", `${base}/journals`, {
+          date: dateOf(i),
+          lines: withAccountIds(lines, acc),
+        }),
         201,
         `仕訳 ${i + 1} の登録`,
       );
@@ -175,18 +136,17 @@ await runBench(
 
     const rows = [];
     for (const target of targets) {
-      await measure(target.path); // ウォームアップ
-      const times: number[] = [];
-      for (let i = 0; i < RUNS; i++) times.push(await measure(target.path));
-      times.sort((a, b) => a - b);
-      const median = times[Math.floor(times.length / 2)] ?? Number.NaN;
-      const max = times[times.length - 1] ?? Number.NaN;
+      const { median, max, result } = await measureStats(
+        () => measure(target.path),
+        RUNS,
+        LIMIT_MS,
+      );
       rows.push({
         report: target.name,
         format: target.format,
-        "median (ms)": Number(median.toFixed(1)),
-        "max (ms)": Number(max.toFixed(1)),
-        result: max <= LIMIT_MS ? "OK" : "NG",
+        "median (ms)": median,
+        "max (ms)": max,
+        result,
       });
     }
     console.table(rows);
@@ -210,48 +170,17 @@ await runBench(
     async function createBlueEntity(
       name: string,
     ): Promise<{ blueBase: string; blueAcc: (name: string) => string }> {
-      const { entity: blueEntity } = await json<{ entity: { id: string } }>(
-        await call("POST", "/entities", {
-          name,
-          kind: "individual",
-          fiscalStartMonth: 1,
-          firstFiscalYear: FISCAL_YEAR,
-        }),
-        201,
-        "決算書用の事業体の作成",
-      );
-      const blueBase = `/entities/${blueEntity.id}`;
-      const blueAccounts = await json<{ accounts: { id: string; name: string }[] }>(
-        await call("GET", `${blueBase}/accounts`),
-        200,
-        "勘定科目の取得（決算書用）",
-      );
-      const blueIds = new Map(blueAccounts.accounts.map((a) => [a.name, a.id]));
-      const blueAcc = (accountName: string): string => {
-        const id = blueIds.get(accountName);
-        if (id === undefined) throw new Error(`科目がありません: ${accountName}`);
-        return id;
-      };
-      await json(
-        await call("PUT", `${blueBase}/fiscal-periods/${FISCAL_YEAR}/opening-balances`, [
-          { accountId: blueAcc("普通預金"), side: "debit", amount: 3_000_000 },
-          { accountId: blueAcc("元入金"), side: "credit", amount: 3_000_000 },
-        ]),
-        200,
-        "期首残高の登録（決算書用）",
-      );
-      // linesOf は acc() で科目を引くため、決算書用の事業体の科目 ID に置き換えて組み立てる
-      const blueLines = (i: number): Line[] =>
-        linesOf(i).map((l) => {
-          const accountName = [...ids].find(([, id]) => id === l.accountId)?.[0];
-          if (accountName === undefined) throw new Error("科目の名前を引けません");
-          return { ...l, accountId: blueAcc(accountName) };
-        });
+      const { base: blueBase, acc: blueAcc } = await createEntityViaApi(client, {
+        name,
+        firstFiscalYear: FISCAL_YEAR,
+        openingBalances: OPENING_BALANCES,
+        label: "決算書用",
+      });
       for (let i = 0; i < BLUE_JOURNALS; i++) {
         await json(
           await call("POST", `${blueBase}/journals`, {
             date: dateOf(i, BLUE_JOURNALS),
-            lines: blueLines(i),
+            lines: withAccountIds(linesOf(i), blueAcc),
           }),
           201,
           `仕訳 ${i + 1} の登録（決算書用）`,
@@ -310,18 +239,8 @@ await runBench(
     ];
     const blueRows = [];
     for (const [name, run] of blueTargets) {
-      await run(); // ウォームアップ
-      const times: number[] = [];
-      for (let i = 0; i < RUNS; i++) times.push(await run());
-      times.sort((a, b) => a - b);
-      const median = times[Math.floor(times.length / 2)] ?? Number.NaN;
-      const max = times[times.length - 1] ?? Number.NaN;
-      blueRows.push({
-        target: name,
-        "median (ms)": Number(median.toFixed(1)),
-        "max (ms)": Number(max.toFixed(1)),
-        result: max <= BLUE_LIMIT_MS ? "OK" : "NG",
-      });
+      const { median, max, result } = await measureStats(run, RUNS, BLUE_LIMIT_MS);
+      blueRows.push({ target: name, "median (ms)": median, "max (ms)": max, result });
     }
     console.log(`決算書: 仕訳 ${BLUE_JOURNALS} 件の帳簿（${FISCAL_YEAR} 年度）`);
     console.table(blueRows);
@@ -340,25 +259,20 @@ await runBench(
     // （GET /home: 今日やること・今期の数字）が 2 秒以内。
     const HOME_LIMIT_MS = positiveNumber("BENCH_HOME_LIMIT_MS", 2_000);
     const homePath = `${blueBase}/home`;
-    await measure(homePath); // ウォームアップ
-    const homeTimes: number[] = [];
-    for (let i = 0; i < RUNS; i++) homeTimes.push(await measure(homePath));
-    homeTimes.sort((a, b) => a - b);
-    const homeMedian = homeTimes[Math.floor(homeTimes.length / 2)] ?? Number.NaN;
-    const homeMax = homeTimes[homeTimes.length - 1] ?? Number.NaN;
+    const home = await measureStats(() => measure(homePath), RUNS, HOME_LIMIT_MS);
     console.log(`ホーム: 仕訳 ${BLUE_JOURNALS} 件の帳簿（${FISCAL_YEAR} 年度）`);
     console.table([
       {
         target: "GET /home",
-        "median (ms)": Number(homeMedian.toFixed(1)),
-        "max (ms)": Number(homeMax.toFixed(1)),
-        result: homeMax <= HOME_LIMIT_MS ? "OK" : "NG",
+        "median (ms)": home.median,
+        "max (ms)": home.max,
+        result: home.result,
       },
     ]);
     let sc003Ok = false;
-    if (homeMax > HOME_LIMIT_MS) {
+    if (home.result === "NG") {
       console.error(
-        `SC-003（011）を満たしません: GET /home が ${HOME_LIMIT_MS} ms を超えました（最大 ${homeMax.toFixed(1)} ms）`,
+        `SC-003（011）を満たしません: GET /home が ${HOME_LIMIT_MS} ms を超えました（最大 ${home.max.toFixed(1)} ms）`,
       );
     } else {
       console.log(`SC-003（011）OK: ホームが ${HOME_LIMIT_MS} ms 以内（${RUNS} 回の最大値）`);
@@ -505,18 +419,8 @@ await runBench(
     ];
     const assetRows = [];
     for (const [name, run] of assetTargets) {
-      await run(); // ウォームアップ
-      const times: number[] = [];
-      for (let i = 0; i < RUNS; i++) times.push(await run());
-      times.sort((a, b) => a - b);
-      const median = times[Math.floor(times.length / 2)] ?? Number.NaN;
-      const max = times[times.length - 1] ?? Number.NaN;
-      assetRows.push({
-        target: name,
-        "median (ms)": Number(median.toFixed(1)),
-        "max (ms)": Number(max.toFixed(1)),
-        result: max <= ASSET_LIMIT_MS ? "OK" : "NG",
-      });
+      const { median, max, result } = await measureStats(run, RUNS, ASSET_LIMIT_MS);
+      assetRows.push({ target: name, "median (ms)": median, "max (ms)": max, result });
     }
     console.log(`償却資産: 資産 ${ASSET_COUNT} 件と開業費 1 件（${FISCAL_YEAR} 年度）`);
     console.table(assetRows);
@@ -537,23 +441,17 @@ await runBench(
     const RECEIPT_COUNT = 5_000;
     const RECEIPT_QUERIES = 10;
     const RECEIPT_LIMIT_MS = positiveNumber("BENCH_RECEIPT_LIMIT_MS", 1_000);
-    const { entity: receiptEntity } = await json<{ entity: { id: string } }>(
-      await call("POST", "/entities", {
-        name: "ベンチマーク（証憑）",
-        kind: "individual",
-        fiscalStartMonth: 1,
-        firstFiscalYear: FISCAL_YEAR,
-      }),
-      201,
-      "証憑用の事業体の作成",
-    );
-    const receiptBase = `/entities/${receiptEntity.id}`;
+    const { id: receiptEntityId, base: receiptBase } = await createEntityViaApi(client, {
+      name: "ベンチマーク（証憑）",
+      firstFiscalYear: FISCAL_YEAR,
+      label: "証憑用",
+    });
     const partnerNames = Array.from(
       { length: 100 },
       (_, i) => `ベンチ商店${String(i).padStart(3, "0")}`,
     );
     const receiptSetupStart = performance.now();
-    const receiptUow = createReceiptUnitOfWork(openTenant(receiptEntity.id));
+    const receiptUow = createReceiptUnitOfWork(openTenant(receiptEntityId));
     const receiptResult = receiptUow.run((tx) => {
       for (let i = 0; i < RECEIPT_COUNT; i++) {
         const at = new Date(Date.UTC(FISCAL_YEAR, 0, 1, 0, 0, 0) + i * 60_000).toISOString();

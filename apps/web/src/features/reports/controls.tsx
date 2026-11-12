@@ -2,10 +2,12 @@ import { Link } from "@tanstack/react-router";
 import type { JournalBookOrder, JournalBookSort } from "@trebuchet/schema";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { CsvExport } from "@/components/ui/csv-export";
 import { Input, NativeSelect } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { FiscalPeriod } from "@/features/periods/api";
 import { presetRange, RANGE_PRESETS } from "@/lib/dates";
+import { type ReportKind, reportCsvUrl } from "./api";
 import type { DateRange } from "./periods";
 
 type PeriodPickerProps = {
@@ -185,7 +187,7 @@ function FiscalPeriodSelect({
   );
 }
 
-/** 前年比較の切替（FR-030） */
+/** 前年比較の切替（001/FR-030） */
 export function CompareToggle({
   checked,
   onChange,
@@ -206,7 +208,7 @@ export function CompareToggle({
   );
 }
 
-/** 前年の値が 0 である理由と、前年の仕訳を取り込む入口への案内（FR-041）。比較の欄の近くに置く */
+/** 前年の値が 0 である理由と、前年の仕訳を取り込む入口への案内（011/FR-041）。比較の欄の近くに置く */
 export function PreviousYearNotice({ entityId, reason }: { entityId: string; reason: string }) {
   return (
     <div
@@ -230,7 +232,7 @@ export function PreviousYearNotice({ entityId, reason }: { entityId: string; rea
 const SORT_LABELS: Record<JournalBookSort, string> = { date: "取引日", created: "登録日" };
 const ORDER_LABELS: Record<JournalBookOrder, string> = { asc: "昇順", desc: "降順" };
 
-/** 仕訳帳の並べ替え（FR-038）: 取引日・登録日 × 昇順・降順 */
+/** 仕訳帳の並べ替え（011/FR-038）: 取引日・登録日 × 昇順・降順 */
 export function JournalBookSortControls({
   sort,
   order,
@@ -277,14 +279,7 @@ export function JournalBookSortControls({
   );
 }
 
-export type ReportKind =
-  | "journal-book"
-  | "general-ledger"
-  | "trial-balance"
-  | "profit-and-loss"
-  | "balance-sheet";
-
-/** 表示中と同じ条件の CSV のダウンロード（FR-032）。params のキーの順にクエリ文字列にする */
+/** 表示中と同じ条件の CSV のダウンロード（001/FR-032） */
 export function CsvLink({
   entityId,
   kind,
@@ -294,18 +289,5 @@ export function CsvLink({
   kind: ReportKind;
   params: Record<string, string | undefined>;
 }) {
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) query.set(key, value);
-  }
-  query.set("format", "csv");
-  return (
-    <a
-      href={`/api/entities/${entityId}/reports/${kind}?${query}`}
-      download
-      className="inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium shadow-xs hover:bg-muted"
-    >
-      CSV をダウンロード
-    </a>
-  );
+  return <CsvExport href={reportCsvUrl(entityId, kind, params)} />;
 }

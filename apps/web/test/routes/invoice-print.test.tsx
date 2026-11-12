@@ -4,11 +4,11 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route } from "@/routes/e/$entityId/invoices/$invoiceId";
+import { advance, useFakeClock } from "../fake-timers";
+import { ENTITY as BASE } from "../fixtures";
 import { INVOICE_DETAIL } from "../invoicing-fixtures";
 import { mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
-
-const BASE = "/api/entities/e1";
 
 function renderDetail(detail: unknown = INVOICE_DETAIL, demo = false) {
   mockApi({
@@ -34,6 +34,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -128,6 +129,7 @@ describe("請求書の印刷（詳細の画面から直接。US1 FR-011・012、
   });
 
   it("demo の事業体の請求書には、印刷にも「デモ（架空のデータ）」を出す。通常の事業体では出さない（014 T007）", async () => {
+    useFakeClock();
     const { unmount } = renderDetail(INVOICE_DETAIL, true);
     const sheet = await findSheet();
     expect(await within(sheet).findByText("デモ（架空のデータ）")).toBeInTheDocument();
@@ -141,7 +143,7 @@ describe("請求書の印刷（詳細の画面から直接。US1 FR-011・012、
         true,
       ),
     );
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await advance(100);
     expect(within(normal).queryByText("デモ（架空のデータ）")).not.toBeInTheDocument();
   });
 

@@ -1,12 +1,12 @@
 import type { Candidate, Purpose, StatementAccount, StatementStatus } from "@trebuchet/schema";
 import { addDays, daysBetween } from "../dates.ts";
-import type { LedgerRepository, StatementUnitOfWork } from "../ports.ts";
+import type { JournalChainRef, LedgerRepository, StatementUnitOfWork } from "../ports.ts";
 import { journalShape, STATEMENT_ACCOUNT_CODES } from "../statements/journal-shape.ts";
-import { MATCH_WINDOW_DAYS, matchExistingJournal } from "../statements/match-existing.ts";
+import { createExistingJournalMatcher, MATCH_WINDOW_DAYS } from "../statements/match-existing.ts";
 import { ruleConfidence, ruleFor } from "../statements/rules.ts";
 import { statementStatus } from "../statements/status.ts";
 import {
-  findTransferPair,
+  createTransferPairFinder,
   inferUnpairedTransfer,
   transferConfidence,
   transferJournal,
@@ -36,42 +36,67 @@ export type StatementState = {
   activeLinks: StatementLinkRecord[];
 };
 
-/** 結びつきの仕訳とその訂正の連鎖（`statementStatus` の入力。INV-44） */
-function journalChain(
+/**
+ * 結びつきの仕訳とその訂正の連鎖（`statementStatus` の入力。INV-44）を引く関数。連鎖は `rootIds` の分を
+ * `correctionChains` で 1 回に読み、仕訳ごとの連鎖（その仕訳から訂正をたどった先）はメモリでたどる
+ */
+function journalChains(
   ledger: LedgerRepository,
-  rootId: string,
-  cache: Map<string, Journal[]>,
-): Journal[] {
-  const cached = cache.get(rootId);
-  if (cached !== undefined) return cached;
-  const chain: Journal[] = [];
-  const seen = new Set<string>();
-  const stack = [rootId];
-  for (let id = stack.pop(); id !== undefined; id = stack.pop()) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const journal = ledger.getJournal(id);
-    if (journal === undefined) continue;
-    chain.push(journal);
-    for (const c of ledger.correctingJournalsOf(id)) stack.push(c.id);
+  rootIds: readonly string[],
+): (rootId: string) => JournalChainRef[] {
+  const refs = ledger.correctionChains(rootIds);
+  const byId = new Map(refs.map((r) => [r.id, r]));
+  const correctedBy = new Map<string, string[]>();
+  for (const r of refs) {
+    if (r.correctsJournalId === null) continue;
+    const list = correctedBy.get(r.correctsJournalId) ?? [];
+    list.push(r.id);
+    correctedBy.set(r.correctsJournalId, list);
   }
-  cache.set(rootId, chain);
-  return chain;
+  const cache = new Map<string, JournalChainRef[]>();
+  return (rootId) => {
+    const cached = cache.get(rootId);
+    if (cached !== undefined) return cached;
+    const chain: JournalChainRef[] = [];
+    const seen = new Set<string>();
+    const stack = [rootId];
+    for (let id = stack.pop(); id !== undefined; id = stack.pop()) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const journal = byId.get(id);
+      if (journal === undefined) continue;
+      chain.push(journal);
+      stack.push(...(correctedBy.get(id) ?? []));
+    }
+    cache.set(rootId, chain);
+    return chain;
+  };
 }
 
-/** すべての明細の状態（R15）を導く。保存した状態は持たない */
-export function loadStatementStates(tx: StatementTx): StatementState[] {
+/**
+ * 明細の状態（R15）を導く。保存した状態は持たない。`ids` を渡すとその明細だけ（並びは取り込んだ順のまま。
+ * 知らない ID は無視する）。仕訳の連鎖は対象の明細の有効な結びつきの分だけを一括で読む
+ */
+export function loadStatementStates(
+  tx: StatementTx,
+  ids?: ReadonlySet<string> | undefined,
+): StatementState[] {
+  const records = tx.statements
+    .listStatements()
+    .filter((record) => ids === undefined || ids.has(record.id));
   const activeByStatement = new Map<string, StatementLinkRecord[]>();
   for (const l of tx.statements.listStatementLinks()) {
-    if (l.revokedAt !== null) continue;
+    if (l.revokedAt !== null || (ids !== undefined && !ids.has(l.statementId))) continue;
     const list = activeByStatement.get(l.statementId) ?? [];
     list.push(l);
     activeByStatement.set(l.statementId, list);
   }
-  const cache = new Map<string, Journal[]>();
-  return tx.statements.listStatements().map((record) => {
+  const rootIds = new Set<string>();
+  for (const links of activeByStatement.values()) for (const l of links) rootIds.add(l.journalId);
+  const chainOf = journalChains(tx.ledger, [...rootIds]);
+  return records.map((record) => {
     const activeLinks = activeByStatement.get(record.id) ?? [];
-    const journals = activeLinks.flatMap((l) => journalChain(tx.ledger, l.journalId, cache));
+    const journals = activeLinks.flatMap((l) => chainOf(l.journalId));
     return { record, activeLinks, status: statementStatus(record, activeLinks, journals) };
   });
 }
@@ -158,6 +183,9 @@ export function buildCandidatesInTx(
   const journalNoOf = new Map(journals.map((j) => [j.id, j.journalNo]));
   const claimedLines = new Set(states.flatMap((s) => s.activeLinks.map((l) => l.journalLineId)));
   const claimed = new Set<string>();
+  // 明細ごとに全件を走査しない: 仕訳は行の内容で、振替の対の候補は金額で索引にし、対にした明細は `claimed` で後から除く
+  const matchJournal = createExistingJournalMatcher(journals);
+  const findPair = createTransferPairFinder(unprocessed);
   const ledgerAccounts = tx.masters.listAccounts();
   const rules = tx.statements.listInferenceRules();
 
@@ -177,7 +205,7 @@ export function buildCandidatesInTx(
     const account = accounts.get(record.statementAccountId) as StatementAccount;
 
     // 1. 既存の仕訳
-    const match = matchExistingJournal(record, account, journals, claimedLines);
+    const match = matchJournal(record, account, claimedLines);
     if (match !== undefined) {
       claimedLines.add(match.lineId);
       write(record.id, {
@@ -193,8 +221,7 @@ export function buildCandidatesInTx(
     }
 
     // 2. 振替の対
-    const pool = unprocessed.filter((r) => r.amount !== 0 && !claimed.has(r.id));
-    const pair = findTransferPair(record, pool);
+    const pair = findPair(record, claimed);
     if (pair !== undefined) {
       const pairAccount = accounts.get(pair.statementAccountId) as StatementAccount;
       const [mine, theirs] = pairBodies(record, account, pair, pairAccount, ledgerAccounts);

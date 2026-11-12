@@ -1,6 +1,6 @@
-import { MASTER_NAME_MAX, TAG_NAME_MAX } from "@trebuchet/schema";
+import { ALLOWED_SECTIONS, MASTER_NAME_MAX, TAG_NAME_MAX } from "@trebuchet/schema";
 import { type AuditInput, auditEntry } from "../audit.ts";
-import { addDays, oneYearEnd } from "../dates.ts";
+import { addDays, oneYearEnd, yearOfDate } from "../dates.ts";
 import { type OpeningBalanceDraft, validateOpeningBalances } from "../opening.ts";
 import type {
   Clock,
@@ -16,8 +16,10 @@ import {
   type AccountCategory,
   type AuditAction,
   type AuditTargetType,
+  accountNotFoundError,
   type DomainError,
   domainError,
+  entityNotFoundError,
   err,
   type FiscalPeriod,
   type Honorific,
@@ -30,6 +32,7 @@ import {
   type SubAccount,
   type Tag,
   type TaxSetting,
+  validation,
 } from "../types.ts";
 
 /** マスタのユースケースの依存。repo は1つのテナントの DB */
@@ -39,6 +42,15 @@ export type MasterDeps = {
   clock: Clock;
 };
 
+/** 年度の会計期間。なければ `periodNotFound`（VALIDATION「会計期間が見つかりません」） */
+export function requirePeriod(
+  repo: Pick<MasterRepository, "getFiscalPeriodByYear">,
+  fiscalYear: number,
+): Result<FiscalPeriod> {
+  const period = repo.getFiscalPeriodByYear(fiscalYear);
+  return period === undefined ? err(periodNotFound(fiscalYear)) : ok(period);
+}
+
 function validName(
   raw: string,
   field: string,
@@ -46,13 +58,12 @@ function validName(
 ): { ok: true; value: string } | { ok: false; error: DomainError } {
   const name = raw.trim();
   if (name.length === 0 || name.length > max) {
-    return err(domainError("VALIDATION", `名称は 1〜${max} 文字で入力してください`, { field }));
+    return validation(`名称は 1〜${max} 文字で入力してください`, { field });
   }
   return ok(name);
 }
 
-const accountNotFound = (accountId: string) =>
-  err(domainError("ACCOUNT_NOT_FOUND", "勘定科目が見つかりません", { accountId }));
+const accountNotFound = (accountId: string) => err(accountNotFoundError(accountId));
 
 /** 最初からある科目（isSystem）の名前の変更・削除の拒否（FR-047、INV-70） */
 const systemAccountProtected = (accountId: string, operation: string) =>
@@ -84,20 +95,11 @@ const CODE_PREFIX: Record<AccountCategory, number> = {
   expense: 5,
 };
 
-/** 区分ごとに使える決算書の区分 */
-const ALLOWED_SECTIONS: Record<AccountCategory, readonly ReportSection[]> = {
-  asset: ["BS_ASSET"],
-  liability: ["BS_LIABILITY"],
-  equity: ["BS_EQUITY", "BS_ASSET"],
-  revenue: ["PL_SALES", "PL_OTHER"],
-  expense: ["PL_COGS", "PL_EXPENSE", "PL_OTHER"],
-};
-
 /**
  * 利用者が追加する科目のコード。区分の先頭の桁（4桁）のうち、使われている最大の番号の次。
  * 区分の番号を使い切ったら undefined。
  */
-export function nextAccountCode(
+function nextAccountCode(
   category: AccountCategory,
   accounts: readonly Pick<Account, "code">[],
 ): string | undefined {
@@ -141,32 +143,26 @@ export function addAccount(deps: MasterDeps, draft: AccountDraft): Result<Accoun
   const name = validName(draft.name, "name");
   if (!name.ok) return name;
   if (!ALLOWED_SECTIONS[draft.category].includes(draft.reportSection)) {
-    return err(
-      domainError("VALIDATION", "科目の区分と決算書の区分が合いません", {
-        category: draft.category,
-        reportSection: draft.reportSection,
-      }),
-    );
+    return validation("科目の区分と決算書の区分が合いません", {
+      category: draft.category,
+      reportSection: draft.reportSection,
+    });
   }
   const reportLine = draft.reportLine ?? null;
   if (reportLine !== null && (!Number.isInteger(reportLine) || reportLine < 1 || reportLine > 45)) {
-    return err(
-      domainError("VALIDATION", "決算書の欄番号は 1〜45 で入力してください", { reportLine }),
-    );
+    return validation("決算書の欄番号は 1〜45 で入力してください", { reportLine });
   }
 
   return deps.repo.transaction((tx) => {
     const accounts = tx.listAccounts();
     if (accounts.some((a) => a.name === name.value)) {
-      return err(domainError("VALIDATION", "同じ名前の科目があります", { name: name.value }));
+      return validation("同じ名前の科目があります", { name: name.value });
     }
     const code = nextAccountCode(draft.category, accounts);
     if (code === undefined) {
-      return err(
-        domainError("VALIDATION", "この区分に追加できる科目の数の上限に達しました", {
-          category: draft.category,
-        }),
-      );
+      return validation("この区分に追加できる科目の数の上限に達しました", {
+        category: draft.category,
+      });
     }
     const account: Account = {
       id: deps.ids.next(),
@@ -199,7 +195,7 @@ export function renameAccount(
     if (account.name === name.value) return ok(account);
     if (account.isSystem) return systemAccountProtected(accountId, "名前を変更");
     if (tx.listAccounts().some((a) => a.id !== accountId && a.name === name.value)) {
-      return err(domainError("VALIDATION", "同じ名前の科目があります", { name: name.value }));
+      return validation("同じ名前の科目があります", { name: name.value });
     }
     const updated = { ...account, name: name.value };
     tx.updateAccount(updated);
@@ -363,12 +359,10 @@ export function addSubAccount(
   return deps.repo.transaction((tx) => {
     if (tx.getAccount(accountId) === undefined) return accountNotFound(accountId);
     if (tx.listSubAccounts(accountId).some((s) => s.name === name.value)) {
-      return err(
-        domainError("VALIDATION", "この科目に同じ名前の補助科目があります", {
-          accountId,
-          name: name.value,
-        }),
-      );
+      return validation("この科目に同じ名前の補助科目があります", {
+        accountId,
+        name: name.value,
+      });
     }
     const sub: SubAccount = { id: deps.ids.next(), accountId, name: name.value, isActive: true };
     tx.insertSubAccount(sub);
@@ -401,10 +395,10 @@ export function writePartner(
   const partners = tx.listPartners();
   const current = partnerId === undefined ? undefined : partners.find((p) => p.id === partnerId);
   if (partnerId !== undefined && current === undefined) {
-    return err(domainError("VALIDATION", "取引先が見つかりません", { partnerId }));
+    return validation("取引先が見つかりません", { partnerId });
   }
   if (partners.some((p) => p.id !== partnerId && p.name === name.value)) {
-    return err(domainError("VALIDATION", "同じ名前の取引先があります", { name: name.value }));
+    return validation("同じ名前の取引先があります", { name: name.value });
   }
   const partner: Partner = {
     id: current?.id ?? ids.next(),
@@ -432,7 +426,7 @@ export function addTag(deps: MasterDeps, rawName: string): Result<Tag> {
   if (!name.ok) return name;
   return deps.repo.transaction((tx) => {
     if (tx.listTags().some((t) => t.name === name.value)) {
-      return err(domainError("VALIDATION", "同じ名前のタグがあります", { name: name.value }));
+      return validation("同じ名前のタグがあります", { name: name.value });
     }
     const tag: Tag = { id: deps.ids.next(), name: name.value };
     tx.insertTag(tag);
@@ -453,11 +447,11 @@ export function replaceTaxSettings(
   return deps.repo.transaction((tx) => {
     const profile = tx.getProfile();
     if (profile === undefined) {
-      return err(domainError("ENTITY_NOT_FOUND", "事業体が見つかりません"));
+      return err(entityNotFoundError());
     }
     const firstPeriod = tx.listFiscalPeriods()[0];
     if (firstPeriod === undefined) {
-      return err(domainError("VALIDATION", "会計期間がありません"));
+      return validation("会計期間がありません");
     }
     const validated = validateTaxSettings(drafts, firstPeriod.startDate);
     if (!validated.ok) return validated;
@@ -487,12 +481,12 @@ export function createNextFiscalPeriod(deps: MasterDeps): Result<FiscalPeriod> {
   return deps.repo.transaction((tx) => {
     const last = tx.listFiscalPeriods().at(-1);
     if (last === undefined) {
-      return err(domainError("VALIDATION", "最初の会計期間がありません"));
+      return validation("最初の会計期間がありません");
     }
     const startDate = addDays(last.endDate, 1);
     const period: FiscalPeriod = {
       id: deps.ids.next(),
-      fiscalYear: Number(startDate.slice(0, 4)),
+      fiscalYear: yearOfDate(startDate),
       startDate,
       endDate: oneYearEnd(startDate),
       status: "open",
@@ -516,10 +510,9 @@ export function replaceOpeningBalances(
 ): Result<OpeningBalance[]> {
   const validated = validateOpeningBalances(rows);
   return deps.repo.transaction((tx) => {
-    const period = tx.getFiscalPeriodByYear(fiscalYear);
-    if (period === undefined) {
-      return err(periodNotFound(fiscalYear));
-    }
+    const found = requirePeriod(tx, fiscalYear);
+    if (!found.ok) return found;
+    const period = found.value;
     if (period.status === "closed") {
       return err(
         domainError("PERIOD_CLOSED", "締め済みの会計期間の期首残高は変更できません", {
@@ -536,12 +529,10 @@ export function replaceOpeningBalances(
         row.subAccountId !== null &&
         !subAccounts.some((s) => s.id === row.subAccountId && s.accountId === row.accountId)
       ) {
-        return err(
-          domainError("VALIDATION", "補助科目がその科目に属していません", {
-            accountId: row.accountId,
-            subAccountId: row.subAccountId,
-          }),
-        );
+        return validation("補助科目がその科目に属していません", {
+          accountId: row.accountId,
+          subAccountId: row.subAccountId,
+        });
       }
     }
 

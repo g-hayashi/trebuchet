@@ -1,4 +1,3 @@
-import { randomUUIDv7 } from "node:crypto";
 import {
   createJournal,
   deleteJournalDraft,
@@ -21,14 +20,22 @@ import { DrizzleJournalDraftStore } from "../src/journal-draft-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { openTenant } from "../src/tenant-store.ts";
-import { createTestEntity, NOW, type TempDataDir, TODAY, useTempDataDir } from "../src/testing.ts";
+import {
+  createTestEntity,
+  NOW,
+  type TempDataDir,
+  TODAY,
+  testClock,
+  testIds,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 let tmp: TempDataDir;
 beforeEach(() => {
   tmp = useTempDataDir("draft-repo");
 });
 afterEach(() => tmp.cleanup());
-const clock = { now: () => NOW };
+const clock = testClock();
 const draft = {
   mode: "detailed" as const,
   date: "2026-",
@@ -103,9 +110,7 @@ it("INV-69 任意の仕訳と下書き操作列で仕訳・監査・帳票・ホ
       fc.array(fc.option(journalDraftArb, { nil: null }), { maxLength: 10 }),
       (journals, ops) => {
         for (const j of journals)
-          expect(
-            createJournal({ ledger, masters, clock, ids: { next: () => randomUUIDv7() } }, j).ok,
-          ).toBe(true);
+          expect(createJournal({ ledger, masters, clock, ids: testIds() }, j).ok).toBe(true);
         const before = snapshot();
         if (before.figures.status !== "ok" || before.figures.value === null)
           throw new Error("figures");

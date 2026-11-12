@@ -8,10 +8,11 @@ import type {
   ReportCompare,
   TrialBalance,
 } from "@trebuchet/schema";
+import { addMonthsToDate } from "../dates.ts";
 import type { MasterRepository, ReportRepository } from "../ports.ts";
 import { buildBalanceSheet, compareBalanceSheet } from "../reports/balance-sheet.ts";
 import { computeBalances } from "../reports/balances.ts";
-import { isActive, shiftYears } from "../reports/common.ts";
+import { isActive } from "../reports/common.ts";
 import { buildGeneralLedger } from "../reports/general-ledger.ts";
 import { buildJournalBook } from "../reports/journal-book.ts";
 import { buildProfitAndLoss, compareProfitAndLoss } from "../reports/profit-and-loss.ts";
@@ -19,14 +20,17 @@ import { buildTrialBalance } from "../reports/trial-balance.ts";
 import { detectWarnings } from "../reports/warnings.ts";
 import {
   type Account,
+  accountNotFoundError,
   type DomainWarning,
   domainError,
   err,
   type FiscalPeriod,
+  findPeriodByDate,
   type OpeningBalance,
   ok,
   type PostedLine,
   type Result,
+  validation,
 } from "../types.ts";
 
 export type ReportDeps = { masters: MasterRepository; reports: ReportRepository };
@@ -41,23 +45,18 @@ export type JournalBookParams = ReportRange & {
   order?: JournalBookOrder | undefined;
 };
 
-const periodOf = (date: string, periods: readonly FiscalPeriod[]) =>
-  periods.find((p) => p.startDate <= date && date <= p.endDate);
-
 const outOfPeriod = (date: string) =>
   err(domainError("OUT_OF_PERIOD", "会計期間が登録されていない日付です", { date }));
 
 /** 期間を含む会計期間（from〜to が 1 つの会計期間に収まること） */
 function resolvePeriod(deps: ReportDeps, range: ReportRange): Result<FiscalPeriod> {
-  const period = periodOf(range.from, deps.masters.listFiscalPeriods());
+  const period = findPeriodByDate(deps.masters.listFiscalPeriods(), range.from);
   if (period === undefined) return outOfPeriod(range.from);
   if (range.to > period.endDate) {
-    return err(
-      domainError("VALIDATION", "期間は1つの会計期間の中で指定してください", {
-        fiscalYear: period.fiscalYear,
-        endDate: period.endDate,
-      }),
-    );
+    return validation("期間は1つの会計期間の中で指定してください", {
+      fiscalYear: period.fiscalYear,
+      endDate: period.endDate,
+    });
   }
   return ok(period);
 }
@@ -105,7 +104,7 @@ export function getJournalBook(
 ): Result<WithWarnings<JournalBook>> {
   const { sort, order, ...range } = params;
   const options = { sort, order };
-  const period = periodOf(range.to, deps.masters.listFiscalPeriods());
+  const period = findPeriodByDate(deps.masters.listFiscalPeriods(), range.to);
   if (period === undefined) {
     const book = buildJournalBook({
       ...range,
@@ -146,9 +145,7 @@ export function getGeneralLedger(
   params: GeneralLedgerParams,
 ): Result<WithWarnings<GeneralLedger>> {
   if (deps.masters.getAccount(params.accountId) === undefined) {
-    return err(
-      domainError("ACCOUNT_NOT_FOUND", "勘定科目が見つかりません", { accountId: params.accountId }),
-    );
+    return err(accountNotFoundError(params.accountId));
   }
   let subAccount: { id: string; name: string } | null = null;
   if (params.subAccountId !== undefined) {
@@ -156,12 +153,10 @@ export function getGeneralLedger(
       .listSubAccounts(params.accountId)
       .find((s) => s.id === params.subAccountId);
     if (sub === undefined) {
-      return err(
-        domainError("VALIDATION", "補助科目がその科目に属していません", {
-          accountId: params.accountId,
-          subAccountId: params.subAccountId,
-        }),
-      );
+      return validation("補助科目がその科目に属していません", {
+        accountId: params.accountId,
+        subAccountId: params.subAccountId,
+      });
     }
     subAccount = { id: sub.id, name: sub.name };
   }
@@ -192,7 +187,7 @@ export function getProfitAndLoss(
   const data = loadPeriod(deps, period.value, range.to);
   let report = buildProfitAndLoss({ ...data, ...range });
   if (params.compare === "previous-year") {
-    const previous = { from: shiftYears(range.from, -1), to: shiftYears(range.to, -1) };
+    const previous = { from: addMonthsToDate(range.from, -12), to: addMonthsToDate(range.to, -12) };
     const lines = deps.reports.linesInRange(previous.from, previous.to);
     report = {
       ...compareProfitAndLoss(
@@ -212,13 +207,13 @@ export function getBalanceSheet(
   params: { asOf: string } & StatementOptions,
 ): Result<WithWarnings<BalanceSheet>> {
   const periods = deps.masters.listFiscalPeriods();
-  const period = periodOf(params.asOf, periods);
+  const period = findPeriodByDate(periods, params.asOf);
   if (period === undefined) return outOfPeriod(params.asOf);
   const data = loadPeriod(deps, period, params.asOf);
   let report = buildBalanceSheet({ ...data, periodStart: period.startDate, asOf: params.asOf });
   if (params.compare === "previous-year") {
-    const asOf = shiftYears(params.asOf, -1);
-    const prevPeriod = periodOf(asOf, periods);
+    const asOf = addMonthsToDate(params.asOf, -12);
+    const prevPeriod = findPeriodByDate(periods, asOf);
     // 前年の会計期間がなければ、前年の値はすべて 0
     const previous =
       prevPeriod === undefined

@@ -4,10 +4,10 @@ import type { BlueReturn } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Route as YearRoute } from "@/routes/e/$entityId/blue-return/$year/index";
 import { Route as ListRoute } from "@/routes/e/$entityId/blue-return/index";
+import { ENTITY } from "../fixtures";
 import { mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
-const ENTITY = "/api/entities/e1";
 const YEAR_API = `${ENTITY}/blue-return/2025`;
 
 const NAMES: Record<number, string> = {

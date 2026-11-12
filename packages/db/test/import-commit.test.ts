@@ -1,4 +1,4 @@
-import { createHash, randomUUIDv7 } from "node:crypto";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   commitFreeeImport,
@@ -18,7 +18,13 @@ import { createImportUnitOfWork, DrizzleImportStore } from "../src/import-reposi
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  createTestEntity,
+  type TempDataDir,
+  testClock,
+  testIds,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 // T024: 取込の確定の統合テスト（テンポラリの SQLite。INV-11、INV-12、SC-005、SC-006）
 
@@ -27,8 +33,8 @@ let db: TenantDb;
 let masters: DrizzleMasterRepository;
 let ledger: DrizzleLedgerRepository;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-19T09:00:00.000Z" };
+const ids = testIds();
+const clock = testClock();
 
 const bytes = new Uint8Array(
   readFileSync(

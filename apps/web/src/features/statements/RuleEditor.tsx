@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Purpose } from "@trebuchet/schema";
 import { PURPOSES } from "@trebuchet/schema";
 import { useId, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
@@ -9,11 +10,12 @@ import { Label } from "@/components/ui/label";
 import { accountsQuery } from "@/features/accounts/api";
 import { taxCategoriesQuery } from "@/features/entities/api";
 import { partnersQuery } from "@/features/masters/api";
+import { RULE_DESCRIPTION_MAX } from "@/lib/limits";
 import { patchRule, type RuleView } from "./api";
 import { PURPOSE_LABELS } from "./labels";
 
 /**
- * ルールの編集（H:§5.3、FR-024）: 相手の科目・税区分・判定・取引先・摘要を直す。
+ * ルールの編集（H:§5.3、006/FR-024）: 相手の科目・税区分・判定・取引先・摘要を直す。
  * 適用の回数と修正の回数は直せない。補助科目は、科目を変えると外れる（サーバーの規則）
  */
 export function RuleEditor({
@@ -61,7 +63,7 @@ export function RuleEditor({
         </Button>
       </div>
       <ApiErrorMessage error={loadError} />
-      {!ready && !loadError && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {!ready && !loadError && <Loading />}
       {ready && (
         <form
           noValidate
@@ -136,7 +138,7 @@ export function RuleEditor({
               <Label htmlFor={`${id}-description`}>摘要</Label>
               <Input
                 id={`${id}-description`}
-                maxLength={500}
+                maxLength={RULE_DESCRIPTION_MAX}
                 autoComplete="off"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}

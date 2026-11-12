@@ -1,16 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type AiSettings, type AiSettingsInput, isAllowedAiBaseUrl } from "@trebuchet/schema";
 import { useId, useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -232,49 +226,32 @@ function Fields({ settings }: { settings: AiSettings }) {
         {notice && <SaveNotice message={notice} />}
       </div>
       <ApiErrorMessage error={save.error} />
-      <Dialog
+      <ConfirmDialog
         open={confirmingImages}
         onOpenChange={(next) => {
           if (!next) setConfirmingImages(false);
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>証憑の画像を外部の AI に送る</DialogTitle>
-            <DialogDescription>
-              証憑の画像はマスクできず、そのまま外部の AI
-              に送られます（明細の推定では送る情報を伏せていますが、画像はその例外です）。送るのは、読み取りを操作した証憑の画像（メタデータを除いたもの）と、科目・税区分の選択肢だけで、取引先の一覧・ほかの仕訳・口座の名前は送りません。保存するまで帳簿は変わりません。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirmingImages(false)}>
-              やめる
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                setReceiptImages(true);
-                setConfirmingImages(false);
-              }}
-            >
-              理解して有効にする
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        title="証憑の画像を外部の AI に送る"
+        description="証憑の画像はマスクできず、そのまま外部の AI に送られます（明細の推定では送る情報を伏せていますが、画像はその例外です）。送るのは、読み取りを操作した証憑の画像（メタデータを除いたもの）と、科目・税区分の選択肢だけで、取引先の一覧・ほかの仕訳・口座の名前は送りません。保存するまで帳簿は変わりません。"
+        cancelLabel="やめる"
+        confirmLabel="理解して有効にする"
+        onCancel={() => setConfirmingImages(false)}
+        onConfirm={() => {
+          setReceiptImages(true);
+          setConfirmingImages(false);
+        }}
+      />
     </form>
   );
 }
 
-/** AI の設定（H:§7。FR-027・027a）: 端末内の AI の可否と、外部の接続先・モデル・API キー。端末の設定 */
+/** AI の設定（H:§7。006/FR-027・027a）: 端末内の AI の可否と、外部の接続先・モデル・API キー。端末の設定 */
 export function AiSettingsForm() {
   const settings = useQuery(aiSettingsQuery());
   return (
     <div className="grid gap-3">
       <ApiErrorMessage error={settings.error} />
-      {settings.isPending && !settings.error && (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
-      )}
+      {settings.isPending && <Loading />}
       {settings.data && <Fields settings={settings.data} />}
     </div>
   );

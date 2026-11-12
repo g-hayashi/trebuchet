@@ -5,6 +5,7 @@ import { EntityCreate } from "@trebuchet/schema";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -38,6 +39,8 @@ import {
 } from "@/features/entities/api";
 import { lastEntityIdOf } from "@/features/entities/EntitySwitcher";
 import { thisYear } from "@/lib/dates";
+import { formatDateTime } from "@/lib/format";
+import { getStored, removeStored, storageKeys } from "@/lib/local-storage";
 
 const KIND_LABELS = { individual: "個人", corporation: "法人" } as const;
 
@@ -75,18 +78,17 @@ function EntityList() {
       // 非表示・削除した帳簿のキャッシュと最後に開いた選択を残さない。
       if (action !== "restore") {
         queryClient.removeQueries({ predicate: ({ queryKey }) => queryKey.includes(id) });
-        if (localStorage.getItem("trebuchet:lastEntityId") === id)
-          localStorage.removeItem("trebuchet:lastEntityId");
+        if (getStored(storageKeys.lastEntityId) === id) removeStored(storageKeys.lastEntityId);
       }
       setTarget(null);
       setConfirmationName("");
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: entityKeys.all }),
+        queryClient.invalidateQueries({ queryKey: entityKeys.all, exact: true }),
         queryClient.invalidateQueries({ queryKey: archivedEntitiesKey }),
       ]);
     },
   });
-  // 最後に開いた事業体を上に置き、印をつける（FR-010）
+  // 最後に開いた事業体を上に置き、印をつける（011/FR-010）
   const lastId = lastEntityIdOf(loaded);
   const entities = loaded && [
     ...loaded.filter((e) => e.id === lastId),
@@ -102,7 +104,7 @@ function EntityList() {
         <ApiErrorMessage error={error} />
         {!target && <ApiErrorMessage error={manage.error} />}
         {isPending ? (
-          <p className="text-sm text-muted-foreground">読み込み中…</p>
+          <Loading />
         ) : entities && entities.length > 0 ? (
           <Table>
             <TableHeader>
@@ -138,7 +140,7 @@ function EntityList() {
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">{KIND_LABELS[e.kind]}</TableCell>
                   <TableCell className="hidden text-muted-foreground sm:table-cell">
-                    {new Date(e.createdAt).toLocaleDateString("ja-JP")}
+                    {formatDateTime(e.createdAt)}
                   </TableCell>
                   <TableCell>
                     <Link
@@ -180,7 +182,7 @@ function EntityList() {
           <summary className="cursor-pointer font-medium">非表示の組織</summary>
           <div className="mt-4 grid gap-3">
             <ApiErrorMessage error={archived.error} />
-            {archived.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+            {archived.isPending && <Loading />}
             {archived.data?.length === 0 && (
               <p className="text-sm text-muted-foreground">非表示の組織はありません。</p>
             )}
@@ -287,7 +289,7 @@ function DemoEntityStart() {
   const create = useMutation({
     mutationFn: createDemoEntity,
     onSuccess: async (entity) => {
-      await queryClient.invalidateQueries({ queryKey: entityKeys.all });
+      await queryClient.invalidateQueries({ queryKey: entityKeys.all, exact: true });
       await navigate({ to: "/e/$entityId", params: { entityId: entity.id } });
     },
   });
@@ -327,7 +329,7 @@ function EntityCreateForm() {
   const create = useMutation({
     mutationFn: (input: EntityCreate) => createEntity(input),
     onSuccess: async (entity) => {
-      await queryClient.invalidateQueries({ queryKey: entityKeys.all });
+      await queryClient.invalidateQueries({ queryKey: entityKeys.all, exact: true });
       await navigate({ to: "/e/$entityId", params: { entityId: entity.id } });
     },
   });

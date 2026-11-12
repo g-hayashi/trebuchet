@@ -8,6 +8,7 @@ import { SaveNotice } from "@/components/ui/save-notice";
 import type { Account } from "@/features/accounts/api";
 import { blueReturnKeys } from "@/features/blue-return/api";
 import { parseWholeYen } from "@/lib/format";
+import { parsePriorAccumulated, priorFieldsOf } from "@/lib/prior-accumulated";
 import {
   type DeferredAssetRow,
   deferredAssetKeys,
@@ -16,10 +17,7 @@ import {
 } from "./api";
 
 const TOTAL_ERROR = "開業費の総額は1円以上の整数で入力してください";
-const PRIOR_ERROR = "前年までの償却累計額は0以上の整数で入力してください";
-const PRIOR_YEAR_ERROR = "累計が何年分までかを入力してください（4桁の年）";
 const REQUIRED_ERROR = "名称・開業日・勘定を入力してください";
-const YEAR_PATTERN = /^\d{4}$/;
 
 type Values = {
   name: string;
@@ -47,15 +45,14 @@ const valuesOf = (d: DeferredAssetRow): Values => ({
   name: d.name,
   total: String(d.totalAmount),
   openedOn: d.openedOn,
-  priorAccumulated: d.priorAccumulated > 0 ? String(d.priorAccumulated) : "",
-  priorThroughYear: d.priorThroughYear === null ? "" : String(d.priorThroughYear),
+  ...priorFieldsOf(d),
   accountId: d.accountId,
   note: d.note ?? "",
   reason: "",
 });
 
 /**
- * 開業費（繰延資産）の登録・編集（FR-012、009 US3）。総額・開業日・前年までの償却累計額とその年分・勘定を入れる。
+ * 開業費（繰延資産）の登録・編集（009/FR-012、009 US3）。総額・開業日・前年までの償却累計額とその年分・勘定を入れる。
  * 登録しただけでは帳簿は変わらない。上限・勘定の区分・変更の制限（有効な仕訳があるとき）の判定は API が行う
  */
 export function DeferredAssetForm({
@@ -120,26 +117,19 @@ export function DeferredAssetForm({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const total = parseWholeYen(values.total, { min: 1 });
-    const prior =
-      values.priorAccumulated.trim() === ""
-        ? 0
-        : parseWholeYen(values.priorAccumulated, { min: 0 });
-    const yearText = values.priorThroughYear.trim();
-    const year =
-      yearText === "" ? null : YEAR_PATTERN.test(yearText) ? Number(yearText) : undefined;
+    const { value, priorError, priorYearError } = parsePriorAccumulated(values);
     const required =
       values.name.trim() === "" || values.openedOn === "" || values.accountId === ""
         ? REQUIRED_ERROR
         : undefined;
-    const yearInvalid = year === undefined || (prior !== null && prior > 0 && year === null);
     setRequiredError(required);
     setTotalError(total === null ? TOTAL_ERROR : undefined);
-    setPriorError(prior === null ? PRIOR_ERROR : undefined);
-    setPriorYearError(yearInvalid ? PRIOR_YEAR_ERROR : undefined);
+    setPriorError(priorError);
+    setPriorYearError(priorYearError);
     // 前の保存の知らせを、今回の結果（失敗を含む）と並べて出さない
     onSaved("");
-    if (required || total === null || prior === null || yearInvalid) return;
-    save.mutate({ total, prior, priorThroughYear: year });
+    if (required || total === null || !value) return;
+    save.mutate({ total, prior: value.prior, priorThroughYear: value.year });
   };
 
   return (

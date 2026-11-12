@@ -22,7 +22,7 @@ export type BlockedPlan = {
 export type RecurringPlan = { post: PlannedRun[]; blocked: BlockedPlan[] };
 
 /** 定義の行を仕訳の行の案にする（`null` は省略。税区分の省略は各回の予定日の既定で決まる。R16） */
-export function recurringLineDrafts(lines: Recurring["lines"]): LineDraft[] {
+function recurringLineDrafts(lines: Recurring["lines"]): LineDraft[] {
   return lines.map((l) => ({
     side: l.side,
     accountId: l.accountId,
@@ -59,7 +59,7 @@ const SPECIFIC_REASONS = [
  * 001 の `checkPeriod`・`validateJournal` を通し、専用の理由（期間・科目）→ 取引先の使用停止 →
  * それ以外（税設定の空白、未対応の計算方法、補助科目の停止など）は `JOURNAL_INVALID`（元のコードを `details.code` に）
  */
-export function blockedReason(
+function blockedReason(
   draft: JournalDraft,
   ctx: RecurringContext,
 ): Pick<BlockedPlan, "reason" | "details"> | undefined {

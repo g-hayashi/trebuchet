@@ -13,10 +13,10 @@ import {
   EXTERNAL_TIMEOUT_MS,
   LOCAL_TIMEOUT_MS,
 } from "./ai-client.ts";
-import type { FmServer } from "./fm-server.ts";
+import { type FmServer, LOCAL_AI_MODEL } from "./fm-server.ts";
 
-/** 端末内の AI（`fm serve`）のモデル名。候補の `model` にも記録する */
-export const LOCAL_AI_MODEL = "system";
+// モデル名の定義は fm-server.ts。呼び出し側（ルート・scripts）はここから読む
+export { LOCAL_AI_MODEL };
 
 /** AI の接続の設定の置き場（registry の `ai_settings`。テストは差し替える） */
 export type AiSettingsStore = {

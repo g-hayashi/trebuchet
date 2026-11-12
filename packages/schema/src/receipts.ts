@@ -1,8 +1,18 @@
 import { z } from "zod";
 import { ErrorDetails } from "./errors.ts";
-import { Sha256 } from "./import.ts";
 import { JournalInput, JournalRef } from "./journals.ts";
-import { DateString, Id, TaxCategoryCode, YEN_LIMIT, Yen } from "./primitives.ts";
+import {
+  AmountBound,
+  DateString,
+  Id,
+  Percent,
+  QueryBool,
+  QueryInt,
+  QueryText,
+  Sha256,
+  TaxCategoryCode,
+  Yen,
+} from "./primitives.ts";
 
 // 010-receipts（contracts/http-api.md §7、data-model §2.1・§2.3）
 
@@ -115,15 +125,6 @@ export type ReceiptFileParam = z.infer<typeof ReceiptFileParam>;
 
 // ---- 検索（data-model §2.3。API のクエリ文字列と、URL の検索パラメーターの両方を受け付ける） ----
 
-const QueryInt = z.union([
-  z.number(),
-  z.string().regex(/^\d+$/, "整数で指定してください").transform(Number),
-]);
-/** URL の検索パラメーターは数字だけの値を数値に読むので、文字列に戻す（取引先が「7」のとき） */
-const QueryText = z.union([z.string(), z.number().transform(String)]);
-const QueryBool = z.union([z.boolean(), z.enum(["true", "false"]).transform((v) => v === "true")]);
-const AmountBound = QueryInt.pipe(z.number().int().nonnegative().lt(YEN_LIMIT));
-
 export const DEFAULT_RECEIPT_LIMIT = 100;
 
 /**
@@ -183,7 +184,7 @@ export const ReceiptReadingView = z.object({
     accountCode: z.string().nullable(),
     taxCategory: TaxCategoryCode.nullable(),
   }),
-  confidence: z.number().int().min(0).max(100).nullable(),
+  confidence: Percent.nullable(),
   reason: z.string().nullable(),
 });
 export type ReceiptReadingView = z.infer<typeof ReceiptReadingView>;

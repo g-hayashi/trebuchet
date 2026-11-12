@@ -17,6 +17,7 @@ import {
 import { jpegBytes, pdfBytes } from "../fixtures/receipts/sample-files.ts";
 import { FaultInjectingReceiptUnitOfWork, receiptSnapshotOf } from "../receipt-fault-injection.ts";
 import { addBareJournal, setupReceipts } from "../receipt-setup.ts";
+import { codeOf } from "../result.ts";
 
 // T027: 訂正・差し替え・削除・履歴（contracts/domain-module.md §3、research R7・R10、data-model §2.2・§2.5、
 // FR-018・019）。入力部（未入力を埋める）は receipts-fill.test.ts
@@ -52,8 +53,6 @@ const replaceInput = (over: Partial<Parameters<typeof replaceReceiptFile>[2]> = 
   probe: PROBE,
   ...over,
 });
-
-const codeOf = (r: { ok: boolean; error?: { code: string } }) => (r.ok ? undefined : r.error?.code);
 
 /** 最初の証憑の今の行 */
 const firstRow = (uow: ReturnType<typeof setupReceipts>["uow"]): ReceiptRow => {

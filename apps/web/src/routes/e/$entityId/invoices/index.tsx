@@ -1,14 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { InvoiceListQuery, InvoiceListStatus } from "@trebuchet/schema";
 import { z } from "zod";
+import { buttonVariants } from "@/components/ui/button";
 import { InvoiceFlow } from "@/features/invoicing/InvoiceFlow";
 import { InvoiceList } from "@/features/invoicing/InvoiceList";
 
-const primaryLink =
-  "inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90";
+const primaryLink = buttonVariants();
 
-const secondaryLink =
-  "inline-flex h-9 items-center rounded-md border bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground";
+const secondaryLink = buttonVariants({ variant: "outline" });
 
 /** URL の絞り込み（取引先・対象月・状態）。状態の省略は既定（未回収）、`all` はすべて */
 const InvoiceSearch = InvoiceListQuery.extend({

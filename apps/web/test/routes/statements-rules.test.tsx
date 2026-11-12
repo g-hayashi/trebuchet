@@ -1,31 +1,14 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/features/accounts/api";
 import { Route as StatementsRoute } from "@/routes/e/$entityId/statements/index";
 import { Route as RulesRoute } from "@/routes/e/$entityId/statements/rules";
+import { account, ENTITY as BASE, uuid } from "../fixtures";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 006 US3: 推定のルールの一覧・編集・停止・再開・履歴・初期作成（H:§5）
 
-const BASE = "/api/entities/e1";
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-
-const account = (
-  n: number,
-  name: string,
-  rest: Pick<Account, "category" | "normalSide" | "reportSection">,
-): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive: true,
-  ...rest,
-});
 const expense = { category: "expense", normalSide: "debit", reportSection: "PL_EXPENSE" } as const;
 const SUPPLIES = account(6010, "消耗品費", expense);
 const RENT = account(6020, "地代家賃", expense);

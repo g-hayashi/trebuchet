@@ -1,31 +1,14 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/features/accounts/api";
 import { Route as LayoutRoute } from "@/routes/e/$entityId/route";
 import { Route as StatementsRoute } from "@/routes/e/$entityId/statements/index";
+import { account, ENTITY as BASE, uuid } from "../fixtures";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 006 US2: 明細の一覧・候補の確認と承認・まとめて承認・除外・結びつき（H:§4.1〜§4.9）
 
-const BASE = "/api/entities/e1";
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-
-const account = (
-  n: number,
-  name: string,
-  rest: Pick<Account, "category" | "normalSide" | "reportSection">,
-): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive: true,
-  ...rest,
-});
 const asset = { category: "asset", normalSide: "debit", reportSection: "BS_ASSET" } as const;
 const BANK = account(1020, "普通預金", asset);
 const CASH = account(1010, "現金", asset);

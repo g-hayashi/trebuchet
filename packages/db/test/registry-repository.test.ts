@@ -25,7 +25,6 @@ describe("DrizzleRegistryRepository: デモの印と準備中（014 T001）", ()
     registry.insertEntity(normal);
     registry.insertEntity(demo);
     expect(registry.listEntities()).toEqual([normal, demo]);
-    expect(registry.getEntity(demo.id)?.demo).toBe(true);
     const raw = openRegistry().$client.prepare("SELECT id, is_demo FROM entities").all();
     expect(raw).toEqual(
       expect.arrayContaining([
@@ -46,14 +45,13 @@ describe("DrizzleRegistryRepository: デモの印と準備中（014 T001）", ()
     ).toThrow();
   });
 
-  it("preparing の行は listEntities・getEntity・listArchivedEntities に出ず、listPreparingEntities に出る", () => {
+  it("preparing の行は listEntities・listArchivedEntities に出ず、listPreparingEntities に出る", () => {
     const registry = new DrizzleRegistryRepository(openRegistry());
     const active = entity("通常", "2026-10-18T00:00:00.000Z");
     const preparing = entity("準備中", "2026-10-18T00:00:01.000Z", true);
     registry.insertEntity(active);
     registry.insertEntity({ ...preparing, status: "preparing" });
     expect(registry.listEntities()).toEqual([active]);
-    expect(registry.getEntity(preparing.id)).toBeUndefined();
     expect(registry.listArchivedEntities()).toEqual([]);
     expect(registry.listPreparingEntities()).toEqual([preparing]);
     expect(registry.getManagedEntity(preparing.id)?.status).toBe("preparing");

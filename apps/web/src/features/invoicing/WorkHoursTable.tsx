@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useId, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
@@ -25,14 +26,13 @@ function parseHours(raw: string): number | undefined | null {
   return raw.trim() === "" ? undefined : parseHalfStep(raw);
 }
 
-/** 対象月の工数の入力。時間単価型の有効な取引先ごとに、0.5 時間単位で入れる（FR-005） */
+/** 対象月の工数の入力。時間単価型の有効な取引先ごとに、0.5 時間単位で入れる（005/FR-005） */
 export function WorkHoursTable({ entityId, month }: { entityId: string; month: string }) {
   const hours = useQuery(workHoursQuery(entityId, month));
   const terms = useQuery(billingTermsQuery(entityId));
   const error = hours.error ?? terms.error;
   if (error) return <ApiErrorMessage error={error} />;
-  if (!hours.data || !terms.data)
-    return <p className="text-sm text-muted-foreground">読み込み中…</p>;
+  if (!hours.data || !terms.data) return <Loading />;
   const names = new Map(terms.data.map((t) => [t.partnerId, t.partnerName]));
   return <HoursForm entityId={entityId} month={month} entries={hours.data} names={names} />;
 }

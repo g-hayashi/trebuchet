@@ -23,6 +23,7 @@ import {
   SequentialIds,
 } from "../fakes.ts";
 import { jpegBytes, pngBytes } from "../fixtures/receipts/sample-files.ts";
+import { TODAY } from "../test-dates.ts";
 
 /** 注入する失敗。`at` は、投入のユースケースの `run`・`transaction` の呼び出しの通し番号（1 から） */
 export type Fault = { at: number; mode: "err" | "throw" };
@@ -78,7 +79,7 @@ export function setupDemo(
   const masters = new InMemoryMasterRepository();
   masters.state.taxRates = [...TAX_RATES];
   const ids = new SequentialIds();
-  const clock = new FixedClock(options.now ?? "2026-11-08T03:00:00.000Z");
+  const clock = new FixedClock(options.now ?? `${TODAY}T03:00:00.000Z`);
   const counter = { n: 0 };
 
   const registry = new InMemoryRegistry();
@@ -86,7 +87,6 @@ export function setupDemo(
   const activated: string[] = [];
   const registryPort: RegistryRepository = {
     listEntities: () => registry.listEntities(),
-    getEntity: (id) => registry.getEntity(id),
     insertEntity: (e) => registry.insertEntity(e),
     renameEntity: (id, name) => registry.renameEntity(id, name),
     activateEntity: (id) => {

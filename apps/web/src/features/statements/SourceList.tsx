@@ -12,6 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDateTime } from "@/lib/format";
+import { SOURCE_NAME_MAX } from "@/lib/limits";
 import {
   deleteStatementSource,
   patchStatementSource,
@@ -59,7 +61,7 @@ function RenameRow({
         <Input
           id={id}
           autoComplete="off"
-          maxLength={100}
+          maxLength={SOURCE_NAME_MAX}
           className="w-64"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -141,7 +143,7 @@ export function SourceList({ entityId }: { entityId: string }) {
                     )}
                   </TableCell>
                   <TableCell>{kindText(s)}</TableCell>
-                  <TableCell>{new Date(s.lastUsedAt).toLocaleString("ja-JP")}</TableCell>
+                  <TableCell>{formatDateTime(s.lastUsedAt)}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-2">
                       <Button

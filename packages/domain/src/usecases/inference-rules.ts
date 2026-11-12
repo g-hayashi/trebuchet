@@ -11,19 +11,25 @@ import { auditEntry } from "../audit.ts";
 import type { Clock, IdGenerator, StatementUnitOfWork } from "../ports.ts";
 import { STATEMENT_ACCOUNT_CODES } from "../statements/journal-shape.ts";
 import { learnRule, type RuleBody, seedRules, toRuleView } from "../statements/rules.ts";
+import { compareText } from "../text.ts";
 import {
+  accountNotFoundError,
   domainError,
   err,
   type InferenceRule,
   type Journal,
+  notFoundError,
   ok,
   type Result,
   type StatementAuditAction,
   type StatementRecord,
   validation,
 } from "../types.ts";
-import { journalsBetween, rebuildRuleCandidates } from "./statement-candidates.ts";
-import type { StatementTx } from "./statements.ts";
+import {
+  journalsBetween,
+  rebuildRuleCandidates,
+  type StatementTx,
+} from "./statement-candidates.ts";
 
 // 推定ルールの学習と管理（006 US3。R9、§1.6・§1.7、FR-022〜024）。
 // 書き込みは UnitOfWork の中だけ。承認からの学習は `approveCandidate` と同じ UnitOfWork で行う（INV-47）。
@@ -32,7 +38,7 @@ import type { StatementTx } from "./statements.ts";
 type RuleDeps = { uow: StatementUnitOfWork; ids: IdGenerator; clock: Clock };
 
 const notFound = (ruleId: string) =>
-  err(domainError("INFERENCE_RULE_NOT_FOUND", "ルールが見つかりません", { ruleId }));
+  err(notFoundError("INFERENCE_RULE_NOT_FOUND", "ルール", { ruleId }));
 
 /** ルールを書き（追加または更新）、履歴と監査に残す */
 function writeRule(
@@ -171,8 +177,8 @@ export function listRules(
         .filter((r) => query.status === undefined || r.status === query.status)
         .sort(
           (a, b) =>
-            a.normalizedContent.localeCompare(b.normalizedContent) ||
-            (a.statementAccountId ?? "").localeCompare(b.statementAccountId ?? ""),
+            compareText(a.normalizedContent, b.normalizedContent) ||
+            compareText(a.statementAccountId ?? "", b.statementAccountId ?? ""),
         )
         .map(toRuleView),
     ),
@@ -283,11 +289,7 @@ export function updateRule(
     if (input.counterAccountId !== undefined) {
       const account = tx.masters.getAccount(input.counterAccountId);
       if (account === undefined) {
-        return err(
-          domainError("ACCOUNT_NOT_FOUND", "勘定科目が見つかりません", {
-            accountId: input.counterAccountId,
-          }),
-        );
+        return err(accountNotFoundError(input.counterAccountId));
       }
       if (!account.isActive) {
         return err(

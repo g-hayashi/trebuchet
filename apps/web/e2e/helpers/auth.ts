@@ -1,10 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
+import { WEB_ORIGIN } from "../env.ts";
 import { VirtualAuthenticator } from "./virtual-authenticator.ts";
 
 /**
- * 帳簿の解錠まわりの画面操作（008 D11。写す元: invest-copilot `tests/e2e/helpers/vault.ts`）。
+ * 帳簿の解錠まわりの画面操作（008 D11）。
  * ロケーターはロールで探し、`exact: true` で、認証の画面の `main` の中に絞る。
  *
  * E2E の実行は1つのデータ場所（1つの server）を共有する。設定は最初の1回しかできないので、
@@ -15,7 +16,7 @@ import { VirtualAuthenticator } from "./virtual-authenticator.ts";
  */
 
 /** CSRF の検査（Origin が必要）を通すため、`page.request` の書き込みの要求に付ける */
-export const ORIGIN_HEADERS = { Origin: "http://localhost:5173" };
+export const ORIGIN_HEADERS = { Origin: WEB_ORIGIN };
 
 const shell = (page: Page): Locator => page.getByRole("main");
 const lockedHeading = (page: Page) =>
@@ -50,7 +51,7 @@ export async function writeVaultState(state: VaultState): Promise<void> {
 }
 
 /** 回復キーの保管の画面から、キーを読み、「保管した」にチェックして「続ける」を押す。読んだキーを返す */
-export async function acknowledgeRecoveryKey(page: Page): Promise<string> {
+async function acknowledgeRecoveryKey(page: Page): Promise<string> {
   const panel = shell(page).getByRole("region", { name: "回復キーの保管", exact: true });
   await expect(panel).toBeVisible();
   const recoveryKey = await panel
@@ -73,7 +74,7 @@ export async function acknowledgeRecoveryKey(page: Page): Promise<string> {
  * vite の proxy が Host を書き換えると、設定が 421 HOST_NOT_ALLOWED になる（004 R6）。
  * 応答の状態を確かめて、その再発を捕まえる
  */
-export async function completeSetup(page: Page): Promise<string> {
+async function completeSetup(page: Page): Promise<string> {
   await expect(setupHeading(page)).toBeVisible();
   const verified = page.waitForResponse(
     (r) =>
@@ -111,16 +112,19 @@ export async function submitRecoveryKey(page: Page, recoveryKey: string): Promis
 
 /**
  * 回復キーで解錠し、新しいパスキーを登録して、帳簿の画面まで進む。新しい回復キーを返す。
- * 既存のパスキーは登録の除外に入るので、空の認証器に取り替えてから登録する（実際の別の端末の再現）
+ * 既存のパスキーは登録の除外に入るので、空の認証器に取り替えてから登録する（実際の別の端末の再現）。
+ * `whileRecovering` は、回復の一時のセッションの間（「新しいパスキーを登録」が出てから、登録する前）に呼ぶ確認
  */
 export async function recoverWithKey(
   page: Page,
   authenticator: VirtualAuthenticator,
   recoveryKey: string,
+  whileRecovering?: () => Promise<void>,
 ): Promise<string> {
   await submitRecoveryKey(page, recoveryKey);
   const register = shell(page).getByRole("button", { name: "新しいパスキーを登録", exact: true });
   await expect(register).toBeVisible();
+  await whileRecovering?.();
   await authenticator.replace();
   await register.click();
   const next = await acknowledgeRecoveryKey(page);

@@ -17,7 +17,6 @@ import type {
 import type {
   AppSettingKey,
   AuthEvent,
-  AuthEventKind,
   BackupRun,
   KeyWrap,
   NewAuthEvent,
@@ -129,6 +128,9 @@ export type NewJournal = Omit<ValidJournal, "lines"> & {
   source?: JournalSource | undefined;
 };
 
+/** 訂正の連鎖の 1 件（`LedgerRepository.correctionChains`。状態の導出に要る列だけ） */
+export type JournalChainRef = Pick<Journal, "id" | "status" | "correctsJournalId">;
+
 export interface AuditLog {
   appendAudit(entry: AuditEntry): void;
 }
@@ -147,8 +149,6 @@ export interface JournalRepository extends AuditLog {
   /** status active、source（省略時は manual）、version 1、updatedAt = createdAt で保存する */
   insertJournal(journal: NewJournal): Journal;
   getJournal(id: string): Journal | undefined;
-  /** 新しい順（日付の降順、同じ日付は仕訳番号の降順）。取消済みを含む */
-  recentJournals(limit: number): Journal[];
 }
 
 /** 仕訳の訂正・取消・履歴・検索（US3） */
@@ -170,6 +170,11 @@ export interface LedgerRepository extends JournalRepository {
   journalHistory(id: string): AuditEntry[];
   /** id を訂正元とする訂正仕訳（仕訳番号の順） */
   correctingJournalsOf(id: string): Journal[];
+  /**
+   * `rootIds` の仕訳と、訂正（`correctsJournalId`）をたどった先のすべての仕訳（訂正の訂正も含む）の
+   * ID・状態・訂正元だけ（行は読まない）。順は不定で、同じ仕訳は 1 回だけ。ない ID は無視する（006 R15 の状態の導出）
+   */
+  correctionChains(rootIds: readonly string[]): JournalChainRef[];
   /** 日付の降順・同じ日付は仕訳番号の降順。limit の既定は 50 */
   findJournals(query: JournalQuery): Page<Journal>;
   /** 全検索結果の件数と借方合計。cursor・limit は無視する */
@@ -178,7 +183,7 @@ export interface LedgerRepository extends JournalRepository {
   recentRegistered(limit: number): Journal[];
 }
 
-/** 帳票の集計（US4 で実装する） */
+/** 帳票の集計に使う、仕訳の行と期首残高の読み取り */
 export interface ReportRepository {
   /** 期間内の有効な仕訳の行（取消済みは含まない） */
   linesInRange(from: string, to: string): PostedLine[];
@@ -447,9 +452,11 @@ export interface StatementStore {
   upsertStatementCandidate(candidate: StatementCandidateRecord): void;
   deleteStatementCandidate(statementId: string): void;
 
-  // ---- 結びつき（US2。§1.5。書き込みは承認・取消のタスク（T015）が使う） ----
+  // ---- 結びつき（US2。§1.5。書き込みは承認・取消のユースケースが使う） ----
   /** 失効したものを含む全件（作成の順） */
   listStatementLinks(): StatementLinkRecord[];
+  /** `journalId` の仕訳への結びつき（失効したものを含む。作成の順） */
+  listLinksOfJournal(journalId: string): StatementLinkRecord[];
   /** 有効な結びつきの重複（明細ごと・仕訳の行ごと）は一意制約の違反で例外（INV-43） */
   insertStatementLink(link: StatementLinkRecord): void;
   /** 有効な結びつきを失効させる（`revoked_at`・`revoked_reason`）。ない・失効済みなら例外 */
@@ -602,8 +609,7 @@ export interface ReceiptReader {
 /** 事業体の一覧（data/registry.sqlite） */
 export interface RegistryRepository {
   listEntities(): EntitySummary[];
-  getEntity(id: string): EntitySummary | undefined;
-  /** `status` の既定は `active`。`preparing` の行は `listEntities`・`getEntity` に出ない */
+  /** `status` の既定は `active`。`preparing` の行は `listEntities` に出ない */
   insertEntity(entity: EntitySummary & { status?: "active" | "preparing" | undefined }): void;
   renameEntity(id: string, name: string): void;
   /** `preparing` → `active`。`preparing` 以外の行は変えない */
@@ -669,16 +675,12 @@ export interface AuthStore {
   /** 失効したセッションの id を返す */
   revokeSessionsByPasskey(passkeyId: string, at: string): Promise<string[]>;
   listActiveSessions(now: string): Promise<Session[]>;
-  /** 失効済みで before より古いものを消す。消した件数を返す */
-  deleteStaleSessions(before: string): Promise<number>;
   /** 全部消す（008 の D3: 起動時と施錠時。施錠中も使える）。消した件数を返す */
   deleteAllSessions(): Promise<number>;
   // 認証の記録（追記のみ）
   appendEvent(event: NewAuthEvent): Promise<void>;
   /** 新しい順。limit を省略すると全件 */
   listEvents(limit?: number): Promise<AuthEvent[]>;
-  /** since 以降の、kinds の記録（新しい順） */
-  listEventsSince(since: string, kinds: AuthEventKind[]): Promise<AuthEvent[]>;
   // ペアリングのトークン（ハッシュは hashToken）
   createPairingToken(token: {
     id: string;
@@ -688,8 +690,6 @@ export interface AuthStore {
     expiresAt: string;
   }): Promise<void>;
   isPairingTokenValid(tokenHash: string, rpId: string, now: string): Promise<boolean>;
-  /** 有効なら used_at を付けて true（単回） */
-  consumePairingToken(tokenHash: string, rpId: string, now: string): Promise<boolean>;
   deleteExpiredPairingTokens(before: string): Promise<number>;
   /**
    * ペアリングの登録: トークンを消費し、パスキーとその包みを入れる（1 トランザクション。INV-53）。

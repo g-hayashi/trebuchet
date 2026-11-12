@@ -28,14 +28,14 @@ import {
   ReceiptUnlinkInput,
   ReceiptUpdateInput,
 } from "@trebuchet/schema";
-import { Hono } from "hono";
+import { Hono, type HonoRequest } from "hono";
 import {
   type ReceiptRuntime,
   type RouteOptions,
   receiptDeps,
   receiptReadingDeps,
 } from "../deps.ts";
-import { errorBody, fail, respond, validationError } from "../errors.ts";
+import { fail, failUnprocessable, respond, validationError } from "../errors.ts";
 import { isLocalHost, requestHost } from "../lib/origin.ts";
 import { readJsonField, readUpload, uploadLimitFor } from "../lib/upload.ts";
 import type { TenantEnv } from "../tenant.ts";
@@ -71,24 +71,30 @@ export function receiptRoutes({ clock, receipts }: RouteOptions & { receipts: Re
     return probed.ok ? ok(probed.value ?? null) : probed;
   };
 
+  // 追加・差し替えが共通で行う、経路（要求の Host で決める。R10）の判定と画像の probe。probe の失敗は呼び出し側が 422 にする
+  const prepareUpload = async (req: HonoRequest, bytes: Uint8Array) => {
+    const channel = isLocalHost(requestHost(req)) ? ("local" as const) : ("remote" as const);
+    const probed = await probeOf(bytes);
+    return probed.ok ? ok({ channel, probe: probed.value }) : probed;
+  };
+
   return (
     new Hono<TenantEnv>()
       // 追加。multipart: file（20 MB まで）と options（JSON）。経路は要求の Host で決める（R10）
       .post("/receipts", uploadLimitFor(1, RECEIPT_MAX_BYTES), async (c) => {
         const upload = await readUpload(c, RECEIPT_MAX_BYTES);
         const options = await readJsonField(c, "options", ReceiptCreateOptions);
-        const channel = isLocalHost(requestHost(c.req)) ? "local" : "remote";
 
-        const probed = await probeOf(upload.bytes);
-        if (!probed.ok) return c.json(errorBody(probed.error), 422);
+        const prepared = await prepareUpload(c.req, upload.bytes);
+        if (!prepared.ok) return failUnprocessable(c, prepared.error);
 
         // addReceipt は同期の区間（await を挟まない）。ここから先に await を足さない
         const result = addReceipt(deps(c), {
           bytes: upload.bytes,
           originalName: upload.name,
-          channel,
+          channel: prepared.value.channel,
           options,
-          probe: probed.value,
+          probe: prepared.value.probe,
         });
         return respond(c, result, (receipt) => c.json({ receipt }, 201));
       })
@@ -111,19 +117,18 @@ export function receiptRoutes({ clock, receipts }: RouteOptions & { receipts: Re
           const { receiptId } = c.req.valid("param");
           const upload = await readUpload(c, RECEIPT_MAX_BYTES);
           const options = await readJsonField(c, "options", ReceiptReplaceOptions);
-          const channel = isLocalHost(requestHost(c.req)) ? "local" : "remote";
 
-          const probed = await probeOf(upload.bytes);
-          if (!probed.ok) return c.json(errorBody(probed.error), 422);
+          const prepared = await prepareUpload(c.req, upload.bytes);
+          if (!prepared.ok) return failUnprocessable(c, prepared.error);
 
           // replaceReceiptFile は同期の区間（await を挟まない）
           const result = replaceReceiptFile(deps(c), receiptId, {
             bytes: upload.bytes,
             originalName: upload.name,
-            channel,
+            channel: prepared.value.channel,
             reason: options.reason,
             version: options.version,
-            probe: probed.value,
+            probe: prepared.value.probe,
           });
           return respond(c, result, (receipt) => c.json({ receipt }, 201));
         },
@@ -196,7 +201,7 @@ export function receiptRoutes({ clock, receipts }: RouteOptions & { receipts: Re
           );
           // 有効な結びつきがない（domain は VALIDATION）は 422（contracts/http-api.md §3）。入力の形の違反は 400
           if (!result.ok && result.error.code === "VALIDATION") {
-            return c.json(errorBody(result.error), 422);
+            return failUnprocessable(c, result.error);
           }
           return respond(c, result, (receipt) => c.json({ receipt }, 200));
         },

@@ -20,11 +20,15 @@ import { createInvoicingUnitOfWork } from "../src/invoicing-repository.ts";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { createRecurringUnitOfWork } from "../src/recurring-repository.ts";
+import { createStatementUnitOfWork } from "../src/statement-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
 import {
   accountIdOf as accountId,
   createTestEntity,
+  NOW,
   type TempDataDir,
+  testClock,
+  testIds,
   useTempDataDir,
 } from "../src/testing.ts";
 
@@ -34,9 +38,8 @@ import {
 let tmp: TempDataDir;
 let db: TenantDb;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-24T09:00:00.000Z" };
-const NOW = clock.now();
+const ids = testIds();
+const clock = testClock();
 
 beforeEach(() => {
   tmp = useTempDataDir("unit-of-work");
@@ -52,7 +55,9 @@ const TABLES = [
   "import_account_mappings",
   "closing_audit_log",
   "invoicing_audit_log",
+  "statement_audit_log",
 ] as const;
+type Table = (typeof TABLES)[number];
 
 const counts = () =>
   Object.fromEntries(
@@ -92,25 +97,26 @@ const failure = domainError("VALIDATION", "中止", { field: "x" });
 
 type Body = (tx: TenantTx<object>, writeStore: () => void) => Result<number>;
 
-/** 機能ごとの UnitOfWork と、その機能のストアへの 1 回の書き込み */
-type Kind = { name: string; attempt: (db: TenantDb, body: Body) => Result<number> };
+/** 機能ごとの UnitOfWork と、その機能のストアへの 1 回の書き込み（書き込み先の表 `table`） */
+type Kind = { name: string; table: Table; attempt: (db: TenantDb, body: Body) => Result<number> };
 
 function kind<E extends object>(
   name: string,
+  table: Table,
   open: (db: TenantDb) => TenantUnitOfWork<E>,
   write: (tx: TenantTx<E>) => void,
 ): Kind {
-  return { name, attempt: (db, body) => open(db).run((tx) => body(tx, () => write(tx))) };
+  return { name, table, attempt: (db, body) => open(db).run((tx) => body(tx, () => write(tx))) };
 }
 
 const KINDS: Kind[] = [
-  kind("取込", createImportUnitOfWork, (tx) =>
+  kind("取込", "import_account_mappings", createImportUnitOfWork, (tx) =>
     tx.imports.upsertAccountMappings(
       [{ sourceName: `科目${randomUUIDv7()}`, accountId: accountId(tx.masters, "現金") }],
       NOW,
     ),
   ),
-  kind("決算", createClosingUnitOfWork, (tx) =>
+  kind("決算", "closing_audit_log", createClosingUnitOfWork, (tx) =>
     tx.closing.appendClosingAudit({
       id: randomUUIDv7(),
       occurredAt: NOW,
@@ -122,9 +128,14 @@ const KINDS: Kind[] = [
       afterJson: "{}",
     }),
   ),
-  kind("請求", createInvoicingUnitOfWork, (tx) => tx.invoicing.appendInvoicingAudit(audit())),
-  kind("定期仕訳", createRecurringUnitOfWork, (tx) =>
+  kind("請求", "invoicing_audit_log", createInvoicingUnitOfWork, (tx) =>
+    tx.invoicing.appendInvoicingAudit(audit()),
+  ),
+  kind("定期仕訳", "invoicing_audit_log", createRecurringUnitOfWork, (tx) =>
     tx.recurring.appendRecurringAudit(audit({ targetType: "recurring_run" })),
+  ),
+  kind("明細", "statement_audit_log", createStatementUnitOfWork, (tx) =>
+    tx.statements.appendStatementAudit({ ...audit(), targetType: "statement", action: "create" }),
   ),
 ];
 
@@ -172,6 +183,7 @@ describe.each(KINDS)("$name の UnitOfWork（drizzleUnitOfWork）", (kind) => {
           const after = counts();
           expect(after.journals).toBe((before.journals ?? 0) + n("journal"));
           expect(after.tags).toBe((before.tags ?? 0) + n("tag"));
+          expect(after[kind.table]).toBe((before[kind.table] ?? 0) + n("store"));
         },
       ),
       { numRuns: 25 },

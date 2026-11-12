@@ -17,6 +17,7 @@ import {
   useWatch,
 } from "react-hook-form";
 import { z } from "zod";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
@@ -40,15 +41,14 @@ import {
   periodKeys,
   putOpeningBalances,
 } from "@/features/periods/api";
-import { groupAccountsBySection } from "@/lib/accounts";
+import { groupAccountsBySection, SIDE_LABELS } from "@/lib/accounts";
 import { formatYen, parseYenInput } from "@/lib/format";
+import { invalidateLedger } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/e/$entityId/periods/$year/opening-balances")({
   component: OpeningBalancesPage,
 });
-
-const SIDE_LABELS: Record<Side, string> = { debit: "借方", credit: "貸方" };
 
 /** 共有スキーマの行。入力途中の金額（未入力 = undefined）を型として許し、検証は Yen で行う */
 const FormSchema = z.object({
@@ -96,9 +96,7 @@ function OpeningBalancesPage() {
         </Link>
       </div>
       <ApiErrorMessage error={error} />
-      {(balances.isPending || accounts.isPending) && !error && (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
-      )}
+      {(balances.isPending || accounts.isPending) && !error && <Loading />}
       {balances.data && accounts.data && (
         <OpeningBalancesForm
           key={balances.data.fiscalPeriod.id}
@@ -164,7 +162,11 @@ function OpeningBalancesForm({
       queryClient.setQueryData(periodKeys.openingBalances(entityId, year), saved);
       form.reset({ rows: toFormRows(saved) });
       closeProposal();
-      await queryClient.invalidateQueries({ queryKey: periodKeys.openingBalances(entityId, year) });
+      // 期首残高は帳票・決算書・ホームの数字の元
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: periodKeys.openingBalances(entityId, year) }),
+        invalidateLedger(queryClient, entityId),
+      ]);
     },
   });
 

@@ -386,7 +386,10 @@ describe("公開の手続きの前提（FR-001・006、INV-29）", () => {
       await initialize();
       const res = await post(publicApp(), path, {});
       expect(res.status).toBe(409);
-      expect((await errorOf(res)).code).toBe("ALREADY_REGISTERED");
+      const error = await errorOf(res);
+      expect(error.code).toBe("ALREADY_REGISTERED");
+      // routes/auth.ts の alreadyRegistered と同じ文言
+      expect(error.message).toBe("すでに設定されています");
     },
   );
 

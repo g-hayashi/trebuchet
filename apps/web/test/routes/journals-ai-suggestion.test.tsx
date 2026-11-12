@@ -1,31 +1,14 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/features/accounts/api";
 import { Route } from "@/routes/e/$entityId/journals/new";
+import { account, ENTITY, TAX_CATEGORIES } from "../fixtures";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 011 T044（R19、FR-060）: かんたん入力の AI の候補。外部の AI が有効なときだけボタンを出し、
 // 候補は「入れる」まで欄に入れない（登録はいつも利用者の操作）
 
-const ENTITY = "/api/entities/e1";
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
-
-const account = (
-  n: number,
-  name: string,
-  rest: Pick<Account, "category" | "normalSide" | "reportSection"> & Partial<Account>,
-): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive: true,
-  ...rest,
-});
 const bank = account(1020, "普通預金", {
   category: "asset",
   normalSide: "debit",
@@ -42,12 +25,6 @@ const supplies = account(6010, "消耗品費", {
   reportSection: "PL_EXPENSE",
 });
 const accounts = [sales, bank, supplies];
-
-const TAX_CATEGORIES = [
-  { code: "OUT_OF_SCOPE", name: "対象外", kind: null },
-  { code: "SALES_10", name: "課税売上 10%", kind: "sales" },
-  { code: "PURCHASE_10", name: "課税仕入 10%", kind: "purchase" },
-];
 
 const EXTERNAL_ON = {
   localEnabled: true,

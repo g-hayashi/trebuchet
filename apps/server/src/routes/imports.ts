@@ -1,6 +1,7 @@
 import { sha256Hex } from "@trebuchet/db";
 import {
   commitFreeeImport,
+  notFoundError,
   previewFreeeImport,
   proposeFreeeOpening,
   reconcileFreee,
@@ -16,7 +17,7 @@ import {
 } from "@trebuchet/schema";
 import { type Context, Hono } from "hono";
 import { importDeps, type RouteOptions, reportDeps } from "../deps.ts";
-import { errorBody, fail, respond } from "../errors.ts";
+import { fail, failUnprocessable, respond } from "../errors.ts";
 import {
   readJsonField,
   readOptionalUpload,
@@ -83,7 +84,7 @@ export function importRoutes({ clock }: RouteOptions) {
             result.error.code === "VALIDATION" &&
             result.error.details?.ledgerDate !== undefined
           ) {
-            return c.json(errorBody(result.error), 422);
+            return failUnprocessable(c, result.error);
           }
           return fail(c, result.error);
         }
@@ -98,11 +99,7 @@ export function importRoutes({ clock }: RouteOptions) {
       const { imports } = importDeps(c.var.db, clock);
       const batch = imports.getBatch(batchId);
       if (batch === undefined) {
-        return fail(c, {
-          code: "IMPORT_BATCH_NOT_FOUND",
-          message: "取込の記録が見つかりません",
-          details: { batchId },
-        });
+        return fail(c, notFoundError("IMPORT_BATCH_NOT_FOUND", "取込の記録", { batchId }));
       }
       const journals = imports.journalsOfBatch(batchId).map(({ journal, ref }) => ({
         journalId: journal.id,
@@ -132,7 +129,7 @@ export function importRoutes({ clock }: RouteOptions) {
       const result = saveImportMappings(importDeps(c.var.db, clock), c.req.valid("json"));
       // 対応先の検証（使用停止の科目・他の科目の補助科目など）は 422 VALIDATION（contracts/http-api.md の対応表）。
       // 入力の形の誤りは validate が 400 VALIDATION にする
-      if (!result.ok) return c.json(errorBody(result.error), 422);
+      if (!result.ok) return failUnprocessable(c, result.error);
       return c.json(result.value, 200);
     });
 }

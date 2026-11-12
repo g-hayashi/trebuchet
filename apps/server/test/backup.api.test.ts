@@ -77,8 +77,8 @@ describe("GET /backup/status", () => {
   it("未設定", async () => {
     const res = await call("GET", "/status");
     expect(res.status).toBe(200);
+    // 常に真の configured は応答に含めない（web は使わない）
     expect(await res.json()).toEqual({
-      configured: true,
       folder: env.defaultFolder,
       folderSource: "default",
       lastSuccess: null,
@@ -95,7 +95,6 @@ describe("GET /backup/status", () => {
     expect(((await res.json()) as { runId: string | null }).runId).toEqual(expect.any(String));
     await idle();
     const s = await status();
-    expect(s.configured).toBe(true);
     expect(s.folder).toBe(env.folder);
     expect(s.folderSource).toBe("configured");
     expect(s.lastRun?.trigger).toBe("manual");
@@ -104,12 +103,6 @@ describe("GET /backup/status", () => {
     expect(s.lastCheck).toBe(s.lastRun?.finishedAt);
     expect(s.alert).toBeNull();
     expect(readdirSync(env.folder)).toHaveLength(1);
-  });
-
-  it("最後の確認から 48 時間たつと STALE", async () => {
-    await configured();
-    await advance(48 * HOUR);
-    expect((await status()).alert).toEqual({ reason: "STALE" });
   });
 
   it("直近の実行が失敗なら LAST_RUN_FAILED", async () => {

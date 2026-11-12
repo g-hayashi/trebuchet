@@ -1,0 +1,1 @@
+CREATE INDEX `journals_corrects` ON `journals` (`corrects_journal_id`);

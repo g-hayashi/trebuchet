@@ -55,7 +55,7 @@ const columns: ReportColumns<Entry> = [
   { id: "balance", header: amountHeader("残高"), accessorFn: (e) => e.balance, cell: amountCell() },
 ];
 
-/** 総勘定元帳（FR-027）。科目（と補助科目）ごとに、前期繰越から残高の推移を表示する */
+/** 総勘定元帳（001/FR-027）。科目（と補助科目）ごとに、前期繰越から残高の推移を表示する */
 function GeneralLedgerPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();

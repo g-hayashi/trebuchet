@@ -5,6 +5,13 @@ export function formatYen(amount: number): string {
   return amount.toLocaleString("ja-JP");
 }
 
+/** ファイルの大きさ（表示用）。1 KB 未満は「512 バイト」、以上は小数 1 桁の KB・MB */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} バイト`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /** 帳票の金額を 3 桁区切りで表示する。マイナスは ▲ を付ける（決算書の表記） */
 export function formatSignedYen(amount: number): string {
   return amount < 0 ? `▲${formatYen(-amount)}` : formatYen(amount);
@@ -27,6 +34,16 @@ export function parseYenInput(raw: string): number | undefined {
 export function parseWholeYen(raw: string, { min }: { min: number }): number | null {
   const value = parseYenInput(raw);
   return value !== undefined && Number.isSafeInteger(value) && value >= min ? value : null;
+}
+
+/** 金額の条件の入力。空欄は指定なし、0 以上の整数でなければ null */
+export function parseAmount(raw: string): number | undefined | null {
+  return raw.trim() === "" ? undefined : parseWholeYen(raw, { min: 0 });
+}
+
+/** 検索の比較用に、全角・半角、大文字・小文字、前後の空白をそろえる */
+export function normalizeForSearch(value: string): string {
+  return value.normalize("NFKC").toLowerCase().trim();
 }
 
 /**

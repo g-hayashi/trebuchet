@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { UNAUTHENTICATED_EVENT } from "@/lib/api";
@@ -56,15 +57,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
   if (status.data === undefined) {
-    return (
-      <Shell>
-        {status.error ? (
-          <ApiErrorMessage error={status.error} />
-        ) : (
-          <p className="text-sm text-muted-foreground">読み込み中…</p>
-        )}
-      </Shell>
-    );
+    return <Shell>{status.error ? <ApiErrorMessage error={status.error} /> : <Loading />}</Shell>;
   }
 
   const { registered, signedIn, rpId, recoveryAcknowledged } = status.data;

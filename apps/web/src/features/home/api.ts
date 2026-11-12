@@ -10,7 +10,7 @@ export const homeKeys = {
   all: (entityId: string) => ["entities", entityId, "home"] as const,
 };
 
-/** ホームの要約。項目ごとに `{ status: "ok", value }` か `{ status: "error", code }`（FR-009） */
+/** ホームの要約。項目ごとに `{ status: "ok", value }` か `{ status: "error", code }`（011/FR-009） */
 export const homeQuery = (entityId: string) =>
   queryOptions({
     queryKey: homeKeys.all(entityId),

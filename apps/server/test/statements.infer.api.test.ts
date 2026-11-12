@@ -6,20 +6,11 @@ import { createApp } from "../src/app.ts";
 import { AI_API_KEY_SECRET } from "../src/lib/ai-client.ts";
 import type { FmServer } from "../src/lib/fm-server.ts";
 import { createMemorySecretStore } from "../src/lib/keychain.ts";
-import {
-  accountLookup,
-  createTestEntity,
-  createTestSession,
-  errorOf,
-  okBody,
-  TEST_HOST,
-  TEST_ORIGIN,
-} from "./helpers.ts";
+import { accountLookup, createTestEntity, errorOf, NOW, okBody, testHeaders } from "./helpers.ts";
 import { importStatementLines } from "./statements-helpers.ts";
 
 // 006 §4.3: POST /statements/infer。偽の fetch・キーチェーン・fm で、設定 → 呼び出し → 候補の保存までを通す
 
-const NOW = "2026-10-31T03:00:00.000Z";
 const KEY = "sk-infer-secret-987654321";
 const BANK = "サンプル銀行";
 
@@ -35,10 +26,9 @@ const completion = (content: string) =>
 async function setup(options: { fmAvailable?: boolean; reply?: (code: string) => string } = {}) {
   const entityId = await createTestEntity();
   const accountId = await accountLookup(entityId);
-  const session = await createTestSession({ now: NOW });
   const codeOf = async (name: string) => {
     const client = testClient(createApp({ clock: { now: () => NOW } }), undefined, undefined, {
-      headers: { Host: TEST_HOST, Origin: TEST_ORIGIN, Cookie: session.cookie },
+      headers: testHeaders,
     });
     const res = await client.api.entities[":entityId"].accounts.$get({ param: { entityId } });
     const found = (await res.json()).accounts.find((a) => a.name === name);
@@ -74,9 +64,7 @@ async function setup(options: { fmAvailable?: boolean; reply?: (code: string) =>
     clock: { now: () => NOW },
     ai: { fetch: fetchFn as unknown as typeof fetch, secrets, fm },
   });
-  const client = testClient(app, undefined, undefined, {
-    headers: { Host: TEST_HOST, Origin: TEST_ORIGIN, Cookie: session.cookie },
-  });
+  const client = testClient(app, undefined, undefined, { headers: testHeaders });
   const e = client.api.entities[":entityId"];
   const param = { entityId };
 

@@ -9,11 +9,11 @@ import {
   clock,
   entityIds,
   fmServer,
-  ids,
   openRecurringUnitOfWork,
   vault,
 } from "./deps.ts";
-import { SERVER_PORT } from "./lib/origin.ts";
+import { ids } from "./lib/ids.ts";
+import { LOOPBACK_HOST, SERVER_PORT } from "./lib/origin.ts";
 import { startBackgroundServices } from "./lib/startup.ts";
 import { resolveWebDist, withWebDist } from "./static.ts";
 
@@ -22,7 +22,7 @@ import { resolveWebDist, withWebDist } from "./static.ts";
 await authStore().deleteAllSessions();
 
 // R13: 認証を入れるまではループバックだけで待ち受ける
-const hostname = "127.0.0.1";
+const hostname = LOOPBACK_HOST;
 const port = SERVER_PORT;
 
 // ビルド済みの web があれば /api の外に配信する（004 R3。TREBUCHET_WEB_DIST、既定 apps/web/dist）。

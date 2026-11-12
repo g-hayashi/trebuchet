@@ -118,6 +118,8 @@ describe("FixedAssetInput", () => {
     { ...ok, businessRatio: 10001 },
     { ...ok, name: "" },
     { ...ok, acquiredOn: "2026-02-30" },
+    { ...ok, acquisitionCost: 1e12 },
+    { ...ok, priorAccumulated: 1e12 },
   ])("不正な入力を拒否する %#", (input) => {
     expect(FixedAssetInput.safeParse(input).success).toBe(false);
   });
@@ -351,6 +353,8 @@ describe("009 の入力と型", () => {
     expect(parsed.priorAccumulated).toBe(0);
     expect(DeferredAssetInput.safeParse({ ...ok, totalAmount: 0 }).success).toBe(false);
     expect(DeferredAssetInput.safeParse({ ...ok, priorAccumulated: -1 }).success).toBe(false);
+    expect(DeferredAssetInput.safeParse({ ...ok, totalAmount: 1e12 }).success).toBe(false);
+    expect(DeferredAssetInput.safeParse({ ...ok, priorAccumulated: 1e12 }).success).toBe(false);
     expect(DeferredAssetInput.safeParse({ ...ok, openedOn: "2026-02-30" }).success).toBe(false);
     expect(DeferredAssetUpdateInput.safeParse({ ...ok, reason: "訂正" }).success).toBe(true);
     expect(DeferredAmortizationInput.safeParse({ amount: 0 }).success).toBe(true);

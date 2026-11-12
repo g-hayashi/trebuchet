@@ -14,12 +14,12 @@ import {
 import { counterAccounts, type ParsedSuggestion, parseSuggestion } from "../statements/prompt.ts";
 import {
   type Account,
-  domainError,
   err,
   ok,
   type Result,
   type StatementCandidateRecord,
   type StatementRecord,
+  statementNotFoundError,
 } from "../types.ts";
 import {
   type CandidateBody,
@@ -161,7 +161,7 @@ const itemOf = (
 
 /**
  * 候補が none の明細に、AI の推定を付ける（R8）。端末内が使えればまず端末内、確信度が `external_threshold`
- * （事業体の設定。T014）より低く外部が有効なら外部、端末内が使えなければ外部が有効なら外部、どちらも
+ * （事業体の設定。006/T014）より低く外部が有効なら外部、端末内が使えなければ外部が有効なら外部、どちらも
  * 使えなければ none（候補は変えない）。AI を呼んで使える出力がなければ、理由つきの none を書く。
  * 端末内・外部に渡すのは `buildAiPayload` の結果だけ。未知の明細の ID は `STATEMENT_NOT_FOUND`
  */
@@ -173,12 +173,10 @@ export async function inferWithAi(
 
   // 1. 読む
   const read = deps.uow.run((tx) => {
-    const states = new Map(loadStatementStates(tx).map((s) => [s.record.id, s]));
+    const states = new Map(loadStatementStates(tx, new Set(ids)).map((s) => [s.record.id, s]));
     const unknown = ids.find((id) => !states.has(id));
     if (unknown !== undefined) {
-      return err(
-        domainError("STATEMENT_NOT_FOUND", "明細が見つかりません", { statementId: unknown }),
-      );
+      return err(statementNotFoundError(unknown));
     }
     const candidates = new Map(
       tx.statements.listStatementCandidates().map((c) => [c.statementId, c]),
@@ -218,7 +216,7 @@ export async function inferWithAi(
   // 3. 書く（待ちの間に状態が変わった明細は書かない）
   const written = deps.uow.run((tx) => {
     const now = deps.clock.now();
-    const states = new Map(loadStatementStates(tx).map((s) => [s.record.id, s]));
+    const states = new Map(loadStatementStates(tx, new Set(ids)).map((s) => [s.record.id, s]));
     const candidates = new Map(
       tx.statements.listStatementCandidates().map((c) => [c.statementId, c]),
     );

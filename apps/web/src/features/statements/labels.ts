@@ -78,7 +78,7 @@ export const STATUS_FILTER_OPTIONS: { value: StatementStatusFilter | ""; label: 
   { value: "", label: "すべて" },
 ];
 
-/** 候補の判定の方法（R8） */
+/** 候補の判定の方法（006/R8） */
 export const METHOD_LABELS: Record<CandidateMethod, string> = {
   match: "既存の仕訳と一致",
   transfer: "振替の対",

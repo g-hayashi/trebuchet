@@ -23,7 +23,14 @@ import { createClosingUnitOfWork, DrizzleClosingStore } from "../src/closing-rep
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  accountIdOf,
+  createTestEntity,
+  NOW,
+  type TempDataDir,
+  testClock,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 let tmp: TempDataDir;
 let db: TenantDb;
@@ -32,8 +39,7 @@ let ledger: DrizzleLedgerRepository;
 let store: DrizzleClosingStore;
 let uow: ClosingUnitOfWork;
 
-const clock = { now: () => "2026-10-19T09:00:00.000Z" };
-const NOW = clock.now();
+const _clock = testClock();
 
 beforeEach(() => {
   tmp = useTempDataDir("closing-repo");

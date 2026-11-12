@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { WithholdingSummary } from "@trebuchet/schema";
 import { Fragment, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { NativeSelect } from "@/components/ui/input";
@@ -68,9 +69,7 @@ export function WithholdingList({
         入金日がその年の、取り消されていない消し込みを数えます。支払金額は、消し込みで売掛金に充てた額（源泉徴収税額と差額を含む）です。
       </p>
       <ApiErrorMessage error={summary.error} />
-      {summary.isPending && !summary.error && (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
-      )}
+      {summary.isPending && <Loading />}
       {summary.data &&
         (summary.data.partners.length === 0 ? (
           <p className="text-sm text-muted-foreground">

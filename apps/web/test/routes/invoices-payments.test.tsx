@@ -4,13 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Account } from "@/features/accounts/api";
 import { Route as DetailRoute } from "@/routes/e/$entityId/invoices/$invoiceId";
 import { Route as ListRoute } from "@/routes/e/$entityId/invoices/index";
+import { ENTITY as BASE } from "../fixtures";
 import { INVOICE_DETAIL } from "../invoicing-fixtures";
 import { apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 005 US2: 消し込みの画面（FR-017〜022。H:§4.1・§4.2、§3.5）
 
-const BASE = "/api/entities/e1";
 const P1 = "00000000-0000-4000-8000-000000000001";
 const P2 = "00000000-0000-4000-8000-000000000002";
 

@@ -14,6 +14,7 @@ import { Hono } from "hono";
 import { DomainException } from "../errors.ts";
 import { resolveBackupFolder } from "../lib/backup-folder.ts";
 import type { BackupRunner } from "../lib/backup-run.ts";
+import { csvResponse } from "../lib/csv-response.ts";
 import { readUpload, uploadLimitFor } from "../lib/upload.ts";
 import type { GuardEnv } from "../middleware/host.ts";
 import { validate } from "../validator.ts";
@@ -65,17 +66,16 @@ export function backupRoutes(deps: BackupRouteDeps) {
       const a = auth();
       const b = backups();
       const destination = resolveBackupFolder(await a.getSetting("backup_folder"));
-      const configured = true;
       const lastSuccess = (await b.getLastSuccess())?.finishedAt ?? null;
       const lastCheck = (await b.getLastCheck())?.finishedAt ?? null;
       const lastRun = (await b.getLastRun()) ?? null;
       const status: BackupStatus = {
-        configured,
         ...destination,
         lastSuccess,
         lastCheck,
         lastRun,
-        alert: backupAlert({ configured, lastCheck, lastRun, now: clock.now() }),
+        // 置き場所は常に決まっている（未設定なら既定の置き場所）ので configured は常に真
+        alert: backupAlert({ configured: true, lastCheck, lastRun, now: clock.now() }),
         running: runner.isRunning(),
       };
       return c.json(status, 200);
@@ -107,17 +107,14 @@ export function backupRoutes(deps: BackupRouteDeps) {
       if (c.req.query("format") === "csv") {
         const runs = await backups().listRuns();
         // ファイル名・保存先・エラー本文・事業体の要約は出さず、表示用の列だけを選ぶ。
-        return c.text(
+        return csvResponse(
+          c,
           encodeCsv([
             ["開始日時", "終了日時", "種類", "結果", "サイズ（バイト）"],
             ...runs.map((r) => [r.startedAt, r.finishedAt, r.trigger, r.status, r.sizeBytes]),
           ]),
-          200,
-          {
-            "Content-Type": "text/csv; charset=utf-8",
-            "Content-Disposition": 'attachment; filename="backup-runs.csv"',
-            "Cache-Control": "no-store",
-          },
+          "backup-runs.csv",
+          { noStore: true },
         );
       }
       const raw = c.req.query("limit");

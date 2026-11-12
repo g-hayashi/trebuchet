@@ -2,7 +2,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { useIsMobile } from "@/lib/use-media-query";
 import { isMobileRoute } from "./MobileNav";
 
-/** スマホの幅で、スマホの対象（`MOBILE_ROUTES`）の外の画面に出す案内（FR-059。禁止はしない） */
+/** スマホの幅で、スマホの対象（`MOBILE_ROUTES`）の外の画面に出す案内（011/FR-059。禁止はしない） */
 export function PcRecommended() {
   const mobile = useIsMobile();
   const pathname = useRouterState({ select: (s) => s.location.pathname });

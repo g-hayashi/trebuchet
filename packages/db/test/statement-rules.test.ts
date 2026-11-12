@@ -22,7 +22,16 @@ import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { createStatementUnitOfWork, DrizzleStatementStore } from "../src/statement-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  accountIdOf,
+  createTestEntity,
+  statementIdOf,
+  type TempDataDir,
+  testClock,
+  testIds,
+  unwrap,
+  useTempDataDir,
+} from "../src/testing.ts";
 
 // 006 T019（INV-47 のルールの側）。推定ルールの永続化を実 DB で確かめる:
 // UNIQUE、履歴の追記のみ、承認の途中の障害でルールも残らない、停止・編集・初期作成の往復
@@ -32,8 +41,8 @@ let db: TenantDb;
 let masters: DrizzleMasterRepository;
 let store: DrizzleStatementStore;
 
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => "2026-10-25T09:00:00.000Z" };
+const ids = testIds();
+const clock = testClock();
 
 beforeEach(() => {
   tmp = useTempDataDir("statement-rules");
@@ -45,17 +54,13 @@ afterEach(() => tmp.cleanup());
 
 const count = (table: string) =>
   (db.$client.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
-const ok = <T>(r: Result<T>): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
 const deps = (uow: StatementUnitOfWork = createStatementUnitOfWork(db)) => ({ uow, ids, clock });
 const bank = () => accountIdOf(masters, "普通預金");
 const rent = () => accountIdOf(masters, "地代家賃");
 const supplies = () => accountIdOf(masters, "消耗品費");
 
 const mapBank = () =>
-  ok(
+  unwrap(
     saveStatementAccount(deps(), "サンプル銀行", {
       usage: "business",
       kind: "bank",
@@ -67,7 +72,7 @@ let shaSeq = 0;
 const importRows = (rows: StatementRow[]) => {
   shaSeq += 1;
   const sha256 = shaSeq.toString(16).padStart(64, "0");
-  ok(
+  unwrap(
     commitStatementRows(deps(), {
       origin: "paste",
       rows,
@@ -84,11 +89,6 @@ const row = (content: string, date = "2026-10-10"): StatementRow => ({
   amount: -1200,
   transferFlag: false,
 });
-const idOf = (content: string) => {
-  const s = store.listStatements().find((x) => x.content === content);
-  if (s === undefined) throw new Error(`明細がない: ${content}`);
-  return s.id;
-};
 const draftFor = (date: string, counter: string): JournalDraft => ({
   date,
   memo: "メモ",
@@ -177,16 +177,22 @@ describe("承認からの学習（実 DB）", () => {
   it("承認でルールと履歴が書かれ、次の候補がルールから作られる。直して承認すると置き換わる", () => {
     mapBank();
     importRows([row("ショップ001"), row("ショップ002", "2026-10-11")]);
-    ok(approveCandidate(deps(), idOf("ショップ001"), { draft: draftFor("2026-10-10", rent()) }));
+    unwrap(
+      approveCandidate(deps(), statementIdOf(store, "ショップ001"), {
+        draft: draftFor("2026-10-10", rent()),
+      }),
+    );
     expect(store.listInferenceRules()).toHaveLength(1);
     expect(store.listInferenceRuleHistory(store.listInferenceRules()[0]?.id ?? "")).toHaveLength(1);
 
-    ok(buildCandidates(deps()));
-    const cand = store.listStatementCandidates().find((c) => c.statementId === idOf("ショップ002"));
+    unwrap(buildCandidates(deps()));
+    const cand = store
+      .listStatementCandidates()
+      .find((c) => c.statementId === statementIdOf(store, "ショップ002"));
     expect(cand).toMatchObject({ method: "rule", confidence: 60 });
 
-    ok(
-      approveCandidate(deps(), idOf("ショップ002"), {
+    unwrap(
+      approveCandidate(deps(), statementIdOf(store, "ショップ002"), {
         draft: draftFor("2026-10-11", supplies()),
       }),
     );
@@ -197,15 +203,23 @@ describe("承認からの学習（実 DB）", () => {
   it("承認のたびに学ぶ。managedBy が user のルールは承認で変わらず、履歴も増えない（T018・INV-71）", () => {
     mapBank();
     importRows([row("ショップ001"), row("ショップ002", "2026-10-11")]);
-    ok(approveCandidate(deps(), idOf("ショップ001"), { draft: draftFor("2026-10-10", rent()) }));
+    unwrap(
+      approveCandidate(deps(), statementIdOf(store, "ショップ001"), {
+        draft: draftFor("2026-10-10", rent()),
+      }),
+    );
     const learned = store.listInferenceRules()[0];
     expect(learned?.managedBy).toBe("auto");
-    ok(updateRule(deps(), learned?.id ?? "", { counterAccountId: supplies() }));
+    unwrap(updateRule(deps(), learned?.id ?? "", { counterAccountId: supplies() }));
     const edited = store.listInferenceRules()[0];
     expect(edited).toMatchObject({ managedBy: "user", counterAccountId: supplies() });
     const historyCount = count("inference_rule_history");
 
-    ok(approveCandidate(deps(), idOf("ショップ002"), { draft: draftFor("2026-10-11", rent()) }));
+    unwrap(
+      approveCandidate(deps(), statementIdOf(store, "ショップ002"), {
+        draft: draftFor("2026-10-11", rent()),
+      }),
+    );
     expect(store.listInferenceRules()).toEqual([edited]);
     expect(count("inference_rule_history")).toBe(historyCount);
   });
@@ -276,13 +290,15 @@ describe("INV-47: 承認の途中の障害でルールも残らない（実 DB�
       mapBank();
       importRows([row("ショップ001"), row("ショップ002", "2026-10-11")]);
       if (withExisting) {
-        ok(
-          approveCandidate(deps(), idOf("ショップ001"), { draft: draftFor("2026-10-10", rent()) }),
+        unwrap(
+          approveCandidate(deps(), statementIdOf(store, "ショップ001"), {
+            draft: draftFor("2026-10-10", rent()),
+          }),
         );
       }
-      ok(buildCandidates(deps()));
+      unwrap(buildCandidates(deps()));
       const uow = new FaultInjectingUow();
-      const target = idOf("ショップ002");
+      const target = statementIdOf(store, "ショップ002");
       let succeededAt = 0;
       for (let failAt = 1; failAt < 40; failAt++) {
         const before = snapshot();
@@ -316,11 +332,15 @@ describe("ルールの管理（実 DB）", () => {
   it("停止・編集・一覧・履歴が往復する", () => {
     mapBank();
     importRows([row("ショップ001")]);
-    ok(approveCandidate(deps(), idOf("ショップ001"), { draft: draftFor("2026-10-10", rent()) }));
+    unwrap(
+      approveCandidate(deps(), statementIdOf(store, "ショップ001"), {
+        draft: draftFor("2026-10-10", rent()),
+      }),
+    );
     const id = store.listInferenceRules()[0]?.id ?? "";
-    ok(pauseRule(deps(), id));
-    ok(updateRule(deps(), id, { counterAccountId: supplies() }));
-    expect(ok(listRules(deps(), { status: "paused" }))[0]).toMatchObject({
+    unwrap(pauseRule(deps(), id));
+    unwrap(updateRule(deps(), id, { counterAccountId: supplies() }));
+    expect(unwrap(listRules(deps(), { status: "paused" }))[0]).toMatchObject({
       counterAccountId: supplies(),
       status: "paused",
     });
@@ -334,7 +354,7 @@ describe("ルールの管理（実 DB）", () => {
   it("初期作成は、有効な手入力の仕訳からルールを作り、再実行では skipped。dryRun は書かない", () => {
     const ledgerDeps = { ledger: new DrizzleLedgerRepository(db), masters, ids, clock };
     for (const description of ["ショップ 001", "ショップ 002", "単発の店"]) {
-      ok(
+      unwrap(
         createJournal(ledgerDeps, {
           date: "2026-10-01",
           memo: "手入力",
@@ -345,16 +365,16 @@ describe("ルールの管理（実 DB）", () => {
         }),
       );
     }
-    expect(ok(seedRulesFromJournals(deps(), { dryRun: true }))).toMatchObject({ created: 1 });
+    expect(unwrap(seedRulesFromJournals(deps(), { dryRun: true }))).toMatchObject({ created: 1 });
     expect(count("inference_rules")).toBe(0);
-    expect(ok(seedRulesFromJournals(deps()))).toMatchObject({ created: 1, skipped: 0 });
+    expect(unwrap(seedRulesFromJournals(deps()))).toMatchObject({ created: 1, skipped: 0 });
     expect(store.listInferenceRules()[0]).toMatchObject({
       normalizedContent: "ショップ#",
       statementAccountId: null,
       origin: "seed",
       hits: 2,
     });
-    expect(ok(seedRulesFromJournals(deps()))).toMatchObject({ created: 0, skipped: 1 });
+    expect(unwrap(seedRulesFromJournals(deps()))).toMatchObject({ created: 0, skipped: 1 });
     expect(count("inference_rules")).toBe(1);
   });
 });

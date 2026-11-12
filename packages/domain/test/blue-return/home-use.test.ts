@@ -8,6 +8,7 @@ import {
 import type { AdjustmentRef, HomeUseAllocation, PostedLine, SubAccount } from "../../src/types.ts";
 import { makeFiscalPeriod } from "../arbitraries.ts";
 import { accountIdOf, INDIVIDUAL_ACCOUNT_LIST } from "../blue-return-arbitraries.ts";
+import { NOW as AT } from "../test-dates.ts";
 
 const RENT = accountIdOf("5230");
 const UTILITIES = accountIdOf("5100");
@@ -15,7 +16,6 @@ const DRAWINGS = accountIdOf("3090");
 const CASH = accountIdOf("1010");
 const SALES = accountIdOf("4010");
 const PERIOD = makeFiscalPeriod(2025);
-const AT = "2026-01-10T00:00:00.000Z";
 
 const allocation = (overrides: Partial<HomeUseAllocation> = {}): HomeUseAllocation => ({
   id: "alloc-rent",
@@ -376,5 +376,6 @@ describe("proposeHomeUseAdjustment（FR-014・FR-016、R6）", () => {
       }),
     );
     expect(!r.ok && r.error.code).toBe("ACCOUNT_NOT_FOUND");
+    expect(!r.ok && r.error.message).toBe("勘定科目（コード 3090）が見つかりません");
   });
 });

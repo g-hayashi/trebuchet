@@ -1,13 +1,13 @@
 import type { ReceiptCategory } from "@trebuchet/schema";
 import { FieldError } from "@/components/ui/form-error";
-import { ApiError } from "@/lib/api";
+import { isApiError } from "@/lib/api";
 import { CATEGORY_HINTS, CATEGORY_LABELS, CATEGORY_OPTIONS } from "./labels";
 
 // 証憑の追加のフォームの部品
 
 /** 重複の応答（409）が指す既存の証憑の ID。削除済みかどうかも返る */
 export function duplicateOf(error: unknown): string | undefined {
-  if (!(error instanceof ApiError) || error.code !== "RECEIPT_DUPLICATE") return undefined;
+  if (!isApiError(error, "RECEIPT_DUPLICATE")) return undefined;
   const id = error.details?.receiptId;
   return typeof id === "string" ? id : undefined;
 }

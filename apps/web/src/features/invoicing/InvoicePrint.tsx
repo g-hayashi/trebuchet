@@ -3,7 +3,7 @@ import { formatYen } from "@/lib/format";
 import { invoiceTaxSummary, quantityOf, recipientOf } from "./display";
 
 /**
- * 印刷用の請求書（A4 縦 1 枚。FR-011・012）。発行時に写した値（`issuer`・明細）だけを使い、
+ * 印刷用の請求書（A4 縦 1 枚。005/FR-011・012）。発行時に写した値（`issuer`・明細）だけを使い、
  * 屋号と登録番号は設定されているときだけ（屋号が氏名と同じなら 1 回だけ。011 FR-037）、
  * 税率ごとの内訳は `tax_display = separate` のときだけ出す。見出しの「ご請求金額」は、源泉徴収税額があるとき
  * （013）は差引請求額、ないときは合計。

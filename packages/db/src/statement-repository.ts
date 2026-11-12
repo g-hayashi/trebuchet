@@ -192,6 +192,16 @@ export class DrizzleStatementStore implements StatementStore {
     return this.db.select().from(statementLinks).orderBy(insertionOrder).all();
   }
 
+  /** 索引 `statement_links_journal` で引く */
+  listLinksOfJournal(journalId: string): StatementLinkRecord[] {
+    return this.db
+      .select()
+      .from(statementLinks)
+      .where(eq(statementLinks.journalId, journalId))
+      .orderBy(insertionOrder)
+      .all();
+  }
+
   insertStatementLink(link: StatementLinkRecord): void {
     this.db.insert(statementLinks).values(link).run();
   }

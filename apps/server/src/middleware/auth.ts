@@ -10,7 +10,13 @@ import {
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
-import { DomainException, lockedError } from "../errors.ts";
+import {
+  alreadyRegisteredError,
+  DomainException,
+  firstRegistrationHostError,
+  lockedError,
+  unauthenticatedError,
+} from "../errors.ts";
 import { isLocalHost, rpIdFor } from "../lib/origin.ts";
 import { SESSION_COOKIE } from "../lib/session.ts";
 import type { Vault } from "../lib/vault.ts";
@@ -50,9 +56,6 @@ export async function findActiveSession(
   return session;
 }
 
-const unauthenticated = () =>
-  new DomainException({ code: "UNAUTHENTICATED", message: "サインインが必要です" });
-
 /**
  * 検査 3: 認証（FR-003）。`requiresAuth` が true のパスは、有効な通常（全権）のセッションと
  * 解錠済みの vault が必要（008 の D5。セッションがなければ 401 UNAUTHENTICATED、施錠中なら 401 LOCKED）。
@@ -78,16 +81,10 @@ export const authCheck = (
 
     if (isRegister) {
       if ((await store.getRecoveryWrap()) !== undefined) {
-        throw new DomainException({
-          code: "ALREADY_REGISTERED",
-          message: "すでにパスキーが登録されています",
-        });
+        throw new DomainException(alreadyRegisteredError());
       }
       if (!isLocalHost(c.var.host)) {
-        throw new DomainException({
-          code: "HOST_NOT_ALLOWED",
-          message: "最初の登録は、この Mac の localhost からだけできます",
-        });
+        throw new DomainException(firstRegistrationHostError());
       }
       return next();
     }
@@ -99,7 +96,7 @@ export const authCheck = (
       now,
       isRecoveryRegister ? "recovery" : "normal",
     );
-    if (session === undefined) throw unauthenticated();
+    if (session === undefined) throw new DomainException(unauthenticatedError());
     if (!vault.isUnlocked()) throw new DomainException(lockedError());
     if (
       session.kind === "normal" &&

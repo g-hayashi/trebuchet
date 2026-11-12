@@ -18,9 +18,9 @@ import {
   INDIVIDUAL_ACCOUNT_LIST,
   straightLineAssetArb,
 } from "../blue-return-arbitraries.ts";
+import { NOW as AT } from "../test-dates.ts";
 
 const EQUIPMENT = accountIdOf("1060");
-const AT = "2026-01-10T00:00:00.000Z";
 const params = { rates: STRAIGHT_LINE_RATES, taxParameters: TAX_PARAMETERS };
 const ctx = { accounts: INDIVIDUAL_ACCOUNT_LIST, ...params };
 

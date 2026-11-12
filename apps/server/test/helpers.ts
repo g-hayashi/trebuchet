@@ -132,11 +132,35 @@ export async function json<T>(res: Response, status: number): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * 許す Host・Origin・セッションの Cookie を付けて呼ぶ（`createApp` で作った別の app にも使える）。
+ * GET 以外は `content-type: application/json` を付け、`body` があれば JSON にして送る
+ */
+export async function jsonRequest(
+  target: { request(path: string, init?: RequestInit): Response | Promise<Response> },
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+  path: string,
+  body?: unknown,
+): Promise<Response> {
+  const headers = await testHeaders();
+  return target.request(path, {
+    method,
+    headers: method === "GET" ? headers : { ...headers, "content-type": "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+}
+
 /** エラーの応答（{ error }）を除いた成功のボディの型にする */
 export const okBody = async <R extends { json(): Promise<unknown> }>(
   res: R,
 ): Promise<Exclude<Awaited<ReturnType<R["json"]>>, { error: unknown }>> =>
   (await res.json()) as Exclude<Awaited<ReturnType<R["json"]>>, { error: unknown }>;
+
+/**
+ * 日付の境目（UTC・JST の 0 時）から離した時刻。UTC 03:00 = JST 12:00（同じ暦日）で、今日は 2026-10-31。
+ * domain・db のテストの `NOW`（`packages/domain/test/test-dates.ts`）とは別の値
+ */
+export const NOW = "2026-10-31T03:00:00.000Z";
 
 /** 進められる偽の時計（`advance` はミリ秒、`set` は ISO 文字列） */
 export function makeClock(start = "2026-10-20T09:00:00.000Z") {

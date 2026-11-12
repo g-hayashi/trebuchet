@@ -22,6 +22,7 @@ import {
   type ReceiptFileRow,
   type ReceiptReadingRow,
   type Result,
+  receiptNotFoundError,
 } from "../types.ts";
 import { isUnreadable, type ReceiptDeps } from "./receipts.ts";
 
@@ -83,7 +84,7 @@ export async function readReceipt(
   const read = deps.uow.run((tx) => {
     const receipt = tx.receipts.getReceipt(receiptId);
     if (receipt === undefined) {
-      return err(domainError("RECEIPT_NOT_FOUND", "証憑が見つかりません"));
+      return err(receiptNotFoundError());
     }
     if (receipt.deletedAt !== null) {
       return err(domainError("RECEIPT_DELETED", "削除済みの証憑は読み取れません"));
@@ -118,7 +119,7 @@ export async function readReceipt(
   return deps.uow.run((tx) => {
     const current = tx.receipts.getReceipt(receiptId);
     if (current === undefined) {
-      return err(domainError("RECEIPT_NOT_FOUND", "証憑が見つかりません"));
+      return err(receiptNotFoundError());
     }
     if (current.deletedAt !== null) {
       return err(domainError("RECEIPT_DELETED", "削除済みの証憑は読み取れません"));

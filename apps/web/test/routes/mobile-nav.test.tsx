@@ -1,19 +1,12 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Outlet,
-  RouterProvider,
-} from "@tanstack/react-router";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { createRootRoute, createRoute, Outlet } from "@tanstack/react-router";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { isMobileRoute, MOBILE_ROUTES } from "@/components/layout/MobileNav";
 import { Route as EntityRoute } from "@/routes/e/$entityId/route";
 import { mockApi, ok } from "../mock-api";
+import { renderTree } from "../render-route";
 
 const entity = {
   id: "e1",
@@ -55,10 +48,6 @@ afterEach(() => {
 
 /** ヘッダー（ルートの上）と事業体のレイアウト・設定・トップの空の画面を描画する */
 function renderAt(url: string) {
-  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   const rootRoute = createRootRoute({
     component: () => (
       <>
@@ -84,16 +73,7 @@ function renderAt(url: string) {
   });
   const top = createRoute({ getParentRoute: () => rootRoute, path: "/", component: () => null });
   rootRoute.addChildren([entityRoute.addChildren([anyChild]), settings, top]);
-  const router = createRouter({
-    routeTree: rootRoute,
-    history: createMemoryHistory({ initialEntries: [url] }),
-  });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return { router };
+  return renderTree(rootRoute, url);
 }
 
 // name に文字列を渡すと完全一致（Testing Library の既定）

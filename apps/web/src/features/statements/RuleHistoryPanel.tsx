@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { accountsQuery } from "@/features/accounts/api";
@@ -36,7 +37,7 @@ function changes(
     .map(([key, label, show]) => `${label}: ${show(before[key])} → ${show(after[key])}`);
 }
 
-/** ルールの履歴（H:§5.5、FR-022）。追記の順に、操作・日時・変わった項目を出す */
+/** ルールの履歴（H:§5.5、006/FR-022）。追記の順に、操作・日時・変わった項目を出す */
 export function RuleHistoryPanel({
   entityId,
   rule,
@@ -66,9 +67,7 @@ export function RuleHistoryPanel({
         </Button>
       </div>
       <ApiErrorMessage error={history.error} />
-      {history.isPending && !history.error && (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
-      )}
+      {history.isPending && <Loading />}
       {history.data && (
         <ul className="grid gap-2 text-sm">
           {history.data.map((h) => {

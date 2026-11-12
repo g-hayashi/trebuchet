@@ -5,8 +5,7 @@ import {
   type RecurringUnitOfWork,
 } from "@trebuchet/domain";
 import { todayOf } from "./today.ts";
-
-const HOUR_MS = 60 * 60 * 1000;
+import { errorName, HOUR_MS, startInterval } from "./util.ts";
 
 export type RecurringSchedulerDeps = {
   /** 判定する事業体の ID（registry の全事業体）。呼ぶたびに引き直す */
@@ -44,20 +43,15 @@ export function startRecurringScheduler(deps: RecurringSchedulerDeps): Recurring
             today,
           );
         } catch (e) {
-          console.error("recurring: 定期仕訳の判定に失敗", e instanceof Error ? e.name : "unknown");
+          console.error("recurring: 定期仕訳の判定に失敗", errorName(e));
         }
       }
     } catch (e) {
-      console.error("recurring: 定期仕訳の判定に失敗", e instanceof Error ? e.name : "unknown");
+      console.error("recurring: 定期仕訳の判定に失敗", errorName(e));
     } finally {
       judging = false;
     }
   }
 
-  const timer = setInterval(() => {
-    void tick();
-  }, deps.intervalMs ?? HOUR_MS);
-  timer.unref();
-
-  return { tick, stop: () => clearInterval(timer) };
+  return { tick, stop: startInterval(tick, deps.intervalMs ?? HOUR_MS) };
 }

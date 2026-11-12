@@ -8,7 +8,7 @@ import { PURPOSE_LABELS } from "./labels";
 export type SeedPreview = { created: number; skipped: number; rules: RuleView[] };
 
 /**
- * ルールの初期作成の案（H:§5.2、FR-023）。過去の確定仕訳から作れるルールを、作る前に見せる。
+ * ルールの初期作成の案（H:§5.2、006/FR-023）。過去の確定仕訳から作れるルールを、作る前に見せる。
  * 「この案で作る」で実行する（案の件数は、実行のときに数え直す）
  */
 export function SeedRulesPanel({

@@ -24,7 +24,7 @@ import { SkipRunForm } from "./SkipRunForm";
 const RUN_STATUS_LABELS = { posted: "登録済み", skipped: "登録しない" } as const;
 
 /**
- * 定期仕訳の詳細（FR-023・026〜029）。停止・再開（再開の月と、今日以前に登録される回の確認）、
+ * 定期仕訳の詳細（005/FR-023・026〜029）。停止・再開（再開の月と、今日以前に登録される回の確認）、
  * 登録できなかった回（「この回は登録しない」）、内容の編集、登録の記録
  */
 export function RecurringDetail({

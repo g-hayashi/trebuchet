@@ -1,5 +1,8 @@
 import type { AdjustmentProposal, BlueReturn } from "@trebuchet/schema";
+import { accountByCode } from "../accounts.ts";
 import { addMonths, isValidDate, monthIndex, monthOfDate, yearOfDate } from "../dates.ts";
+import { isYen } from "../money.ts";
+import { blankToNull } from "../text.ts";
 import {
   type Account,
   type AdjustmentRef,
@@ -11,8 +14,10 @@ import {
   ok,
   type Result,
   type TaxParameter,
+  validation,
 } from "../types.ts";
-import { accountByCode, DEPRECIATION_ACCOUNT_CODE } from "./depreciation.ts";
+import { DEPRECIATION_ACCOUNT_CODE } from "./depreciation.ts";
+import { checkPriorAccumulation } from "./prior-accumulation.ts";
 import { resolveTaxParameter } from "./tax-parameters.ts";
 
 /** 開業費の登録の入力。id は更新のときだけ */
@@ -20,13 +25,7 @@ export type DeferredAssetDraft = Omit<DeferredAsset, "id" | "createdAt" | "updat
   id?: string;
 };
 
-const MAX_AMOUNT = 1e12;
 const BUSINESS_RATIO = 10000;
-
-const blankToNull = (s: string | null | undefined): string | null => {
-  const t = s?.trim() ?? "";
-  return t === "" ? null : t;
-};
 
 /**
  * 開業費の登録を検証する（FR-012、R5）。
@@ -39,18 +38,11 @@ export function validateDeferredAsset(
   draft: DeferredAssetDraft,
   ctx: { accounts: readonly Account[] },
 ): Result<DeferredAssetDraft> {
-  const fail = (field: string, message: string) =>
-    err(domainError("VALIDATION", message, { field }));
-  const priorFail = (field: "priorAccumulated" | "priorThroughYear", message: string) =>
-    err(domainError("PRIOR_ACCUMULATED_INVALID", message, { field }));
+  const fail = (field: string, message: string) => validation(message, { field });
 
   const name = draft.name.trim();
   if (name === "") return fail("name", "名称を入力してください");
-  if (
-    !Number.isSafeInteger(draft.totalAmount) ||
-    draft.totalAmount <= 0 ||
-    draft.totalAmount >= MAX_AMOUNT
-  ) {
+  if (!isYen(draft.totalAmount)) {
     return fail("totalAmount", "支出の総額は 1 円以上の整数で入力してください");
   }
   if (!isValidDate(draft.openedOn)) {
@@ -66,26 +58,13 @@ export function validateDeferredAsset(
       }),
     );
   }
-  if (
-    !Number.isSafeInteger(draft.priorAccumulated) ||
-    draft.priorAccumulated < 0 ||
-    draft.priorAccumulated > draft.totalAmount
-  ) {
-    return priorFail(
-      "priorAccumulated",
-      "前年までの償却累計額は 0 円以上、総額以下の整数で入力してください",
-    );
-  }
-  const through = draft.priorThroughYear;
-  if (through !== null && !Number.isSafeInteger(through)) {
-    return priorFail("priorThroughYear", "累計の年は整数で入力してください");
-  }
-  if (draft.priorAccumulated > 0 && through === null) {
-    return priorFail("priorThroughYear", "前年までの償却累計額には、何年分までかの入力が必要です");
-  }
-  if (through !== null && through < yearOfDate(draft.openedOn)) {
-    return priorFail("priorThroughYear", "累計の年は開業の年以後にしてください");
-  }
+  const priorError = checkPriorAccumulation(draft, {
+    max: draft.totalAmount,
+    maxMessage: "前年までの償却累計額は 0 円以上、総額以下の整数で入力してください",
+    startYear: yearOfDate(draft.openedOn),
+    startYearMessage: "累計の年は開業の年以後にしてください",
+  });
+  if (priorError !== null) return err(priorError);
   return ok({ ...draft, name, note: blankToNull(draft.note) });
 }
 
@@ -194,9 +173,7 @@ export function validateDeferredDecision(
   amount: number,
 ): Result<number> {
   if (!Number.isSafeInteger(amount) || amount < 0) {
-    return err(
-      domainError("VALIDATION", "償却額は 0 円以上の整数で入力してください", { field: "amount" }),
-    );
+    return validation("償却額は 0 円以上の整数で入力してください", { field: "amount" });
   }
   if (amount > view.openingBalance) {
     return err(
@@ -275,7 +252,7 @@ export type DeferredContext = {
 };
 
 /** 開業費ごとの年度の見え方（計算できない開業費は含めない） */
-export function deferredViews(
+function deferredViews(
   assets: readonly DeferredAsset[],
   fiscalYear: number,
   ctx: DeferredContext,

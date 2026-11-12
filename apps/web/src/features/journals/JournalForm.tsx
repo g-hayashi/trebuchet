@@ -26,15 +26,13 @@ import { Input, NativeSelect } from "@/components/ui/input";
 import { type Account, subAccountsQuery } from "@/features/accounts/api";
 import type { TaxCategory, TaxSetting } from "@/features/entities/api";
 import type { Partner, Tag } from "@/features/masters/api";
-import { groupAccountsBySection } from "@/lib/accounts";
+import { groupAccountsBySection, SIDE_LABELS } from "@/lib/accounts";
 import { ApiError } from "@/lib/api";
 import { formatYen, parseYenInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CreateFiscalPeriodLink } from "./CreateFiscalPeriodLink";
 import { JournalSuggestions, type SuggestionStatus } from "./JournalSuggestions";
 import { QuickEntryForm } from "./QuickEntryForm";
-
-const SIDE_LABELS: Record<Side, string> = { debit: "借方", credit: "貸方" };
 
 /** 共有スキーマの行。入力途中の金額（未入力 = undefined）を型として許し、検証は Yen で行う */
 const LineSchema = JournalLineInput.extend({
@@ -253,7 +251,7 @@ export type JournalFormProps = {
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
   /** 訂正する仕訳。その内容で始め、使っている使用停止の科目・補助科目・取引先も選べるようにする */
   journal?: JournalFormSource | undefined;
-  /** 訂正仕訳として登録するときの訂正元（FR-019a） */
+  /** 訂正仕訳として登録するときの訂正元（001/FR-019a） */
   correctsJournalId?: string | undefined;
   submitLabel?: string | undefined;
   /** フォームの名前（読み上げ・テストの検索用）。既定は「仕訳」 */
@@ -269,7 +267,7 @@ export type JournalFormProps = {
   onSubmit: (input: JournalInput) => Promise<unknown>;
 };
 
-/** 仕訳の入力フォーム（FR-013〜018）。行の追加・削除、合計と差額の表示、エラーの表示を行う */
+/** 仕訳の入力フォーム（001/FR-013〜018）。行の追加・削除、合計と差額の表示、エラーの表示を行う */
 export function JournalForm({
   entityId,
   accounts,

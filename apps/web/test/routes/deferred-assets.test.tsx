@@ -1,14 +1,14 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AdjustmentProposal } from "@trebuchet/schema";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route as DeferredAssetsRoute } from "@/routes/e/$entityId/deferred-assets/index";
+import { ENTITY } from "../fixtures";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
 // 開業費の画面（009 US3）。固定資産台帳から移した（011/T005）。見出し・主な操作の仕上げは T033
 
-const ENTITY = "/api/entities/e1";
 const DEFERRED = `${ENTITY}/deferred-assets`;
 const ADJUSTMENTS = `${ENTITY}/blue-return/2025/adjustments`;
 
@@ -446,5 +446,19 @@ describe("開業費（009 US3）", () => {
     });
     await waitFor(() => expect(callsOf(calls, "GET", DEFERRED).length).toBeGreaterThan(listReads));
     expect(await screen.findByText("登録する仕訳の案はありません。")).toBeInTheDocument();
+  });
+});
+
+describe("年分の入力欄は URL に追従する", () => {
+  it("戻る・進むで ?year が変わると、欄も同じ年になる", async () => {
+    mockScreen();
+    const { router } = renderPage();
+    const input = await screen.findByRole("textbox", { name: "年分" });
+    expect(input).toHaveValue("2025");
+
+    await act(async () => {
+      router.history.push("/e/e1/deferred-assets/?year=2024");
+    });
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "年分" })).toHaveValue("2024"));
   });
 });

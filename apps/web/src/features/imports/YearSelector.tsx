@@ -7,7 +7,7 @@ import { DECISION_LABELS } from "./labels";
 
 type Year = ImportPreview["years"][number];
 
-/** 取り込む年度の選択（FR-004a）。会計期間のない年度は選べない */
+/** 取り込む年度の選択（002/FR-004a）。会計期間のない年度は選べない */
 export function YearSelector({
   entityId,
   years,

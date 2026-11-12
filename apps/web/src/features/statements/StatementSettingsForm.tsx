@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
@@ -106,15 +107,13 @@ function Fields({
   );
 }
 
-/** 明細の設定（H:§6.3。FR-018・027）: 「確信度の高い行を選択」と外部へ送るしきい値。事業体ごと */
+/** 明細の設定（H:§6.3。006/FR-018・027）: 「確信度の高い行を選択」と外部へ送るしきい値。事業体ごと */
 export function StatementSettingsForm({ entityId }: { entityId: string }) {
   const settings = useQuery(statementSettingsQuery(entityId));
   return (
     <div className="grid gap-3">
       <ApiErrorMessage error={settings.error} />
-      {settings.isPending && !settings.error && (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
-      )}
+      {settings.isPending && <Loading />}
       {settings.data && <Fields key={entityId} entityId={entityId} initial={settings.data} />}
     </div>
   );

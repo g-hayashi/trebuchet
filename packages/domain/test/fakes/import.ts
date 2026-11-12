@@ -165,4 +165,3 @@ export const fakeImportUnitOfWork = (
   masters = new InMemoryMasterRepository(),
   imports = new InMemoryImportStore(ledger),
 ) => fakeUnitOfWork(ledger, masters, { imports });
-export type FakeImportUnitOfWork = ReturnType<typeof fakeImportUnitOfWork>;

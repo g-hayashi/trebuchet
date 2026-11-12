@@ -5,7 +5,7 @@ import { StatementsWorkspace } from "@/features/statements/StatementsWorkspace";
 
 /**
  * `statementId` を付けて開くと、その明細に印を付ける（仕訳の詳細の「元の明細」から）。
- * `status` を付けると、その状態で絞り込んで開く（ホームの「未処理の明細」から。011 T009）。省略は「未処理」
+ * `status` を付けると、その状態で絞り込んで開く（ホームの「未処理の明細」から。011/T009）。省略は「未処理」
  */
 const StatementsSearch = z.object({
   statementId: Id.optional(),

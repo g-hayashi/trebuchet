@@ -1,4 +1,3 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { RECEIPT_MAX_BYTES, type ReceiptDetail } from "@trebuchet/schema";
 import { useState } from "react";
 import { ReasonDialog } from "@/components/reason-dialog";
@@ -6,14 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldError } from "@/components/ui/form-error";
 import { FilePicker } from "@/features/imports/FilePicker";
-import { ApiError } from "@/lib/api";
-import { postReceiptFile, receiptKeys } from "./api";
+import { postReceiptFile } from "./api";
+import { RECEIPT_MAX_MB } from "./labels";
+import { useReceiptWrite } from "./use-receipt-write";
 
-const MAX_MB = RECEIPT_MAX_BYTES / (1024 * 1024);
 const ACCEPT = "image/jpeg,image/png,image/heic,application/pdf,.jpg,.jpeg,.png,.heic,.pdf";
 
 /**
- * ファイルの差し替え（撮り直し。US5、FR-018）。新しいファイルを選び、理由を添えて送る。
+ * ファイルの差し替え（撮り直し。010/US5、010/FR-018）。新しいファイルを選び、理由を添えて送る。
  * 前の版は残り、履歴から開ける。警告（解像度など）は差し替え後の証憑の警告として詳細に出る。
  * 削除済みの証憑には出さない（呼び出し側）
  */
@@ -24,38 +23,33 @@ export function ReceiptReplaceSection({
   entityId: string;
   receipt: ReceiptDetail;
 }) {
-  const queryClient = useQueryClient();
   const [file, setFile] = useState<File | undefined>();
   const [pickerKey, setPickerKey] = useState(0);
   const [asking, setAsking] = useState(false);
   const [fileError, setFileError] = useState<string | undefined>();
 
-  const mutation = useMutation({
-    mutationFn: (input: { file: File; reason: string }) =>
-      postReceiptFile(entityId, receipt.id, input.file, {
-        reason: input.reason,
-        version: receipt.version,
-      }),
-    onSuccess: async ({ receipt: updated }) => {
-      queryClient.setQueryData(receiptKeys.detail(entityId, receipt.id), updated);
-      setFile(undefined);
-      setPickerKey((k) => k + 1);
-      await queryClient.invalidateQueries({ queryKey: receiptKeys.all(entityId) });
+  const mutation = useReceiptWrite(
+    entityId,
+    receipt.id,
+    async (input: { file: File; reason: string }) =>
+      (
+        await postReceiptFile(entityId, receipt.id, input.file, {
+          reason: input.reason,
+          version: receipt.version,
+        })
+      ).receipt,
+    {
+      onUpdated: () => {
+        setFile(undefined);
+        setPickerKey((k) => k + 1);
+      },
     },
-    onError: async (error) => {
-      // 他の操作で版が進んでいたら、最新を読み直す
-      if (error instanceof ApiError && error.code === "VERSION_CONFLICT") {
-        await queryClient.invalidateQueries({
-          queryKey: receiptKeys.detail(entityId, receipt.id),
-        });
-      }
-    },
-  });
+  );
 
   const open = () => {
     if (file === undefined) return;
     if (file.size > RECEIPT_MAX_BYTES) {
-      setFileError(`ファイルが大きすぎます（${MAX_MB} MB まで）。`);
+      setFileError(`ファイルが大きすぎます（${RECEIPT_MAX_MB} MB まで）。`);
       return;
     }
     setFileError(undefined);

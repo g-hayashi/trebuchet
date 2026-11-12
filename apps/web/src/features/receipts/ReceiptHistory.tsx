@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReceiptHistoryEntry } from "@trebuchet/schema";
+import { Loading } from "@/components/loading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatYen } from "@/lib/format";
 import { receiptFileUrl, receiptHistoryQuery } from "./api";
 import { CATEGORY_LABELS, HISTORY_ACTION_LABELS, HISTORY_VALUE_LABELS } from "./labels";
 
@@ -21,7 +22,7 @@ function valueText(key: keyof typeof HISTORY_VALUE_LABELS, value: unknown): stri
   if (key === "category" && (value === "paper_scan" || value === "electronic")) {
     return CATEGORY_LABELS[value];
   }
-  if (key === "amount" && typeof value === "number") return `${value.toLocaleString("ja-JP")} 円`;
+  if (key === "amount" && typeof value === "number") return `${formatYen(value)} 円`;
   return String(value);
 }
 
@@ -89,7 +90,7 @@ function EntryBody({
 }
 
 /**
- * 証憑の履歴（US5、FR-018・SC-005）。追加・訂正・差し替え・削除・結びつけを古い順に、
+ * 証憑の履歴（010/US5、010/FR-018・010/SC-005）。追加・訂正・差し替え・削除・結びつけを古い順に、
  * 日時・理由・訂正の前後の値・差し替え前のファイルへのリンクで示す。削除済みの証憑でも開ける
  */
 export function ReceiptHistory({ entityId, receiptId }: { entityId: string; receiptId: string }) {
@@ -102,7 +103,7 @@ export function ReceiptHistory({ entityId, receiptId }: { entityId: string; rece
         </CardHeader>
         <CardContent>
           <ApiErrorMessage error={query.error} />
-          {query.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+          {query.isPending && <Loading />}
           {query.data && (
             <ol className="grid gap-3 text-sm">
               {query.data.map((entry, i) => (

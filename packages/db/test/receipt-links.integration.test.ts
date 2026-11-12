@@ -23,7 +23,17 @@ import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { createReceiptFileStore } from "../src/receipt-files.ts";
 import { createReceiptUnitOfWork } from "../src/receipt-repository.ts";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { accountIdOf, createTestEntity, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import {
+  accountIdOf,
+  codeOf,
+  createTestEntity,
+  NOW,
+  type TempDataDir,
+  testClock,
+  testIds,
+  unwrap,
+  useTempDataDir,
+} from "../src/testing.ts";
 import { receiptDb } from "./receipt-db-setup.ts";
 
 // T021（INV-64）: 証憑と仕訳の結びつきを、実際の drizzleUnitOfWork・DB で確かめる。
@@ -36,9 +46,8 @@ let ledger: DrizzleLedgerRepository;
 let raw: ReturnType<typeof receiptDb>;
 let entityId: string;
 
-const NOW = "2026-10-25T09:00:00.000Z";
-const ids = { next: () => randomUUIDv7() };
-const clock = { now: () => NOW };
+const ids = testIds();
+const clock = testClock();
 const ledgerDeps = () => ({ ledger, masters, ids, clock });
 const RANGE = { from: "2026-01-01", to: "2026-12-31" };
 
@@ -51,12 +60,6 @@ beforeEach(() => {
   raw = receiptDb(db);
 });
 afterEach(() => tmp.cleanup());
-
-const unwrap = <T>(r: Result<T>): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
-const codeOf = <T>(r: Result<T>): string | undefined => (r.ok ? undefined : r.error.code);
 
 const receiptDeps = (uow: ReceiptUnitOfWork = createReceiptUnitOfWork(db)): ReceiptDeps => ({
   uow,

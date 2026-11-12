@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Loading } from "@/components/loading";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { recurringDetailQuery } from "@/features/recurring/api";
 import { RecurringDetail } from "@/features/recurring/RecurringDetail";
@@ -25,7 +26,7 @@ function RecurringDetailPage() {
         </Link>
       </div>
       <ApiErrorMessage error={error} />
-      {isPending && !error && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {isPending && <Loading />}
       {data && <RecurringDetail entityId={entityId} detail={data} />}
     </main>
   );

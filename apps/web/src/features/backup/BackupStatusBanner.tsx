@@ -4,7 +4,7 @@ import { backupStatusQuery } from "./api";
 import { ALERT_MESSAGES } from "./labels";
 
 /**
- * バックアップの知らせ（FR-020）。`GET /api/backup/status` の `alert` があるときだけ、全画面の上部に出す。
+ * バックアップの知らせ（004/FR-020）。`GET /api/backup/status` の `alert` があるときだけ、全画面の上部に出す。
  * 状態を読めないとき（読み込み中・エラー）は、画面の邪魔をしないよう何も出さない
  */
 export function BackupStatusBanner() {

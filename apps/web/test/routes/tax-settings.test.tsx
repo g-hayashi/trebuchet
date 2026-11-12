@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TaxSetting } from "@/features/entities/api";
 import { ACCOUNTING_METHOD_HELP, TAXPAYER_STATUS_HELP } from "@/features/entities/tax-help";
 import { Route } from "@/routes/e/$entityId/tax-settings";
+import { expectLedgerInvalidated, seedLedgerQueries } from "../ledger-cache";
 import { apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
 
@@ -88,6 +89,27 @@ describe("消費税の設定の画面", () => {
     expect(
       await screen.findByRole("button", { name: "削除（2024-01-01 からの設定）" }),
     ).toBeDisabled();
+  });
+
+  it("設定を保存すると、帳票・決算書・ホームを読み直す", async () => {
+    let taxSettings = [s2024];
+    mockApi({
+      [`GET ${PATH}`]: () => ok({ taxSettings }),
+      [`PUT ${PATH}`]: () => {
+        taxSettings = [s2024, s2027];
+        return ok({ taxSettings });
+      },
+    });
+    const user = userEvent.setup();
+    const { queryClient } = renderTaxSettings();
+    await screen.findByRole("table");
+    seedLedgerQueries(queryClient);
+
+    await user.type(screen.getByLabelText("適用開始日"), "2027-01-01");
+    await user.click(screen.getByRole("button", { name: "追加して保存" }));
+
+    await screen.findByText("2027-01-01 〜");
+    expectLedgerInvalidated(queryClient);
   });
 
   it("設定を追加すると、全件を送って一覧を置き換える", async () => {

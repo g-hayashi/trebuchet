@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { periodOf } from "@/features/periods/current";
 import { type BalanceSheet, balanceSheetQuery } from "@/features/reports/api";
 import {
   AsOfPicker,
@@ -8,7 +9,7 @@ import {
   CsvLink,
   PreviousYearNotice,
 } from "@/features/reports/controls";
-import { periodOf, useReportAsOf } from "@/features/reports/periods";
+import { useReportAsOf } from "@/features/reports/periods";
 import { BalancedBadge, ReportPage } from "@/features/reports/ReportPage";
 import { type StatementLine, StatementTable } from "@/features/reports/StatementTable";
 import { AsOfSearch } from "@/features/reports/search";
@@ -84,7 +85,7 @@ function statementLines(report: BalanceSheet) {
   return { assets, liabilitiesAndEquity };
 }
 
-/** 貸借対照表（FR-029, FR-030） */
+/** 貸借対照表（001/FR-029, 001/FR-030） */
 function BalanceSheetPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();
@@ -102,7 +103,7 @@ function BalanceSheetPage() {
   const period = periods && asOf ? periodOf(periods, asOf) : undefined;
   const lines = data && statementLines(data);
   const compare = data?.previousAsOf != null;
-  // 科目名のリンクは、会計期間の期首から基準日までの元帳へ（FR-039）
+  // 科目名のリンクは、会計期間の期首から基準日までの元帳へ（011/FR-039）
   const ledger = period && asOf ? { entityId, from: period.startDate, to: asOf } : undefined;
 
   return (

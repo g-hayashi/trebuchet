@@ -178,6 +178,7 @@ export function createApp(options: AppOptions = {}) {
       remoteSettingsRoutes({
         store,
         clock,
+        support,
         tailscale: options.tailscale ?? createTailscaleCli({ port: SERVER_PORT }),
       }),
     )

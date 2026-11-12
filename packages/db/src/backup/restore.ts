@@ -18,10 +18,14 @@ import {
   type DbKeyScope,
   encryptSqliteFile,
   openEncryptedSqlite,
+  REGISTRY_FILE_NAME,
+  registryFile,
+  tenantRelPath,
   withDataKeyOverride,
 } from "../tenant-store.ts";
+import { sha256Hex } from "../util.ts";
 import { unwrapDataKey } from "../vault-crypto.ts";
-import { packArchive, sha256Hex, unpackArchive } from "./archive.ts";
+import { isArchivePath, packArchive, unpackArchive } from "./archive.ts";
 import {
   type BackupHeader,
   decryptBackup,
@@ -74,6 +78,10 @@ export type RestoreSummary = {
   /** データ場所に帳簿（registry か事業体の DB）があるか。あれば復元前に今の帳簿をバックアップする */
   hasExistingLedger: boolean;
   differences: RestoreEntityDiff[];
+  /** 差の計算に失敗した（`differences` は空だが「差がない」ではない）。確認の画面でその旨を出す */
+  differencesUnavailable: boolean;
+  /** 失敗した例外の名前（メッセージは値や鍵のパスを含みうるので入れない）。失敗していなければ null */
+  differencesError: string | null;
 };
 
 export type RestoreResult = {
@@ -116,7 +124,7 @@ export type RestoreOptions = {
 const fail = (error: RestoreErrorCode) => ({ ok: false, error }) as const;
 
 function hasExistingLedger(dataDir: string): boolean {
-  if (existsSync(join(dataDir, "registry.sqlite"))) return true;
+  if (existsSync(registryFile(dataDir))) return true;
   try {
     return readdirSync(join(dataDir, "tenants")).some((n) => n.endsWith(".sqlite"));
   } catch {
@@ -134,9 +142,9 @@ function journalStats(db: Database.Database): RestoreEntitySide {
 /** データ場所の registry に同じ id の事業体があるものだけ、仕訳の件数と最後の更新を比べる */
 function computeDifferences(dataDir: string, archive: UnpackedArchive): RestoreEntityDiff[] {
   const diffs: RestoreEntityDiff[] = [];
-  const registryFile = join(dataDir, "registry.sqlite");
-  if (!existsSync(registryFile)) return diffs;
-  const registry = openEncryptedSqlite(registryFile, "registry", {
+  const registryPath = registryFile(dataDir);
+  if (!existsSync(registryPath)) return diffs;
+  const registry = openEncryptedSqlite(registryPath, "registry", {
     readonly: true,
     fileMustExist: true,
   });
@@ -149,8 +157,8 @@ function computeDifferences(dataDir: string, archive: UnpackedArchive): RestoreE
     for (const entity of archive.manifest.entities) {
       const id = entity.id.toLowerCase();
       if (!existing.has(id)) continue;
-      const currentFile = join(dataDir, "tenants", `${id}.sqlite`);
-      const backupFile = archive.files.find((f) => f.path.toLowerCase() === `tenants/${id}.sqlite`);
+      const currentFile = join(dataDir, tenantRelPath(id));
+      const backupFile = archive.files.find((f) => f.path.toLowerCase() === tenantRelPath(id));
       if (!existsSync(currentFile) || backupFile === undefined) continue;
       const current = openEncryptedSqlite(
         currentFile,
@@ -181,7 +189,7 @@ type SettingRow = { key: string; value: string; updated_at: string };
 
 /** データ場所の registry の `app_settings` の全行。表がなければ空 */
 function readAppSettings(dataDir: string): SettingRow[] {
-  const file = join(dataDir, "registry.sqlite");
+  const file = registryFile(dataDir);
   if (!existsSync(file)) return [];
   const db = openEncryptedSqlite(file, "registry", { readonly: true, fileMustExist: true });
   try {
@@ -209,7 +217,7 @@ type AiSettingsRow = {
 
 /** データ場所の registry の `ai_settings`（端末の AI の接続の設定。006 R12）。表・行がなければ undefined */
 function readAiSettings(dataDir: string): AiSettingsRow | undefined {
-  const file = join(dataDir, "registry.sqlite");
+  const file = registryFile(dataDir);
   if (!existsSync(file)) return undefined;
   const db = openEncryptedSqlite(file, "registry", { readonly: true, fileMustExist: true });
   try {
@@ -239,10 +247,6 @@ function integrityOk(file: string): boolean {
     db?.close();
   }
 }
-
-/** 許すのは `registry.sqlite` と `tenants/<UUID>.sqlite` の形だけ（unpackArchive の検査に重ねる） */
-const SAFE_PATH =
-  /^(?:registry|tenants\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sqlite$/;
 
 /** tbk・展開先・改名先がすべて空いている日時（同じ秒の 2 回目は 1 秒ずつ進める） */
 function pickStamp(dataDir: string, start: Date): Date {
@@ -281,7 +285,7 @@ function readCurrentRecoveryWrap(dataDir: string): WrappedKey | undefined {
 function opensRegistry(dataDir: string, dk: Uint8Array): boolean {
   return withDataKeyOverride(dk, () => {
     try {
-      openEncryptedSqlite(join(dataDir, "registry.sqlite"), "registry", {
+      openEncryptedSqlite(registryFile(dataDir), "registry", {
         readonly: true,
         fileMustExist: true,
       }).close();
@@ -308,7 +312,7 @@ function resolveCurrentKey(
   backupDk: Buffer,
   openedWrap: WrappedKey,
 ): CurrentKey | null {
-  const registryExists = existsSync(join(dataDir, "registry.sqlite"));
+  const registryExists = existsSync(registryFile(dataDir));
   const currentWrap = readCurrentRecoveryWrap(dataDir);
   if (currentWrap !== undefined) {
     const dk = unwrapDataKey(currentWrap, secret, "recovery", null);
@@ -389,11 +393,14 @@ async function applyRestore(
 
   // 3. 要約と確認
   let differences: RestoreEntityDiff[] = [];
+  let differencesError: string | null = null;
   if (hasLedger && current !== null) {
     try {
       differences = withDataKeyOverride(current.dk, () => computeDifferences(dataDir, archive));
-    } catch {
+    } catch (e) {
+      // 握りつぶさない。差が出ないまま上書きに進まないよう、要約に失敗を出す
       differences = [];
+      differencesError = e instanceof Error ? e.name : "unknown";
     }
   }
   const summary: RestoreSummary = {
@@ -403,6 +410,8 @@ async function applyRestore(
     entities: archive.manifest.entities,
     hasExistingLedger: hasLedger,
     differences,
+    differencesUnavailable: differencesError !== null,
+    differencesError,
   };
   if (!(await options.confirm(summary))) return fail("CANCELLED");
 
@@ -496,13 +505,13 @@ async function applyRestore(
     for (const file of archive.files) {
       // マニフェストのパスを信用せず、許す形だけを書く
       const path = file.path.toLowerCase();
-      if (!SAFE_PATH.test(path)) throw new Error("path");
+      if (!isArchivePath(path)) throw new Error("path");
       writeFile(join(restoreDir, path), file.bytes);
     }
     for (const file of archive.files) {
       if (!integrityOk(join(restoreDir, file.path.toLowerCase()))) throw new Error("integrity");
     }
-    const registry = new Database(join(restoreDir, "registry.sqlite"), { fileMustExist: true });
+    const registry = new Database(registryFile(restoreDir), { fileMustExist: true });
     try {
       const insert = registry.prepare(
         "INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)",
@@ -534,7 +543,7 @@ async function applyRestore(
       for (const file of archive.files) {
         const path = file.path.toLowerCase();
         const scope: DbKeyScope =
-          path === "registry.sqlite"
+          path === REGISTRY_FILE_NAME
             ? "registry"
             : { tenant: path.slice("tenants/".length, -".sqlite".length) };
         encryptSqliteFile(join(restoreDir, path), scope);

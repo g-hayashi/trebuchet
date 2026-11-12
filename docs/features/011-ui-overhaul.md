@@ -1,17 +1,8 @@
 # 画面の作り直し（011）
 
-## 組織の一覧と削除
-
-一覧のURLは `/list`（従来の `/?list=1` でも表示）。作成フォームの「個人・法人の違い」は展開式で、期首月・個人限定の決算機能・共通の初期設定を説明する。
-
-- 非表示: `POST /api/entities/:entityId/archive`。registry の `entities.status` を `archived` にして通常の一覧・切替・自動処理から外す。帳簿・証憑は保持するが、事業体配下のAPIは404にする。
-- 復元: `POST /api/entities/:entityId/restore`。`GET /api/entities/archived` の「非表示の組織」から一覧へ戻す。
-- 完全削除: `DELETE /api/entities/:entityId/purge`（JSON `{ name }`）。非表示済みかつ名称一致が必要。対象の操作が進行中なら拒否する。`deleting` を保存し、対象のDBハンドルを閉じてDB・副ファイル・証憑だけを消し、最後に一覧の行を消す。失敗時は `deleting` のまま残し、復元を拒否して完全削除を再試行できる。
-- バックアップ: 非表示の組織は状態ごと保持し、削除処理中の組織は新しいバックアップから除外する。既存のバックアップや証憑のバックアップは消さない。過去のバックアップを復元すると削除した組織も戻る場合があることを確認画面で説明する。
-
-実装: `usecases/entity-lifecycle.ts`（domain）、`registry-repository.ts`・`tenant-store.ts`（db）、`routes/entities.ts`・`tenant.ts`（server）、`features/entities/EntityListPage.tsx`・`routes/list.tsx`（web）。
-
 仕様: `specs/011-ui-overhaul/`。画面の正本は UI の契約 `contracts/ui-shell.md`（主な操作は §7、スマホは §4）。API の変更は `contracts/http-api.md`。ホーム・ヘッダー・メニュー・主なボタン・スマホ・設定・仕訳のかんたん入力・請求・印刷などを作り直した。帳簿の不変条件（INV-1〜68）は変えず、INV-69〜72 を足した（`specs/INVARIANTS.md`）。
+
+## 011 の骨組み
 
 | 層 | 場所 |
 |---|---|
@@ -35,6 +26,17 @@
 - **申告の控え（`tax_return_memos`・`filed_documents`）とアプリの中の評価（`eval_runs`、`lib/jobs.ts`、`JOB_RUNNING`）は消した**（011 の migration で `DROP TABLE`）。過去の migration と snapshot にだけ残る。決算書の計算は控えを参照していなかったので変わらない。再び作らない。
 - **明細の承認の入力に `learn` はない**。承認のたびに学ぶ条件（`learnFromApproval`）でルールを作る・直す。ルールの一覧で利用者が直した・止めた・再開したルールは `managed_by = 'user'` になり、戻さない。承認と `seedRulesFromJournals` は `user` のルールを変えない（INV-71）。取込の確定の後、web が `inference-rules/seed` → `statements/candidates` → `statements/infer`（AI が無効なら飛ばす）を順に呼ぶ（`candidate-chain.ts`）。
 - **AI の推定の場面は `scene`（`statement`・`journal_entry`）で分ける**。`journal_entry` に送るのは `buildJournalEntryPayload` の日付・金額・`maskContent` を通した摘要だけ（INV-45）。`statement` の場面の指示文は `packages/domain/test/statements/prompt-golden.test.ts` が固定する（変えるときは `eval:statements` の前後の比較が要る）。仕訳の AI の候補は保存せず、ルールを使わない。
-- **端末内の AI は非推奨で、既定は無効**（2026-11-07。006 の文書）。AI の設定の画面（`AiSettingsForm.tsx`）の端末内の項目に「非推奨」と理由、無効だと列の対応の案（007）も出ないことを示す。既定では推定の経路は「ルール → 外部」になる（外部も既定は無効で、利用者が接続先・モデルを入れて有効にする）。
+- **端末内の AI の既定（非推奨・無効）の正本は[006](006-mfme-ai-journal.md)**。AI の設定の画面（`AiSettingsForm.tsx`）の端末内の項目に「非推奨」と理由、無効だと列の対応の案（007）も出ないことを示す。
 - **`eval:statements` の規則**: 明細の推定のプロンプト・推定の経路（ルール → 端末内 → 外部）を変えるときは、変更の前と後で `pnpm eval:statements` を実行して結果を比べる（Constitution IV、011/R10）。AI（`fm` と外部）を呼ぶので CI に含まれない。結果は `.tmp/eval-statements/` に件数と割合だけを残し、モデル名・URL・キー・明細・AI の回答を書かない。外部の有効・無効の状態や fixture の版が違う結果は比べない。CI のテストは偽の `SuggestionProvider` で集計だけを確かめる。`eval:columns`（007）・`eval:receipts`（010）と同じ規則。
+
+## 組織の一覧と削除
+
+一覧のURLは `/list`。作成フォームの「個人・法人の違い」は展開式で、期首月・個人限定の決算機能・共通の初期設定を説明する。
+
+- 非表示: `POST /api/entities/:entityId/archive`。registry の `entities.status` を `archived` にして通常の一覧・切替・自動処理から外す。帳簿・証憑は保持するが、事業体配下のAPIは404にする。
+- 復元: `POST /api/entities/:entityId/restore`。`GET /api/entities/archived` の「非表示の組織」から一覧へ戻す。
+- 完全削除: `DELETE /api/entities/:entityId/purge`（JSON `{ name }`）。非表示済みかつ名称一致が必要。対象の操作が進行中なら拒否する。`deleting` を保存し、対象のDBハンドルを閉じてDB・副ファイル・証憑だけを消し、最後に一覧の行を消す。失敗時は `deleting` のまま残し、復元を拒否して完全削除を再試行できる。
+- バックアップ: 非表示の組織は状態ごと保持し、削除処理中の組織は新しいバックアップから除外する。既存のバックアップや証憑のバックアップは消さない。過去のバックアップを復元すると削除した組織も戻る場合があることを確認画面で説明する。
+
+実装: `usecases/entity-lifecycle.ts`（domain）、`registry-repository.ts`・`tenant-store.ts`（db）、`routes/entities.ts`・`tenant.ts`（server）、`features/entities/EntityListPage.tsx`・`routes/list.tsx`（web）。
 

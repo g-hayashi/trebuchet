@@ -36,6 +36,7 @@ import {
 } from "@trebuchet/domain";
 import type { BackupTrigger } from "@trebuchet/schema";
 import { resolveBackupFolder } from "./backup-folder.ts";
+import { errorName } from "./util.ts";
 
 export type BackupRunnerDeps = {
   auth: () => AuthStore;
@@ -224,7 +225,7 @@ export function createBackupRunner(deps: BackupRunnerDeps): BackupRunner {
         const done = execute(runId, trigger, destination)
           .catch((e: unknown) => {
             // 記録そのものが失敗した場合。鍵を含まない種別だけをログに残す
-            console.error("backup: 実行の記録に失敗", e instanceof Error ? e.name : "unknown");
+            console.error("backup: 実行の記録に失敗", errorName(e));
             throw e;
           })
           .finally(() => {

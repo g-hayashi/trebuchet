@@ -12,6 +12,7 @@ import type {
   InvoicePriceMode,
   InvoiceTaxDisplay,
   JournalSource,
+  JournalStatus,
   PaymentView,
   Purpose,
   ReceiptCategory,
@@ -74,6 +75,30 @@ export const validationError = (message: string, details?: ErrorDetails): Domain
 export const validation = (message: string, details?: ErrorDetails) =>
   err(validationError(message, details));
 
+/** `*_NOT_FOUND` のエラーコード */
+type NotFoundCode = Extract<ErrorCode, `${string}_NOT_FOUND`>;
+
+/** `*_NOT_FOUND` の `DomainError`。文言は「<対象>が見つかりません」 */
+export const notFoundError = (
+  code: NotFoundCode,
+  subject: string,
+  details?: ErrorDetails,
+): DomainError => domainError(code, `${subject}が見つかりません`, details);
+
+/** 仕訳がない（`JOURNAL_NOT_FOUND`）。`subject` は文言の対象（既定は「仕訳」） */
+export const journalNotFoundError = (journalId: string, subject = "仕訳"): DomainError =>
+  notFoundError("JOURNAL_NOT_FOUND", subject, { journalId });
+
+export const accountNotFoundError = (accountId: string): DomainError =>
+  notFoundError("ACCOUNT_NOT_FOUND", "勘定科目", { accountId });
+
+export const entityNotFoundError = (): DomainError => notFoundError("ENTITY_NOT_FOUND", "事業体");
+
+export const receiptNotFoundError = (): DomainError => notFoundError("RECEIPT_NOT_FOUND", "証憑");
+
+export const statementNotFoundError = (statementId: string): DomainError =>
+  notFoundError("STATEMENT_NOT_FOUND", "明細", { statementId });
+
 /** 会計期間がない（`VALIDATION`、`details.fiscalYear` に年度）。HTTP のパスの年度は文字列のまま渡せる */
 export const periodNotFound = (fiscalYear: number | string): DomainError =>
   validationError("会計期間が見つかりません", { fiscalYear });
@@ -104,6 +129,12 @@ export type FiscalPeriod = {
   status: FiscalPeriodStatus;
   closedAt: string | null;
 };
+
+/** 日付（`YYYY-MM-DD`）を含む会計期間。なければ undefined */
+export const findPeriodByDate = <P extends Pick<FiscalPeriod, "startDate" | "endDate">>(
+  periods: readonly P[],
+  date: string,
+): P | undefined => periods.find((p) => p.startDate <= date && date <= p.endDate);
 
 export type Account = {
   id: string;
@@ -209,8 +240,7 @@ export type ValidJournal = {
   lines: ValidLine[];
 };
 
-export type JournalStatus = "active" | "voided";
-export type { JournalSource };
+export type { JournalSource, JournalStatus };
 
 export type JournalLine = ValidLine & { id: string };
 

@@ -1,12 +1,14 @@
+import { ACCOUNT_CODES } from "@trebuchet/schema";
 import type { ValidOpeningBalance } from "./opening.ts";
 import type { Balance } from "./reports/balances.ts";
-import { sortAccounts } from "./reports/common.ts";
-import { type Account, domainError, err, ok, type Result } from "./types.ts";
+import { accountOrder } from "./reports/common.ts";
+import { compareText } from "./text.ts";
+import { type Account, ok, type Result, validation } from "./types.ts";
 
 /** 繰越で使う seed の科目のコード（research R6） */
-export const CAPITAL_ACCOUNT_CODE = "3020";
-export const OWNER_LOAN_ACCOUNT_CODE = "3010";
-export const DRAWINGS_ACCOUNT_CODE = "3090";
+export const CAPITAL_ACCOUNT_CODE = ACCOUNT_CODES.capital;
+export const OWNER_LOAN_ACCOUNT_CODE = ACCOUNT_CODES.ownerContribution;
+export const DRAWINGS_ACCOUNT_CODE = ACCOUNT_CODES.ownerDrawing;
 
 /** 前年度の期末の残高（computeBalances の結果の一部。closing は借方を正とする） */
 export type CarryForwardBalance = Pick<Balance, "accountId" | "subAccountId" | "closing">;
@@ -24,7 +26,7 @@ export function carryForward(
 ): Result<ValidOpeningBalance[]> {
   const byId = new Map(accounts.map((a) => [a.id, a]));
   const capital = accounts.find((a) => a.code === CAPITAL_ACCOUNT_CODE);
-  const closedCodes = [OWNER_LOAN_ACCOUNT_CODE, DRAWINGS_ACCOUNT_CODE];
+  const closedCodes: readonly string[] = [OWNER_LOAN_ACCOUNT_CODE, DRAWINGS_ACCOUNT_CODE];
   const isClosed = (a: Account | undefined) =>
     a !== undefined &&
     (a.category === "revenue" || a.category === "expense" || closedCodes.includes(a.code));
@@ -44,23 +46,20 @@ export function carryForward(
   }
   if (transferred !== 0) {
     if (capital === undefined) {
-      return err(
-        domainError("VALIDATION", "元入金の科目がないため、前年度の残高を繰り越せません", {
-          code: CAPITAL_ACCOUNT_CODE,
-        }),
-      );
+      return validation("元入金の科目がないため、前年度の残高を繰り越せません", {
+        code: CAPITAL_ACCOUNT_CODE,
+      });
     }
     add(capital.id, null, transferred);
   }
 
-  const order = new Map(sortAccounts([...accounts]).map((a, i) => [a.id, i]));
-  const rank = (id: string) => order.get(id) ?? Number.MAX_SAFE_INTEGER;
+  const rank = accountOrder(accounts);
   const rows = [...net.values()]
     .filter((r) => r.amount !== 0)
     .sort(
       (a, b) =>
         rank(a.accountId) - rank(b.accountId) ||
-        (a.accountId < b.accountId ? -1 : a.accountId > b.accountId ? 1 : 0) ||
+        compareText(a.accountId, b.accountId) ||
         compareSubAccountIds(a.subAccountId, b.subAccountId),
     );
   return ok(
@@ -77,5 +76,5 @@ function compareSubAccountIds(a: string | null, b: string | null): number {
   if (a === b) return 0;
   if (a === null) return -1;
   if (b === null) return 1;
-  return a < b ? -1 : 1;
+  return compareText(a, b);
 }

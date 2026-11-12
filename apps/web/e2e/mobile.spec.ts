@@ -1,10 +1,11 @@
 import { expect, type Page, test } from "@playwright/test";
-import { enterVault, ORIGIN_HEADERS } from "./helpers/auth.ts";
+import { enterVault } from "./helpers/auth.ts";
+import { createEntityViaApi, postJournalViaApi } from "./helpers/entity.ts";
+import { MOBILE_VIEWPORT } from "./helpers/viewports.ts";
 
 // SC-010・FR-058・FR-059（011 US10、research R11）。スマホの幅（390 × 844）で、FR-058 の画面のどれも
 // ページ全体が横にはみ出さないこと、メニューから各画面に届くこと、対象の外に「PC での操作を推奨」が出ること。
-// jsdom は配置を計算しないので、はみ出しはここで確かめる。実行は利用者の端末（T049）
-const MOBILE = { width: 390, height: 844 };
+// jsdom は配置を計算しないので、はみ出しはここで確かめる。実行は利用者の端末（011/T049）
 
 // 1×1 の PNG（証憑の追加の確認用。内容に意味はない）
 const PNG_1X1 = Buffer.from(
@@ -51,31 +52,16 @@ test("スマホの幅で、メニューから各画面に届き、どの画面�
   });
 
   await test.step("事業体と仕訳を API で作る", async () => {
-    const name = `スマホ ${Date.now()}`;
-    const created = await page.request.post("/api/entities", {
-      headers: ORIGIN_HEADERS,
-      data: { name, kind: "individual", fiscalStartMonth: 1, firstFiscalYear: 2026 },
+    entityId = await createEntityViaApi(page, {
+      name: `スマホ ${Date.now()}`,
+      firstFiscalYear: 2026,
     });
-    expect(created.status()).toBe(201);
-    const list = (await (await page.request.get("/api/entities")).json()) as {
-      entities: { id: string; name: string }[];
-    };
-    entityId = list.entities.find((e) => e.name === name)?.id ?? "";
-    expect(entityId).not.toBe("");
-
-    const accounts = (await (
-      await page.request.get(`/api/entities/${entityId}/accounts`)
-    ).json()) as { accounts: { id: string; name: string }[] };
-    const idOf = (accountName: string) => accounts.accounts.find((a) => a.name === accountName)?.id;
-    const journal = await page.request.post(`/api/entities/${entityId}/journals`, {
-      headers: ORIGIN_HEADERS,
-      data: {
-        date: "2026-10-31",
-        lines: [
-          { side: "debit", accountId: idOf("普通預金"), amount: 500000 },
-          { side: "credit", accountId: idOf("売上高"), amount: 500000 },
-        ],
-      },
+    const journal = await postJournalViaApi(page, entityId, {
+      date: "2026-10-31",
+      lines: [
+        { side: "debit", account: "普通預金", amount: 500000 },
+        { side: "credit", account: "売上高", amount: 500000 },
+      ],
     });
     expect(journal.status()).toBe(201);
     // 登録の応答は { journal, warnings }。id は journal の中にある
@@ -84,7 +70,7 @@ test("スマホの幅で、メニューから各画面に届き、どの画面�
   });
 
   await test.step("スマホの幅にする。ヘッダーはロゴ・事業体の名前・メニューのボタンだけ", async () => {
-    await page.setViewportSize(MOBILE);
+    await page.setViewportSize(MOBILE_VIEWPORT);
     await page.goto(`/e/${entityId}`);
     const header = page.getByRole("banner");
     await expect(header.getByRole("button", { name: "メニュー", exact: true })).toHaveAttribute(

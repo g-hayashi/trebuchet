@@ -65,14 +65,25 @@ describe("CSV の出力（FR-032）", () => {
       );
     });
 
-    it("任意の文字列の表を、読み戻すと元に戻る", () => {
+    it("文字列のセルが = + - @ タブ CR で始まるとき、先頭に ' を付ける（数式として実行させない）", () => {
+      expect(encodeCsv([["=SUM(A1)", "+1", "-1", "@x", "\tx", "\rx", "ok", "a=b", ""]])).toBe(
+        `${BOM}'=SUM(A1),'+1,'-1,'@x,'\tx,"'\rx",ok,a=b,\r\n`,
+      );
+    });
+
+    it("数値のセルには ' を付けない（負の金額は -100 のまま）", () => {
+      expect(encodeCsv([[-100, 0, 5, "-100"]])).toBe(`${BOM}-100,0,5,'-100\r\n`);
+    });
+
+    it("任意の文字列の表を、読み戻すと元に戻る（数式の先頭だけ ' が付く）", () => {
+      const neutralized = (s: string) => (/^[=+\-@\t\r]/.test(s) ? `'${s}` : s);
       fc.assert(
         fc.property(
           fc.array(fc.array(fc.string({ unit: "grapheme" }), { minLength: 2, maxLength: 5 }), {
             maxLength: 10,
           }),
           (table) => {
-            expect(parseCsv(encodeCsv(table))).toEqual(table);
+            expect(parseCsv(encodeCsv(table))).toEqual(table.map((r) => r.map(neutralized)));
           },
         ),
       );

@@ -668,17 +668,17 @@ describe("設定 / セキュリティ", () => {
     expect(callsTo(calls, "GET", "/api/auth/events").map((c) => c.query)).toEqual([{ limit: "5" }]);
   });
 
-  it("「CSV に書き出す」は全件の CSV（format=csv）へのリンクで、0 件なら無効", async () => {
+  it("「CSV をダウンロード」は全件の CSV（format=csv）へのリンクで、0 件なら無効", async () => {
     open();
-    const link = await screen.findByRole("link", { name: "CSV に書き出す" });
+    const link = await screen.findByRole("link", { name: "CSV をダウンロード" });
     expect(link).toHaveAttribute("href", "/api/auth/events?format=csv");
     expect(link).toHaveAttribute("download");
   });
 
-  it("認証の記録が 0 件なら「CSV に書き出す」は無効（リンクではなく押せないボタン）", async () => {
+  it("認証の記録が 0 件なら「CSV をダウンロード」は無効（リンクではなく押せないボタン）", async () => {
     open({ "GET /api/auth/events": () => ok({ events: [] }) });
-    expect(await screen.findByRole("button", { name: "CSV に書き出す" })).toBeDisabled();
-    expect(screen.queryByRole("link", { name: "CSV に書き出す" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "CSV をダウンロード" })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: "CSV をダウンロード" })).not.toBeInTheDocument();
   });
 
   it("施錠のカードは、ヘッダーの「施錠してサインアウト」と同じ文で確認してから sign-out を呼ぶ", async () => {

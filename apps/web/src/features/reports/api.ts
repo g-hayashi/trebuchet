@@ -6,7 +6,7 @@ import type {
   ProfitAndLossQuery,
   TrialBalanceQuery,
 } from "@trebuchet/schema";
-import { api, type QueryData, unwrap } from "@/lib/api";
+import { api, entityPath, type QueryData, unwrap } from "@/lib/api";
 
 // 帳票の API（001 contracts/http-api.md）
 
@@ -20,11 +20,11 @@ const reportKey = (entityId: string, kind: string, params: object) =>
   [...reportKeys.all(entityId), kind, params] as const;
 
 /** 帳票の条件（CSV の指定を除く）。指定のないキーは持たない（そのまま API のクエリ文字列にする） */
-export type ReportRange = Omit<TrialBalanceQuery, "format">;
-export type JournalBookParams = Omit<JournalBookQuery, "format">;
-export type GeneralLedgerParams = Omit<GeneralLedgerQuery, "format">;
-export type ProfitAndLossParams = Omit<ProfitAndLossQuery, "format">;
-export type BalanceSheetParams = Omit<BalanceSheetQuery, "format">;
+type ReportRange = Omit<TrialBalanceQuery, "format">;
+type JournalBookParams = Omit<JournalBookQuery, "format">;
+type GeneralLedgerParams = Omit<GeneralLedgerQuery, "format">;
+type ProfitAndLossParams = Omit<ProfitAndLossQuery, "format">;
+type BalanceSheetParams = Omit<BalanceSheetQuery, "format">;
 
 const param = (entityId: string) => ({ param: { entityId } });
 
@@ -62,6 +62,27 @@ export const balanceSheetQuery = (entityId: string, params: BalanceSheetParams) 
     queryFn: async () =>
       unwrap(await reports["balance-sheet"].$get({ ...param(entityId), query: params })),
   });
+
+export type ReportKind =
+  | "journal-book"
+  | "general-ledger"
+  | "trial-balance"
+  | "profit-and-loss"
+  | "balance-sheet";
+
+/** 表示中と同じ条件の CSV のダウンロードの URL（001/FR-032）。params のキーの順にクエリ文字列にする */
+export function reportCsvUrl(
+  entityId: string,
+  kind: ReportKind,
+  params: Record<string, string | undefined>,
+): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) query.set(key, value);
+  }
+  query.set("format", "csv");
+  return `${entityPath(entityId)}/reports/${kind}?${query}`;
+}
 
 export type JournalBook = QueryData<typeof journalBookQuery>;
 export type GeneralLedger = QueryData<typeof generalLedgerQuery>;

@@ -2,7 +2,6 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReceiptDetail, ReceiptSummary } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Account } from "@/features/accounts/api";
 import { journalKeys } from "@/features/journals/api";
 import { receiptKeys } from "@/features/receipts/api";
 import { reportKeys } from "@/features/reports/api";
@@ -10,15 +9,14 @@ import { Route as JournalDetailRoute } from "@/routes/e/$entityId/journals/$jour
 import { Route as JournalsRoute } from "@/routes/e/$entityId/journals/index";
 import { Route as NewJournalRoute } from "@/routes/e/$entityId/journals/new";
 import { Route as ReceiptRoute } from "@/routes/e/$entityId/receipts/$receiptId";
+import { account, ENTITY, uuid } from "../fixtures";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { RECEIPT_ID, receiptDetail, receiptSummary } from "../receipts-fixtures";
 import { renderRoute } from "../render-route";
 
 // T023: 仕訳との結びつき（link・unlink・証憑から仕訳を作る）と、仕訳の一覧・詳細の証憑（H: §3・§4・§8）
 
-const ENTITY = "/api/entities/e1";
 const RECEIPT = `${ENTITY}/receipts/${RECEIPT_ID}`;
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const ref = (journalNo: number, date: string, status: "active" | "voided" = "active") => ({
   id: uuid(9000 + journalNo),
@@ -290,20 +288,6 @@ describe("証憑の仕訳との結びつき（付け替え・解除）", () => {
 // ---- 証憑から仕訳を作る ----
 
 const asset = { category: "asset", normalSide: "debit", reportSection: "BS_ASSET" } as const;
-const account = (
-  n: number,
-  name: string,
-  rest: Partial<Account> & Pick<Account, "category" | "normalSide" | "reportSection">,
-): Account => ({
-  id: uuid(n),
-  code: String(n),
-  name,
-  reportLine: null,
-  sortOrder: n,
-  isSystem: false,
-  isActive: true,
-  ...rest,
-});
 const bank = account(1020, "普通預金", asset);
 const supplies = account(6010, "消耗品費", {
   category: "expense",

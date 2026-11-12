@@ -19,6 +19,13 @@ export const REMOTE_ORIGIN = `https://${REMOTE_HOST}`;
 export const MIN = 60 * 1000;
 export const authStore = () => new DrizzleAuthStore(openAuth(), openRegistry);
 
+/** トークンを使用済みにする（別の要求が先に使った状態を作る） */
+export const markPairingTokenUsed = (tokenHash: string, at: string): void => {
+  openAuth()
+    .$client.prepare("UPDATE pairing_tokens SET used_at = ? WHERE token_hash = ?")
+    .run(at, tokenHash);
+};
+
 export type CallOpts = { body?: unknown; cookie?: string; host?: string };
 
 export function setupPairing(options: Partial<Parameters<typeof createApp>[0]> = {}) {

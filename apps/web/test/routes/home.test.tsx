@@ -206,7 +206,6 @@ describe("最近の仕訳・近道・日時", () => {
       [`GET ${HOME}`]: () => ok(summary({ lastStatementImportAt: { status: "ok", value: null } })),
       "GET /api/backup/status": () =>
         ok({
-          configured: true,
           folderSource: "configured",
           folder: "/x",
           lastSuccess: "2026-10-30T12:00:00.000Z",

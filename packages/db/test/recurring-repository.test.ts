@@ -17,7 +17,7 @@ import type { Recurring, RecurringInput } from "@trebuchet/schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DrizzleInvoicingStore } from "../src/invoicing-repository.ts";
 import { createRecurringUnitOfWork, DrizzleRecurringStore } from "../src/recurring-repository.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { must, type TempDataDir, TODAY, useTempDataDir } from "../src/testing.ts";
 import { setupInvoicingDb } from "./invoicing-db-setup.ts";
 
 // 005 US3: 定期仕訳の実 DB での往復・冪等性・巻き戻し。
@@ -28,8 +28,6 @@ let t: ReturnType<typeof setupInvoicingDb>;
 let store: DrizzleRecurringStore;
 let uow: RecurringUnitOfWork;
 let deps: { uow: RecurringUnitOfWork; ids: { next(): string }; clock: { now(): string } };
-
-const TODAY = "2026-10-26";
 
 beforeEach(() => {
   tmp = useTempDataDir("recurring-repository");
@@ -52,11 +50,6 @@ const input = (over: Partial<RecurringInput> = {}): RecurringInput => ({
   ],
   ...over,
 });
-
-const must = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
-  if (!r.ok) throw new Error(JSON.stringify(r.error));
-  return r.value;
-};
 
 const definition = (over: Partial<Recurring> = {}): Recurring => ({
   id: randomUUIDv7(),

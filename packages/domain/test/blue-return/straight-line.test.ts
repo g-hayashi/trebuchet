@@ -6,8 +6,7 @@ import {
 } from "../../src/blue-return/straight-line.ts";
 import type { FixedAsset } from "../../src/types.ts";
 import { accountIdOf } from "../blue-return-arbitraries.ts";
-
-const AT = "2026-01-10T00:00:00.000Z";
+import { NOW as AT } from "../test-dates.ts";
 
 /** 定額法の資産（既定: 2026-07-10 に取得・供用、500,000 円、耐用年数 4 年） */
 const asset = (over: Partial<FixedAsset> = {}): FixedAsset => ({

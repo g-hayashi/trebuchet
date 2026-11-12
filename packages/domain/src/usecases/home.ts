@@ -14,7 +14,7 @@ import {
   recentJournalOf,
 } from "../home/summary.ts";
 import type { LedgerRepository, ReceiptUnitOfWork, StatementUnitOfWork } from "../ports.ts";
-import { ok, type Result } from "../types.ts";
+import { findPeriodByDate, ok, type Result } from "../types.ts";
 import { type BlueReturnDeps, getBlueReturn } from "./blue-return.ts";
 import { type InvoicingDeps, listInvoices } from "./invoicing.ts";
 import { type RecurringDeps, recurringStatus } from "./recurring.ts";
@@ -58,9 +58,7 @@ const must = <T>(result: Result<T>): T => {
 };
 
 const periodOn = (deps: HomeDeps, today: string) =>
-  deps.blueReturn.masters
-    .listFiscalPeriods()
-    .find((p) => p.startDate <= today && today <= p.endDate);
+  findPeriodByDate(deps.blueReturn.masters.listFiscalPeriods(), today);
 
 /** 今日を含む会計期間の年の決算書の警告の件数。会計期間がない・個人の事業体でなければ 0 */
 function blueReturnWarnings(deps: HomeDeps, today: string): number {

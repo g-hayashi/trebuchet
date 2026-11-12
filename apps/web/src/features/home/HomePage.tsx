@@ -2,18 +2,18 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { HomeFigures, HomeRecentJournal, HomeTasks, Section } from "@trebuchet/schema";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { Loading } from "@/components/loading";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { backupStatusQuery } from "@/features/backup/api";
 import { formatDateTime, formatSignedYen } from "@/lib/format";
 import { homeQuery } from "./api";
 
-// ホーム（011 US1。contracts/ui-shell.md §3、FR-006〜009）。件数・金額は server（domain）が決める。画面は表示と移動だけ
+// ホーム（011 US1。contracts/ui-shell.md §3、011/FR-006〜009）。件数・金額は server（domain）が決める。画面は表示と移動だけ
 
 const linkClass = "text-primary underline-offset-4 hover:underline";
-const shortcutClass =
-  "inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium shadow-xs hover:bg-accent";
+const shortcutClass = buttonVariants({ variant: "outline" });
 
 /** 1 項目の枠。見出しを `aria-labelledby` に結ぶ（読み上げと、テストが名前で探す） */
 function Block({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -27,7 +27,7 @@ function Block({ id, title, children }: { id: string; title: string; children: R
   );
 }
 
-/** 項目の失敗（FR-009）。その場所に「読み込めませんでした」と「再読み込み」を出す */
+/** 項目の失敗（011/FR-009）。その場所に「読み込めませんでした」と「再読み込み」を出す */
 function SectionError({ onRetry }: { onRetry: () => void }) {
   return (
     <div role="alert" className="flex flex-wrap items-center gap-3 text-sm">
@@ -55,7 +55,7 @@ function Loaded<T>({
 }) {
   if (section === undefined) {
     if (fetchError !== null && fetchError !== undefined) return <SectionError onRetry={onRetry} />;
-    return pending ? <p className="text-sm text-muted-foreground">読み込み中…</p> : null;
+    return pending ? <Loading /> : null;
   }
   if (section.status === "error") return <SectionError onRetry={onRetry} />;
   return <>{children(section.value)}</>;
@@ -63,7 +63,7 @@ function Loaded<T>({
 
 /**
  * 今日やること。件数が 0 の項目は出さず、すべて 0 なら「残っている作業はありません」。
- * 押し先は絞り込みの検索の引数つきの画面（contracts/ui-shell.md §3）。期限切れは未入金の「うち」
+ * 押し先は絞り込みの検索の引数つきの画面（011 contracts/ui-shell.md §3）。期限切れは未入金の「うち」
  */
 function Tasks({
   entityId,
@@ -241,7 +241,7 @@ function RecentJournals({
 
 /**
  * 事業体のホーム。「今日やること」「今期の数字」「最近の仕訳」「近道」と、前回のバックアップ・最後の明細の取込の日時。
- * 項目ごとに失敗を扱う（FR-009）。バックアップは端末の情報なので、既存の `GET /api/backup/status` を別に読む
+ * 項目ごとに失敗を扱う（011/FR-009）。バックアップは端末の情報なので、既存の `GET /api/backup/status` を別に読む
  */
 export function HomePage({ entityId }: { entityId: string }) {
   const home = useQuery(homeQuery(entityId));

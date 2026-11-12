@@ -1,14 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { authKeys, clearLedgerData, lockVault } from "./api";
 
@@ -42,23 +35,19 @@ export function SignOutButton() {
       >
         施錠してサインアウト
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>施錠してサインアウト</DialogTitle>
-            <DialogDescription>{SIGN_OUT_CONFIRM_TEXT}</DialogDescription>
-          </DialogHeader>
-          <ApiErrorMessage error={lock.error} />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              やめる
-            </Button>
-            <Button disabled={lock.isPending} onClick={() => lock.mutate()}>
-              施錠してサインアウト
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="施錠してサインアウト"
+        description={SIGN_OUT_CONFIRM_TEXT}
+        cancelLabel="やめる"
+        confirmLabel="施錠してサインアウト"
+        confirmDisabled={lock.isPending}
+        onCancel={() => setOpen(false)}
+        onConfirm={() => lock.mutate()}
+      >
+        <ApiErrorMessage error={lock.error} />
+      </ConfirmDialog>
     </>
   );
 }

@@ -8,9 +8,9 @@
  * 判定した文字コード、ヘッダで見つからない列名、メモの列の値に含まれる記号の種類（区切り文字の候補）を出す。
  * 値・金額・取引先は出さない。
  *
- * ## 2. 取込と照合（T070）
+ * ## 2. 取込と照合（002/T070）
  *
- *   pnpm verify:freee --journal <仕訳帳.csv> --ledger <総勘定元帳.csv> --year 2025 [--mapping <json>] [--keep] [--continue]
+ *   pnpm verify:freee --journal <仕訳帳.csv> --ledger <総勘定元帳.csv> --year 2025 [--mapping <json>]
  *
  * 使い捨ての事業体（最初の年度 = --year）を `.tmp/verify-freee/` に作り、次を順に行って標準出力に出す。
  *   ヘッダの確認 → 取込（プレビュー → 確定）→ 元帳から期首残高を保存 → 元帳との照合 → PL・BS の科目別の金額
@@ -31,10 +31,8 @@
  *       ],
  *       "taxes": [{ "sourceName": "課税売上10%", "taxCategory": "<税区分コード>" }]
  *     }
- * - `--keep`: 終了後も `.tmp/verify-freee/` を残す（保存した対応表もそのまま残る）。付けなければ終了時に消す（`--continue` の実行も同じ）。
- * - `--continue`: `.tmp/verify-freee/` の事業体を作り直さず使う。別の --year と --journal / --ledger で、
- *   その年度を足す（会計期間がなければ翌年度を作る。前年度を締める必要はない）。
- *   例: 2025 年分を --keep で実行 → 2026 年分を --continue --year 2026 で実行して FR-020a の警告を確かめる。
+ * - `.tmp/verify-freee/` は終了時に消える（008 以降、一時のデータ場所の DB は実行ごとの乱数の鍵で暗号化し、
+ *   鍵を残さないため、前の実行の事業体は使えない。年度ごとに実行し直す）。
  *
  * このファイルは引数の解析と終了コードだけを持つ。取込・期首残高・照合の処理は `lib/freee-import-runner.ts`
  * （`verify-tax-return.ts` と共通。research R12b）。
@@ -56,7 +54,7 @@ function usage(message: string): never {
     "  node scripts/verify-freee-import.ts --headers-only [--journal <path>] [--ledger <path>]",
   );
   console.error(
-    "  node scripts/verify-freee-import.ts --journal <path> --ledger <path> --year <年度> [--mapping <.tmp/ の下の json>] [--keep] [--continue]",
+    "  node scripts/verify-freee-import.ts --journal <path> --ledger <path> --year <年度> [--mapping <.tmp/ の下の json>]",
   );
   process.exit(2);
 }
@@ -68,8 +66,6 @@ const { values } = parseArgs({
     ledger: { type: "string" },
     year: { type: "string" },
     mapping: { type: "string" },
-    keep: { type: "boolean", default: false },
-    continue: { type: "boolean", default: false },
   },
   strict: true,
 });
@@ -99,19 +95,17 @@ try {
 
 let exitCode = 1;
 try {
-  const { matched } = runFreeeImport(
-    {
-      journal: values.journal,
-      ledger: values.ledger,
-      year: Number(values.year),
-      mapping: mappingFile,
-    },
-    { keep: values.keep, reuse: values.continue },
-  );
+  const { matched } = runFreeeImport({
+    journal: values.journal,
+    ledger: values.ledger,
+    year: Number(values.year),
+    mapping: mappingFile,
+  });
   exitCode = matched ? 0 : 1;
 } catch (error) {
-  console.error(error instanceof StopError ? error.message : error);
+  // StopError 以外の例外の中身（実データの値を含みうる）は出さない
+  console.error(error instanceof StopError ? error.message : "予期しないエラーで止まりました");
 } finally {
-  finishFreeeImport(values.keep);
+  finishFreeeImport();
 }
 process.exit(exitCode);

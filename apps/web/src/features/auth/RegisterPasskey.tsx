@@ -1,10 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { ApiError } from "@/lib/api";
-import { authKeys, registerFirstPasskey } from "./api";
-
-const LOCAL_RP_ID = "localhost";
+import { isApiError } from "@/lib/api";
+import { authKeys, LOCAL_RP_ID, registerFirstPasskey } from "./api";
 
 /** 初回の設定（008 D4.1）。設定は Mac のローカルの名前（localhost）からだけ。判定は server に従う */
 export function RegisterPasskey({
@@ -20,7 +18,7 @@ export function RegisterPasskey({
     onSuccess: onIssued,
     onError: (error) => {
       // すでに設定されていたなら、状態を取り直して解錠の画面に進む
-      if (error instanceof ApiError && error.code === "ALREADY_REGISTERED") {
+      if (isApiError(error, "ALREADY_REGISTERED")) {
         void queryClient.invalidateQueries({ queryKey: authKeys.status });
       }
     },

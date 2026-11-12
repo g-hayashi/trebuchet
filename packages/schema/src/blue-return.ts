@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ErrorDetails } from "./errors.ts";
 import { JournalInput } from "./journals.ts";
-import { DateString, FiscalYearParam, Id } from "./primitives.ts";
+import { DateString, FiscalYearParam, Id, YEAR_PATTERN, YEN_LIMIT, Yen } from "./primitives.ts";
 
 // 003-tax-return（contracts/http-api.md、data-model.md §1・§2）
 
@@ -69,13 +69,13 @@ export const FixedAssetInput = z.object({
   name: NonEmpty,
   quantity: z.string().max(100).nullish(),
   acquiredOn: DateString,
-  acquisitionCost: z.number().int().positive(),
+  acquisitionCost: Yen,
   method: DepreciationMethod,
   usefulLifeYears: z.number().int().positive().nullish(),
   /** 事業の用に供した日。null・省略なら取得日 */
   inServiceOn: DateString.nullish(),
   /** 前年までの償却累計額 */
-  priorAccumulated: z.number().int().nonnegative().default(0),
+  priorAccumulated: z.number().int().nonnegative().lt(YEN_LIMIT).default(0),
   /** 累計が何年分までか */
   priorThroughYear: FiscalYear.nullish(),
   businessRatio: Ratio,
@@ -103,9 +103,9 @@ export type FixedAssetDisposeInput = z.infer<typeof FixedAssetDisposeInput>;
 /** 繰延資産（開業費）の登録（POST /deferred-assets）。勘定の区分などの検査は domain */
 export const DeferredAssetInput = z.object({
   name: NonEmpty,
-  totalAmount: z.number().int().positive(),
+  totalAmount: Yen,
   openedOn: DateString,
-  priorAccumulated: z.number().int().nonnegative().default(0),
+  priorAccumulated: z.number().int().nonnegative().lt(YEN_LIMIT).default(0),
   priorThroughYear: FiscalYear.nullish(),
   accountId: Id,
   note: z.string().max(1000).nullish(),
@@ -127,11 +127,7 @@ export const DeferredAmortizationParam = FiscalYearParam.extend({ deferredAssetI
 
 /** 固定資産の一覧のクエリ（GET /fixed-assets）。year を付けると各資産にその年の償却の計算を付ける */
 export const FixedAssetsQuery = z.object({
-  year: z
-    .string()
-    .regex(/^\d{4}$/, "年は4桁で指定してください")
-    .transform(Number)
-    .optional(),
+  year: z.string().regex(YEAR_PATTERN, "年は4桁で指定してください").transform(Number).optional(),
 });
 export type FixedAssetsQuery = z.infer<typeof FixedAssetsQuery>;
 

@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { computeInclusiveTax, sumYen, toYen } from "../src/money.ts";
+import { computeInclusiveTax, isNonNegativeYen, isYen, sumYen } from "../src/money.ts";
 
 const amountArb = fc.integer({ min: 1, max: 1e12 - 1 });
 const rateArb = fc.constantFrom(8, 10);
@@ -64,19 +64,22 @@ describe("sumYen", () => {
   });
 });
 
-describe("toYen", () => {
-  it("正の整数で 1e12 未満なら ok", () => {
-    fc.assert(
-      fc.property(amountArb, (n) => {
-        const r = toYen(n);
-        expect(r.ok).toBe(true);
-      }),
-    );
+describe("isYen", () => {
+  it("正の整数で 1e12 未満なら true", () => {
+    fc.assert(fc.property(amountArb, (n) => isYen(n)));
   });
 
-  it.each([0, -1, 1.5, 1e12, Number.NaN, Number.POSITIVE_INFINITY])("%s は VALIDATION", (n) => {
-    const r = toYen(n);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.code).toBe("VALIDATION");
+  it.each([0, -1, 1.5, 1e12, Number.NaN, Number.POSITIVE_INFINITY])("%s は false", (n) => {
+    expect(isYen(n)).toBe(false);
+  });
+});
+
+describe("isNonNegativeYen", () => {
+  it.each([0, 1, 999_999_999_999])("%s は true", (n) => {
+    expect(isNonNegativeYen(n)).toBe(true);
+  });
+
+  it.each([-1, 1.5, 1e12, Number.NaN, Number.POSITIVE_INFINITY])("%s は false", (n) => {
+    expect(isNonNegativeYen(n)).toBe(false);
   });
 });

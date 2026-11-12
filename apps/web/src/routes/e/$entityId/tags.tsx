@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { TagCreate } from "@trebuchet/schema";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
@@ -43,7 +44,7 @@ function TagsPage() {
         </CardHeader>
         <CardContent className="grid gap-4">
           <ApiErrorMessage error={error} />
-          {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+          {isPending && <Loading />}
           {tags && tags.length === 0 && (
             <p className="text-sm text-muted-foreground">タグはまだありません。</p>
           )}

@@ -3,6 +3,7 @@
  * 確認画面（プレビュー）が表示されるまでが 5 秒以内か（AI による列の案の時間を除く。AI（fm・外部）は呼ばない）。
  * 画面が呼ぶ順（layout → preview → 確定 → 候補を作る → 明細の一覧）に multipart で API を呼ぶ。
  * 判定は layout + preview の合計（SC-006）。確定・候補・一覧は参考として測る（006 の SC-006 の区間）。
+ * 参考として、候補のある明細のまとめて承認（既定で最大 500 件）と承認後の一覧も測る（判定しない）。
  * 1 回ごとに新しい事業体を作る（確定は繰り返せないため）。事業体には、候補の突き合わせ（match）と
  * ルール（rule）が働くように、既存の仕訳 100 件とそこから作ったルールを用意する（準備の時間は測らない）。
  * CSV は合成で、`work/`・`data/` は読まない。`.tmp/bench-<uuid>/` に一時的なテナントを作り、終了時に削除する。
@@ -10,12 +11,15 @@
  *   pnpm bench:statements
  *   BENCH_STATEMENTS_LIMIT_MS=2000 BENCH_STATEMENTS_RUNS=5 pnpm bench:statements   # しきい値（既定 5000）・回数（既定 3）
  *   BENCH_STATEMENTS=1000 pnpm bench:statements                                    # CSV の件数（既定 500）
+ *   BENCH_STATEMENTS_APPROVE=200 pnpm bench:statements                             # まとめて承認の上限（既定・最大 500）
  *
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む（bench-reports.ts と同じ）。
  */
 import { useTempDataDir } from "../packages/db/src/testing.ts";
-import { positiveNumber, runBench } from "./lib/bench-common.ts";
+import { createBenchClient, createEntityViaApi } from "./lib/bench-client.ts";
+import { runBench, summarize } from "./lib/bench-common.ts";
 import { createBenchHeaders } from "./lib/bench-session.ts";
+import { positiveNumber } from "./lib/env.ts";
 
 const FISCAL_YEAR = 2026;
 const STATEMENTS = positiveNumber("BENCH_STATEMENTS", 500);
@@ -23,6 +27,8 @@ const LIMIT_MS = positiveNumber("BENCH_STATEMENTS_LIMIT_MS", 5_000);
 const RUNS = positiveNumber("BENCH_STATEMENTS_RUNS", 3);
 /** 既存の仕訳の件数（先頭の同じ件数の明細が、仕訳と同じ日付・金額になる） */
 const JOURNALS = 100;
+/** まとめて承認する件数の上限（候補のある明細から。`MAX_BULK_SELECTION` 以下） */
+const APPROVE_LIMIT = Math.min(positiveNumber("BENCH_STATEMENTS_APPROVE", 500), 500);
 
 const BANK = "サンプル銀行";
 const CARD = "テストカードA";
@@ -52,43 +58,8 @@ await runBench(
     const { app } = await import("../apps/server/src/app.ts");
 
     // 認証（Host → CSRF → セッション）を通すためのヘッダー
-    const authHeaders = await createBenchHeaders();
-
-    async function call(method: string, path: string, body?: unknown): Promise<Response> {
-      const init: RequestInit =
-        body === undefined
-          ? { method, headers: authHeaders }
-          : {
-              method,
-              headers: { ...authHeaders, "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-            };
-      return app.request(`/api${path}`, init);
-    }
-
-    /** multipart（`file` と `options` の JSON）。Content-Type は境界つきで fetch が付ける */
-    async function callForm(path: string, form: FormData): Promise<Response> {
-      return app.request(`/api${path}`, { method: "POST", headers: authHeaders, body: form });
-    }
-
-    async function json<T>(res: Response, expected: number, what: string): Promise<T> {
-      if (res.status !== expected) {
-        throw new Error(`${what} が失敗しました: ${res.status} ${await res.text()}`);
-      }
-      return (await res.json()) as T;
-    }
-
-    /** 応答を JSON として読み終えるまでの時間（ミリ秒）と本文 */
-    async function timed<T>(
-      expected: number,
-      what: string,
-      send: () => Promise<Response>,
-    ): Promise<{ ms: number; value: T }> {
-      const start = performance.now();
-      const res = await send();
-      const value = await json<T>(res, expected, what);
-      return { ms: performance.now() - start, value };
-    }
+    const client = createBenchClient(app, await createBenchHeaders());
+    const { call, callForm, json, timed } = client;
 
     const dayOf = (i: number): string => {
       const date = new Date(Date.UTC(FISCAL_YEAR, 0, 1) + (i % 360) * 86_400_000);
@@ -165,43 +136,23 @@ await runBench(
       commit: number;
       candidates: number;
       list: number;
+      /** 承認した明細の件数（振替の対の相手を含む） */
+      approved: number;
+      approve: number;
+      listAfter: number;
     };
 
     /** 事業体と準備（口座の対応・既存の仕訳・ルール）を作り、ファイルの選択から一覧までを測る */
     async function runOnce(label: string): Promise<Sample> {
-      const { entity } = await json<{ entity: { id: string } }>(
-        await call("POST", "/entities", {
-          name: `ベンチマーク（明細 ${label}）`,
-          kind: "individual",
-          fiscalStartMonth: 1,
-          firstFiscalYear: FISCAL_YEAR,
-        }),
-        201,
-        "事業体の作成",
-      );
-      const base = `/entities/${entity.id}`;
-
-      const { accounts } = await json<{ accounts: { id: string; name: string }[] }>(
-        await call("GET", `${base}/accounts`),
-        200,
-        "勘定科目の取得",
-      );
-      const ids = new Map(accounts.map((a) => [a.name, a.id]));
-      const acc = (name: string): string => {
-        const id = ids.get(name);
-        if (id === undefined) throw new Error(`科目がありません: ${name}`);
-        return id;
-      };
-
-      // 期首残高（普通預金から支払える残高）
-      await json(
-        await call("PUT", `${base}/fiscal-periods/${FISCAL_YEAR}/opening-balances`, [
-          { accountId: acc("普通預金"), side: "debit", amount: 30_000_000 },
-          { accountId: acc("元入金"), side: "credit", amount: 30_000_000 },
-        ]),
-        200,
-        "期首残高の登録",
-      );
+      // 期首残高は、普通預金から支払える残高
+      const { base, acc } = await createEntityViaApi(client, {
+        name: `ベンチマーク（明細 ${label}）`,
+        firstFiscalYear: FISCAL_YEAR,
+        openingBalances: [
+          { account: "普通預金", side: "debit", amount: 30_000_000 },
+          { account: "元入金", side: "credit", amount: 30_000_000 },
+        ],
+      });
 
       // 取込元の口座の対応（銀行・カード・現金。事業用）
       const mapping: [name: string, kind: "bank" | "card" | "cash", account: string][] = [
@@ -296,20 +247,37 @@ await runBench(
       const candidates = await timed(200, "候補を作る", () =>
         call("POST", `${base}/statements/candidates`, {}),
       );
-      const list = await timed<{ statements: unknown[] }>(200, "明細の一覧", () =>
-        call("GET", `${base}/statements?status=unprocessed`),
-      );
+      const list = await timed<{
+        statements: { id: string; candidate: { method: string } | null }[];
+      }>(200, "明細の一覧", () => call("GET", `${base}/statements?status=unprocessed`));
       if (list.value.statements.length !== STATEMENTS) {
         throw new Error(
           `一覧の件数が想定と違います: ${list.value.statements.length}（想定 ${STATEMENTS}）`,
         );
       }
+
+      // 参考: 候補のある明細をまとめて承認し（画面の「まとめて承認」）、承認後の一覧を読む
+      const items = list.value.statements
+        .filter((s) => s.candidate !== null && s.candidate.method !== "none")
+        .slice(0, APPROVE_LIMIT)
+        .map((s) => ({ statementId: s.id }));
+      const approve = await timed<{ approved: string[]; failed: unknown[] }>(
+        200,
+        "まとめて承認",
+        () => call("POST", `${base}/statements/approve-bulk`, { items }),
+      );
+      const listAfter = await timed<{ statements: unknown[] }>(200, "承認後の明細の一覧", () =>
+        call("GET", `${base}/statements`),
+      );
       return {
         layout: layout.ms,
         preview: preview.ms,
         commit: commit.ms,
         candidates: candidates.ms,
         list: list.ms,
+        approved: approve.value.approved.length,
+        approve: approve.ms,
+        listAfter: listAfter.ms,
       };
     }
 
@@ -322,12 +290,7 @@ await runBench(
     /** SC-006: ファイルを選んでから確認画面まで */
     const toPreview = (s: Sample): number => s.layout + s.preview;
     const total = (s: Sample): number => toPreview(s) + s.commit + s.candidates + s.list;
-    const stat = (pick: (s: Sample) => number) => {
-      const values = samples.map(pick).sort((a, b) => a - b);
-      const median = values[Math.floor(values.length / 2)] ?? Number.NaN;
-      const max = values[values.length - 1] ?? Number.NaN;
-      return { median: Number(median.toFixed(1)), max: Number(max.toFixed(1)) };
-    };
+    const stat = (pick: (s: Sample) => number) => summarize(samples.map(pick));
     const parts: [name: string, pick: (s: Sample) => number, judged: boolean][] = [
       ["layout", (s) => s.layout, false],
       ["preview", (s) => s.preview, false],
@@ -336,6 +299,8 @@ await runBench(
       ["build candidates", (s) => s.candidates, false],
       ["list statements", (s) => s.list, false],
       ["total (layout to list)", total, false],
+      [`approve bulk (${samples[0]?.approved ?? 0} statements)`, (s) => s.approve, false],
+      ["list statements after approve", (s) => s.listAfter, false],
     ];
     console.table(
       parts.map(([name, pick, judged]) => {

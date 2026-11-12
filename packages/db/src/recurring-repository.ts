@@ -31,23 +31,27 @@ export class DrizzleRecurringStore implements RecurringStore {
     appendInvoicingAuditRow(this.db, entry);
   }
 
-  /** 定義の行を行番号の順に読んで、定義に付ける */
+  /** 定義の行（`rows` の定義の分だけ）を行番号の順に読んで、定義に付ける */
   private withLines(rows: (typeof recurringJournals.$inferSelect)[]): Recurring[] {
     if (rows.length === 0) return [];
-    const lines = this.db
+    const lineRows = this.db
       .select()
       .from(recurringJournalLines)
+      .where(
+        inArray(
+          recurringJournalLines.recurringId,
+          rows.map((r) => r.id),
+        ),
+      )
       .orderBy(asc(recurringJournalLines.recurringId), asc(recurringJournalLines.lineNo))
       .all();
-    return rows.map((row) => ({
-      ...row,
-      lines: lines
-        .filter((l) => l.recurringId === row.id)
-        .map(({ id: _id, recurringId: _recurringId, ...line }) => ({
-          ...line,
-          taxCategory: asTaxCategory(line.taxCategory),
-        })),
-    }));
+    const linesByRecurring = new Map<string, Recurring["lines"]>();
+    for (const { id: _id, recurringId, ...line } of lineRows) {
+      const list = linesByRecurring.get(recurringId) ?? [];
+      list.push({ ...line, taxCategory: asTaxCategory(line.taxCategory) });
+      linesByRecurring.set(recurringId, list);
+    }
+    return rows.map((row) => ({ ...row, lines: linesByRecurring.get(row.id) ?? [] }));
   }
 
   listRecurring(): Recurring[] {

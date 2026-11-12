@@ -11,8 +11,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { TMP_ROOT } from "../packages/db/src/tenant-store.ts";
 
 const root = resolve(import.meta.dirname, "..");
+/** 録画の置き場所（`apps/web/e2e/promo.capture.ts` が書く） */
+const PROMO_DIR = resolve(TMP_ROOT, "promo");
 const FPS = 30;
 const GIF_SECONDS = 18;
 const GIF_WIDTH = 960;
@@ -97,16 +100,14 @@ function encodeGif(mp4: string, gif: string): void {
 
 const requested = process.argv.slice(2);
 const langs =
-  requested.length > 0
-    ? requested
-    : ["ja", "en"].filter((l) => existsSync(resolve(root, ".tmp/promo", l)));
+  requested.length > 0 ? requested : ["ja", "en"].filter((l) => existsSync(resolve(PROMO_DIR, l)));
 if (langs.length === 0)
   throw new Error("録画がありません。先に pnpm promo:capture を実行してください");
 
 const outDir = resolve(root, "docs/promo");
 mkdirSync(outDir, { recursive: true });
 for (const lang of langs) {
-  const dir = resolve(root, ".tmp/promo", lang);
+  const dir = resolve(PROMO_DIR, lang);
   const webm = resolve(dir, "video.webm");
   const timelinePath = resolve(dir, "timeline.json");
   if (!existsSync(webm) || !existsSync(timelinePath)) {

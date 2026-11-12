@@ -7,12 +7,11 @@ import { createApp } from "../src/app.ts";
 import { AI_API_KEY_SECRET } from "../src/lib/ai-client.ts";
 import type { FmServer } from "../src/lib/fm-server.ts";
 import { createMemorySecretStore } from "../src/lib/keychain.ts";
-import { createTestSession, errorOf, TEST_HOST, TEST_ORIGIN } from "./helpers.ts";
+import { errorOf, NOW, TEST_HOST, TEST_ORIGIN, testHeaders } from "./helpers.ts";
 
 // 006 §7: GET・PUT /settings/ai。API キーはキーチェーン（SecretStore）にだけ入り、応答・ログ・DB に出ない。
 // キーチェーン・fm は偽物（実物に触れない）
 
-const NOW = "2026-10-31T03:00:00.000Z";
 const KEY = "sk-live-super-secret-0123456789";
 
 let tmp: TempDataDir;
@@ -32,14 +31,11 @@ const fakeFm = (available: boolean): FmServer => ({
 
 async function setup(options: { fmAvailable?: boolean; secrets?: SecretStore } = {}) {
   const secrets = options.secrets ?? createMemorySecretStore();
-  const session = await createTestSession({ now: NOW });
   const app = createApp({
     clock: { now: () => NOW },
     ai: { secrets, fm: fakeFm(options.fmAvailable ?? false) },
   });
-  const client = testClient(app, undefined, undefined, {
-    headers: { Host: TEST_HOST, Origin: TEST_ORIGIN, Cookie: session.cookie },
-  });
+  const client = testClient(app, undefined, undefined, { headers: testHeaders });
   const ai = client.api.settings.ai;
   return {
     app,

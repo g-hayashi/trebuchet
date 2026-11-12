@@ -10,10 +10,10 @@ import {
   type ReceiptReadingView,
   type ReceiptSummary,
   type ReceiptUpdateInput,
-  YEN_LIMIT,
 } from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
 import { isValidDate } from "../dates.ts";
+import { isYen } from "../money.ts";
 import {
   type Clock,
   type IdGenerator,
@@ -41,6 +41,7 @@ import {
   type ReceiptReadingRow,
   type ReceiptRow,
   type Result,
+  receiptNotFoundError,
   validationError,
 } from "../types.ts";
 import { checkReason } from "./journal-edit.ts";
@@ -79,7 +80,7 @@ function checkValues(options: ReceiptCreateOptions): Result<CheckedValues> {
   if (transactionDate !== null && !isValidDate(transactionDate)) {
     return fail("transactionDate", "取引年月日が正しくありません");
   }
-  if (amount !== null && !(Number.isInteger(amount) && amount > 0 && amount < YEN_LIMIT)) {
+  if (amount !== null && !isYen(amount)) {
     return fail("amount", "金額は 1 円以上 1 兆円未満の整数で入力してください");
   }
   const partnerName =
@@ -200,7 +201,7 @@ export function receiptSummaryOf(
   return toSummary(deps, receipt, currentFile, link, journalRefOf(tx, link));
 }
 
-const notFound = () => domainError("RECEIPT_NOT_FOUND", "証憑が見つかりません");
+const notFound = receiptNotFoundError;
 
 // ---- 追加 ----
 

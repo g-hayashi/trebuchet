@@ -74,7 +74,7 @@ export const sessions = sqliteTable(
 );
 
 /**
- * リモート（Tailscale）の設定（1 行。端末に結びつくのでバックアップに含めない）。004/T016・R4。
+ * リモート（Tailscale）の設定（1 行。端末に結びつくのでバックアップに含めない）。004/R4。
  * 秘密を持たない（ホスト名だけ）ので、施錠中も Host の検査のために読める
  */
 export const remoteSettings = sqliteTable(
@@ -93,7 +93,7 @@ export const remoteSettings = sqliteTable(
   ],
 );
 
-/** ペアリングのトークン（ハッシュのみ、単回・期限つき）。004 の data-model §1.7、004/T016 で registry から移した */
+/** ペアリングのトークン（ハッシュのみ、単回・期限つき）。004 の data-model §1.7 */
 export const pairingTokens = sqliteTable("pairing_tokens", {
   id: text("id").primaryKey(),
   tokenHash: text("token_hash").notNull().unique(),

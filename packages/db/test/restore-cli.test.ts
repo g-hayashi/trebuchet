@@ -248,6 +248,8 @@ describe("restore-backup（使い方と終了コード）", () => {
               entities: [],
               hasExistingLedger: false,
               differences: [],
+              differencesUnavailable: false,
+              differencesError: null,
             },
             beforeRestoreBackup: null,
             previousDataDir: null,
@@ -294,6 +296,28 @@ describe("restore-backup（使い方と終了コード）", () => {
       expect(await runRestoreCli(args("--yes", "--allow-missing-receipts"), h.deps)).toBe(0);
       expect(h.out.join("\n")).toContain("2 件");
     });
+  });
+
+  it("差を計算できなかったときは、確認の前にその旨と理由を出す（差がないとは読めないように）", async () => {
+    writeFileSync(backupFile(), "not-a-real-backup");
+    const restore: NonNullable<RestoreCliDeps["restore"]> = async (options) => {
+      await options.confirm({
+        createdAt: "x",
+        macId: "m",
+        appVersion: { registry: 1, tenant: 1 },
+        entities: [],
+        hasExistingLedger: true,
+        differences: [],
+        differencesUnavailable: true,
+        differencesError: "SqliteError",
+      });
+      return { ok: false, error: "CANCELLED" };
+    };
+    const h = harness({ restore });
+    expect(await runRestoreCli(args("--yes"), h.deps)).toBe(4);
+    const text = h.out.join("\n");
+    expect(text).toContain("今の帳簿との差を計算できませんでした");
+    expect(text).toContain("SqliteError");
   });
 
   it("存在しない --file は 2", async () => {

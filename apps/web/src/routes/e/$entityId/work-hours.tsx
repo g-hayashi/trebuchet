@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { WorkHoursTable } from "@/features/invoicing/WorkHoursTable";
-import { previousMonth, thisMonth } from "@/lib/dates";
+import { lastMonth } from "@/lib/dates";
 
 export const Route = createFileRoute("/e/$entityId/work-hours")({
   validateSearch: WorkHoursQuery.partial(),
@@ -15,7 +15,7 @@ function WorkHoursPage() {
   const { entityId } = Route.useParams();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
-  const month = search.month ?? previousMonth(thisMonth());
+  const month = search.month ?? lastMonth();
 
   return (
     <main className="grid gap-6">

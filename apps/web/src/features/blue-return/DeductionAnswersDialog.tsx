@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DeductionAnswersInput } from "@trebuchet/schema";
 import { type FormEvent, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,7 +34,7 @@ const NONE: DeductionAnswersInput = {
 };
 
 /**
- * 青色申告特別控除の要件の回答（FR-010、011 FR-044）。決算書の欄44の近くから開く。
+ * 青色申告特別控除の要件の回答（003/FR-010、011 FR-044）。決算書の欄44の近くから開く。
  * 上限額は API が決め、画面は結果を表示する。保存したら決算書を読み直す（欄44・45 が変わる）
  */
 export function DeductionAnswersDialog({
@@ -77,7 +78,7 @@ function AnswersLoader({ entityId, year }: { entityId: string; year: string }) {
   return (
     <div className="grid gap-4">
       <ApiErrorMessage error={error} />
-      {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {isPending && <Loading />}
       {data && (
         <AnswersForm
           // 保存済みの回答が読み込まれたら入力欄を作り直す

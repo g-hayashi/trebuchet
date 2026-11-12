@@ -1,17 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Loading } from "@/components/loading";
 import { ReasonDialog } from "@/components/reason-dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import {
   Table,
@@ -33,6 +27,7 @@ import {
   reopenPeriod,
 } from "@/features/periods/api";
 import { formatDateTime } from "@/lib/format";
+import { invalidateLedger } from "@/lib/queries";
 
 export const Route = createFileRoute("/e/$entityId/periods/")({
   component: PeriodsPage,
@@ -58,7 +53,7 @@ function Stage({ label, children }: StageProps) {
 
 const stageLinkClass = "text-sm underline-offset-4 hover:underline";
 
-/** 年度のカード（FR-051）。期首残高 → 記帳 → 決算整理 → 締めの状態と、それぞれの入口 */
+/** 年度のカード（011/FR-051）。期首残高 → 記帳 → 決算整理 → 締めの状態と、それぞれの入口 */
 function PeriodCard({
   entityId,
   period: p,
@@ -170,6 +165,8 @@ function PeriodsPage() {
 
   // 会計期間のキーの前方一致で、一覧・履歴・期首残高をまとめて読み直す
   const invalidate = () => queryClient.invalidateQueries({ queryKey: periodKeys.list(entityId) });
+  // 締め・解除は帳票・決算書・ホーム（締めの状態・知らせ）にも関わる
+  const invalidateAll = () => Promise.all([invalidate(), invalidateLedger(queryClient, entityId)]);
 
   const createNext = useMutation({
     mutationFn: () => createNextPeriod(entityId),
@@ -177,12 +174,12 @@ function PeriodsPage() {
   });
   const close = useMutation({
     mutationFn: (year: number) => closePeriod(entityId, year),
-    onSuccess: invalidate,
+    onSuccess: invalidateAll,
   });
   const reopen = useMutation({
     mutationFn: ({ year, reason }: { year: number; reason: string }) =>
       reopenPeriod(entityId, year, reason),
-    onSuccess: invalidate,
+    onSuccess: invalidateAll,
   });
 
   const startClosing = (p: FiscalPeriod) => {
@@ -211,7 +208,7 @@ function PeriodsPage() {
         <Link
           to="/e/$entityId/imports"
           params={{ entityId }}
-          className="inline-flex h-9 items-center rounded-md border bg-background px-4 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground"
+          className={buttonVariants({ variant: "outline" })}
         >
           freee の取込
         </Link>
@@ -226,7 +223,7 @@ function PeriodsPage() {
         </CardHeader>
         <CardContent className="grid gap-4">
           <ApiErrorMessage error={error} />
-          {isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+          {isPending && <Loading />}
           {periods && (
             <div className="grid gap-4">
               {periods.map((p) => (
@@ -260,7 +257,7 @@ function PeriodsPage() {
         </CardHeader>
         <CardContent className="grid gap-4">
           <ApiErrorMessage error={history.error} />
-          {history.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+          {history.isPending && <Loading />}
           {history.data?.length === 0 && (
             <p className="text-sm text-muted-foreground">締めた年度はまだありません。</p>
           )}
@@ -291,35 +288,27 @@ function PeriodsPage() {
         </CardContent>
       </Card>
 
-      <Dialog
+      <ConfirmDialog
         open={closing !== undefined}
         onOpenChange={(next) => {
           if (!next && !close.isPending) setClosing(undefined);
         }}
+        title={<>{closing?.fiscalYear}年度を締める</>}
+        description={
+          <>
+            締めると、{closing?.fiscalYear}
+            年度の日付の仕訳の登録・訂正・取消と、期首残高の変更ができなくなります。締めた後の誤りは、翌年度以降の訂正仕訳で直します。締めは理由を記録して解除できます。
+          </>
+        }
+        cancelLabel="戻る"
+        confirmLabel="締める"
+        cancelDisabled={close.isPending}
+        confirmDisabled={close.isPending}
+        onCancel={() => setClosing(undefined)}
+        onConfirm={confirmClose}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{closing?.fiscalYear}年度を締める</DialogTitle>
-            <DialogDescription>
-              締めると、{closing?.fiscalYear}
-              年度の日付の仕訳の登録・訂正・取消と、期首残高の変更ができなくなります。締めた後の誤りは、翌年度以降の訂正仕訳で直します。締めは理由を記録して解除できます。
-            </DialogDescription>
-          </DialogHeader>
-          <ApiErrorMessage error={close.error} />
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={close.isPending}
-              onClick={() => setClosing(undefined)}
-            >
-              戻る
-            </Button>
-            <Button disabled={close.isPending} onClick={confirmClose}>
-              締める
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <ApiErrorMessage error={close.error} />
+      </ConfirmDialog>
       <ReasonDialog
         open={reopening !== undefined}
         title={`${reopening?.fiscalYear ?? ""}年度の締めの解除`}

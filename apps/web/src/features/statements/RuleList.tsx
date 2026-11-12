@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RuleStatus } from "@trebuchet/schema";
 import { useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { NativeSelect } from "@/components/ui/input";
@@ -51,7 +52,7 @@ function CounterName({
 type Panel = { kind: "edit" | "history"; ruleId: string };
 
 /**
- * 推定のルールの画面（US3。H:§5、FR-023・024）: 一覧（内容・口座・相手の科目・判定・取引先・確信度・
+ * 推定のルールの画面（006/US3。H:§5、006/FR-023・024）: 一覧（内容・口座・相手の科目・判定・取引先・確信度・
  * 適用と修正の回数・状態）、編集・停止・再開・履歴、過去の仕訳からの初期作成（案を見てから作る）。
  * ルールを変えると、その内容の未処理の候補が作り直されるので、明細の一覧も読み直す
  */
@@ -132,7 +133,7 @@ export function RuleList({ entityId }: { entityId: string }) {
         />
       )}
 
-      {rules.isPending && !error && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {rules.isPending && !error && <Loading />}
       {rules.data?.length === 0 && (
         <p className="text-sm text-muted-foreground">該当するルールはありません。</p>
       )}

@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatYen } from "@/lib/format";
+import { badgeClass } from "@/lib/styles";
 import type { StatementView } from "./api";
 import { changedFields } from "./changes";
 import { METHOD_LABELS, STATUS_LABELS } from "./labels";
@@ -21,8 +22,6 @@ export type StatementActions = {
   onAcknowledge: (statement: StatementView) => void;
   onUnlink: (statement: StatementView) => void;
 };
-
-const badgeClass = "ml-2 rounded-md border border-amber-500/60 px-1.5 py-0.5 text-xs";
 
 function Row({
   entityId,
@@ -130,7 +129,7 @@ function Row({
 }
 
 /**
- * 明細の一覧（H:§4.1。FR-012）: 日付・口座・内容・金額・状態・候補の判定・確信度・根拠と、状態ごとの操作。
+ * 明細の一覧（H:§4.1。006/FR-012）: 日付・口座・内容・金額・状態・候補の判定・確信度・根拠と、状態ごとの操作。
  * `highlightId` の行に印を付ける（仕訳の詳細の「元の明細」から開いたとき）
  */
 export function StatementList({

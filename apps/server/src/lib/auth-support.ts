@@ -11,10 +11,10 @@ import {
 } from "@trebuchet/domain";
 import type { PasskeyView } from "@trebuchet/schema";
 import type { Context } from "hono";
-import { ids } from "../deps.ts";
-import { DomainException } from "../errors.ts";
+import { DomainException, unauthenticatedError } from "../errors.ts";
 import type { GuardEnv } from "../middleware/host.ts";
 import type { ChallengeStore } from "./challenges.ts";
+import { ids } from "./ids.ts";
 import { rpIdFor } from "./origin.ts";
 import { ReauthTracker } from "./reauth.ts";
 import { isSecureHost, issueSession, setSessionCookie } from "./session.ts";
@@ -42,7 +42,14 @@ export type Ctx = Context<GuardEnv>;
 const PRF_SALT_BYTES = 32;
 const DEFAULT_PASSKEY_NAME = "パスキー";
 
-const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
+export const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
+
+/** 回復用の一時セッション・通常のセッションは、検査（middleware/auth.ts）が `c.var.session` に入れる */
+export function sessionOf(c: Ctx): Session {
+  const session = c.var.session;
+  if (session === undefined) throw new DomainException(unauthenticatedError());
+  return session;
+}
 
 export const webauthnFailed = () =>
   new DomainException(
@@ -134,6 +141,42 @@ export function createAuthSupport(deps: AuthSupportDeps) {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * サインイン・再認証の応答（認証）を検証する。challenge を（用途 scope で）取り出し、資格情報の
+   * パスキーを引き、この RP ID のものだけ検証する。失敗は `verified: null`（呼び出し側が 400 にする）。
+   * `passkey` は、失敗の記録に使うために（見つかれば）返す
+   */
+  async function verifyAssertion(
+    store: AuthStore,
+    scope: string,
+    response: Record<string, unknown>,
+    rpId: string,
+    origin: string,
+  ) {
+    const taken =
+      responseKind(response) === "authentication" ? takeChallenge(scope, response) : null;
+    const credentialId = typeof response.id === "string" ? response.id : undefined;
+    const passkey = credentialId === undefined ? undefined : await store.getPasskey(credentialId);
+    const verified =
+      taken === null || passkey === undefined || passkey.rpId !== rpId
+        ? null
+        : await safely(() =>
+            webauthn.verifyAuthentication({
+              response,
+              expectedChallenge: (challenge) => challenge === taken.challenge,
+              expectedOrigin: origin,
+              expectedRpId: rpId,
+              credential: {
+                id: passkey.id,
+                publicKey: passkey.publicKey,
+                counter: passkey.counter,
+                ...(passkey.transports ? { transports: passkey.transports } : {}),
+              },
+            }),
+          );
+    return { passkey, verified };
   }
 
   /** 登録の options。除外する認証器は、この RP ID の既存のパスキー。PRF の salt を新しく作る */
@@ -278,8 +321,7 @@ export function createAuthSupport(deps: AuthSupportDeps) {
     secure,
     nowMs,
     record,
-    takeChallenge,
-    safely,
+    verifyAssertion,
     beginRegistration,
     finishRegistration,
     newPasskey,

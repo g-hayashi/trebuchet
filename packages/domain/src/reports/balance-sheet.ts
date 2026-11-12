@@ -7,6 +7,8 @@ import {
   type OpeningInput,
   SECTION_SIDE,
   sectionRows,
+  sectionTotal,
+  sumAmounts,
   toSide,
 } from "./common.ts";
 import { compareFigure, compareSections } from "./statement.ts";
@@ -18,8 +20,6 @@ export type BalanceSheetInput = {
   periodStart: string;
   asOf: string;
 };
-
-const sum = (rows: readonly { amount: number }[]) => rows.reduce((s, r) => s + r.amount, 0);
 
 /**
  * 貸借対照表（FR-029, INV-5）: 基準日の残高。資産は借方、負債・純資産は貸方を正とする。
@@ -34,12 +34,12 @@ export function buildBalanceSheet(input: BalanceSheetInput): BalanceSheet {
     const rows = sectionRows(input.accounts, section, (id) =>
       toSide(closing(id), SECTION_SIDE[section]),
     );
-    return { section, rows, total: { amount: sum(rows) } };
+    return { section, rows, total: { amount: sumAmounts(rows) } };
   });
   const netIncome = input.accounts
     .filter((a) => !isBsSection(a.reportSection))
     .reduce((s, a) => s - closing(a.id), 0);
-  const total = (section: string) => sections.find((s) => s.section === section)?.total.amount ?? 0;
+  const total = (section: string) => sectionTotal(sections, section);
   const totalAssets = total("BS_ASSET");
   const totalLiabilitiesAndEquity = total("BS_LIABILITY") + total("BS_EQUITY") + netIncome;
   return {

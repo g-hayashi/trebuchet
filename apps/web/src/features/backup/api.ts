@@ -23,10 +23,10 @@ export const backupStatusQuery = () =>
     refetchInterval: (query) => (query.state.data?.running ? POLL_MS : false),
   });
 
-/** 画面に出す最近の件数（FR-054）。全件は CSV の書き出しで取る */
-export const RECENT_RUN_LIMIT = 5;
+/** 画面に出す最近の件数（011/FR-054）。全件は CSV の書き出しで取る */
+const RECENT_RUN_LIMIT = 5;
 
-/** バックアップの履歴の全件の CSV（server が表示用の列だけを返す。FR-054） */
+/** バックアップの履歴の全件の CSV（server が表示用の列だけを返す。011/FR-054） */
 export const RUNS_CSV_HREF = "/api/backup/runs?format=csv";
 
 export const backupRunsQuery = (limit = RECENT_RUN_LIMIT) =>
@@ -42,6 +42,6 @@ export const saveBackupSettings = async (json: BackupSettingsInput) =>
 
 export const runBackup = async () => unwrap(await backup.run.$post());
 
-/** バックアップのファイルの検査（FR-024）。解錠中の鍵で復号する（パスフレーズはない）。ファイルはメモリだけで扱われ、帳簿は変わらない */
+/** バックアップのファイルの検査（004/FR-024）。解錠中の鍵で復号する（パスフレーズはない）。ファイルはメモリだけで扱われ、帳簿は変わらない */
 export const inspectBackup = async (input: { file: File }) =>
   uploadForm<BackupInspection>("/api/backup/inspect", input);

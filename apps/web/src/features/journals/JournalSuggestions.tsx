@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import type { JournalSuggestion } from "@trebuchet/schema";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import type { Account } from "@/features/accounts/api";
 import type { TaxCategory } from "@/features/entities/api";
 import type { Partner } from "@/features/masters/api";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { journalSuggestionsQuery } from "./api";
 import type { JournalFormControl } from "./JournalForm";
 
@@ -15,6 +16,9 @@ import type { JournalFormControl } from "./JournalForm";
  * `found` は候補が出ている、`empty` は 0 件か失敗、`idle` は探す条件がない
  */
 export type SuggestionStatus = "idle" | "pending" | "found" | "empty";
+
+type Search = { memo: string; partnerId: string | undefined };
+const NO_SEARCH: Search = { memo: "", partnerId: undefined };
 
 export function JournalSuggestions({
   form,
@@ -33,42 +37,36 @@ export function JournalSuggestions({
 }) {
   const memo = useWatch({ control: form.control, name: "memo" }) ?? "";
   const lines = useWatch({ control: form.control, name: "lines" });
-  const partnerIds = JSON.stringify(lines.map((line) => line.partnerId ?? null));
-  const previousPartners = useRef(partnerIds);
+  // 取引先は、最後に変えた行の取引先を使う（取引先が入っていない行に変えたときは、最初の取引先）。
+  // 行の取引先が変わったことを、前の描画の値との比較で見つけ、描画の中で状態を直す
+  const partnerIds = lines.map((line) => line.partnerId ?? null);
+  const [seenPartnerIds, setSeenPartnerIds] = useState(partnerIds);
   const [partnerId, setPartnerId] = useState(() => lines.find((line) => line.partnerId)?.partnerId);
-  useEffect(() => {
-    const previous = JSON.parse(previousPartners.current) as (string | null)[];
-    const current = JSON.parse(partnerIds) as (string | null)[];
-    const changed = current
-      .map((id, index) => (id !== previous[index] ? index : -1))
-      .filter((index) => index >= 0)
-      .at(-1);
-    if (changed !== undefined)
-      setPartnerId(current[changed] ?? current.find((id) => id !== null) ?? undefined);
-    previousPartners.current = partnerIds;
-  }, [partnerIds]);
-  const search = JSON.stringify({ memo: memo.length <= 200 ? memo.trim() : "", partnerId });
-  const [debounced, setDebounced] = useState("");
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(search), 300);
-    return () => clearTimeout(timer);
-  }, [search]);
-  const query = (debounced ? JSON.parse(debounced) : { memo: "" }) as {
-    memo: string;
-    partnerId?: string | undefined;
-  };
-  const ready = search === debounced && Boolean(query.memo || query.partnerId);
+  if (
+    partnerIds.length !== seenPartnerIds.length ||
+    partnerIds.some((id, index) => id !== seenPartnerIds[index])
+  ) {
+    setSeenPartnerIds(partnerIds);
+    const changed = partnerIds.findLastIndex((id, index) => id !== seenPartnerIds[index]);
+    if (changed >= 0)
+      setPartnerId(partnerIds[changed] ?? partnerIds.find((id) => id !== null) ?? undefined);
+  }
+  const memoText = memo.length <= 200 ? memo.trim() : "";
+  const search = useMemo(() => ({ memo: memoText, partnerId }), [memoText, partnerId]);
+  // 入力が 300ms 止まってから探す。最初は何も探さない（`NO_SEARCH`）
+  const debounced = useDebouncedValue(search, 300, NO_SEARCH);
+  const ready = search === debounced && Boolean(debounced.memo || debounced.partnerId);
   const result = useQuery({
     ...journalSuggestionsQuery(entityId, {
-      ...(query.memo && { memo: query.memo }),
-      ...(query.partnerId && { partnerId: query.partnerId }),
+      ...(debounced.memo && { memo: debounced.memo }),
+      ...(debounced.partnerId && { partnerId: debounced.partnerId }),
     }),
     enabled: ready,
   });
   // 順序・重複排除・最大件数は server の契約をそのまま使う。
   const suggestions = ready ? (result.data ?? []) : [];
   const error = ready ? result.error : undefined;
-  const wanted = Boolean((memo.length <= 200 ? memo.trim() : "") || partnerId);
+  const wanted = Boolean(memoText || partnerId);
   const status: SuggestionStatus = !wanted
     ? "idle"
     : !ready || result.isPending

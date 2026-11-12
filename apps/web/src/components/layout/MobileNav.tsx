@@ -11,13 +11,14 @@ import {
 } from "@/components/ui/sheet";
 import { SignOutButton } from "@/features/auth/SignOutButton";
 import { EntitySwitcher } from "@/features/entities/EntitySwitcher";
+import type { FileRouteTypes } from "@/routeTree.gen";
 import { mobileNavItems } from "./EntityNav";
 
 /**
- * スマホのメニューに出し、PC の推奨を出さない画面（contracts/ui-shell.md §4、FR-058）。
+ * スマホのメニューに出し、PC の推奨を出さない画面（011 contracts/ui-shell.md §4、011/FR-058）。
  * `$名前` は 1 区間（`new` は別の画面なので当たらない）、末尾の `*` はその下のすべて（なくてもよい）
  */
-export const MOBILE_ROUTES: readonly string[] = [
+export const MOBILE_ROUTES = [
   "/",
   "/e/$entityId",
   "/e/$entityId/receipts",
@@ -27,7 +28,7 @@ export const MOBILE_ROUTES: readonly string[] = [
   "/e/$entityId/journals/$journalId",
   "/e/$entityId/reports/*",
   "/settings/*",
-];
+] as const satisfies readonly (FileRouteTypes["to"] | `${string}/*`)[];
 
 const segmentsOf = (path: string) => path.split("/").filter((s) => s !== "");
 
@@ -50,7 +51,7 @@ export function isMobileRoute(pathname: string): boolean {
 }
 
 /**
- * スマホの幅のヘッダーのメニュー（FR-059）。ボタン「メニュー」で `Sheet` を開く。
+ * スマホの幅のヘッダーのメニュー（011/FR-059）。ボタン「メニュー」で `Sheet` を開く。
  * 事業体の切替（`EntitySwitcher`）をメニューの先頭に置く。
  * 事業体の項目は `EntityNav` の `mobile` を持つものだけ（`entityId` がなければ出さない）。
  * 設定と「施錠してサインアウト」はいつも出す

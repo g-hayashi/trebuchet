@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ErrorDetails } from "./errors.ts";
 import { JournalStatus } from "./journals.ts";
 import { MASTER_NAME_MAX } from "./masters.ts";
-import { DateString, Id, Side, TaxCategoryCode, Yen } from "./primitives.ts";
+import { DateString, Id, Sha256, Side, TaxCategoryCode, Yen } from "./primitives.ts";
 
 // 002-freee-import（contracts/http-api.md、data-model.md）
 
@@ -14,9 +14,6 @@ const FiscalYear = z.number().int().min(1900).max(9999);
 const FreeeJournalId = z.string().min(1);
 /** NFKC で正規化した freee の名前（科目名・税区分名） */
 const SourceName = z.string().trim().min(1, "名前を入力してください").max(200);
-
-/** ファイルの内容の SHA-256（小文字16進64文字） */
-export const Sha256 = z.string().regex(/^[0-9a-f]{64}$/, "SHA-256 の形式が正しくありません");
 
 // ---- 判定と警告のコード（data-model §3） ----
 

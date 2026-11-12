@@ -1,3 +1,4 @@
+import { ENTITY_KINDS } from "@trebuchet/schema";
 import { sql } from "drizzle-orm";
 import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
@@ -10,7 +11,7 @@ export const entities = sqliteTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
-    kind: text("kind", { enum: ["individual", "corporation"] }).notNull(),
+    kind: text("kind", { enum: ENTITY_KINDS }).notNull(),
     dbFile: text("db_file").notNull().unique(),
     createdAt: text("created_at").notNull(),
     status: text("status", { enum: ["active", "archived", "deleting", "preparing"] })
@@ -26,7 +27,7 @@ export const entities = sqliteTable(
   ],
 );
 
-/** 端末に結びつく設定（バックアップに含めない）。data-model §1.5。リモートの設定は 004/T016 で auth.sqlite（`remote_settings`）へ移した */
+/** 端末に結びつく設定（バックアップに含めない）。data-model §1.5。リモートの設定は auth.sqlite（`remote_settings`）にある */
 export const appSettings = sqliteTable(
   "app_settings",
   {

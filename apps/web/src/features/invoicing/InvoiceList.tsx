@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { InvoiceListStatus } from "@trebuchet/schema";
 import { useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { Input, NativeSelect } from "@/components/ui/input";
@@ -60,7 +61,7 @@ function ListPaymentForm({
 }
 
 /** URL の状態の絞り込み。省略は既定（未入金・一部入金 = 未回収。期限切れはこの中にある）、`all` はすべて */
-export type ListStatus = InvoiceListStatus | "all";
+type ListStatus = InvoiceListStatus | "all";
 export type ListFilters = Omit<InvoiceFilters, "status"> & { status?: ListStatus | undefined };
 
 /** サーバーへ送る絞り込み（`all` は status を送らない） */
@@ -70,7 +71,7 @@ export const toQueryFilters = (filters: ListFilters): InvoiceFilters => ({
 });
 
 /**
- * 請求書の一覧（FR-020・022、011 FR-035）。番号・取引先・対象月・発行日・合計・状態・残額と、取引先・対象月・状態の絞り込み。
+ * 請求書の一覧（005/FR-020・022、011 FR-035）。番号・取引先・対象月・発行日・合計・状態・残額と、取引先・対象月・状態の絞り込み。
  * 既定の表示は未入金・期限切れ（未回収）。期限切れの請求書には印を付け、取引先ごとの未回収の残額（うち期限切れ）を表で示す。
  * 未回収の行から入金を記録できる（パネル）
  */
@@ -160,7 +161,7 @@ export function InvoiceList({
         )}
       </div>
       <ApiErrorMessage error={error} />
-      {invoices.isPending && !error && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {invoices.isPending && !error && <Loading />}
       {invoices.data && invoices.data.outstandingByPartner.length > 0 && (
         <section className="grid gap-2" aria-label="未回収">
           <h2 className="text-base font-semibold">取引先ごとの未回収</h2>

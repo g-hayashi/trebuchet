@@ -14,18 +14,12 @@ import { FakeImageTool, FakeReceiptReader } from "../fakes.ts";
 import { jpegBytes, jpegSegments, pdfBytes, readExif } from "../fixtures/receipts/sample-files.ts";
 import { FaultInjectingReceiptUnitOfWork, receiptSnapshotOf } from "../receipt-fault-injection.ts";
 import { setupReceiptsWithLedger } from "../receipt-setup.ts";
+import { codeOf, must } from "../result.ts";
 
 // T033: 証憑の読み取りのユースケース（contracts/domain-module.md §3、research R13・R14、FR-014〜017、INV-66・67）。
 // AI・sips は呼ばない（偽の ReceiptReader・ReceiptImageTool）
 
 const PROBE = { width: 4032, height: 3024, fullColor: true };
-
-function must<T>(r: Result<T>): T {
-  if (!r.ok) throw new Error(`unexpected err: ${r.error.code} ${r.error.message}`);
-  return r.value;
-}
-const codeOf = (r: { ok: boolean; error?: { code: string } }): string | undefined =>
-  r.ok ? undefined : r.error?.code;
 
 /** `read` の最中に UnitOfWork が開いていないこと（AI をトランザクションの外で呼ぶ。R13）を確かめる偽の reader */
 class OutsideTransactionReader extends FakeReceiptReader {

@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReceiptDetail } from "@trebuchet/schema";
 import { type FormEvent, useState } from "react";
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +14,7 @@ import {
 import { ApiErrorMessage, FieldError } from "@/components/ui/form-error";
 import { Input } from "@/components/ui/input";
 import { journalSearchQuery } from "@/features/journals/api";
-import { ApiError } from "@/lib/api";
+import { isApiError } from "@/lib/api";
 import { formatYen } from "@/lib/format";
 import { invalidateLedger } from "@/lib/queries";
 import { journalCandidatesQuery, postReceiptLink } from "./api";
@@ -21,7 +22,7 @@ import { journalCandidatesQuery, postReceiptLink } from "./api";
 type Pick = { journalId: string; reason?: string };
 
 /**
- * 証憑を仕訳に結びつけるダイアログ（FR-011・013）。取引年月日の前後の候補（R6）と、
+ * 証憑を仕訳に結びつけるダイアログ（010/FR-011・013）。取引年月日の前後の候補（010/R6）と、
  * キーワードで探した仕訳を示し、選ぶと link を送る。
  * 結びついた仕訳がある証憑は付け替えなので `replace: true` で送る。理由の要否は web で判断せず、
  * server が 422 `REASON_REQUIRED` を返したら理由の入力を求めて送り直す。
@@ -72,7 +73,7 @@ export function LinkJournalDialog({
     onClose();
   };
 
-  const needReason = link.error instanceof ApiError && link.error.code === "REASON_REQUIRED";
+  const needReason = isApiError(link.error, "REASON_REQUIRED");
   const choose = (journalId: string) => {
     setChosen(journalId);
     setReason("");
@@ -111,7 +112,7 @@ export function LinkJournalDialog({
         <section aria-label="候補の仕訳" className="grid gap-2">
           <h3 className="text-sm font-medium">候補（取引年月日の前後）</h3>
           <ApiErrorMessage error={candidates.error} />
-          {candidates.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+          {candidates.isPending && <Loading />}
           {candidates.data?.length === 0 && (
             <p className="text-sm text-muted-foreground">候補の仕訳がありません。</p>
           )}

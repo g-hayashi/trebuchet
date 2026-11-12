@@ -1,18 +1,16 @@
-import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { Loading } from "@/components/loading";
 import { ApiErrorMessage } from "@/components/ui/form-error";
-import { fiscalPeriodsQuery } from "@/features/periods/api";
-import { currentPeriod } from "@/features/reports/periods";
+import { useCurrentPeriod } from "@/features/periods/current";
 
 export const Route = createFileRoute("/e/$entityId/blue-return/")({
   component: BlueReturnEntryPage,
 });
 
-/** 青色申告決算書の入口（FR-043）。今日を含む会計期間（なければ最新）の年の決算書へ転送する */
+/** 青色申告決算書の入口（011/FR-043）。今日を含む会計期間（なければ最新）の年の決算書へ転送する */
 function BlueReturnEntryPage() {
   const { entityId } = Route.useParams();
-  const { data: periods, error } = useQuery(fiscalPeriodsQuery(entityId));
-  const period = periods && currentPeriod(periods);
+  const { periods, period, error } = useCurrentPeriod(entityId);
 
   if (period) {
     return (
@@ -30,9 +28,7 @@ function BlueReturnEntryPage() {
       {periods?.length === 0 && (
         <p className="text-sm text-muted-foreground">会計期間がありません。</p>
       )}
-      {periods === undefined && !error && (
-        <p className="text-sm text-muted-foreground">読み込み中…</p>
-      )}
+      {periods === undefined && !error && <Loading />}
     </main>
   );
 }

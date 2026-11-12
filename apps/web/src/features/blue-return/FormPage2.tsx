@@ -21,7 +21,7 @@ const TIER_LABELS: Record<NonNullable<Page2["deduction"]>["tier"], string> = {
 };
 
 /**
- * 決算書の2ページ。月別の売上・雑収入、地代家賃の内訳、青色申告特別控除の計算（FR-017、FR-024、FR-010）。
+ * 決算書の2ページ。月別の売上・雑収入、地代家賃の内訳、青色申告特別控除の計算（003/FR-017、003/FR-024、003/FR-010）。
  * 値は API が作った決算書のとおりに表示する（計算しない）。地代家賃の内訳の編集は家事按分の画面で行う
  */
 export function FormPage2({ page2 }: { page2: Page2 }) {

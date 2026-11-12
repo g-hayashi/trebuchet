@@ -21,7 +21,7 @@ const STATUS_LABELS: Record<Row["status"], string> = {
 const rowTitle = (r: Row) => `${r.date} ${r.accountName} ${r.content}`;
 
 /**
- * 取込のプレビュー（FR-002・004〜006）: 期間・件数・合計、読めない行、重複の疑い、変更ありの行の変更前後、
+ * 取込のプレビュー（006/FR-002・004〜006）: 期間・件数・合計、読めない行、重複の疑い、変更ありの行の変更前後、
  * 取り込む明細の一覧。口座の対応と確定のボタンは画面（`StatementImportPage`）が置く
  */
 export function ImportPreview({ preview }: { preview: StatementImportPreview }) {

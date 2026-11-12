@@ -5,13 +5,12 @@ import { fileURLToPath } from "node:url";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Database, drizzleOf } from "../src/driver.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 // 007 T004。0009・0010（statement_batches・statement_audit_log の作り直し）が、
 // 取込済みのデータを失わず、外部キーとトリガーを保つことを、0008 までの DB に当てて確かめる
 
 const FULL = fileURLToPath(new URL("../drizzle/tenant", import.meta.url));
-const NOW = "2026-10-25T09:00:00.000Z";
 
 let tmp: TempDataDir;
 let client: Database.Database;

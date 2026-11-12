@@ -5,9 +5,9 @@ import type {
   ManagedEntity,
   RegistryRepository,
 } from "@trebuchet/domain";
-import { and, asc, eq, ne, notInArray } from "drizzle-orm";
+import { and, asc, eq, notInArray } from "drizzle-orm";
 import { entities } from "./schema/registry.ts";
-import { type RegistryDb, removeTenantData } from "./tenant-store.ts";
+import { type RegistryDb, removeTenantData, tenantRelPath } from "./tenant-store.ts";
 
 const summary = {
   id: entities.id,
@@ -47,16 +47,6 @@ export class DrizzleRegistryRepository implements RegistryRepository, EntityLife
       .map(toSummary);
   }
 
-  /** 準備中（`preparing`）の行は返さない（014 R2） */
-  getEntity(id: string): EntitySummary | undefined {
-    const row = this.db
-      .select(summary)
-      .from(entities)
-      .where(and(eq(entities.id, id.toLowerCase()), ne(entities.status, "preparing")))
-      .get();
-    return row === undefined ? undefined : toSummary(row);
-  }
-
   /** DB ファイルは data ディレクトリからの相対パスで記録する（data ディレクトリを移動できるように） */
   insertEntity(entity: EntitySummary & { status?: "active" | "preparing" | undefined }): void {
     const id = entity.id.toLowerCase();
@@ -69,7 +59,7 @@ export class DrizzleRegistryRepository implements RegistryRepository, EntityLife
         createdAt: entity.createdAt,
         isDemo: entity.demo ? 1 : 0,
         status: entity.status ?? "active",
-        dbFile: `tenants/${id}.sqlite`,
+        dbFile: tenantRelPath(id),
       })
       .run();
   }

@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { api, unwrap } from "@/lib/api";
+import { api, entityPath, unwrap } from "@/lib/api";
 
 // 青色申告決算書の API（003 contracts/http-api.md「決算書」「控除の回答」）
 
@@ -34,7 +34,7 @@ export const putDeductionAnswers = async (
   json: Parameters<(typeof blueReturnApi)["deduction-answers"]["$put"]>[0]["json"],
 ) => unwrap(await blueReturnApi["deduction-answers"].$put({ param: { entityId, year }, json }));
 
-// ---- 家事按分・地代家賃の内訳・決算整理の仕訳の案（US2） ----
+// ---- 家事按分・地代家賃の内訳・決算整理の仕訳の案（003/US2） ----
 // どれも年度のキーの下に置く。年度のキーを無効にすると、決算書とあわせて読み直される
 
 export const homeUseQuery = (entityId: string, year: string) =>
@@ -81,7 +81,7 @@ export const postAdjustment = async (
   json: Parameters<(typeof blueReturnApi)["adjustments"]["$post"]>[0]["json"],
 ) => unwrap(await blueReturnApi.adjustments.$post({ param: { entityId, year }, json }));
 
-/** 決算のメモ（特別な事情・期首と前期末の差の説明）の保存（US4。FR-027, FR-030） */
+/** 決算のメモ（特別な事情・期首と前期末の差の説明）の保存（003/US4。003/FR-027, 003/FR-030） */
 export const putClosingNote = async (
   entityId: string,
   year: string,
@@ -95,6 +95,6 @@ export const putClosingNote = async (
     }),
   );
 
-/** CSV のダウンロードの URL。使わない欄は常に空にする（`blankUnused=true`。様式の行の対応を保つ。FR-045） */
+/** CSV のダウンロードの URL。使わない欄は常に空にする（`blankUnused=true`。様式の行の対応を保つ。011/FR-045） */
 export const blueReturnCsvUrl = (entityId: string, year: string) =>
-  `/api/entities/${encodeURIComponent(entityId)}/blue-return/${encodeURIComponent(year)}/csv?blankUnused=true`;
+  `${entityPath(entityId)}/blue-return/${encodeURIComponent(year)}/csv?blankUnused=true`;

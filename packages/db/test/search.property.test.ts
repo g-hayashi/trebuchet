@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DrizzleLedgerRepository } from "../src/ledger-repository.ts";
 import { DrizzleMasterRepository } from "../src/master-repository.ts";
 import { openTenant } from "../src/tenant-store.ts";
-import { createTestEntity, NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { createTestEntity, type TempDataDir, testClock, useTempDataDir } from "../src/testing.ts";
 
 let tmp: TempDataDir;
 let masters: DrizzleMasterRepository;
@@ -23,7 +23,7 @@ let accountIds: string[];
 let partnerIds: string[];
 let tagIds: string[];
 
-const clock = { now: () => NOW };
+const clock = testClock();
 
 beforeEach(() => {
   tmp = useTempDataDir("search");

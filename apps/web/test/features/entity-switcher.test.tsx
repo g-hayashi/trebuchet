@@ -1,6 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { accountKeys } from "@/features/accounts/api";
@@ -12,6 +10,7 @@ import { Route as EntityRoute } from "@/routes/e/$entityId/route";
 import { Route as HomeRoute } from "@/routes/index";
 import { Route as ListRoute } from "@/routes/list";
 import { type ApiCall, mockApi, ok } from "../mock-api";
+import { renderTree } from "../render-route";
 
 const LAST_ENTITY_KEY = "trebuchet:lastEntityId";
 
@@ -48,11 +47,6 @@ afterEach(() => {
 
 /** 実際のルート（ヘッダーを持つルート・トップ画面・事業体のレイアウト）でアプリを描画する */
 function renderApp(url: string) {
-  // jsdom は scrollTo を実装していない（ルーターが画面の切り替えで呼ぶ）
-  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
   // routeTree.gen.ts と同じく、ファイルルートに id・path・親を後から与える
   const routeTree = RootRoute.addChildren([
     HomeRoute.update({ id: "/", path: "/", getParentRoute: () => RootRoute } as never),
@@ -63,17 +57,7 @@ function renderApp(url: string) {
       getParentRoute: () => RootRoute,
     } as never),
   ]);
-  const router = createRouter({
-    routeTree,
-    context: { queryClient },
-    history: createMemoryHistory({ initialEntries: [url] }),
-  });
-  const result = render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return { ...result, queryClient, router };
+  return renderTree(routeTree, url);
 }
 
 const switcher = () => screen.findByRole("combobox", { name: "事業体" });

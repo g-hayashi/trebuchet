@@ -31,6 +31,7 @@ import {
   makeReceiptQuery,
   setupReceipts,
 } from "../receipt-setup.ts";
+import { must } from "../result.ts";
 
 // T012: addReceipt・listReceipts・getReceipt・readReceiptFile（contracts/domain-module.md §3、R10、FR-001〜005・007）
 
@@ -57,11 +58,6 @@ function add(deps: ReceiptDeps, input: AddInput = {}) {
     ...rest,
     options: { ...FULL, ...options },
   });
-}
-
-function must<T>(result: { ok: true; value: T } | { ok: false; error: { message: string } }): T {
-  if (!result.ok) throw new Error(result.error.message);
-  return result.value;
 }
 
 describe("addReceipt: 成功", () => {

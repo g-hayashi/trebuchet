@@ -7,6 +7,7 @@ import {
   type ProfitAndLoss,
   type StatementBatch,
 } from "@trebuchet/schema";
+import { sectionTotal } from "../reports/common.ts";
 import type { FiscalPeriod, Journal } from "../types.ts";
 
 // 011 US1: ホームの要約の純関数（research R3、data-model §2.1）。帳票と同じ関数が作った損益計算書・貸借対照表から
@@ -24,9 +25,6 @@ export function countInvoiceTasks(invoices: readonly InvoiceSummary[]): {
 /** 未取消の請求書の残額の合計（未回収） */
 export const outstandingTotal = (invoices: readonly InvoiceSummary[]): number =>
   invoices.reduce((sum, i) => sum + i.remaining, 0);
-
-const sectionTotal = (report: ProfitAndLoss, section: string): number =>
-  report.sections.find((s) => s.section === section)?.total.amount ?? 0;
 
 /** 貸借対照表の現金・預金の科目（`CASH_AND_DEPOSIT_CODES`）の行の合計 */
 export function cashAndDeposits(balanceSheet: Pick<BalanceSheet, "sections">): number {
@@ -51,8 +49,8 @@ export function homeFigures(input: {
     fiscalYear: period.fiscalYear,
     from: period.startDate,
     to: period.endDate,
-    sales: sectionTotal(pl, "PL_SALES"),
-    expenses: sectionTotal(pl, "PL_COGS") + sectionTotal(pl, "PL_EXPENSE"),
+    sales: sectionTotal(pl.sections, "PL_SALES"),
+    expenses: sectionTotal(pl.sections, "PL_COGS") + sectionTotal(pl.sections, "PL_EXPENSE"),
     netIncome: pl.netIncome.amount,
     cashAndDeposits: cashAndDeposits(input.balanceSheet),
     outstanding: input.outstanding,

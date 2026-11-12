@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { formatDateTime } from "@/lib/format";
 import { Route } from "@/routes/e/$entityId/statements/settings";
 import { type ApiCall, apiError, mockApi, ok } from "../mock-api";
 import { renderRoute } from "../render-route";
@@ -149,7 +150,9 @@ describe("取込元", () => {
     expect(rows[2]).toHaveTextContent("テスト銀行 CSV");
     expect(rows[2]).toHaveTextContent("1 つの口座");
     expect(rows[2]).toHaveTextContent("テスト銀行");
-    expect(rows[1]).toHaveTextContent(new Date(A.lastUsedAt).toLocaleString("ja-JP"));
+    // 日時は共通の表記（秒なし）
+    expect(rows[1]).toHaveTextContent(formatDateTime(A.lastUsedAt));
+    expect(rows[1]?.textContent).not.toMatch(/\d{2}:\d{2}:\d{2}/);
   });
 
   it("保存した取込元がなければその旨を示す", async () => {

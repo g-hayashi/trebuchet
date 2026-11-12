@@ -12,7 +12,7 @@ import {
   daysBetween,
   monthAtIndex,
   monthEnd,
-  monthOfDate,
+  monthNumberOf,
   yearOfDate,
 } from "../dates.ts";
 import type { Honorific, Side } from "../types.ts";
@@ -323,7 +323,7 @@ const SALES_AMOUNTS = [
  * 年度は、作成日の月が 3 月以上なら作成日の年、1・2 月なら前の年（US3）。作成日より後の日付は入れない（INV-76）
  */
 export function buildDemoPlan(today: string): DemoPlan {
-  const month = Number(monthOfDate(today).slice(5));
+  const month = monthNumberOf(today);
   const previousYear = month < 3;
   const fiscalYear = previousYear ? yearOfDate(today) - 1 : yearOfDate(today);
 

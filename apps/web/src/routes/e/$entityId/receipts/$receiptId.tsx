@@ -2,13 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ReceiptDetail } from "@trebuchet/schema";
 import type { ReactNode } from "react";
+import { Loading } from "@/components/loading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiErrorMessage } from "@/components/ui/form-error";
 import { receiptQuery } from "@/features/receipts/api";
 import {
   CATEGORY_LABELS,
   CHANNEL_LABELS,
-  formatBytes,
   LINK_STATE_LABELS,
   MEDIA_TYPE_LABELS,
   warningText,
@@ -21,7 +21,7 @@ import { ReceiptReadingNote } from "@/features/receipts/ReceiptReadingNote";
 import { ReceiptReplaceSection } from "@/features/receipts/ReceiptReplaceSection";
 import { ReceiptViewer } from "@/features/receipts/ReceiptViewer";
 import { useReceiptReading } from "@/features/receipts/reading";
-import { formatDateTime } from "@/lib/format";
+import { formatBytes, formatDateTime, formatYen } from "@/lib/format";
 
 export const Route = createFileRoute("/e/$entityId/receipts/$receiptId")({
   component: ReceiptDetailPage,
@@ -41,7 +41,7 @@ function ReceiptDetailPage() {
         </Link>
       </div>
       <ApiErrorMessage error={query.error} />
-      {query.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
+      {query.isPending && <Loading />}
       {receipt && <ReceiptBody entityId={entityId} receipt={receipt} />}
     </main>
   );
@@ -128,9 +128,7 @@ function ValueSummary({ receipt }: { receipt: ReceiptDetail }) {
   return (
     <dl className="grid grid-cols-[8rem_1fr] gap-2 text-sm">
       <Row label="取引年月日">{receipt.transactionDate ?? "未入力"}</Row>
-      <Row label="金額">
-        {receipt.amount === null ? "未入力" : receipt.amount.toLocaleString("ja-JP")}
-      </Row>
+      <Row label="金額">{receipt.amount === null ? "未入力" : formatYen(receipt.amount)}</Row>
       <Row label="取引先">{receipt.partnerName ?? "未入力"}</Row>
       <Row label="メモ">{receipt.memo ?? ""}</Row>
     </dl>
@@ -144,7 +142,7 @@ const Row = ({ label, children }: { label: string; children: ReactNode }) => (
   </>
 );
 
-/** 受領日時・ハッシュ・元の名前・形式・大きさ・経路など、保存した時点の事実（FR-009） */
+/** 受領日時・ハッシュ・元の名前・形式・大きさ・経路など、保存した時点の事実（010/FR-009） */
 function ReceiptInfo({ entityId, receipt }: { entityId: string; receipt: ReceiptDetail }) {
   const file = receipt.currentFile;
   return (

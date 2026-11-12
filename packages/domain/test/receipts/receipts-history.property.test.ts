@@ -19,6 +19,7 @@ import { jpegBytes } from "../fixtures/receipts/sample-files.ts";
 import { type ReceiptOp, receiptInputArb, receiptOpArb } from "../receipt-arbitraries.ts";
 import { FaultInjectingReceiptUnitOfWork, receiptSnapshotOf } from "../receipt-fault-injection.ts";
 import { addBareJournal, setupReceiptsWithLedger } from "../receipt-setup.ts";
+import { codeOf } from "../result.ts";
 
 // INV-63（履歴の完全性）と INV-62（差し替えの重複・失敗）。data-model §4、research R7・R10、SC-005。
 // 操作の列（入力・訂正・差し替え・削除・結びつけ・解除）を、途中の DB の失敗を混ぜて実行する
@@ -49,9 +50,6 @@ function build() {
 type Ctx = ReturnType<typeof build>;
 
 const bytesOf = (seed: number) => jpegBytes({ seed: seed % SEEDS });
-
-/** 失敗のコード。成功は undefined */
-const codeOf = (r: Result<unknown>) => (r.ok ? undefined : r.error.code);
 
 /**
  * 1 つの操作を実行する。`expected` は失敗の注入がないときに決まるエラーのコード（モデル。
@@ -177,7 +175,7 @@ describe("INV-63: 操作の列の後の履歴の完全性", () => {
             } else if (result === undefined) {
               expect(failAt).not.toBeNull();
             } else {
-              expect(codeOf(result)).toBeUndefined();
+              expect(codeOf(result)).toBe("ok");
             }
           }
 

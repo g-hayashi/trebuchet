@@ -1,13 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { z } from "zod";
 import { WithholdingList } from "@/features/invoicing/WithholdingList";
 import { thisYear } from "@/lib/dates";
+import { YearSearch } from "@/lib/year-search";
 
-/** 年は暦年（入金日の年）。不正な値は捨てて、今年にする */
-const Search = z.object({ year: z.number().int().min(1900).max(9999).optional().catch(undefined) });
-
+/** 年は暦年（入金日の年） */
 export const Route = createFileRoute("/e/$entityId/invoices/withholding")({
-  validateSearch: Search,
+  validateSearch: YearSearch,
   component: WithholdingPage,
 });
 

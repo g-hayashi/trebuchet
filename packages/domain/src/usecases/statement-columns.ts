@@ -3,6 +3,7 @@ import {
   type StatementAmountSign,
   type StatementColumnIndexes,
   type StatementColumnRole,
+  type StatementColumnUnavailable,
   type StatementTableLayout,
 } from "@trebuchet/schema";
 import type { ColumnSuggestionProvider } from "../ports.ts";
@@ -22,7 +23,7 @@ import { perMille } from "../statements/evals.ts";
 export const COLUMN_TIMEOUT_DETAIL = { timeout: true } as const;
 
 /** 案を作れなかった理由。`disabled` は AI の設定で端末内が無効（provider を渡さない） */
-export type ColumnSuggestionUnavailable = "disabled" | "unavailable" | "timeout" | "invalid";
+export type ColumnSuggestionUnavailable = StatementColumnUnavailable;
 
 export type ColumnSuggestionResult = {
   suggestion: ColumnSuggestion | null;

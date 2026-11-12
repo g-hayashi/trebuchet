@@ -11,6 +11,11 @@ export function thisMonth(): string {
   return today().slice(0, 7);
 }
 
+/** 先月（ローカル時刻の YYYY-MM）。請求・工数の月の既定 */
+export function lastMonth(): string {
+  return previousMonth(thisMonth());
+}
+
 /** 今年（ローカル時刻） */
 export function thisYear(): number {
   return new Date().getFullYear();
@@ -38,7 +43,7 @@ export function previousMonth(month: string): string {
   return `${y}-${pad2(pm)}`;
 }
 
-/** 帳票の期間のプリセット（FR-040）。暦の月・四半期・年 */
+/** 帳票の期間のプリセット（011/FR-040）。暦の月・四半期・年 */
 export type RangePreset = "this-month" | "last-month" | "this-quarter" | "this-year" | "last-year";
 
 export const RANGE_PRESETS: readonly { id: RangePreset; label: string }[] = [

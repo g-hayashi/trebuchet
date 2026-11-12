@@ -83,7 +83,10 @@ describe("POST /api/entities/demo", () => {
     const [a, b] = await Promise.all([post(), post()]);
     expect([a.status, b.status].sort()).toEqual([201, 409]);
     const loser = a.status === 409 ? a : b;
-    expect((await errorOf(loser)).code).toBe("DEMO_NOT_AVAILABLE");
+    const error = await errorOf(loser);
+    expect(error.code).toBe("DEMO_NOT_AVAILABLE");
+    // 事業体があるからではなく、作成中であることがわかる文言
+    expect(error.message).toBe("デモ事業を作成中です");
     const list = (await get("/api/entities")) as { entities: unknown[] };
     expect(list.entities).toHaveLength(1);
   });

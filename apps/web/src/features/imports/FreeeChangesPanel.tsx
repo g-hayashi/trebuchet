@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SIDE_LABELS } from "@/lib/accounts";
 import { formatYen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { WARNING_LABELS } from "./labels";
@@ -27,8 +28,6 @@ type SnapshotLine = {
   description: string | null;
 };
 type Snapshot = { date: string; memo: string | null; lines: SnapshotLine[] };
-
-const SIDE_LABELS = { debit: "借方", credit: "貸方" } as const;
 
 /** 正準 JSON（文字列、または解析済みのオブジェクト）を読む。形が違えば undefined */
 function parseSnapshot(value: unknown): Snapshot | undefined {
@@ -58,7 +57,7 @@ type Entry = {
   after: Snapshot | undefined;
 };
 
-/** freee 側の変更・削除（FR-029, FR-030）。帳簿の仕訳は変えず、比べた内容と帳簿の仕訳へのリンクを示す */
+/** freee 側の変更・削除（002/FR-029, 002/FR-030）。帳簿の仕訳は変えず、比べた内容と帳簿の仕訳へのリンクを示す */
 export function FreeeChangesPanel({
   entityId,
   warnings,

@@ -2,7 +2,7 @@ import { randomUUIDv7 } from "node:crypto";
 import { STRAIGHT_LINE_RATES, TAX_PARAMETERS } from "@trebuchet/domain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openTenant, type TenantDb } from "../src/tenant-store.ts";
-import { type TempDataDir, useTempDataDir } from "../src/testing.ts";
+import { NOW, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 
 let tmp: TempDataDir;
 let db: TenantDb;
@@ -27,7 +27,6 @@ const NEW_TABLES = [
 const NEW_TABLES_009 = ["straight_line_rates", "deferred_assets", "deferred_amortizations"];
 
 const run = (sqlText: string, ...params: unknown[]) => db.$client.prepare(sqlText).run(...params);
-const NOW = "2026-10-19T09:00:00.000Z";
 
 function seedAccount(code: string, name: string, category = "expense"): string {
   const id = randomUUIDv7();

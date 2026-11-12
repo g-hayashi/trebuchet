@@ -1,14 +1,14 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReceiptDetail } from "@trebuchet/schema";
 import { useState } from "react";
 import { ReasonDialog } from "@/components/reason-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ApiError } from "@/lib/api";
-import { postReceiptDelete, receiptKeys } from "./api";
+import { isApiError } from "@/lib/api";
+import { postReceiptDelete } from "./api";
+import { useReceiptWrite } from "./use-receipt-write";
 
 /**
- * 証憑の削除（US5、FR-019）。理由つきで「削除済み」にする（行・ファイル・履歴は残り、後から開ける）。
+ * 証憑の削除（010/US5、010/FR-019）。理由つきで「削除済み」にする（行・ファイル・履歴は残り、後から開ける）。
  * 仕訳に結びついていれば server が 409 `RECEIPT_LINKED` を返すので、先に結びつきを解除するよう促す。
  * 削除済みの証憑には出さない（呼び出し側）
  */
@@ -19,25 +19,12 @@ export function ReceiptDeleteSection({
   entityId: string;
   receipt: ReceiptDetail;
 }) {
-  const queryClient = useQueryClient();
   const [asking, setAsking] = useState(false);
   const [linked, setLinked] = useState(false);
 
-  const mutation = useMutation({
-    mutationFn: (reason: string) =>
-      postReceiptDelete(entityId, receipt.id, { reason, version: receipt.version }),
-    onSuccess: async (updated) => {
-      queryClient.setQueryData(receiptKeys.detail(entityId, receipt.id), updated);
-      await queryClient.invalidateQueries({ queryKey: receiptKeys.all(entityId) });
-    },
-    onError: async (error) => {
-      if (error instanceof ApiError && error.code === "VERSION_CONFLICT") {
-        await queryClient.invalidateQueries({
-          queryKey: receiptKeys.detail(entityId, receipt.id),
-        });
-      }
-    },
-  });
+  const mutation = useReceiptWrite(entityId, receipt.id, (reason: string) =>
+    postReceiptDelete(entityId, receipt.id, { reason, version: receipt.version }),
+  );
 
   return (
     <section aria-label="証憑の削除">
@@ -76,7 +63,7 @@ export function ReceiptDeleteSection({
           try {
             await mutation.mutateAsync(reason);
           } catch (error) {
-            if (error instanceof ApiError && error.code === "RECEIPT_LINKED") {
+            if (isApiError(error, "RECEIPT_LINKED")) {
               setLinked(true);
               setAsking(false);
               return;

@@ -53,6 +53,13 @@ describe("parseStatementAmount（R5）", () => {
     ["()", undefined],
     ["△", undefined],
     ["1-2", undefined],
+    // 括弧・△・▲と符号が重なる書き方は、符号が反転するので金額として読まない
+    ["(-1,234)", undefined],
+    ["(+1,234)", undefined],
+    ["△-1000", undefined],
+    ["▲-1000", undefined],
+    ["△+1000", undefined],
+    ["△(1,000)", undefined],
   ];
   for (const [raw, expected] of cases) {
     it(`${JSON.stringify(raw)} → ${String(expected)}`, () => {

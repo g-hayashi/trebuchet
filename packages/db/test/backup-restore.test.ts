@@ -446,6 +446,34 @@ describe("restoreBackup: 既存の帳簿がある場所への復元", () => {
     const { promise, summaries } = run();
     expect((await promise).ok).toBe(true);
     expect(summaries[0]?.differences).toEqual([]);
+    expect(summaries[0]?.differencesUnavailable).toBe(false);
+    expect(summaries[0]?.differencesError).toBeNull();
+  });
+
+  it("差の計算に失敗したら、握りつぶさず differencesUnavailable と理由（例外の名前）を要約に出す", async () => {
+    const [e] = seedSource([{ name: "事業A", journals: 2, seed: 1 }]);
+    await buildBackup();
+    expect((await run().promise).ok).toBe(true);
+    // 今の帳簿の事業体の DB が読めない（壊れている）状態にする
+    writeFileSync(join(dest(), "tenants", `${e?.id}.sqlite`), "garbage");
+
+    const summaries: RestoreSummary[] = [];
+    const result = await restoreBackup({
+      file: backupPath(),
+      recoveryKey: recovery.text,
+      dataDir: dest(),
+      tmpRoot: scratch(),
+      confirm: (s) => {
+        summaries.push(s);
+        return false;
+      },
+      now: () => NOW,
+    });
+    expect(result).toEqual({ ok: false, error: "CANCELLED" });
+    expect(summaries[0]?.hasExistingLedger).toBe(true);
+    expect(summaries[0]?.differences).toEqual([]);
+    expect(summaries[0]?.differencesUnavailable).toBe(true);
+    expect(summaries[0]?.differencesError).toEqual(expect.any(String));
   });
 });
 

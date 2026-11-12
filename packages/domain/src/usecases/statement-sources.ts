@@ -1,7 +1,8 @@
 import type { StatementSource } from "@trebuchet/schema";
 import { auditEntry } from "../audit.ts";
 import type { Clock, IdGenerator, StatementUnitOfWork } from "../ports.ts";
-import { domainError, err, ok, type Result, validationError } from "../types.ts";
+import { compareText } from "../text.ts";
+import { domainError, err, notFoundError, ok, type Result, validationError } from "../types.ts";
 
 // 取込元（列の対応の保存）の一覧・名前の変更・削除（007/R7、FR-012）。保存と更新は取込の確定（`commitStatementImport`）
 
@@ -23,7 +24,7 @@ export function checkStatementSourceName(name: string): Result<string> {
 }
 
 export const sourceNotFound = (id: string) =>
-  err(domainError("STATEMENT_SOURCE_NOT_FOUND", "取込元が見つかりません", { id }));
+  err(notFoundError("STATEMENT_SOURCE_NOT_FOUND", "取込元", { id }));
 
 export const sourceNameTaken = (name: string) =>
   err(
@@ -38,7 +39,7 @@ export function listStatementSources(deps: Pick<SourceDeps, "uow">): Result<Stat
     ok(
       tx.statements
         .listStatementSources()
-        .sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt) || a.name.localeCompare(b.name)),
+        .sort((a, b) => compareText(b.lastUsedAt, a.lastUsedAt) || compareText(a.name, b.name)),
     ),
   );
 }

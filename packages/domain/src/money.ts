@@ -1,17 +1,15 @@
 import { YEN_LIMIT } from "@trebuchet/schema";
-import { type DomainError, domainError, err, ok, type Result } from "./types.ts";
 
 export type Yen = number & { readonly __brand: "Yen" };
 
+/** 1 円以上 1 兆円未満の整数（INV-3） */
 export function isYen(n: number): n is Yen {
   return Number.isSafeInteger(n) && n > 0 && n < YEN_LIMIT;
 }
 
-export function toYen(n: number): Result<Yen, DomainError> {
-  if (isYen(n)) return ok(n);
-  return err(
-    domainError("VALIDATION", "金額は 1 円以上 1 兆円未満の整数で入力してください", { amount: n }),
-  );
+/** 0 円以上 1 兆円未満の整数（0 を許す金額） */
+export function isNonNegativeYen(n: number): boolean {
+  return Number.isSafeInteger(n) && n >= 0 && n < YEN_LIMIT;
 }
 
 /**

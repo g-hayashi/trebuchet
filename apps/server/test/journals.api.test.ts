@@ -9,6 +9,7 @@ import {
   createTestEntity,
   errorOf,
   json,
+  jsonRequest,
   makeClock,
   testHeaders,
 } from "./helpers.ts";
@@ -18,7 +19,7 @@ import {
 let tmp: TempDataDir;
 let entityId: string;
 let acc: (name: string) => string;
-const clock = makeClock("2026-10-20T09:00:00.000Z");
+const clock = makeClock();
 const PROBE: ReceiptProbe = { width: 4032, height: 3024, fullColor: true };
 
 beforeEach(async () => {
@@ -40,14 +41,8 @@ const makeApp = () => createApp({ clock, receipts: { imageTool: tool() } });
 type App = ReturnType<typeof makeApp>;
 const base = () => `/api/entities/${entityId}`;
 
-async function post(app: App, path: string, body: unknown) {
-  return app.request(path, {
-    method: "POST",
-    body: JSON.stringify(body),
-    headers: { ...(await testHeaders()), "content-type": "application/json" },
-  });
-}
-const get = async (app: App, path: string) => app.request(path, { headers: await testHeaders() });
+const post = (app: App, path: string, body: unknown) => jsonRequest(app, "POST", path, body);
+const get = (app: App, path: string) => jsonRequest(app, "GET", path);
 
 let seed = 100;
 async function createReceipt(app: App): Promise<ReceiptDetail> {

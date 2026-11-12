@@ -11,7 +11,7 @@ const accounts = [
 
 const codes = (query: string) => filterAccounts(accounts, query).map((a) => a.code);
 
-describe("account-search（R5、D3）", () => {
+describe("account-search（011 R5、D3）", () => {
   it("空の検索はすべて返す（順序を変えない）", () => {
     expect(codes("")).toEqual(["1010", "1020", "5120", "5320", "1090"]);
     expect(codes("  ")).toEqual(["1010", "1020", "5120", "5320", "1090"]);

@@ -13,7 +13,7 @@ export const RangeSearch = z.object({
   to: DateString.optional().catch(undefined),
 });
 
-/** 仕訳帳の並び（FR-038）。URL になければ取引日の昇順 */
+/** 仕訳帳の並び（011/FR-038）。URL になければ取引日の昇順 */
 export const JournalBookSearch = RangeSearch.extend({
   sort: JournalBookSort.optional().catch(undefined),
   order: JournalBookOrder.optional().catch(undefined),

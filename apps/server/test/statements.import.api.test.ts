@@ -221,13 +221,6 @@ describe("表の判定（§2.1 layout）", () => {
       expect((await errorOf(res)).code).toBe("VALIDATION");
     }
   });
-
-  it("5 MB を超えるファイルは 413 FILE_TOO_LARGE", async () => {
-    const big = new Uint8Array(5 * 1024 * 1024 + 1).fill(0x61);
-    const res = await layout({ file: big, options: { origin: "file" } });
-    expect(res.status).toBe(413);
-    expect((await errorOf(res)).code).toBe("FILE_TOO_LARGE");
-  });
 });
 
 describe("取込のプレビュー（§2.2）", () => {
@@ -379,13 +372,6 @@ describe("取込のプレビュー（§2.2）", () => {
       expect(res.status).toBe(400);
       expect((await errorOf(res)).code).toBe("VALIDATION");
     }
-  });
-
-  it("5 MB を超えるファイルは 413 FILE_TOO_LARGE", async () => {
-    const big = new Uint8Array(5 * 1024 * 1024 + 1).fill(0x61);
-    const res = await preview({ file: big, options: paste().options });
-    expect(res.status).toBe(413);
-    expect((await errorOf(res)).code).toBe("FILE_TOO_LARGE");
   });
 });
 
@@ -578,10 +564,18 @@ describe("取込の確定（§2.3）→ 再取込 → 履歴（§2.4）", () => 
     expect((await errorOf(missing)).code).toBe("VALIDATION");
   });
 
-  it("5 MB を超えるファイルの確定は 413 FILE_TOO_LARGE", async () => {
-    const big = new Uint8Array(5 * 1024 * 1024 + 1).fill(0x61);
-    const res = await commit({ file: big, options: paste().options }, "a".repeat(64), 0);
-    expect(res.status).toBe(413);
+  it("file がなければ確定は 400 VALIDATION（共通のアップロードの部品。5 MB の上限は imports.upload.api.test.ts）", async () => {
+    const res = await imports().$post(
+      { param: param() },
+      init(undefined, {
+        ...paste().options,
+        expected: { inputSha256: "a".repeat(64), countNew: 0 },
+        accounts: [],
+        saveSource: null,
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).code).toBe("VALIDATION");
   });
 
   it("GET /statements/imports は新しい順に回を返す", async () => {
