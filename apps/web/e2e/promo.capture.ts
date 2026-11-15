@@ -1,6 +1,6 @@
 import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type BrowserContext, expect, test } from "@playwright/test";
+import { type BrowserContext, expect, type Locator, test } from "@playwright/test";
 import { renderSVG } from "uqr";
 import { TMP_ROOT, WEB_ORIGIN } from "./env.ts";
 import { enterVault } from "./helpers/auth.ts";
@@ -19,8 +19,9 @@ import { MOBILE_VIEWPORT, PROMO_CAPTION_HEIGHT, PROMO_VIEWPORT } from "./helpers
  * AI は呼ばない。`page.route` で、決まった架空の応答に差し替える:
  * - GET /api/settings/ai（AI が有効に見える設定）
  * - POST /api/entities/:id/statements/infer と、明細の一覧の候補、承認の draft（明細の仕訳の案）
- * - POST /api/entities/:id/receipts/:id/readings と、証憑の詳細の readings（証憑の読み取り）
- * - POST /api/entities/:id/journals/ai-suggestion（仕訳の入力の AI の候補。押さないが、実際の呼び出しを防ぐ）
+ * - POST /api/entities/:id/receipts/:id/readings と、証憑の詳細の readings（証憑の読み取り。詳細に足すのは
+ *   「AI で読み取る」を押した後だけ。追加の直後の自動の読み取りは画面に出さず、押して値が入る流れを見せる）
+ * - POST /api/entities/:id/journals/ai-suggestion（かんたん入力の「AI で候補を出す」の科目・税区分）
  * - GET /api/settings/remote/tailscale（接続済みの架空の名前。実機の名前を映さない）
  * 一覧・詳細の応答は実サーバーの応答に候補を足す。承認・取込・証憑の追加は実サーバーが行う。
  */
@@ -46,9 +47,10 @@ const CAPTIONS = {
     ja: "領収書は撮るだけで読み取り",
     en: "Snap a receipt, it reads the details",
   },
-  invoices: {
-    ja: "請求書も、青色申告決算書も",
-    en: "Invoices and blue-return statements",
+  invoices: { ja: "請求書の作成も", en: "Create invoices" },
+  blueReturn: {
+    ja: "青色申告決算書の作成支援も",
+    en: "Help preparing your blue-return statement",
   },
   mobile: {
     ja: "スマホからも、Tailscale で安全に",
@@ -75,7 +77,22 @@ const CAPTION_BACKGROUND = "#0f172a";
 // ---- 字幕（帯の画像。変換が画面の下に足した帯に重ねる） ----
 
 /** 締めのカードは字幕を本文に持つので、帯の画像を作らない */
-const CAPTIONED_SCENES = ["intro", "entry", "statements", "receipt", "invoices", "mobile"] as const;
+const CAPTIONED_SCENES = [
+  "intro",
+  "entry",
+  "statements",
+  "receipt",
+  "invoices",
+  "blueReturn",
+  "mobile",
+] as const;
+
+/** 押す箇所を目立たせる（`data-promo-spotlight` は脈打つ枠、`data-promo-frame` は囲みの枠）。画面の遷移で消える */
+const SPOTLIGHT_CSS = `
+@keyframes promo-pulse{0%,100%{box-shadow:0 0 0 3px #f59e0b}50%{box-shadow:0 0 0 10px rgba(245,158,11,.35)}}
+[data-promo-spotlight]{animation:promo-pulse 1s ease-in-out infinite}
+[data-promo-frame]{box-shadow:0 0 0 3px #f59e0b,0 10px 32px rgba(245,158,11,.3)}
+`;
 
 function captionHtml(text: string): string {
   return `<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><style>
@@ -143,6 +160,10 @@ type Mocks = {
   drafts: Map<string, Draft>;
   /** 架空の読み取りの結果（証憑の取引日・金額・取引先・科目・税区分） */
   receipt?: { transactionDate: string; accountCode: string | null } | undefined;
+  /** 証憑の詳細に読み取りを足すか（「AI で読み取る」を押すときに true にする） */
+  receiptRead: boolean;
+  /** かんたん入力の AI の候補の科目のコード */
+  entryAccountCode?: string | undefined;
 };
 
 const json = (value: unknown) => ({
@@ -197,10 +218,24 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
       : route.fallback(),
   );
 
-  // 仕訳の入力の AI の候補（押さないが、実際の呼び出しを防ぐ）
-  await context.route(/\/api\/entities\/[^/]+\/journals\/ai-suggestion$/, (route) =>
-    route.fulfill(json({ suggestion: null, reason: "デモでは使いません" })),
-  );
+  // かんたん入力の「AI で候補を出す」: 少し待って、決まった科目・税区分を返す
+  await context.route(/\/api\/entities\/[^/]+\/journals\/ai-suggestion$/, async (route) => {
+    await new Promise((done) => setTimeout(done, 900));
+    await route.fulfill(
+      json({
+        suggestion:
+          mocks.entryAccountCode === undefined
+            ? null
+            : {
+                accountCode: mocks.entryAccountCode,
+                taxCategory: "PURCHASE_10",
+                purpose: "business",
+                confidence: 95,
+                reason: "摘要の「コピー用紙」から事務用品の購入と推定しました",
+              },
+      }),
+    );
+  });
 
   // 明細の推定: 少し待って、端末内の AI で推定したことにする（案は一覧の応答に足す）
   await context.route(/\/api\/entities\/[^/]+\/statements\/infer$/, async (route) => {
@@ -277,7 +312,7 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
     const body = (await response.json()) as {
       receipt: { currentFile: { addedAt: string }; readings: unknown[] };
     };
-    if (mocks.receipt !== undefined) {
+    if (mocks.receipt !== undefined && mocks.receiptRead) {
       body.receipt.readings = [fakeReading(mocks, body.receipt.currentFile.addedAt)];
     }
     return route.fulfill(json(body));
@@ -397,7 +432,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
     storageState,
     recordVideo: { dir: resolve(outDir, "raw"), size: SIZE },
   });
-  const mocks: Mocks = { suggestions: new Map(), drafts: new Map() };
+  const mocks: Mocks = { suggestions: new Map(), drafts: new Map(), receiptRead: false };
   await installMocks(context, mocks);
 
   const t0 = Date.now();
@@ -430,6 +465,17 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
 
   const main = mainOf(page);
   const pause = (ms: number) => page.waitForTimeout(ms);
+  /** 押す箇所に脈打つ枠（`spotlight`）か、囲みの枠（`frame`）を付ける */
+  const highlight = async (target: Locator, kind: "spotlight" | "frame" = "spotlight") => {
+    await page.addStyleTag({ content: SPOTLIGHT_CSS });
+    await target.evaluate((element, name) => element.setAttribute(name, ""), `data-promo-${kind}`);
+  };
+  const clearSpotlight = () =>
+    page.evaluate(() => {
+      for (const element of document.querySelectorAll("[data-promo-spotlight]")) {
+        element.removeAttribute("data-promo-spotlight");
+      }
+    });
 
   // ---- 0〜3 秒: 空の一覧で「デモ事業を作って試す」 ----
   await page.goto("/");
@@ -502,6 +548,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
     transactionDate: date0,
     accountCode: accountNamed(RECEIPT.accountName).code,
   };
+  mocks.entryAccountCode = accountNamed("消耗品費").code;
   const invoices = (
     (await (await page.request.get(`/api/entities/${entityId}/invoices`)).json()) as {
       invoices: { invoiceNo: string }[];
@@ -510,29 +557,42 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   const invoiceNo = invoices[0]?.invoiceNo;
   if (invoiceNo === undefined) throw new Error("デモ事業に請求書がありません");
 
-  // ---- 3〜8 秒: ホーム → かんたん入力で 1 件を登録 ----
-  beginScene("entry", 5_000);
-  await holdScene(1_200);
+  // ---- 3〜9 秒: ホーム → かんたん入力で、AI の候補から科目を入れて 1 件を登録 ----
+  beginScene("entry", 6_000);
+  await holdScene(900);
   await openNav(page, "仕訳", "入力する");
   await expect(main.getByRole("button", { name: "かんたん入力", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
   await main.getByLabel("日付", { exact: true }).fill(date0);
-  await pickQuickAccount(main, "借方科目", "消耗品費");
-  await pause(250);
+  await main.getByLabel("金額", { exact: true }).pressSequentially("1980", { delay: 70 });
+  await main.getByLabel("摘要", { exact: true }).pressSequentially("コピー用紙", { delay: 70 });
+  const aiPanel = main.getByRole("region", { name: "AI の候補", exact: true });
+  const askButton = aiPanel.getByRole("button", { name: "AI で候補を出す", exact: true });
+  await highlight(askButton);
+  await pause(700);
+  await askButton.click();
+  const applyButton = aiPanel.getByRole("button", { name: "入れる", exact: true });
+  await expect(applyButton).toBeVisible({ timeout: 15_000 });
+  await clearSpotlight();
+  await highlight(applyButton);
+  await pause(800);
+  await applyButton.click();
+  await clearSpotlight();
+  await expect(main.getByRole("combobox", { name: "借方科目", exact: true })).toHaveValue(
+    /消耗品費$/,
+  );
+  await pause(300);
   await pickQuickAccount(main, "貸方科目", "現金");
-  await pause(250);
-  await main.getByLabel("金額", { exact: true }).pressSequentially("1980", { delay: 90 });
-  await main.getByLabel("摘要", { exact: true }).pressSequentially("コピー用紙", { delay: 90 });
-  await pause(400);
+  await pause(300);
   await main.getByRole("button", { name: "登録", exact: true }).click();
   await expect(main.getByRole("status", { name: "登録の結果", exact: true })).toContainText(
     "を登録しました",
   );
   await endScene();
 
-  // ---- 8〜13 秒: 明細の CSV を貼る → 仕訳の案（AI）→ 承認 ----
+  // ---- 9〜14 秒: 明細の CSV を貼る → 仕訳の案（AI）→ 承認 ----
   beginScene("statements", 5_000);
   await openNav(page, "明細", "取り込む");
   await expect(main.getByRole("heading", { name: "明細の取込", exact: true })).toBeVisible();
@@ -573,8 +633,8 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   });
   await endScene();
 
-  // ---- 13〜18 秒: 領収書の画像を追加 → 読み取りで値が入る ----
-  beginScene("receipt", 5_000);
+  // ---- 14〜20.5 秒: 領収書の画像を追加 → 「AI で読み取る」で値が入る ----
+  beginScene("receipt", 6_500);
   await openNav(page, "証憑", "追加する");
   await main.getByLabel("ファイルを選ぶ", { exact: true }).setInputFiles(receiptFile);
   await main.getByRole("radio", { name: /^紙を撮影/ }).check();
@@ -582,18 +642,33 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   await main.getByRole("button", { name: "追加する", exact: true }).click();
   const fields = main.getByRole("region", { name: "追加した証憑の値", exact: true });
   await expect(fields).toBeVisible({ timeout: 30_000 });
-  // 読み取った値の欄は画面の下に出るので、見える位置まで送る
+  // 値の欄と「AI の読み取り」は画面の下に出るので、見える位置まで送る
   await fields.evaluate((element) =>
     element.scrollIntoView({ behavior: "smooth", block: "center" }),
   );
+  const readingNote = fields.getByRole("region", { name: "AI の読み取り", exact: true });
+  const readButton = readingNote.getByRole("button", { name: "AI で読み取る", exact: true });
+  await expect(readButton).toBeVisible();
+  await highlight(readingNote.locator(":scope > *").first(), "frame");
+  await highlight(readButton);
+  await pause(1_000);
+  // 押した後の詳細の読み直しに、架空の読み取りを足す
+  mocks.receiptRead = true;
+  await readButton.click();
   await expect(fields.getByLabel("取引年月日", { exact: true })).toHaveValue(date0, {
     timeout: 30_000,
   });
-  await pause(1_800);
+  await clearSpotlight();
+  await pause(800);
+  // 読み取りの結果（科目・税区分を含む）が見えるまで送る
+  await readingNote.evaluate((element) =>
+    element.scrollIntoView({ behavior: "smooth", block: "end" }),
+  );
+  await pause(1_200);
   await endScene();
 
-  // ---- 18〜24 秒: 請求書の一覧と詳細（3 秒）→ 青色申告決算書（3 秒） ----
-  beginScene("invoices", 6_000);
+  // ---- 20.5〜23.5 秒: 請求書の一覧と詳細 ----
+  beginScene("invoices", 3_000);
   await page.goto(`${entityRoot}/invoices`);
   const invoiceLink = main.getByRole("link", { name: invoiceNo, exact: true });
   await expect(invoiceLink).toBeVisible();
@@ -601,7 +676,10 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   await invoiceLink.click();
   await page.waitForURL((url) => url.pathname.startsWith(`${entityRoot}/invoices/`));
   await expect(main.getByRole("heading", { level: 1 })).toBeVisible();
-  await holdScene(3_000);
+  await endScene();
+
+  // ---- 23.5〜27.5 秒: 青色申告決算書（損益計算書の項目まで送る） ----
+  beginScene("blueReturn", 4_000);
   // 1 段目の「決算・申告」だけを押す（決算書の画面で 2 段目の「決算書」を押し直すと、入口の転送が進まない）
   await openNav(page, "決算・申告");
   // 決算書は初回の読み込みが遅いことがある。待ちは動画から削る
@@ -612,9 +690,14 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   const blueReturnWaitEnd = now() - 300;
   if (blueReturnWaitEnd > blueReturnWaitStart)
     cuts.push({ startMs: blueReturnWaitStart, endMs: blueReturnWaitEnd });
+  await pause(900);
+  // 上の転記の値と警告の下にある、損益計算書の項目まで送る
+  await main
+    .getByRole("region", { name: "決算書 1ページ（損益計算書）", exact: true })
+    .evaluate((element) => element.scrollIntoView({ behavior: "smooth", block: "start" }));
   await endScene();
 
-  // ---- 24〜28 秒: スマホの幅（390px）の画面と、接続用の QR ----
+  // ---- 27.5〜31.5 秒: スマホの幅（390px）の画面と、接続用の QR ----
   beginScene("mobile", 4_000);
   await page.goto("/settings/remote");
   await expect(main.getByText(TAILSCALE_NAME, { exact: true }).first()).toBeVisible();
@@ -626,7 +709,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   await expect(page.frameLocator("#phone").locator("main")).toBeVisible({ timeout: 30_000 });
   await endScene();
 
-  // ---- 28〜30 秒: 締めのカード ----
+  // ---- 31.5〜33.5 秒: 締めのカード ----
   beginScene("closing", 2_000);
   await page.setContent(closingHtml(CAPTIONS.closing[LANG]));
   await endScene();
