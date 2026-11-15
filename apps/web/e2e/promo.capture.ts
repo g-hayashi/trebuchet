@@ -1,18 +1,20 @@
 import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { type BrowserContext, expect, test } from "@playwright/test";
 import { renderSVG } from "uqr";
 import { TMP_ROOT, WEB_ORIGIN } from "./env.ts";
 import { enterVault } from "./helpers/auth.ts";
 import { openNav } from "./helpers/nav.ts";
 import { entityIdOf, mainOf, pickQuickAccount, renderHtmlToPng } from "./helpers/ui.ts";
-import { MOBILE_VIEWPORT, PROMO_VIEWPORT } from "./helpers/viewports.ts";
+import { MOBILE_VIEWPORT, PROMO_CAPTION_HEIGHT, PROMO_VIEWPORT } from "./helpers/viewports.ts";
 
 /**
  * 宣伝動画の録画（`pnpm promo:record`。変換は `scripts/promo-encode.ts`）。
  * `PROMO_LANG=ja|en` で字幕を切り替える。画面は日本語のまま。
  * 手順: 録画しない context で解錠 → storageState を渡した録画用の context で本編を撮る。
  * 各場面の開始時刻（録画の開始からの ms）と、削る区間を `.tmp/promo/<lang>/timeline.json` に書く。
+ * 字幕は画面に被せない。画面は字幕の帯の分だけ低く録り、場面ごとの字幕の画像（`captions/<場面>.png`）を
+ * 変換が下に足した帯に重ねる。
  *
  * AI は呼ばない。`page.route` で、決まった架空の応答に差し替える:
  * - GET /api/settings/ai（AI が有効に見える設定）
@@ -59,62 +61,28 @@ const CAPTIONS = {
 } satisfies Record<string, Record<Lang, string>>;
 
 const outDir = resolve(TMP_ROOT, "promo", LANG);
-const SIZE = PROMO_VIEWPORT;
+/** 録画する画面の大きさ（仕上がりから字幕の帯を除いた分） */
+const SIZE = {
+  width: PROMO_VIEWPORT.width,
+  height: PROMO_VIEWPORT.height - PROMO_CAPTION_HEIGHT,
+};
 const TZ = "Asia/Tokyo";
 const FONT =
   '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif';
+/** 字幕の帯の色（変換の pad の色と同じ。`scripts/promo-encode.ts`） */
+const CAPTION_BACKGROUND = "#0f172a";
 
-// ---- 字幕（画面の下の半透明の帯。DOM に足す。再読み込みしても sessionStorage で保つ） ----
+// ---- 字幕（帯の画像。変換が画面の下に足した帯に重ねる） ----
 
-/**
- * ブラウザの中で動く（自己完結の関数。外の変数は使えない）。`next` が文字列なら字幕を替え、null なら消す。
- * 省略なら、保存してある字幕を描くだけ（init script がページの読み込みのたびに呼ぶ）。
- * iframe の中（スマホの場面）には出さない
- */
-function renderCaption(next?: string | null): void {
-  if (window.top !== window) return;
-  const key = "__promo_caption";
-  try {
-    if (next === null) sessionStorage.removeItem(key);
-    else if (typeof next === "string") sessionStorage.setItem(key, next);
-  } catch {
-    // sessionStorage が使えない文書では、字幕を保たない
-  }
-  let text: string | null = null;
-  try {
-    text = sessionStorage.getItem(key);
-  } catch {
-    text = null;
-  }
-  let element = document.getElementById("promo-caption");
-  if (!text) {
-    element?.remove();
-    return;
-  }
-  if (!element) {
-    element = document.createElement("div");
-    element.id = "promo-caption";
-    element.style.cssText = [
-      "position:fixed",
-      "left:0",
-      "right:0",
-      "bottom:0",
-      "z-index:2147483647",
-      "box-sizing:border-box",
-      "padding:20px 48px 24px",
-      "background:rgba(15,23,42,0.78)",
-      "color:#fff",
-      'font:600 28px/1.35 "Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif',
-      "letter-spacing:0.02em",
-      "text-align:center",
-      "pointer-events:none",
-    ].join(";");
-    (document.body ?? document.documentElement).append(element);
-  }
-  element.textContent = text;
+/** 締めのカードは字幕を本文に持つので、帯の画像を作らない */
+const CAPTIONED_SCENES = ["intro", "entry", "statements", "receipt", "invoices", "mobile"] as const;
+
+function captionHtml(text: string): string {
+  return `<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><style>
+  html,body{margin:0;width:${PROMO_VIEWPORT.width}px;height:${PROMO_CAPTION_HEIGHT}px;background:${CAPTION_BACKGROUND};color:#fff}
+  body{display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 48px;font:600 28px/1.35 ${FONT};letter-spacing:.02em;text-align:center}
+  </style></head><body>${text}</body></html>`;
 }
-
-const setCaption = (page: Page, text: string | null) => page.evaluate(renderCaption, text);
 
 // ---- 日付 ----
 
@@ -320,11 +288,10 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
 
 const cardStyle = `
   html,body{margin:0;height:100%;background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;font-family:${FONT}}
-  .caption{position:fixed;left:0;right:0;bottom:0;box-sizing:border-box;padding:20px 48px 24px;background:rgba(15,23,42,0.78);font:600 28px/1.35 ${FONT};letter-spacing:.02em;text-align:center}
 `;
 
-/** 録画の画面（1280x720）の中に、スマホの枠（390x844 を縮小した iframe）と、横に接続用の QR を並べる */
-function mobileHtml(appUrl: string, text: string): string {
+/** 録画の画面の中に、スマホの枠（390x844 を縮小した iframe）と、横に接続用の QR を並べる */
+function mobileHtml(appUrl: string): string {
   const qr = renderSVG(`https://${TAILSCALE_NAME}/pair?token=demo-only`);
   const labels =
     LANG === "ja"
@@ -332,7 +299,7 @@ function mobileHtml(appUrl: string, text: string): string {
       : { scan: "Scan with your phone", status: "Tailscale connected" };
   return `<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><style>
   ${cardStyle}
-  .stage{position:absolute;inset:0 0 96px 0;display:flex;align-items:center;justify-content:center;gap:96px}
+  .stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:96px}
   .phone{width:258px;height:558px;border:10px solid #0b1220;border-radius:38px;overflow:hidden;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.5)}
   .phone iframe{width:${MOBILE_VIEWPORT.width}px;height:${MOBILE_VIEWPORT.height}px;border:0;transform:scale(.66);transform-origin:0 0}
   .qr{display:grid;gap:18px;justify-items:center}
@@ -352,7 +319,6 @@ function mobileHtml(appUrl: string, text: string): string {
       <div class="chip"><i></i>${labels.status}</div>
     </div>
   </div>
-  <div class="caption" id="composite-caption">${text}</div>
   </body></html>`;
 }
 
@@ -366,12 +332,15 @@ function closingHtml(text: string): string {
   </style></head><body><div class="card"><h1>Trebuchet</h1><p>${text}</p></div></body></html>`;
 }
 
-/** 領収書の合成の画像（読み取りの架空の結果と同じ値） */
+/** 領収書の合成の画像の大きさ（紙 420x560 と、周りの余白 40px） */
+const RECEIPT_CLIP = { x: 0, y: 0, width: 500, height: 640 };
+
+/** 領収書の合成の画像（読み取りの架空の結果と同じ値）。紙は左上の余白から置き、`RECEIPT_CLIP` に収める */
 function receiptHtml(date: string): string {
   const [y, m, d] = date.split("-").map(Number);
   return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>
   html,body{margin:0;background:#f3f4f6;font-family:${FONT};color:#111}
-  .paper{width:420px;height:560px;margin:40px auto;box-sizing:border-box;padding:32px 36px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+  .paper{width:420px;height:560px;margin:40px;box-sizing:border-box;padding:32px 36px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.2)}
   h1{margin:0 0 4px;font-size:30px;text-align:center}
   .sub{text-align:center;color:#555;font-size:15px;margin-bottom:20px}
   .row{display:flex;justify-content:space-between;font-size:20px;margin:10px 0}
@@ -397,21 +366,25 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   const date0 = dates[0] as string;
   const receiptFile = resolve(outDir, "synthetic-receipt.png");
 
-  // 1. 録画しない context で解錠し、領収書の合成の画像を作る
+  // 1. 録画しない context で解錠し、領収書の合成の画像と字幕の画像を作る
   const setup = await browser.newContext({
     baseURL: baseURL ?? WEB_ORIGIN,
     locale: "ja-JP",
     timezoneId: TZ,
-    viewport: SIZE,
+    viewport: PROMO_VIEWPORT,
   });
   const setupPage = await setup.newPage();
   await enterVault(setupPage);
-  await renderHtmlToPng(setup, receiptHtml(date0), receiptFile, {
-    x: 0,
-    y: 0,
-    width: 500,
-    height: 640,
-  });
+  await renderHtmlToPng(setup, receiptHtml(date0), receiptFile, RECEIPT_CLIP);
+  await mkdir(resolve(outDir, "captions"), { recursive: true });
+  for (const id of CAPTIONED_SCENES) {
+    await renderHtmlToPng(
+      setup,
+      captionHtml(CAPTIONS[id][LANG]),
+      resolve(outDir, "captions", `${id}.png`),
+      { x: 0, y: 0, width: PROMO_VIEWPORT.width, height: PROMO_CAPTION_HEIGHT },
+    );
+  }
   const storageState = await setup.storageState();
   await setup.close();
 
@@ -426,9 +399,6 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   });
   const mocks: Mocks = { suggestions: new Map(), drafts: new Map() };
   await installMocks(context, mocks);
-  await context.addInitScript(
-    `(() => { const render = (${renderCaption.toString()}); const run = () => render(); if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run); else run(); })();`,
-  );
 
   const t0 = Date.now();
   const page = await context.newPage();
@@ -441,12 +411,11 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   let sceneTarget = 0;
   let sceneCut = 0;
   const cutTotal = () => cuts.reduce((sum, c) => sum + (c.endMs - c.startMs), 0);
-  const beginScene = async (id: keyof typeof CAPTIONS, targetMs: number) => {
+  const beginScene = (id: keyof typeof CAPTIONS, targetMs: number) => {
     sceneStart = now();
     sceneTarget = targetMs;
     sceneCut = cutTotal();
     scenes.push({ id, startMs: sceneStart, targetMs });
-    await setCaption(page, CAPTIONS[id][LANG]);
   };
   /** 場面の開始から目標の長さになるまで待つ（先に長さを超えていたら、そのまま進む） */
   const holdScene = async (elapsedMs: number) => {
@@ -466,7 +435,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   await page.goto("/");
   const demoButton = main.getByRole("button", { name: "デモ事業を作って試す", exact: true });
   await expect(demoButton).toBeVisible();
-  await beginScene("intro", 3_000);
+  beginScene("intro", 3_000);
   await pause(1_700);
   const clickedAt = now();
   await demoButton.click();
@@ -542,7 +511,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   if (invoiceNo === undefined) throw new Error("デモ事業に請求書がありません");
 
   // ---- 3〜8 秒: ホーム → かんたん入力で 1 件を登録 ----
-  await beginScene("entry", 5_000);
+  beginScene("entry", 5_000);
   await holdScene(1_200);
   await openNav(page, "仕訳", "入力する");
   await expect(main.getByRole("button", { name: "かんたん入力", exact: true })).toHaveAttribute(
@@ -564,7 +533,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   await endScene();
 
   // ---- 8〜13 秒: 明細の CSV を貼る → 仕訳の案（AI）→ 承認 ----
-  await beginScene("statements", 5_000);
+  beginScene("statements", 5_000);
   await openNav(page, "明細", "取り込む");
   await expect(main.getByRole("heading", { name: "明細の取込", exact: true })).toBeVisible();
   const csv = `${[
@@ -605,7 +574,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   await endScene();
 
   // ---- 13〜18 秒: 領収書の画像を追加 → 読み取りで値が入る ----
-  await beginScene("receipt", 5_000);
+  beginScene("receipt", 5_000);
   await openNav(page, "証憑", "追加する");
   await main.getByLabel("ファイルを選ぶ", { exact: true }).setInputFiles(receiptFile);
   await main.getByRole("radio", { name: /^紙を撮影/ }).check();
@@ -624,7 +593,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   await endScene();
 
   // ---- 18〜24 秒: 請求書の一覧と詳細（3 秒）→ 青色申告決算書（3 秒） ----
-  await beginScene("invoices", 6_000);
+  beginScene("invoices", 6_000);
   await page.goto(`${entityRoot}/invoices`);
   const invoiceLink = main.getByRole("link", { name: invoiceNo, exact: true });
   await expect(invoiceLink).toBeVisible();
@@ -646,29 +615,26 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   await endScene();
 
   // ---- 24〜28 秒: スマホの幅（390px）の画面と、接続用の QR ----
-  await beginScene("mobile", 4_000);
+  beginScene("mobile", 4_000);
   await page.goto("/settings/remote");
   await expect(main.getByText(TAILSCALE_NAME, { exact: true }).first()).toBeVisible();
   await holdScene(1_400);
-  // 1280x720 の中に、スマホの枠（iframe）と QR を並べた合成ページ（同じオリジンのまま差し替える）
-  await setCaption(page, null);
-  await page.setContent(
-    mobileHtml(`${new URL(page.url()).origin}${entityRoot}`, CAPTIONS.mobile[LANG]),
-    { waitUntil: "domcontentloaded" },
-  );
+  // 録画の画面の中に、スマホの枠（iframe）と QR を並べた合成ページ（同じオリジンのまま差し替える）
+  await page.setContent(mobileHtml(`${new URL(page.url()).origin}${entityRoot}`), {
+    waitUntil: "domcontentloaded",
+  });
   await expect(page.frameLocator("#phone").locator("main")).toBeVisible({ timeout: 30_000 });
   await endScene();
 
   // ---- 28〜30 秒: 締めのカード ----
-  await beginScene("closing", 2_000);
-  await setCaption(page, null);
+  beginScene("closing", 2_000);
   await page.setContent(closingHtml(CAPTIONS.closing[LANG]));
   await endScene();
   const endMs = now();
 
   await writeFile(
     resolve(outDir, "timeline.json"),
-    `${JSON.stringify({ lang: LANG, scenes, cuts, endMs }, null, 2)}\n`,
+    `${JSON.stringify({ lang: LANG, captionHeight: PROMO_CAPTION_HEIGHT, scenes, cuts, endMs }, null, 2)}\n`,
   );
 
   const video = page.video();
