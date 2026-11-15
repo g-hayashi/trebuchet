@@ -6,7 +6,7 @@
 
 ![かんたん入力・明細の取込・証憑の読み取りを操作する Trebuchet の画面（デモ事業の架空のデータ）](docs/promo/trebuchet-ja.gif)
 
-30 秒の紹介動画: [日本語](docs/promo/trebuchet-ja.mp4) ／ [English](docs/promo/trebuchet-en.mp4)（デモ事業の架空のデータ。AI の応答は撮影用の固定の値）
+30 秒ほどの紹介動画: [日本語](docs/promo/trebuchet-ja.mp4) ／ [English](docs/promo/trebuchet-en.mp4)（デモ事業の架空のデータ。AI の応答は撮影用の固定の値）
 
 アカウント登録も月額料金もありません。帳簿はこの Mac の暗号化されたファイルに保存します。
 

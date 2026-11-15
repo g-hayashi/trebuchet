@@ -1,24 +1,27 @@
 import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { type BrowserContext, expect, type Locator, test } from "@playwright/test";
 import { renderSVG } from "uqr";
 import { TMP_ROOT, WEB_ORIGIN } from "./env.ts";
 import { enterVault } from "./helpers/auth.ts";
 import { openNav } from "./helpers/nav.ts";
 import { entityIdOf, mainOf, pickQuickAccount, renderHtmlToPng } from "./helpers/ui.ts";
-import { MOBILE_VIEWPORT, PROMO_VIEWPORT } from "./helpers/viewports.ts";
+import { MOBILE_VIEWPORT, PROMO_CAPTION_HEIGHT, PROMO_VIEWPORT } from "./helpers/viewports.ts";
 
 /**
  * 宣伝動画の録画（`pnpm promo:record`。変換は `scripts/promo-encode.ts`）。
  * `PROMO_LANG=ja|en` で字幕を切り替える。画面は日本語のまま。
  * 手順: 録画しない context で解錠 → storageState を渡した録画用の context で本編を撮る。
  * 各場面の開始時刻（録画の開始からの ms）と、削る区間を `.tmp/promo/<lang>/timeline.json` に書く。
+ * 字幕は画面に被せない。画面は字幕の帯の分だけ低く録り、場面ごとの字幕の画像（`captions/<場面>.png`）を
+ * 変換が下に足した帯に重ねる。
  *
  * AI は呼ばない。`page.route` で、決まった架空の応答に差し替える:
  * - GET /api/settings/ai（AI が有効に見える設定）
  * - POST /api/entities/:id/statements/infer と、明細の一覧の候補、承認の draft（明細の仕訳の案）
- * - POST /api/entities/:id/receipts/:id/readings と、証憑の詳細の readings（証憑の読み取り）
- * - POST /api/entities/:id/journals/ai-suggestion（仕訳の入力の AI の候補。押さないが、実際の呼び出しを防ぐ）
+ * - POST /api/entities/:id/receipts/:id/readings と、証憑の詳細の readings（証憑の読み取り。詳細に足すのは
+ *   「AI で読み取る」を押した後だけ。追加の直後の自動の読み取りは画面に出さず、押して値が入る流れを見せる）
+ * - POST /api/entities/:id/journals/ai-suggestion（かんたん入力の「AI で候補を出す」の科目・税区分）
  * - GET /api/settings/remote/tailscale（接続済みの架空の名前。実機の名前を映さない）
  * 一覧・詳細の応答は実サーバーの応答に候補を足す。承認・取込・証憑の追加は実サーバーが行う。
  */
@@ -44,9 +47,10 @@ const CAPTIONS = {
     ja: "領収書は撮るだけで読み取り",
     en: "Snap a receipt, it reads the details",
   },
-  invoices: {
-    ja: "請求書も、青色申告決算書も",
-    en: "Invoices and blue-return statements",
+  invoices: { ja: "請求書の作成も", en: "Create invoices" },
+  blueReturn: {
+    ja: "青色申告決算書の作成支援も",
+    en: "Help preparing your blue-return statement",
   },
   mobile: {
     ja: "スマホからも、Tailscale で安全に",
@@ -59,62 +63,43 @@ const CAPTIONS = {
 } satisfies Record<string, Record<Lang, string>>;
 
 const outDir = resolve(TMP_ROOT, "promo", LANG);
-const SIZE = PROMO_VIEWPORT;
+/** 録画する画面の大きさ（仕上がりから字幕の帯を除いた分） */
+const SIZE = {
+  width: PROMO_VIEWPORT.width,
+  height: PROMO_VIEWPORT.height - PROMO_CAPTION_HEIGHT,
+};
 const TZ = "Asia/Tokyo";
 const FONT =
   '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif';
+/** 字幕の帯の色（変換の pad の色と同じ。`scripts/promo-encode.ts`） */
+const CAPTION_BACKGROUND = "#0f172a";
 
-// ---- 字幕（画面の下の半透明の帯。DOM に足す。再読み込みしても sessionStorage で保つ） ----
+// ---- 字幕（帯の画像。変換が画面の下に足した帯に重ねる） ----
 
-/**
- * ブラウザの中で動く（自己完結の関数。外の変数は使えない）。`next` が文字列なら字幕を替え、null なら消す。
- * 省略なら、保存してある字幕を描くだけ（init script がページの読み込みのたびに呼ぶ）。
- * iframe の中（スマホの場面）には出さない
- */
-function renderCaption(next?: string | null): void {
-  if (window.top !== window) return;
-  const key = "__promo_caption";
-  try {
-    if (next === null) sessionStorage.removeItem(key);
-    else if (typeof next === "string") sessionStorage.setItem(key, next);
-  } catch {
-    // sessionStorage が使えない文書では、字幕を保たない
-  }
-  let text: string | null = null;
-  try {
-    text = sessionStorage.getItem(key);
-  } catch {
-    text = null;
-  }
-  let element = document.getElementById("promo-caption");
-  if (!text) {
-    element?.remove();
-    return;
-  }
-  if (!element) {
-    element = document.createElement("div");
-    element.id = "promo-caption";
-    element.style.cssText = [
-      "position:fixed",
-      "left:0",
-      "right:0",
-      "bottom:0",
-      "z-index:2147483647",
-      "box-sizing:border-box",
-      "padding:20px 48px 24px",
-      "background:rgba(15,23,42,0.78)",
-      "color:#fff",
-      'font:600 28px/1.35 "Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif',
-      "letter-spacing:0.02em",
-      "text-align:center",
-      "pointer-events:none",
-    ].join(";");
-    (document.body ?? document.documentElement).append(element);
-  }
-  element.textContent = text;
+/** 締めのカードは字幕を本文に持つので、帯の画像を作らない */
+const CAPTIONED_SCENES = [
+  "intro",
+  "entry",
+  "statements",
+  "receipt",
+  "invoices",
+  "blueReturn",
+  "mobile",
+] as const;
+
+/** 押す箇所を目立たせる（`data-promo-spotlight` は脈打つ枠、`data-promo-frame` は囲みの枠）。画面の遷移で消える */
+const SPOTLIGHT_CSS = `
+@keyframes promo-pulse{0%,100%{box-shadow:0 0 0 3px #f59e0b}50%{box-shadow:0 0 0 10px rgba(245,158,11,.35)}}
+[data-promo-spotlight]{animation:promo-pulse 1s ease-in-out infinite}
+[data-promo-frame]{box-shadow:0 0 0 3px #f59e0b,0 10px 32px rgba(245,158,11,.3)}
+`;
+
+function captionHtml(text: string): string {
+  return `<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><style>
+  html,body{margin:0;width:${PROMO_VIEWPORT.width}px;height:${PROMO_CAPTION_HEIGHT}px;background:${CAPTION_BACKGROUND};color:#fff}
+  body{display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0 48px;font:600 28px/1.35 ${FONT};letter-spacing:.02em;text-align:center}
+  </style></head><body>${text}</body></html>`;
 }
-
-const setCaption = (page: Page, text: string | null) => page.evaluate(renderCaption, text);
 
 // ---- 日付 ----
 
@@ -175,6 +160,10 @@ type Mocks = {
   drafts: Map<string, Draft>;
   /** 架空の読み取りの結果（証憑の取引日・金額・取引先・科目・税区分） */
   receipt?: { transactionDate: string; accountCode: string | null } | undefined;
+  /** 証憑の詳細に読み取りを足すか（「AI で読み取る」を押すときに true にする） */
+  receiptRead: boolean;
+  /** かんたん入力の AI の候補の科目のコード */
+  entryAccountCode?: string | undefined;
 };
 
 const json = (value: unknown) => ({
@@ -229,10 +218,24 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
       : route.fallback(),
   );
 
-  // 仕訳の入力の AI の候補（押さないが、実際の呼び出しを防ぐ）
-  await context.route(/\/api\/entities\/[^/]+\/journals\/ai-suggestion$/, (route) =>
-    route.fulfill(json({ suggestion: null, reason: "デモでは使いません" })),
-  );
+  // かんたん入力の「AI で候補を出す」: 少し待って、決まった科目・税区分を返す
+  await context.route(/\/api\/entities\/[^/]+\/journals\/ai-suggestion$/, async (route) => {
+    await new Promise((done) => setTimeout(done, 900));
+    await route.fulfill(
+      json({
+        suggestion:
+          mocks.entryAccountCode === undefined
+            ? null
+            : {
+                accountCode: mocks.entryAccountCode,
+                taxCategory: "PURCHASE_10",
+                purpose: "business",
+                confidence: 95,
+                reason: "摘要の「コピー用紙」から事務用品の購入と推定しました",
+              },
+      }),
+    );
+  });
 
   // 明細の推定: 少し待って、端末内の AI で推定したことにする（案は一覧の応答に足す）
   await context.route(/\/api\/entities\/[^/]+\/statements\/infer$/, async (route) => {
@@ -309,7 +312,7 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
     const body = (await response.json()) as {
       receipt: { currentFile: { addedAt: string }; readings: unknown[] };
     };
-    if (mocks.receipt !== undefined) {
+    if (mocks.receipt !== undefined && mocks.receiptRead) {
       body.receipt.readings = [fakeReading(mocks, body.receipt.currentFile.addedAt)];
     }
     return route.fulfill(json(body));
@@ -320,11 +323,10 @@ async function installMocks(context: BrowserContext, mocks: Mocks) {
 
 const cardStyle = `
   html,body{margin:0;height:100%;background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;font-family:${FONT}}
-  .caption{position:fixed;left:0;right:0;bottom:0;box-sizing:border-box;padding:20px 48px 24px;background:rgba(15,23,42,0.78);font:600 28px/1.35 ${FONT};letter-spacing:.02em;text-align:center}
 `;
 
-/** 録画の画面（1280x720）の中に、スマホの枠（390x844 を縮小した iframe）と、横に接続用の QR を並べる */
-function mobileHtml(appUrl: string, text: string): string {
+/** 録画の画面の中に、スマホの枠（390x844 を縮小した iframe）と、横に接続用の QR を並べる */
+function mobileHtml(appUrl: string): string {
   const qr = renderSVG(`https://${TAILSCALE_NAME}/pair?token=demo-only`);
   const labels =
     LANG === "ja"
@@ -332,7 +334,7 @@ function mobileHtml(appUrl: string, text: string): string {
       : { scan: "Scan with your phone", status: "Tailscale connected" };
   return `<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><style>
   ${cardStyle}
-  .stage{position:absolute;inset:0 0 96px 0;display:flex;align-items:center;justify-content:center;gap:96px}
+  .stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:96px}
   .phone{width:258px;height:558px;border:10px solid #0b1220;border-radius:38px;overflow:hidden;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.5)}
   .phone iframe{width:${MOBILE_VIEWPORT.width}px;height:${MOBILE_VIEWPORT.height}px;border:0;transform:scale(.66);transform-origin:0 0}
   .qr{display:grid;gap:18px;justify-items:center}
@@ -352,7 +354,6 @@ function mobileHtml(appUrl: string, text: string): string {
       <div class="chip"><i></i>${labels.status}</div>
     </div>
   </div>
-  <div class="caption" id="composite-caption">${text}</div>
   </body></html>`;
 }
 
@@ -366,12 +367,15 @@ function closingHtml(text: string): string {
   </style></head><body><div class="card"><h1>Trebuchet</h1><p>${text}</p></div></body></html>`;
 }
 
-/** 領収書の合成の画像（読み取りの架空の結果と同じ値） */
+/** 領収書の合成の画像の大きさ（紙 420x560 と、周りの余白 40px） */
+const RECEIPT_CLIP = { x: 0, y: 0, width: 500, height: 640 };
+
+/** 領収書の合成の画像（読み取りの架空の結果と同じ値）。紙は左上の余白から置き、`RECEIPT_CLIP` に収める */
 function receiptHtml(date: string): string {
   const [y, m, d] = date.split("-").map(Number);
   return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>
   html,body{margin:0;background:#f3f4f6;font-family:${FONT};color:#111}
-  .paper{width:420px;height:560px;margin:40px auto;box-sizing:border-box;padding:32px 36px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+  .paper{width:420px;height:560px;margin:40px;box-sizing:border-box;padding:32px 36px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.2)}
   h1{margin:0 0 4px;font-size:30px;text-align:center}
   .sub{text-align:center;color:#555;font-size:15px;margin-bottom:20px}
   .row{display:flex;justify-content:space-between;font-size:20px;margin:10px 0}
@@ -397,21 +401,25 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   const date0 = dates[0] as string;
   const receiptFile = resolve(outDir, "synthetic-receipt.png");
 
-  // 1. 録画しない context で解錠し、領収書の合成の画像を作る
+  // 1. 録画しない context で解錠し、領収書の合成の画像と字幕の画像を作る
   const setup = await browser.newContext({
     baseURL: baseURL ?? WEB_ORIGIN,
     locale: "ja-JP",
     timezoneId: TZ,
-    viewport: SIZE,
+    viewport: PROMO_VIEWPORT,
   });
   const setupPage = await setup.newPage();
   await enterVault(setupPage);
-  await renderHtmlToPng(setup, receiptHtml(date0), receiptFile, {
-    x: 0,
-    y: 0,
-    width: 500,
-    height: 640,
-  });
+  await renderHtmlToPng(setup, receiptHtml(date0), receiptFile, RECEIPT_CLIP);
+  await mkdir(resolve(outDir, "captions"), { recursive: true });
+  for (const id of CAPTIONED_SCENES) {
+    await renderHtmlToPng(
+      setup,
+      captionHtml(CAPTIONS[id][LANG]),
+      resolve(outDir, "captions", `${id}.png`),
+      { x: 0, y: 0, width: PROMO_VIEWPORT.width, height: PROMO_CAPTION_HEIGHT },
+    );
+  }
   const storageState = await setup.storageState();
   await setup.close();
 
@@ -424,11 +432,8 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
     storageState,
     recordVideo: { dir: resolve(outDir, "raw"), size: SIZE },
   });
-  const mocks: Mocks = { suggestions: new Map(), drafts: new Map() };
+  const mocks: Mocks = { suggestions: new Map(), drafts: new Map(), receiptRead: false };
   await installMocks(context, mocks);
-  await context.addInitScript(
-    `(() => { const render = (${renderCaption.toString()}); const run = () => render(); if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run); else run(); })();`,
-  );
 
   const t0 = Date.now();
   const page = await context.newPage();
@@ -441,12 +446,11 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   let sceneTarget = 0;
   let sceneCut = 0;
   const cutTotal = () => cuts.reduce((sum, c) => sum + (c.endMs - c.startMs), 0);
-  const beginScene = async (id: keyof typeof CAPTIONS, targetMs: number) => {
+  const beginScene = (id: keyof typeof CAPTIONS, targetMs: number) => {
     sceneStart = now();
     sceneTarget = targetMs;
     sceneCut = cutTotal();
     scenes.push({ id, startMs: sceneStart, targetMs });
-    await setCaption(page, CAPTIONS[id][LANG]);
   };
   /** 場面の開始から目標の長さになるまで待つ（先に長さを超えていたら、そのまま進む） */
   const holdScene = async (elapsedMs: number) => {
@@ -461,12 +465,23 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
 
   const main = mainOf(page);
   const pause = (ms: number) => page.waitForTimeout(ms);
+  /** 押す箇所に脈打つ枠（`spotlight`）か、囲みの枠（`frame`）を付ける */
+  const highlight = async (target: Locator, kind: "spotlight" | "frame" = "spotlight") => {
+    await page.addStyleTag({ content: SPOTLIGHT_CSS });
+    await target.evaluate((element, name) => element.setAttribute(name, ""), `data-promo-${kind}`);
+  };
+  const clearSpotlight = () =>
+    page.evaluate(() => {
+      for (const element of document.querySelectorAll("[data-promo-spotlight]")) {
+        element.removeAttribute("data-promo-spotlight");
+      }
+    });
 
   // ---- 0〜3 秒: 空の一覧で「デモ事業を作って試す」 ----
   await page.goto("/");
   const demoButton = main.getByRole("button", { name: "デモ事業を作って試す", exact: true });
   await expect(demoButton).toBeVisible();
-  await beginScene("intro", 3_000);
+  beginScene("intro", 3_000);
   await pause(1_700);
   const clickedAt = now();
   await demoButton.click();
@@ -533,6 +548,7 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
     transactionDate: date0,
     accountCode: accountNamed(RECEIPT.accountName).code,
   };
+  mocks.entryAccountCode = accountNamed("消耗品費").code;
   const invoices = (
     (await (await page.request.get(`/api/entities/${entityId}/invoices`)).json()) as {
       invoices: { invoiceNo: string }[];
@@ -541,30 +557,43 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   const invoiceNo = invoices[0]?.invoiceNo;
   if (invoiceNo === undefined) throw new Error("デモ事業に請求書がありません");
 
-  // ---- 3〜8 秒: ホーム → かんたん入力で 1 件を登録 ----
-  await beginScene("entry", 5_000);
-  await holdScene(1_200);
+  // ---- 3〜9 秒: ホーム → かんたん入力で、AI の候補から科目を入れて 1 件を登録 ----
+  beginScene("entry", 6_000);
+  await holdScene(900);
   await openNav(page, "仕訳", "入力する");
   await expect(main.getByRole("button", { name: "かんたん入力", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
   await main.getByLabel("日付", { exact: true }).fill(date0);
-  await pickQuickAccount(main, "借方科目", "消耗品費");
-  await pause(250);
+  await main.getByLabel("金額", { exact: true }).pressSequentially("1980", { delay: 70 });
+  await main.getByLabel("摘要", { exact: true }).pressSequentially("コピー用紙", { delay: 70 });
+  const aiPanel = main.getByRole("region", { name: "AI の候補", exact: true });
+  const askButton = aiPanel.getByRole("button", { name: "AI で候補を出す", exact: true });
+  await highlight(askButton);
+  await pause(700);
+  await askButton.click();
+  const applyButton = aiPanel.getByRole("button", { name: "入れる", exact: true });
+  await expect(applyButton).toBeVisible({ timeout: 15_000 });
+  await clearSpotlight();
+  await highlight(applyButton);
+  await pause(800);
+  await applyButton.click();
+  await clearSpotlight();
+  await expect(main.getByRole("combobox", { name: "借方科目", exact: true })).toHaveValue(
+    /消耗品費$/,
+  );
+  await pause(300);
   await pickQuickAccount(main, "貸方科目", "現金");
-  await pause(250);
-  await main.getByLabel("金額", { exact: true }).pressSequentially("1980", { delay: 90 });
-  await main.getByLabel("摘要", { exact: true }).pressSequentially("コピー用紙", { delay: 90 });
-  await pause(400);
+  await pause(300);
   await main.getByRole("button", { name: "登録", exact: true }).click();
   await expect(main.getByRole("status", { name: "登録の結果", exact: true })).toContainText(
     "を登録しました",
   );
   await endScene();
 
-  // ---- 8〜13 秒: 明細の CSV を貼る → 仕訳の案（AI）→ 承認 ----
-  await beginScene("statements", 5_000);
+  // ---- 9〜14 秒: 明細の CSV を貼る → 仕訳の案（AI）→ 承認 ----
+  beginScene("statements", 5_000);
   await openNav(page, "明細", "取り込む");
   await expect(main.getByRole("heading", { name: "明細の取込", exact: true })).toBeVisible();
   const csv = `${[
@@ -604,8 +633,8 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   });
   await endScene();
 
-  // ---- 13〜18 秒: 領収書の画像を追加 → 読み取りで値が入る ----
-  await beginScene("receipt", 5_000);
+  // ---- 14〜20.5 秒: 領収書の画像を追加 → 「AI で読み取る」で値が入る ----
+  beginScene("receipt", 6_500);
   await openNav(page, "証憑", "追加する");
   await main.getByLabel("ファイルを選ぶ", { exact: true }).setInputFiles(receiptFile);
   await main.getByRole("radio", { name: /^紙を撮影/ }).check();
@@ -613,18 +642,33 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   await main.getByRole("button", { name: "追加する", exact: true }).click();
   const fields = main.getByRole("region", { name: "追加した証憑の値", exact: true });
   await expect(fields).toBeVisible({ timeout: 30_000 });
-  // 読み取った値の欄は画面の下に出るので、見える位置まで送る
+  // 値の欄と「AI の読み取り」は画面の下に出るので、見える位置まで送る
   await fields.evaluate((element) =>
     element.scrollIntoView({ behavior: "smooth", block: "center" }),
   );
+  const readingNote = fields.getByRole("region", { name: "AI の読み取り", exact: true });
+  const readButton = readingNote.getByRole("button", { name: "AI で読み取る", exact: true });
+  await expect(readButton).toBeVisible();
+  await highlight(readingNote.locator(":scope > *").first(), "frame");
+  await highlight(readButton);
+  await pause(1_000);
+  // 押した後の詳細の読み直しに、架空の読み取りを足す
+  mocks.receiptRead = true;
+  await readButton.click();
   await expect(fields.getByLabel("取引年月日", { exact: true })).toHaveValue(date0, {
     timeout: 30_000,
   });
-  await pause(1_800);
+  await clearSpotlight();
+  await pause(800);
+  // 読み取りの結果（科目・税区分を含む）が見えるまで送る
+  await readingNote.evaluate((element) =>
+    element.scrollIntoView({ behavior: "smooth", block: "end" }),
+  );
+  await pause(1_200);
   await endScene();
 
-  // ---- 18〜24 秒: 請求書の一覧と詳細（3 秒）→ 青色申告決算書（3 秒） ----
-  await beginScene("invoices", 6_000);
+  // ---- 20.5〜23.5 秒: 請求書の一覧と詳細 ----
+  beginScene("invoices", 3_000);
   await page.goto(`${entityRoot}/invoices`);
   const invoiceLink = main.getByRole("link", { name: invoiceNo, exact: true });
   await expect(invoiceLink).toBeVisible();
@@ -632,7 +676,10 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   await invoiceLink.click();
   await page.waitForURL((url) => url.pathname.startsWith(`${entityRoot}/invoices/`));
   await expect(main.getByRole("heading", { level: 1 })).toBeVisible();
-  await holdScene(3_000);
+  await endScene();
+
+  // ---- 23.5〜27.5 秒: 青色申告決算書（損益計算書の項目まで送る） ----
+  beginScene("blueReturn", 4_000);
   // 1 段目の「決算・申告」だけを押す（決算書の画面で 2 段目の「決算書」を押し直すと、入口の転送が進まない）
   await openNav(page, "決算・申告");
   // 決算書は初回の読み込みが遅いことがある。待ちは動画から削る
@@ -643,32 +690,34 @@ test(`宣伝動画を録画する（${LANG}）`, async ({ browser, baseURL }) =>
   const blueReturnWaitEnd = now() - 300;
   if (blueReturnWaitEnd > blueReturnWaitStart)
     cuts.push({ startMs: blueReturnWaitStart, endMs: blueReturnWaitEnd });
+  await pause(900);
+  // 上の転記の値と警告の下にある、損益計算書の項目まで送る
+  await main
+    .getByRole("region", { name: "決算書 1ページ（損益計算書）", exact: true })
+    .evaluate((element) => element.scrollIntoView({ behavior: "smooth", block: "start" }));
   await endScene();
 
-  // ---- 24〜28 秒: スマホの幅（390px）の画面と、接続用の QR ----
-  await beginScene("mobile", 4_000);
+  // ---- 27.5〜31.5 秒: スマホの幅（390px）の画面と、接続用の QR ----
+  beginScene("mobile", 4_000);
   await page.goto("/settings/remote");
   await expect(main.getByText(TAILSCALE_NAME, { exact: true }).first()).toBeVisible();
   await holdScene(1_400);
-  // 1280x720 の中に、スマホの枠（iframe）と QR を並べた合成ページ（同じオリジンのまま差し替える）
-  await setCaption(page, null);
-  await page.setContent(
-    mobileHtml(`${new URL(page.url()).origin}${entityRoot}`, CAPTIONS.mobile[LANG]),
-    { waitUntil: "domcontentloaded" },
-  );
+  // 録画の画面の中に、スマホの枠（iframe）と QR を並べた合成ページ（同じオリジンのまま差し替える）
+  await page.setContent(mobileHtml(`${new URL(page.url()).origin}${entityRoot}`), {
+    waitUntil: "domcontentloaded",
+  });
   await expect(page.frameLocator("#phone").locator("main")).toBeVisible({ timeout: 30_000 });
   await endScene();
 
-  // ---- 28〜30 秒: 締めのカード ----
-  await beginScene("closing", 2_000);
-  await setCaption(page, null);
+  // ---- 31.5〜33.5 秒: 締めのカード ----
+  beginScene("closing", 2_000);
   await page.setContent(closingHtml(CAPTIONS.closing[LANG]));
   await endScene();
   const endMs = now();
 
   await writeFile(
     resolve(outDir, "timeline.json"),
-    `${JSON.stringify({ lang: LANG, scenes, cuts, endMs }, null, 2)}\n`,
+    `${JSON.stringify({ lang: LANG, captionHeight: PROMO_CAPTION_HEIGHT, scenes, cuts, endMs }, null, 2)}\n`,
   );
 
   const video = page.video();
