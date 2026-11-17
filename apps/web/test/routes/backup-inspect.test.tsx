@@ -94,11 +94,11 @@ describe("バックアップの検査（008 の D9: 解錠中の鍵で検査す�
     expect(screen.queryByRole("region", { name: "復元の手順" })).not.toBeInTheDocument();
   });
 
-  it("アプリの版が一致しないときの文言", async () => {
+  it("新しい版のアプリで作られたバックアップのときの文言", async () => {
     open(() => apiError(422, "BACKUP_VERSION_MISMATCH", "x"));
     await submit();
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください",
+      "このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください",
     );
   });
 

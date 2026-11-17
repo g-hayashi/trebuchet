@@ -59,7 +59,7 @@ const USAGE =
 const MESSAGES: Record<RestoreErrorCode, string> = {
   INVALID: "回復キーが違うか、ファイルが壊れています",
   VERSION_MISMATCH:
-    "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください",
+    "このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください",
   CANCELLED: "取り消しました",
   BEFORE_BACKUP_FAILED:
     "復元の前の帳簿のバックアップを書けなかったため、中止しました。帳簿は変わっていません",

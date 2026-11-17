@@ -571,13 +571,16 @@ describe("restoreBackup: 検査の失敗は何も作らない", () => {
       "新しい版",
       { registry: currentAppVersion().registry + 1, tenant: currentAppVersion().tenant },
     ],
-    ["古い版", { registry: currentAppVersion().registry - 1, tenant: currentAppVersion().tenant }],
     [
       "tenant が新しい版",
       { registry: currentAppVersion().registry, tenant: currentAppVersion().tenant + 1 },
     ],
+    [
+      "registry が新しく tenant が古い版",
+      { registry: currentAppVersion().registry + 1, tenant: currentAppVersion().tenant - 1 },
+    ],
   ])(
-    "版の違うバックアップ（%s）は VERSION_MISMATCH で拒否し、何も作らない",
+    "新しい版のバックアップ（%s）は VERSION_MISMATCH で拒否し、何も作らない",
     async (_n, appVersion) => {
       seedSource([{ name: "事業A", journals: 2, seed: 1 }]);
       seedDest();

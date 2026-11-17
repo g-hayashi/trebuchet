@@ -143,7 +143,7 @@ export function backupRoutes(deps: BackupRouteDeps) {
           decrypted.error === "VERSION_MISMATCH"
             ? domainError(
                 "BACKUP_VERSION_MISMATCH",
-                "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください",
+                "このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください",
               )
             : invalidBackup(),
         );

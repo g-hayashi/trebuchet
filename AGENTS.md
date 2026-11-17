@@ -92,7 +92,7 @@ apps/server ──→ packages/schema
 | 001 帳簿の中核 | `specs/001-ledger-core/`（開発の規約は `docs/development.md`） | 0001〜0003 |
 | 002 freee の取込 | `docs/features/002-freee-import.md` | 0004 |
 | 003 決算書（按分、少額の特例、税制の値の足し方） | `docs/features/003-tax-return.md` | 0005 |
-| 004 認証とバックアップ、リモート（Tailscale） | `docs/features/004-auth-backup.md` | 0006・0007（鍵は 008 で置換） |
+| 004 認証とバックアップ、リモート（Tailscale） | `docs/features/004-auth-backup.md` | 0006・0007（鍵は 008 で置換、版は 0016） |
 | 005 請求と定期仕訳 | `docs/features/005-recurring-invoicing.md` | 0008・0013 |
 | 006 明細の取込と AI 仕訳 | `docs/features/006-mfme-ai-journal.md` | 0009 |
 | 007 汎用の明細取込（列の対応、列の案の AI） | `docs/features/007-generic-statement-import.md` | 0010 |

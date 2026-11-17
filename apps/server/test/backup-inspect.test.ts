@@ -158,12 +158,20 @@ describe("POST /api/backup/inspect", () => {
     }
   });
 
-  it("アプリの版が今と違う（新しい・古い）と 422 BACKUP_VERSION_MISMATCH", async () => {
-    for (const file of [newer, older]) {
-      const res = await inspect(form(file));
-      expect(res.status).toBe(422);
-      expect((await errorOf(res)).code).toBe("BACKUP_VERSION_MISMATCH");
-    }
+  it("新しい版のアプリで作ったものは 422 BACKUP_VERSION_MISMATCH（新しい版で作られた旨の文言）", async () => {
+    const res = await inspect(form(newer));
+    expect(res.status).toBe(422);
+    const error = await errorOf(res);
+    expect(error.code).toBe("BACKUP_VERSION_MISMATCH");
+    expect(error.message).toContain("新しい版のアプリで作られています");
+  });
+
+  it("古い版のアプリで作ったものは受け入れ、ヘッダーの版を返す（復元で今の版までマイグレーションを当てる）", async () => {
+    const res = await inspect(form(older));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as BackupInspection;
+    const v = currentAppVersion();
+    expect(body.appVersion).toEqual({ registry: v.registry, tenant: Math.max(0, v.tenant - 1) });
   });
 
   it("file がない → 400 VALIDATION", async () => {

@@ -211,13 +211,13 @@ describe("restore-backup（使い方と終了コード）", () => {
     expect(siblings()).toEqual([]);
   });
 
-  it("版の違うバックアップは 1 で、決められた文言を出し、何も作らない", async () => {
+  it("新しい版のアプリで作られたバックアップは 1 で、決められた文言を出し、何も作らない", async () => {
     const v = currentAppVersion();
     await makeBackup({ registry: v.registry + 1, tenant: v.tenant });
     const h = harness();
     expect(await runRestoreCli(args("--yes"), h.deps)).toBe(1);
     expect(h.err.join("\n")).toContain(
-      "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください",
+      "このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください",
     );
     expect(siblings()).toEqual([]);
   });

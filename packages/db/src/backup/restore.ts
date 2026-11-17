@@ -17,6 +17,7 @@ import {
   createAuthFile,
   type DbKeyScope,
   encryptSqliteFile,
+  migrateEncryptedFile,
   openEncryptedSqlite,
   REGISTRY_FILE_NAME,
   registryFile,
@@ -44,10 +45,11 @@ import type { ManifestEntity, UnpackedArchive } from "./types.ts";
 /**
  * 復元の失敗の種類（回復キー・鍵・内容を含めない）。
  * - INVALID: 回復キーが違う、ファイルが壊れている、読めない（区別しない）
- * - VERSION_MISMATCH: アプリの版が今と一致しない（新しくても古くても）
+ * - VERSION_MISMATCH: 新しい版のアプリで作られた（registry・tenant のマイグレーションの数のどちらかが今より多い）。
+ *   古い版は受け入れ、入れ替えの前に今の版までマイグレーションを当てる
  * - CANCELLED: 確認で拒否された
  * - BEFORE_BACKUP_FAILED: 復元前のバックアップを書けなかった（何も変えていない）
- * - RESTORE_FAILED: 展開、integrity_check、改名のどれかの失敗（元のデータ場所は無傷）
+ * - RESTORE_FAILED: 展開、integrity_check、マイグレーション、改名のどれかの失敗（元のデータ場所は無傷）
  * - RECEIPTS_MISSING: `receipt_files` の証憑のファイルが置き場所に欠ける・壊れている（010 の INV-68。
  *   `allowMissingReceipts` がなければ、何も作らず何も変えない。件数は `onReceiptsMissing` で受け取る）
  */
@@ -98,6 +100,8 @@ export type RestoreResult = {
 export type RestoreIo = {
   rename?: (from: string, to: string) => void;
   writeFile?: (path: string, bytes: Uint8Array) => void;
+  /** 復元先に当てるマイグレーションのフォルダ（既定は今のアプリのもの。途中で失敗するものを差し込む） */
+  migrationsFolders?: { registry?: string | undefined; tenant?: string | undefined } | undefined;
 };
 
 export type RestoreOptions = {
@@ -235,6 +239,58 @@ function readAiSettings(dataDir: string): AiSettingsRow | undefined {
   }
 }
 
+/** 暗号化した DB の integrity_check（DK は呼び出し側が `withDataKeyOverride` で与える） */
+function encryptedIntegrityOk(file: string, scope: DbKeyScope): boolean {
+  let db: Database.Database | undefined;
+  try {
+    db = openEncryptedSqlite(file, scope, { readonly: true, fileMustExist: true });
+    const rows = db.pragma("integrity_check") as { integrity_check: string }[];
+    return rows.length === 1 && rows[0]?.integrity_check === "ok";
+  } catch {
+    return false;
+  } finally {
+    db?.close();
+  }
+}
+
+/**
+ * 復元先の registry（暗号化済み・今の版までマイグレーション済み）に、今の帳簿の端末の設定（`app_settings`・
+ * `ai_settings`）を引き継ぐ。DK は呼び出し側が `withDataKeyOverride` で与える
+ */
+function carryOverDeviceSettings(
+  file: string,
+  settings: readonly SettingRow[],
+  aiSettings: AiSettingsRow | undefined,
+): void {
+  const registry = openEncryptedSqlite(file, "registry", { fileMustExist: true });
+  try {
+    const insert = registry.prepare(
+      "INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)",
+    );
+    registry.transaction(() => {
+      for (const s of settings) insert.run(s.key, s.value, s.updated_at);
+      // ai_settings も app_settings と同じく端末の値のまま引き継ぐ（006 R12）
+      if (aiSettings !== undefined) {
+        registry
+          .prepare(
+            "INSERT OR REPLACE INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, receipt_images_enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          )
+          .run(
+            aiSettings.id,
+            aiSettings.local_enabled,
+            aiSettings.external_enabled,
+            aiSettings.external_base_url,
+            aiSettings.external_model,
+            aiSettings.receipt_images_enabled,
+            aiSettings.updated_at,
+          );
+      }
+    })();
+  } finally {
+    registry.close();
+  }
+}
+
 function integrityOk(file: string): boolean {
   let db: Database.Database | undefined;
   try {
@@ -330,9 +386,9 @@ function resolveCurrentKey(
 /**
  * バックアップの復元（research R13。contracts/cli.md の手順 2〜6）。全部か無か。
  * 回復キーで DK を開いて復号と検査 → 確認 → 今の帳簿のバックアップ → `<dataDir>.restore-<日時>/` に展開して
- * integrity_check → `app_settings` の引き継ぎ → バックアップの DK で暗号化 → `auth.sqlite`（recovery の包みだけ）を
- * 作る → 改名の入れ替え。失敗はどの経路でも展開先を消し、元の `dataDir` に触らない。
- * server が動いていないことは呼び出し側が確かめる。マイグレーションは当てない（008 の D9）。
+ * integrity_check → バックアップの DK で暗号化 → 今の版までマイグレーション（古い版のとき。暗号化のまま）→
+ * integrity_check → `app_settings` の引き継ぎ → `auth.sqlite`（recovery の包みだけ）を作る → 改名の入れ替え。
+ * 失敗はどの経路でも展開先を消し、元の `dataDir` に触らない。server が動いていないことは呼び出し側が確かめる。
  */
 export async function restoreBackup(
   options: RestoreOptions,
@@ -340,7 +396,7 @@ export async function restoreBackup(
   const dataDir = resolve(options.dataDir);
   const appVersion = currentAppVersion();
 
-  // 2. 復号と検査（誤った回復キー・壊れたファイルは区別しない。版の不一致は何も作らず拒否）
+  // 2. 復号と検査（誤った回復キー・壊れたファイルは区別しない。新しい版のものは何も作らず拒否）
   let bytes: Buffer;
   try {
     bytes = readFileSync(options.file);
@@ -496,7 +552,7 @@ async function applyRestore(
     }
   }
 
-  // 5〜6. 展開 → integrity_check → app_settings の引き継ぎ → 改名の入れ替え
+  // 5〜6. 展開 → integrity_check → 暗号化 → マイグレーション → integrity_check → app_settings の引き継ぎ → 改名の入れ替え
   let swapped = false;
   let previousDataDir: string | null = null;
   try {
@@ -511,34 +567,10 @@ async function applyRestore(
     for (const file of archive.files) {
       if (!integrityOk(join(restoreDir, file.path.toLowerCase()))) throw new Error("integrity");
     }
-    const registry = new Database(registryFile(restoreDir), { fileMustExist: true });
-    try {
-      const insert = registry.prepare(
-        "INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)",
-      );
-      registry.transaction(() => {
-        for (const s of settings) insert.run(s.key, s.value, s.updated_at);
-        // ai_settings も app_settings と同じく端末の値のまま引き継ぐ（006 R12）
-        if (aiSettings !== undefined) {
-          registry
-            .prepare(
-              "INSERT OR REPLACE INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, receipt_images_enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            )
-            .run(
-              aiSettings.id,
-              aiSettings.local_enabled,
-              aiSettings.external_enabled,
-              aiSettings.external_base_url,
-              aiSettings.external_model,
-              aiSettings.receipt_images_enabled,
-              aiSettings.updated_at,
-            );
-        }
-      })();
-    } finally {
-      registry.close();
-    }
-    // 展開した平文のファイルを、バックアップの DK から作った鍵で暗号化する（008 の D2・D9。入れ替えの前に）
+    // 展開した平文のファイルを、バックアップの DK から作った鍵で暗号化する（008 の D2・D9。入れ替えの前に）。
+    // 古い版のバックアップは、暗号化したまま今の版までマイグレーションを当て、もう一度 integrity_check を
+    // 通す（入れ替えの後の openTenant などの初回の migrate に頼らない）。端末の設定は当てた後の表に引き継ぐ
+    const folders = options.io?.migrationsFolders;
     withDataKeyOverride(decrypted.dk, () => {
       for (const file of archive.files) {
         const path = file.path.toLowerCase();
@@ -546,8 +578,16 @@ async function applyRestore(
           path === REGISTRY_FILE_NAME
             ? "registry"
             : { tenant: path.slice("tenants/".length, -".sqlite".length) };
-        encryptSqliteFile(join(restoreDir, path), scope);
+        const target = join(restoreDir, path);
+        encryptSqliteFile(target, scope);
+        migrateEncryptedFile(
+          target,
+          scope,
+          scope === "registry" ? folders?.registry : folders?.tenant,
+        );
+        if (!encryptedIntegrityOk(target, scope)) throw new Error("integrity");
       }
+      carryOverDeviceSettings(registryFile(restoreDir), settings, aiSettings);
     });
     // auth.sqlite は recovery の包み（DK を開けたもの）だけで作り直す。パスキー・セッションは空。
     // 次の起動で回復キーで解錠し、パスキーを登録する

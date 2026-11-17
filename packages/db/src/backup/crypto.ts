@@ -183,10 +183,19 @@ function parseFile(bytes: Uint8Array): Result<Parsed, "INVALID" | "VERSION_MISMA
 }
 
 /**
+ * 受け入れるアプリの版: registry・tenant のマイグレーションの数がどちらも今以下（古い版は復元で今の版まで
+ * マイグレーションを当てる。マイグレーションは足すだけで、適用済みを書き換えない）。どちらかが今より多ければ、
+ * 新しい版のアプリで作られたもの
+ */
+export function isAcceptableVersion(backup: AppVersion, current: AppVersion): boolean {
+  return backup.registry <= current.registry && backup.tenant <= current.tenant;
+}
+
+/**
  * DK で復号する。GCM の final() が通るまで平文を返さない・使わない。
- * 形式の版が 1 でなければ復号の前に VERSION_MISMATCH。アプリの版が currentVersion と
- * 一致しないときは、復号と検証が通った後に VERSION_MISMATCH。それ以外の失敗（誤った鍵、改ざん、
- * 切り詰め）は区別せず INVALID。
+ * 形式の版が 1 でなければ復号の前に VERSION_MISMATCH。アプリの版が currentVersion より新しい
+ * （`isAcceptableVersion` が false）ときは、復号と検証が通った後に VERSION_MISMATCH。それ以外の失敗
+ * （誤った鍵、改ざん、切り詰め）は区別せず INVALID。
  */
 export function decryptBackup(
   bytes: Uint8Array,
@@ -213,11 +222,7 @@ export function decryptBackup(
     key.fill(0);
   }
 
-  const { appVersion } = header;
-  if (
-    appVersion.registry !== currentVersion.registry ||
-    appVersion.tenant !== currentVersion.tenant
-  ) {
+  if (!isAcceptableVersion(header.appVersion, currentVersion)) {
     return { ok: false, error: "VERSION_MISMATCH" };
   }
   return { ok: true, value: { header, archive } };
@@ -255,7 +260,7 @@ export function decryptBackupWithRecoveryKey(
       const decrypted = decryptBackup(bytes, dk, currentVersion);
       if (decrypted.ok) return { ok: true, value: { ...decrypted.value, dk, recoveryWrap: wrap } };
       dk.fill(0);
-      // 本体を開けた（鍵が正しい）のに版が違うときだけ、他の包みを試さずに知らせる
+      // 本体を開けた（鍵が正しい）のに新しい版のものだったときだけ、他の包みを試さずに知らせる
       if (decrypted.error === "VERSION_MISMATCH") return decrypted;
     }
     return invalid;

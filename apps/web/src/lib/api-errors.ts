@@ -126,7 +126,8 @@ export function describeError(error: unknown): ErrorDescription {
       };
     case "BACKUP_VERSION_MISMATCH":
       return {
-        message: "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください。",
+        message:
+          "このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください。",
         details: [],
       };
     case "REPORT_LINE_INVALID":

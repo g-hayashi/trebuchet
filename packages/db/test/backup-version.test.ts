@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { fc } from "@trebuchet/domain/testing";
 import { beforeAll, describe, expect, it } from "vitest";
 import { decryptBackup, encryptBackup } from "../src/backup/crypto.ts";
 import { recoveryFixture } from "./backup-fixtures.ts";
@@ -25,7 +26,7 @@ function rewriteHeader(file: Buffer, edit: (h: Record<string, unknown>) => void)
   return Buffer.concat([file.subarray(0, 4), lenBuf, json, file.subarray(8 + len)]);
 }
 
-describe("版の完全一致", () => {
+describe("版の判定（今以下なら受け入れ、新しい版は拒否）", () => {
   let same: Buffer;
   beforeAll(() => {
     same = make(NOW);
@@ -60,11 +61,35 @@ describe("版の完全一致", () => {
 
   it.each([
     ["registry が多い", { registry: 4, tenant: 5 }],
-    ["registry が少ない", { registry: 2, tenant: 5 }],
     ["tenant が多い", { registry: 3, tenant: 6 }],
-    ["tenant が少ない", { registry: 3, tenant: 4 }],
-  ])("%s ファイルは VERSION_MISMATCH", (_name, v) => {
+    ["registry が多く tenant が少ない", { registry: 4, tenant: 1 }],
+    ["tenant が多く registry が少ない", { registry: 0, tenant: 6 }],
+  ])("新しい版（%s）のファイルは VERSION_MISMATCH", (_name, v) => {
     expect(open(make(v))).toEqual({ ok: false, error: "VERSION_MISMATCH" });
+  });
+
+  it.each([
+    ["registry が少ない", { registry: 2, tenant: 5 }],
+    ["tenant が少ない", { registry: 3, tenant: 4 }],
+    ["どちらも少ない", { registry: 0, tenant: 0 }],
+  ])("古い版（%s）のファイルは受け入れ、ヘッダーの版をそのまま返す", (_name, v) => {
+    const r = open(make(v));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.header.appVersion).toEqual(v);
+      expect(r.value.archive).toEqual(archive);
+    }
+  });
+
+  it("受け入れるのは registry・tenant がどちらも今以下のときだけ（性質）", () => {
+    fc.assert(
+      fc.property(fc.nat({ max: 8 }), fc.nat({ max: 10 }), (registry, tenant) => {
+        const r = open(make({ registry, tenant }));
+        if (registry <= NOW.registry && tenant <= NOW.tenant) expect(r.ok).toBe(true);
+        else expect(r).toEqual({ ok: false, error: "VERSION_MISMATCH" });
+      }),
+      { numRuns: 60 },
+    );
   });
 
   it("版が違っていて誤った鍵なら INVALID（版の違いを教えない）", () => {
