@@ -47,6 +47,7 @@ apps/server ──→ packages/schema
 | 明細の推定の評価（ルール → 端末内 → 外部。011） | `pnpm eval:statements` |
 | 証憑の読み取りの評価（外部の AI を呼ぶ。010） | `pnpm eval:receipts` |
 | バックアップ（`.tbk`）の復元（server を止めて行う。回復キーを標準入力から読む） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--receipts-dir <dir>] [--allow-missing-receipts] [--yes]` |
+| リリースの見本のバックアップを足す（`packages/db/test/fixtures/backups/v<version>/`。既存の見本は書き換えない。手順は `docs/development.md` の「リリースの手順」） | `pnpm backup:fixture` |
 | freee の書き出しの確認と照合（実データ、ローカル専用。`work/` を読む。一時の事業体は実行ごとに作って消す。`--continue`・`--keep` はない: 008） | `pnpm verify:freee` |
 | 青色申告決算書の照合（実データ、ローカル専用。`work/` を読む） | `pnpm verify:tax-return` |
 | 宣伝動画（MP4 と GIF、日本語・英語。ffmpeg が要る） | `pnpm promo:record` |
@@ -78,7 +79,7 @@ apps/server ──→ packages/schema
 - **依存（npm パッケージ）を足すときは、`pnpm add` の前に利用者の承認を得る**。
 - **エラーコード・共有の型・契約を変えるタスクでは、`grep -rn <値> packages apps scripts` で同じ値を参照するテストと実装を探し、担当外のプロジェクトも含めて直す**。
 - **マイグレーション**: `drizzle-kit generate` の後、新しい表の `);` を `) STRICT;` に置き換える（001/R2、001/T024）。トリガー・ビュー・部分 UNIQUE は `--custom` の手書きの SQL。
-- **開発中は利用者がいない**ため、既存データの移行・旧版との互換は考えない。帳簿の不変条件（Constitution I）は守る。
+- **公開済みで利用者がいる**（2026-11-16 から）。更新した版で、前の版のデータ（DB・証憑・`.tbk`・`localStorage`）が開けない・エラーになる・消える変更をしない。マイグレーションは足すだけ（適用済みのファイルを書き換えない・消さない）で、既存の行があっても通す。読む形式を変えるときは旧形式の読み込みを残し、旧版のデータを新版で開くテストを足す。機能・画面・API の削除と大きな振る舞いの変更は、利用者の承認を得てから。詳細は [docs/development.md](docs/development.md) の「互換性」。
 - **部下（サブエージェント）への指示**: 担当のプロジェクトのテストだけを実行させる（`pnpm vitest run --project <name>`）。整形は触ったファイルだけ、変更は Edit / Write で行う。全体の検証は最後にメインが 1 回行う。
 - **コミットメッセージは Conventional Commits**（タスク ID を入れる）。
 - **tasks.md は 1 タスク 1 行を 500 字程度までにする**。細部は research・data-model・contracts の節に置き、節の番号で参照する。
