@@ -17,6 +17,7 @@ import {
   createAuthFile,
   type DbKeyScope,
   encryptSqliteFile,
+  isValidEntityId,
   migrateEncryptedFile,
   openEncryptedSqlite,
   REGISTRY_FILE_NAME,
@@ -236,6 +237,49 @@ function readAiSettings(dataDir: string): AiSettingsRow | undefined {
       .get() as AiSettingsRow | undefined;
   } finally {
     db.close();
+  }
+}
+
+const sqlQuote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+
+/** 暗号化した DB を読み取り専用で開き、`VACUUM INTO` で同じ鍵で暗号化された写しを作る（元のファイルは変えない） */
+function copyEncrypted(source: string, dest: string, scope: DbKeyScope): void {
+  const db = openEncryptedSqlite(source, scope, { readonly: true, fileMustExist: true });
+  try {
+    db.exec(`VACUUM INTO ${sqlQuote(dest)}`);
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * 今のデータ場所の registry と、registry にある事業体の DB を `workDir`（`.tmp/` の下）へ暗号化のまま写し、
+ * 写しに今の版までのマイグレーションを当てる（データ場所が今より新しい版なら例外）。生きているデータ場所は
+ * 変えない。DK は呼び出し側が `withDataKeyOverride` で与え、`workDir` は呼び出し側が finally で消す
+ */
+function copyCurrentLedgerMigrated(dataDir: string, workDir: string): void {
+  mkdirSync(join(workDir, "tenants"), { recursive: true });
+  const registryCopy = registryFile(workDir);
+  copyEncrypted(registryFile(dataDir), registryCopy, "registry");
+  migrateEncryptedFile(registryCopy, "registry");
+  const registry = openEncryptedSqlite(registryCopy, "registry", {
+    readonly: true,
+    fileMustExist: true,
+  });
+  let ids: string[];
+  try {
+    ids = (registry.prepare("SELECT id FROM entities").all() as { id: string }[])
+      .map((r) => r.id.toLowerCase())
+      .filter(isValidEntityId);
+  } finally {
+    registry.close();
+  }
+  for (const id of ids) {
+    const source = join(dataDir, tenantRelPath(id));
+    if (!existsSync(source)) continue;
+    const copy = join(workDir, tenantRelPath(id));
+    copyEncrypted(source, copy, { tenant: id });
+    migrateEncryptedFile(copy, { tenant: id });
   }
 }
 
@@ -515,18 +559,24 @@ async function applyRestore(
   if (hasLedger && current !== null) {
     try {
       const currentDk = current.dk;
-      const read = withDataKeyOverride(currentDk, () => ({
-        settings: readAppSettings(dataDir),
-        aiSettings: readAiSettings(dataDir),
-      }));
-      settings = read.settings;
-      aiSettings = read.aiSettings;
-      const macId = settings.find((s) => s.key === "mac_id")?.value ?? randomUUID();
       const name = beforeRestoreFileName(at);
+      // 今のデータ場所は古いスキーマのまま（更新の後で server を起動していない）のことがある。生きている DB には
+      // 触れず（マイグレーションも当てない）、仮の場所へ暗号化のまま写して今の版まで当ててから、今の版のコードで読む
+      const workDir = createSnapshotDir(options.tmpRoot);
       const snapDir = createSnapshotDir(options.tmpRoot);
       try {
-        const snapshot = withDataKeyOverride(currentDk, () => snapshotDataDir(dataDir, snapDir));
-        const plain = packArchive(snapshot);
+        const read = withDataKeyOverride(currentDk, () => {
+          copyCurrentLedgerMigrated(dataDir, workDir);
+          return {
+            settings: readAppSettings(workDir),
+            aiSettings: readAiSettings(workDir),
+            snapshot: snapshotDataDir(workDir, snapDir),
+          };
+        });
+        settings = read.settings;
+        aiSettings = read.aiSettings;
+        const macId = settings.find((s) => s.key === "mac_id")?.value ?? randomUUID();
+        const plain = packArchive(read.snapshot);
         const sha = sha256Hex(plain);
         const encrypted = encryptBackup(plain, currentDk, {
           appVersion,
@@ -544,6 +594,7 @@ async function applyRestore(
         });
       } finally {
         rmSync(snapDir, { recursive: true, force: true });
+        rmSync(workDir, { recursive: true, force: true });
       }
       beforeRestoreBackup = join(dirname(dataDir), name);
     } catch {

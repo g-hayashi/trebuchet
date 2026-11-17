@@ -1,10 +1,17 @@
-import { randomUUIDv7 } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomUUIDv7 } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { packArchive } from "../src/backup/archive.ts";
-import { encryptBackup } from "../src/backup/crypto.ts";
+import { packArchive, unpackArchive } from "../src/backup/archive.ts";
+import { decryptBackup, encryptBackup } from "../src/backup/crypto.ts";
 import { restoreBackup } from "../src/backup/restore.ts";
 import { currentAppVersion } from "../src/backup/snapshot.ts";
 import type { AppVersion, SnapshotFile } from "../src/backup/types.ts";
@@ -82,43 +89,9 @@ function buildOldBackup(version: AppVersion, journals = 5): OldLedger {
       "INSERT INTO entities (id, name, kind, db_file, created_at) VALUES (?, '古い版の事業', 'individual', ?, '2026-01-01T00:00:00.000Z')",
     ).run(entityId, `tenants/${entityId}.sqlite`);
   });
-  const rows: OldLedger["journals"] = [];
+  let rows: OldLedger["journals"] = [];
   const tenant = oldDbBytes(migrationsFolder("tenant", version.tenant), (db) => {
-    const account = db.prepare(
-      "INSERT INTO accounts (id, code, name, category, normal_side, report_section, report_line, sort_order, is_system, is_active) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 1)",
-    );
-    account.run(CASH, "100", "現金", "asset", "debit", "BS_ASSET", 1);
-    account.run(SALES, "400", "売上高", "revenue", "credit", "PL_SALES", 2);
-    account.run(EXPENSE, "500", "消耗品費", "expense", "debit", "PL_EXPENSE", 3);
-    const periodId = randomUUIDv7();
-    db.prepare(
-      "INSERT INTO fiscal_periods (id, fiscal_year, start_date, end_date, status) VALUES (?, 2026, '2026-01-01', '2026-12-31', 'open')",
-    ).run(periodId);
-    const journal = db.prepare(
-      "INSERT INTO journals (id, journal_no, date, fiscal_period_id, memo, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
-    );
-    const line = db.prepare(
-      "INSERT INTO journal_lines (id, journal_id, line_no, side, account_id, amount, tax_category, tax_amount) VALUES (?, ?, ?, ?, ?, ?, 'OUT_OF_SCOPE', 0)",
-    );
-    for (let i = 1; i <= journals; i++) {
-      const id = randomUUIDv7();
-      const date = `2026-0${1 + (i % 9)}-1${i % 10}`;
-      const memo = i % 2 === 0 ? null : `古い仕訳 ${i}`;
-      journal.run(
-        id,
-        i,
-        date,
-        periodId,
-        memo,
-        "2026-02-01T00:00:00.000Z",
-        "2026-02-01T00:00:00.000Z",
-      );
-      const amount = 1000 * i + 7;
-      const [debit, credit] = i % 3 === 0 ? [EXPENSE, CASH] : [CASH, SALES];
-      line.run(randomUUIDv7(), id, 1, "debit", debit, amount);
-      line.run(randomUUIDv7(), id, 2, "credit", credit, amount);
-      rows.push({ id, journal_no: i, date, memo });
-    }
+    rows = fillLedger(db, journals, "古い仕訳");
   });
   const files: SnapshotFile[] = [
     { path: "registry.sqlite", bytes: registry },
@@ -141,6 +114,47 @@ function buildOldBackup(version: AppVersion, journals = 5): OldLedger {
     }),
   );
   return { entityId, journals: rows, balances: balancesOf(journals) };
+}
+
+/** 古い版の DB（tenant の先頭 2 件以上）に科目・会計期間・仕訳を入れる。入れた仕訳を返す */
+function fillLedger(db: Database.Database, journals: number, memoPrefix: string) {
+  const rows: OldLedger["journals"] = [];
+  const account = db.prepare(
+    "INSERT INTO accounts (id, code, name, category, normal_side, report_section, report_line, sort_order, is_system, is_active) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 1)",
+  );
+  account.run(CASH, "100", "現金", "asset", "debit", "BS_ASSET", 1);
+  account.run(SALES, "400", "売上高", "revenue", "credit", "PL_SALES", 2);
+  account.run(EXPENSE, "500", "消耗品費", "expense", "debit", "PL_EXPENSE", 3);
+  const periodId = randomUUIDv7();
+  db.prepare(
+    "INSERT INTO fiscal_periods (id, fiscal_year, start_date, end_date, status) VALUES (?, 2026, '2026-01-01', '2026-12-31', 'open')",
+  ).run(periodId);
+  const journal = db.prepare(
+    "INSERT INTO journals (id, journal_no, date, fiscal_period_id, memo, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
+  );
+  const line = db.prepare(
+    "INSERT INTO journal_lines (id, journal_id, line_no, side, account_id, amount, tax_category, tax_amount) VALUES (?, ?, ?, ?, ?, ?, 'OUT_OF_SCOPE', 0)",
+  );
+  for (let i = 1; i <= journals; i++) {
+    const id = randomUUIDv7();
+    const date = `2026-0${1 + (i % 9)}-1${i % 10}`;
+    const memo = i % 2 === 0 ? null : `${memoPrefix} ${i}`;
+    journal.run(
+      id,
+      i,
+      date,
+      periodId,
+      memo,
+      "2026-02-01T00:00:00.000Z",
+      "2026-02-01T00:00:00.000Z",
+    );
+    const amount = 1000 * i + 7;
+    const [debit, credit] = i % 3 === 0 ? [EXPENSE, CASH] : [CASH, SALES];
+    line.run(randomUUIDv7(), id, 1, "debit", debit, amount);
+    line.run(randomUUIDv7(), id, 2, "credit", credit, amount);
+    rows.push({ id, journal_no: i, date, memo });
+  }
+  return rows;
 }
 
 /** 仕訳の組み立てと同じ規則で、科目ごとの残高（借方 − 貸方）を計算する */
@@ -348,4 +362,194 @@ describe("古い版のバックアップの復元", () => {
       ).toEqual(dump);
     });
   });
+});
+
+/**
+ * 古いスキーマのままのデータ場所（アプリを更新した直後で、server を起動していない）を dest に作る。
+ * registry・tenant を先頭の数件だけ当てて暗号化して置き、端末の設定（app_settings・ai_settings）と auth.sqlite を足す。
+ * registryFolder を渡すと、registry にはそのフォルダを当てる（今より新しいデータ場所の再現）
+ */
+function seedOldDest(version: AppVersion, registryFolder?: string) {
+  const entityId = randomUUIDv7().toLowerCase();
+  mkdirSync(join(dest(), "tenants"), { recursive: true });
+  const make = (
+    file: string,
+    scope: DbKeyScope,
+    folder: string,
+    fill: (db: Database.Database) => void,
+  ) => {
+    const db = openEncryptedSqlite(file, scope);
+    try {
+      db.pragma("journal_mode = WAL");
+      db.pragma("foreign_keys = ON");
+      migrate(drizzleOf(db, {}), { migrationsFolder: folder });
+      fill(db);
+    } finally {
+      db.close();
+    }
+  };
+  make(
+    join(dest(), "registry.sqlite"),
+    "registry",
+    registryFolder ?? migrationsFolder("registry", version.registry),
+    (db) => {
+      db.prepare(
+        "INSERT INTO entities (id, name, kind, db_file, created_at) VALUES (?, '今の事業', 'individual', ?, '2026-01-01T00:00:00.000Z')",
+      ).run(entityId, `tenants/${entityId}.sqlite`);
+      const setting = db.prepare(
+        "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, '2026-10-30T00:00:00.000Z')",
+      );
+      setting.run("mac_id", "mac-of-this-machine");
+      setting.run("backup_folder", "/folder-of-this-machine");
+      db.prepare(
+        "INSERT INTO ai_settings (id, local_enabled, external_enabled, external_base_url, external_model, updated_at) VALUES (1, 0, 1, 'https://ai.example.com', 'model-x', '2026-10-30T00:00:00.000Z')",
+      ).run();
+    },
+  );
+  let journals: OldLedger["journals"] = [];
+  make(
+    join(dest(), "tenants", `${entityId}.sqlite`),
+    { tenant: entityId },
+    migrationsFolder("tenant", version.tenant),
+    (db) => {
+      journals = fillLedger(db, 3, "今の帳簿の仕訳");
+    },
+  );
+  createAuthFile(join(dest(), "auth.sqlite"), recovery.wrap, "2026-10-30T00:00:00.000Z");
+  return { entityId, journals };
+}
+
+/** dir の DB のファイル（付属の -wal・-shm を除く）の相対パスと SHA-256 */
+function hashes(dir: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const rel of listAll(dir)) {
+    if (!rel.endsWith(".sqlite")) continue;
+    out[rel] = createHash("sha256")
+      .update(readFileSync(join(dir, rel)))
+      .digest("hex");
+  }
+  return out;
+}
+
+const scratchLeftovers = () => (existsSync(scratch()) ? readdirSync(scratch()) : []);
+
+describe("古いスキーマのままのデータ場所への復元（server を起動する前）", () => {
+  const destVersions: [string, AppVersion][] = [
+    ["registry 1・tenant 2", { registry: 1, tenant: 2 }],
+    ["registry 3・tenant 14", { registry: 3, tenant: 14 }],
+  ];
+  const backups: [string, () => AppVersion][] = [
+    ["古い版のバックアップ", () => ({ registry: 1, tenant: 2 })],
+    ["今の版のバックアップ", () => currentAppVersion()],
+  ];
+
+  for (const [destName, destVersion] of destVersions) {
+    it.each(backups)(
+      `データ場所が ${destName}: %s を復元でき、復元の前の写しが残り、端末の設定を引き継ぎ、元のファイルは変わらない`,
+      async (_n, backupVersion) => {
+        const old = buildOldBackup(backupVersion());
+        const before = seedOldDest(destVersion);
+        const beforeHashes = hashes(dest());
+
+        const result = await run();
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        // 生きていたデータ場所は改名されただけで、DB のファイルは 1 バイトも変わっていない
+        expect(result.value.previousDataDir).not.toBeNull();
+        expect(hashes(result.value.previousDataDir ?? "")).toEqual(beforeHashes);
+
+        // 復元の前の写しは今の版で、今の帳簿の事業体と仕訳を含む
+        const saved = result.value.beforeRestoreBackup;
+        expect(saved).not.toBeNull();
+        const decrypted = decryptBackup(readFileSync(saved ?? ""), TEST_DATA_KEY, current);
+        expect(decrypted.ok).toBe(true);
+        if (!decrypted.ok) return;
+        expect(decrypted.value.header.appVersion).toEqual(current);
+        const unpacked = unpackArchive(decrypted.value.archive);
+        expect(unpacked.ok).toBe(true);
+        if (!unpacked.ok) return;
+        expect(unpacked.value.manifest.entities).toEqual([
+          { id: before.entityId, name: "今の事業", fiscalYears: [{ year: 2026, journals: 3 }] },
+        ]);
+
+        withDataDir(dest(), () => {
+          const registry = openRegistry().$client;
+          expect(registry.prepare("SELECT id FROM entities").all()).toEqual([{ id: old.entityId }]);
+          expect(
+            registry.prepare("SELECT key, value FROM app_settings ORDER BY key").all(),
+          ).toEqual([
+            { key: "backup_folder", value: "/folder-of-this-machine" },
+            { key: "mac_id", value: "mac-of-this-machine" },
+          ]);
+          expect(
+            registry
+              .prepare("SELECT external_base_url, external_model FROM ai_settings WHERE id = 1")
+              .get(),
+          ).toEqual({ external_base_url: "https://ai.example.com", external_model: "model-x" });
+          expect(
+            openTenant(old.entityId)
+              .$client.prepare(
+                "SELECT id, journal_no, date, memo FROM journals ORDER BY journal_no",
+              )
+              .all(),
+          ).toEqual(old.journals);
+        });
+        expect(scratchLeftovers()).toEqual([]);
+      },
+    );
+  }
+
+  it("データ場所が今より新しい版（古いアプリで新しいデータ）なら BEFORE_BACKUP_FAILED で、ファイルは変わらない", async () => {
+    buildOldBackup(current);
+    const future = migrationsFolder("registry", current.registry, {
+      tag: "9999_future",
+      sql: "CREATE TABLE `future_table` (`x` integer) STRICT;",
+    });
+    seedOldDest({ registry: current.registry, tenant: current.tenant }, future);
+    const beforeHashes = hashes(dest());
+    const result = await run();
+    expect(result).toEqual({ ok: false, error: "BEFORE_BACKUP_FAILED" });
+    expect(hashes(dest())).toEqual(beforeHashes);
+    const siblings = readdirSync(join(tmp.dir, "dest"));
+    expect(siblings.filter((n) => n !== "data")).toEqual([]);
+    expect(scratchLeftovers()).toEqual([]);
+  });
+
+  it.each([
+    ["復元先のマイグレーションの途中の失敗", "migration"],
+    ["入れ替えの改名の失敗", "rename"],
+  ] as const)(
+    "%s では RESTORE_FAILED で、元のデータ場所の DB のファイルはバイト単位で変わらない",
+    async (_n, kind) => {
+      buildOldBackup({ registry: 1, tenant: 2 });
+      seedOldDest({ registry: 3, tenant: 14 });
+      const beforeHashes = hashes(dest());
+      let renames = 0;
+      const result = await run(
+        kind === "migration"
+          ? {
+              migrationsFolders: {
+                tenant: migrationsFolder("tenant", current.tenant, {
+                  tag: "9999_broken",
+                  sql: "CREATE TABLE `half_done` (`x` integer) STRICT;\n--> statement-breakpoint\nINSERT INTO `no_such_table` VALUES (1);",
+                }),
+              },
+            }
+          : {
+              rename: (from, to) => {
+                renames += 1;
+                if (renames === 2) throw new Error("rename failed");
+                renameSync(from, to);
+              },
+            },
+      );
+      expect(result).toEqual({ ok: false, error: "RESTORE_FAILED" });
+      expect(hashes(dest())).toEqual(beforeHashes);
+      const siblings = readdirSync(join(tmp.dir, "dest"));
+      expect(siblings.filter((n) => n.includes(".restore-"))).toEqual([]);
+      expect(siblings.filter((n) => n.includes(".before-restore-"))).toEqual([]);
+      expect(scratchLeftovers()).toEqual([]);
+    },
+  );
 });

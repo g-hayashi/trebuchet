@@ -302,10 +302,23 @@ export function pendingMigrationCount(client: Database.Database, migrationsFolde
   return migrations.filter((m) => applied < m.folderMillis).length;
 }
 
+/** このアプリの最後のマイグレーションより新しいもの（新しい版のアプリで当てたもの）が当たっているか */
+function hasNewerMigrations(client: Database.Database, migrationsFolder: string): boolean {
+  const latest = Math.max(
+    0,
+    ...readMigrationFiles({ migrationsFolder }).map((m) => m.folderMillis),
+  );
+  const row = client.prepare("SELECT max(created_at) AS last FROM __drizzle_migrations").get() as
+    | { last: number | string | null }
+    | undefined;
+  return row?.last != null && Number(row.last) > latest;
+}
+
 /**
- * 復元の仮の場所に展開して暗号化した DB に、今の版までのマイグレーションを当てる（暗号化のまま。WAL にしない）。
- * 起動時と同じく foreign_keys を有効にして当てる。当てた後に未適用が残れば例外。`migrationsFolder` はテストが
- * 失敗を注入するための差し替え（既定は今のマイグレーション）
+ * 復元の仮の場所の DB（展開して暗号化したもの、今の帳簿の写し）に、今の版までのマイグレーションを当てる
+ * （暗号化のまま。WAL にしない）。起動時と同じく foreign_keys を有効にして当てる。当てた後に未適用が残る、
+ * またはこのアプリより新しい版のマイグレーションが当たっていれば例外。`folder` はテストが失敗を注入するための
+ * 差し替え（既定は今のマイグレーション）
  */
 export function migrateEncryptedFile(
   file: string,
@@ -320,6 +333,9 @@ export function migrateEncryptedFile(
     migrate(drizzleOf(client, {}), { migrationsFolder });
     if (pendingMigrationCount(client, migrationsFolder) !== 0) {
       throw new Error("未適用のマイグレーションが残った");
+    }
+    if (hasNewerMigrations(client, migrationsFolder)) {
+      throw new Error("このアプリより新しい版のマイグレーションが当たっている");
     }
   } finally {
     client.close();
