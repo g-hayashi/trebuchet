@@ -33,6 +33,8 @@ pnpm start   # web をビルドし、server が http://localhost:8787 で web �
 |---|---|---|
 | `snapshotDataDir(dataDir, tmpDir)` | データ場所、`.tmp/` の下の作業場所 | `{ files: { path, bytes }[], manifest }`。各 DB に `VACUUM INTO`。registry の写しは、トリガーを `DROP` → 認証の表・`app_settings`・`backup_runs`・`pairing_tokens` の行を消す → トリガーを作り直す → `VACUUM`（R9）。平文の写しは `tmpDir` の下に作り、`finally` で必ず消す（呼び出し側が `tmpDir` ごと消す） |
 | `currentAppVersion()` | — | `{ registry, tenant }`（マイグレーションの適用数） |
+| `currentRelease()` | — | アプリのリリースの版（ルートの `package.json` の `version`。例 `"0.1.0"`）。`encryptBackup` がヘッダーの任意の項目 `release` に書く（AAD に含まれる。`format` は 1 のまま。`release` のない以前のファイルも読む） |
+| `readBackupRelease(bytes)` | | ヘッダーの `release`（復号しない。表示だけに使う）。なければ `undefined`。`VERSION_MISMATCH` の文言（schema の `backupVersionMismatchMessage`）に作った版を示す |
 | `removeStaleSnapshots(tmpRoot)` | `.tmp/` | 前回の異常終了で残った `.tmp/backup-snapshot-*/` を消す（server の起動時に呼ぶ） |
 | `packArchive(snapshot)` / `unpackArchive(bytes)` | | アーカイブのバイト列 / `{ manifest, files }`（各ファイルの SHA-256 を検査） |
 | `encryptBackup(archive, passphrase, header)` | | `.tbk` のバイト列（Argon2id ＋ AES-256-GCM、ヘッダーを AAD） |

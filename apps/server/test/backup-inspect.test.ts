@@ -14,7 +14,7 @@ import {
   wrapDataKey,
 } from "@trebuchet/db";
 import { TEST_DATA_KEY, type TempDataDir, useTempDataDir } from "@trebuchet/db/testing";
-import type { BackupInspection } from "@trebuchet/schema";
+import { type BackupInspection, backupVersionMismatchMessage } from "@trebuchet/schema";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.ts";
 import { createTestEntity, createTestSession, errorOf, TEST_HOST, TEST_ORIGIN } from "./helpers.ts";
@@ -47,24 +47,35 @@ const snapshot: Snapshot = {
 };
 
 /** .tbk を作る（DK で暗号化し、ヘッダーに recovery の包みを入れる。ファイルは1回作って使い回す） */
-function makeFile(version: AppVersion = currentAppVersion(), dk: Uint8Array = TEST_DATA_KEY) {
+function makeFile(
+  version: AppVersion = currentAppVersion(),
+  dk: Uint8Array = TEST_DATA_KEY,
+  release?: string | null,
+) {
   const key = generateRecoveryKey();
   return encryptBackup(packArchive(snapshot), dk, {
     appVersion: version,
     macId: MAC_ID,
     createdAt: CREATED_AT,
     recoveryWrap: wrapDataKey(dk, key.secret, "recovery", null),
+    ...(release === undefined ? {} : { release }),
   });
 }
 
 let good: Buffer;
 let newer: Buffer;
+let newerWithRelease: Buffer;
 let older: Buffer;
 let otherDk: Buffer;
 beforeAll(() => {
   const v = currentAppVersion();
   good = makeFile();
-  newer = makeFile({ registry: v.registry + 1, tenant: v.tenant });
+  newer = makeFile({ registry: v.registry + 1, tenant: v.tenant }, TEST_DATA_KEY, null);
+  newerWithRelease = makeFile(
+    { registry: v.registry, tenant: v.tenant + 1 },
+    TEST_DATA_KEY,
+    "0.2.0",
+  );
   older = makeFile({ registry: v.registry, tenant: Math.max(0, v.tenant - 1) });
   otherDk = makeFile(v, randomBytes(32));
 });
@@ -164,6 +175,16 @@ describe("POST /api/backup/inspect", () => {
     const error = await errorOf(res);
     expect(error.code).toBe("BACKUP_VERSION_MISMATCH");
     expect(error.message).toContain("新しい版のアプリで作られています");
+  });
+
+  it("ヘッダーに release があれば、拒否の文言に作った版を示し、details.release で返す", async () => {
+    const res = await inspect(form(newerWithRelease));
+    expect(res.status).toBe(422);
+    const error = await errorOf(res);
+    expect(error.code).toBe("BACKUP_VERSION_MISMATCH");
+    expect(error.message).toBe(backupVersionMismatchMessage("0.2.0"));
+    expect(error.message).toContain("このバックアップは v0.2.0 で作られています。");
+    expect(error.details).toEqual({ release: "0.2.0" });
   });
 
   it("古い版のアプリで作ったものは受け入れ、ヘッダーの版を返す（復元で今の版までマイグレーションを当てる）", async () => {

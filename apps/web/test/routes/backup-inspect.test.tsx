@@ -102,6 +102,14 @@ describe("バックアップの検査（008 の D9: 解錠中の鍵で検査す�
     );
   });
 
+  it("応答の details.release があれば、作った版を文言に示す", async () => {
+    open(() => apiError(422, "BACKUP_VERSION_MISMATCH", "x", { release: "0.2.0" }));
+    await submit();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "このバックアップは v0.2.0 で作られています。今のアプリより新しい版で作られたため、アプリを更新してから復元してください。",
+    );
+  });
+
   it("大きすぎるときの文言（上限は応答の maxBytes から）", async () => {
     open(() => apiError(413, "FILE_TOO_LARGE", "x", { maxBytes: 200 * 1024 * 1024 }));
     await submit();

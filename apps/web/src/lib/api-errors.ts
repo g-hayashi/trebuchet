@@ -1,3 +1,4 @@
+import { backupVersionMismatchMessage } from "@trebuchet/schema";
 import { ApiError } from "./api";
 import { formatYen } from "./format";
 
@@ -124,12 +125,14 @@ export function describeError(error: unknown): ErrorDescription {
         message: "このアプリのバックアップではないか、ファイルが壊れています。",
         details: [],
       };
-    case "BACKUP_VERSION_MISMATCH":
+    case "BACKUP_VERSION_MISMATCH": {
+      // details.release は .tbk のヘッダーの作った版（以前のバックアップにはない）
+      const release = error.details?.release;
       return {
-        message:
-          "このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください。",
+        message: `${backupVersionMismatchMessage(typeof release === "string" ? release : undefined)}。`,
         details: [],
       };
+    }
     case "REPORT_LINE_INVALID":
       return { message: "決算書の欄は、費用の科目の 8〜31 から選んでください。", details: [] };
     case "DEPRECIATION_JOURNAL_EXISTS": {

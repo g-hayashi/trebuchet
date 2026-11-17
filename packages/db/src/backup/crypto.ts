@@ -3,6 +3,7 @@ import type { Result, WrappedKey } from "@trebuchet/domain";
 import { parseRecoveryKey } from "../recovery-key.ts";
 import { isRecord } from "../util.ts";
 import { DK_BYTES, unwrapDataKey } from "../vault-crypto.ts";
+import { currentRelease, RELEASE_PATTERN } from "./snapshot.ts";
 import type { AppVersion } from "./types.ts";
 
 const MAGIC = Buffer.from("TBK1", "ascii");
@@ -21,6 +22,11 @@ export type BackupRecoveryWrap = { salt: string; iv: string; tag: string; wrappe
 export type BackupHeader = {
   format: 1;
   appVersion: AppVersion;
+  /**
+   * 作ったアプリのリリースの版（ルートの package.json の version。例 "0.1.0"）。任意の項目で、以前の
+   * バックアップにはない。表示（拒否の文言）だけに使い、受け入れの判定は appVersion で行う。AAD に含まれる
+   */
+  release?: string | undefined;
   macId: string;
   createdAt: string;
   key: { alg: "hkdf-sha256"; salt: string };
@@ -36,6 +42,8 @@ export type BackupHeaderInput = {
   createdAt: string;
   /** 今の `auth.sqlite` の recovery の包み */
   recoveryWrap: WrappedKey;
+  /** ヘッダーの release。省略すると今の版（`currentRelease()`）、null なら書かない（以前の形式の再現。テスト用） */
+  release?: string | null | undefined;
 };
 
 /** 鍵は DK から HKDF で 32 バイト。使い終えたら呼び出し側が fill(0) する */
@@ -52,9 +60,11 @@ export function encryptBackup(
   if (dk.length !== DK_BYTES) throw new RangeError(`data key must be ${DK_BYTES} bytes`);
   const salt = randomBytes(SALT_BYTES);
   const nonce = randomBytes(NONCE_BYTES);
+  const release = header.release === undefined ? currentRelease() : header.release;
   const full: BackupHeader = {
     format: 1,
     appVersion: { registry: header.appVersion.registry, tenant: header.appVersion.tenant },
+    ...(release === null ? {} : { release }),
     macId: header.macId,
     createdAt: header.createdAt,
     key: { alg: "hkdf-sha256", salt: salt.toString("base64") },
@@ -107,6 +117,9 @@ function parseHeader(raw: Record<string, unknown>): ParsedHeader | undefined {
   if (!isInt(appVersion.registry, 0, 1_000_000) || !isInt(appVersion.tenant, 0, 1_000_000)) {
     return undefined;
   }
+  // release は任意（以前のバックアップにはない）。あれば版の形でなければならない
+  const release = "release" in raw ? releaseOf(raw) : undefined;
+  if ("release" in raw && release === undefined) return undefined;
   if (typeof macId !== "string" || typeof createdAt !== "string") return undefined;
   if (key.alg !== "hkdf-sha256" || cipher.alg !== "aes-256-gcm") return undefined;
   const salt = decodeBase64(key.salt, SALT_BYTES);
@@ -129,6 +142,7 @@ function parseHeader(raw: Record<string, unknown>): ParsedHeader | undefined {
     header: {
       format: 1,
       appVersion: { registry: appVersion.registry, tenant: appVersion.tenant },
+      ...(release === undefined ? {} : { release }),
       macId,
       createdAt,
       key: { alg: "hkdf-sha256", salt: key.salt as string },
@@ -150,22 +164,48 @@ const invalid = { ok: false, error: "INVALID" } as const;
 
 type Parsed = ParsedHeader & { aad: Buffer; body: Buffer; tag: Buffer };
 
-/** マジック・長さ・JSON・形を検査する（認証はしない）。format が 1 でなければ VERSION_MISMATCH */
-function parseFile(bytes: Uint8Array): Result<Parsed, "INVALID" | "VERSION_MISMATCH"> {
+/** ヘッダーの release が版の形の文字列ならその値、そうでなければ undefined */
+function releaseOf(raw: Record<string, unknown>): string | undefined {
+  const value = raw.release;
+  return typeof value === "string" && RELEASE_PATTERN.test(value) ? value : undefined;
+}
+
+/** マジック・長さ・JSON を検査してヘッダーの JSON（認証していない値）を返す。形が違えば undefined */
+function readRawHeader(
+  bytes: Uint8Array,
+): { buf: Buffer; headerEnd: number; raw: Record<string, unknown> } | undefined {
   const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (buf.length < MAGIC.length + 4 || !buf.subarray(0, MAGIC.length).equals(MAGIC)) return invalid;
+  if (buf.length < MAGIC.length + 4 || !buf.subarray(0, MAGIC.length).equals(MAGIC)) {
+    return undefined;
+  }
   const headerLength = buf.readUInt32BE(MAGIC.length);
   const headerEnd = MAGIC.length + 4 + headerLength;
-  if (headerLength === 0 || headerLength > MAX_HEADER_BYTES) return invalid;
-  if (headerEnd + TAG_BYTES > buf.length) return invalid;
-
+  if (headerLength === 0 || headerLength > MAX_HEADER_BYTES) return undefined;
+  if (headerEnd + TAG_BYTES > buf.length) return undefined;
   let raw: unknown;
   try {
     raw = JSON.parse(buf.subarray(MAGIC.length + 4, headerEnd).toString("utf8"));
   } catch {
-    return invalid;
+    return undefined;
   }
-  if (!isRecord(raw)) return invalid;
+  return isRecord(raw) ? { buf, headerEnd, raw } : undefined;
+}
+
+/**
+ * ヘッダーの release（作ったアプリのリリースの版）を、復号せずに読む。`VERSION_MISMATCH` の文言に版を示すため。
+ * 形式の版が 1 でないファイルも読む。認証の前の値なので表示だけに使う（版の形の文字列に限る）。
+ * なければ・読めなければ undefined
+ */
+export function readBackupRelease(bytes: Uint8Array): string | undefined {
+  const read = readRawHeader(bytes);
+  return read === undefined ? undefined : releaseOf(read.raw);
+}
+
+/** マジック・長さ・JSON・形を検査する（認証はしない）。format が 1 でなければ VERSION_MISMATCH */
+function parseFile(bytes: Uint8Array): Result<Parsed, "INVALID" | "VERSION_MISMATCH"> {
+  const read = readRawHeader(bytes);
+  if (read === undefined) return invalid;
+  const { buf, headerEnd, raw } = read;
   if (raw.format !== 1) {
     return typeof raw.format === "number" ? { ok: false, error: "VERSION_MISMATCH" } : invalid;
   }

@@ -1,6 +1,12 @@
 import { accessSync, constants, statSync } from "node:fs";
 import { isAbsolute } from "node:path";
-import { currentAppVersion, decryptBackup, unpackArchive, withDataKey } from "@trebuchet/db";
+import {
+  currentAppVersion,
+  decryptBackup,
+  readBackupRelease,
+  unpackArchive,
+  withDataKey,
+} from "@trebuchet/db";
 import {
   type AuthStore,
   type BackupStore,
@@ -9,7 +15,12 @@ import {
   domainError,
   encodeCsv,
 } from "@trebuchet/domain";
-import { type BackupInspection, BackupSettingsInput, type BackupStatus } from "@trebuchet/schema";
+import {
+  type BackupInspection,
+  BackupSettingsInput,
+  type BackupStatus,
+  backupVersionMismatchMessage,
+} from "@trebuchet/schema";
 import { Hono } from "hono";
 import { DomainException } from "../errors.ts";
 import { resolveBackupFolder } from "../lib/backup-folder.ts";
@@ -139,13 +150,15 @@ export function backupRoutes(deps: BackupRouteDeps) {
       // 別の DK のバックアップと壊れたファイルは区別しない
       const decrypted = withDataKey((dk) => decryptBackup(upload.bytes, dk, currentAppVersion()));
       if (!decrypted.ok) {
+        if (decrypted.error !== "VERSION_MISMATCH") throw new DomainException(invalidBackup());
+        // ヘッダーの release（作った版）があれば文言に示し、details.release で返す（web が同じ文言を作る）
+        const release = readBackupRelease(upload.bytes);
         throw new DomainException(
-          decrypted.error === "VERSION_MISMATCH"
-            ? domainError(
-                "BACKUP_VERSION_MISMATCH",
-                "このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください",
-              )
-            : invalidBackup(),
+          domainError(
+            "BACKUP_VERSION_MISMATCH",
+            backupVersionMismatchMessage(release),
+            release === undefined ? undefined : { release },
+          ),
         );
       }
       const unpacked = unpackArchive(decrypted.value.archive);

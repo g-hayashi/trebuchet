@@ -63,3 +63,13 @@
 - **開発中は利用者がいない**ため、既存データの移行・旧版との互換は考えない。帳簿の不変条件（Constitution I）は守る。
 - **コミットメッセージは Conventional Commits**（タスク ID を入れる）。
 - **tasks.md は 1 タスク 1 行を 500 字程度までにする**。長くなる細部は research・data-model・contracts の節に置き、タスクからは節の番号で参照する。
+
+## 互換性（公開後）
+
+### リリースの手順
+
+1. ルートの `package.json` の `version` を上げる（アプリのリリースの版。`.tbk` のヘッダーの `release` になる）。
+2. `pnpm backup:fixture` で `packages/db/test/fixtures/backups/v<version>/` に見本のバックアップを足す。既存の見本は書き換えない・消さない（照合が赤になったら、今の版のマイグレーション・復元の側を直す）。
+3. `pnpm typecheck`・`pnpm lint`・`pnpm test` を通す（`packages/db/test/backup-fixtures.test.ts` が全部の見本を今の版で復元して照合する）。
+4. 見本を含めてコミットし、PR をマージする。
+5. マージ後の main に `git tag v<version>` を付けて push する。

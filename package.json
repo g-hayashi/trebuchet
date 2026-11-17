@@ -1,5 +1,6 @@
 {
   "name": "trebuchet",
+  "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -30,6 +31,7 @@
     "eval:statements": "node scripts/eval-statements.ts",
     "eval:receipts": "node scripts/eval-receipts.ts",
     "restore": "node scripts/restore-backup.ts",
+    "backup:fixture": "node scripts/make-backup-fixture.ts",
     "verify:freee": "node scripts/verify-freee-import.ts",
     "verify:tax-return": "node scripts/verify-tax-return.ts"
   },
