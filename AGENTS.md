@@ -47,6 +47,7 @@ apps/server ──→ packages/schema
 | 明細の推定の評価（ルール → 端末内 → 外部。011） | `pnpm eval:statements` |
 | 証憑の読み取りの評価（外部の AI を呼ぶ。010） | `pnpm eval:receipts` |
 | バックアップ（`.tbk`）の復元（server を止めて行う。回復キーを標準入力から読む） | `pnpm restore -- --file <.tbk> [--data-dir <dir>] [--receipts-dir <dir>] [--allow-missing-receipts] [--yes]` |
+| リリースの見本のバックアップを足す（`packages/db/test/fixtures/backups/v<version>/`。既存の見本は書き換えない。手順は `docs/development.md` の「リリースの手順」） | `pnpm backup:fixture` |
 | freee の書き出しの確認と照合（実データ、ローカル専用。`work/` を読む。一時の事業体は実行ごとに作って消す。`--continue`・`--keep` はない: 008） | `pnpm verify:freee` |
 | 青色申告決算書の照合（実データ、ローカル専用。`work/` を読む） | `pnpm verify:tax-return` |
 | 宣伝動画（MP4 と GIF、日本語・英語。ffmpeg が要る） | `pnpm promo:record` |
@@ -92,7 +93,7 @@ apps/server ──→ packages/schema
 | 001 帳簿の中核 | `specs/001-ledger-core/`（開発の規約は `docs/development.md`） | 0001〜0003 |
 | 002 freee の取込 | `docs/features/002-freee-import.md` | 0004 |
 | 003 決算書（按分、少額の特例、税制の値の足し方） | `docs/features/003-tax-return.md` | 0005 |
-| 004 認証とバックアップ、リモート（Tailscale） | `docs/features/004-auth-backup.md` | 0006・0007（鍵は 008 で置換） |
+| 004 認証とバックアップ、リモート（Tailscale） | `docs/features/004-auth-backup.md` | 0006・0007（鍵は 008 で置換、版は 0016） |
 | 005 請求と定期仕訳 | `docs/features/005-recurring-invoicing.md` | 0008・0013 |
 | 006 明細の取込と AI 仕訳 | `docs/features/006-mfme-ai-journal.md` | 0009 |
 | 007 汎用の明細取込（列の対応、列の案の AI） | `docs/features/007-generic-statement-import.md` | 0010 |

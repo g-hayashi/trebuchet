@@ -31,7 +31,7 @@
 | 409 | `BACKUP_NOT_CONFIGURED` | 未設定でバックアップを求めた | FR-019 |
 | 409 | `BACKUP_RUNNING` | 実行中に重ねて求めた | FR-019 |
 | 422 | `BACKUP_INVALID` | 検査で、壊れている・パスフレーズが違う | FR-024 |
-| 422 | `BACKUP_VERSION_MISMATCH` | アプリの版が今と一致しないファイル（新しくても古くても） | FR-027 |
+| 422 | `BACKUP_VERSION_MISMATCH` | 新しい版のアプリで作られたファイル（古い版は受け入れる。ADR 0016）。ヘッダーに `release`（作った版）があれば `details: { release }` を返し、文言に「このバックアップは v<release> で作られています。」を示す | FR-027 |
 | 422 | `REMOTE_HOST_INVALID` | `*.ts.net` の形でない名前 | FR-010 |
 | 409 | `REMOTE_NOT_CONFIGURED` | リモートが無効、または名前が未登録でペアリングを求めた | FR-012 |
 | 401 | `PAIRING_TOKEN_INVALID` | ペアリングのトークンがない・違う・期限切れ・使用済み | FR-012 |

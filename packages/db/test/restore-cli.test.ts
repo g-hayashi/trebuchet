@@ -9,7 +9,12 @@ import {
 } from "../../../scripts/lib/restore-cli.ts";
 import { packArchive } from "../src/backup/archive.ts";
 import { encryptBackup } from "../src/backup/crypto.ts";
-import { createSnapshotDir, currentAppVersion, snapshotDataDir } from "../src/backup/snapshot.ts";
+import {
+  createSnapshotDir,
+  currentAppVersion,
+  currentRelease,
+  snapshotDataDir,
+} from "../src/backup/snapshot.ts";
 import { closeAll, openRegistry } from "../src/tenant-store.ts";
 import { TEST_DATA_KEY, type TempDataDir, useTempDataDir } from "../src/testing.ts";
 import { recoveryFixture, seedEntities } from "./backup-fixtures.ts";
@@ -34,7 +39,10 @@ const dataDir = () => join(tmp.dir, "dest", "data");
 const backupFile = () => join(tmp.dir, "backup.tbk");
 
 /** DK と recovery の包みで .tbk を作る。src は tmp.dir/src */
-async function makeBackup(appVersion = currentAppVersion()): Promise<void> {
+async function makeBackup(
+  appVersion = currentAppVersion(),
+  release?: string | null,
+): Promise<void> {
   const src = join(tmp.dir, "src");
   mkdirSync(src, { recursive: true });
   process.env.TREBUCHET_DATA_DIR = src;
@@ -50,6 +58,7 @@ async function makeBackup(appVersion = currentAppVersion()): Promise<void> {
       macId: "mac-src",
       createdAt: "2026-10-31T09:00:00.000Z",
       recoveryWrap: recovery.wrap,
+      ...(release === undefined ? {} : { release }),
     });
     writeFileSync(backupFile(), bytes);
   } finally {
@@ -211,13 +220,24 @@ describe("restore-backup（使い方と終了コード）", () => {
     expect(siblings()).toEqual([]);
   });
 
-  it("版の違うバックアップは 1 で、決められた文言を出し、何も作らない", async () => {
+  it("新しい版のアプリで作られたバックアップは 1 で、決められた文言を出し、何も作らない", async () => {
     const v = currentAppVersion();
     await makeBackup({ registry: v.registry + 1, tenant: v.tenant });
     const h = harness();
     expect(await runRestoreCli(args("--yes"), h.deps)).toBe(1);
     expect(h.err.join("\n")).toContain(
-      "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください",
+      `このバックアップは v${currentRelease()} で作られています。今のアプリより新しい版で作られたため、アプリを更新してから復元してください`,
+    );
+    expect(siblings()).toEqual([]);
+  });
+
+  it("ヘッダーに release のない新しい版のバックアップは、版を示さない文言", async () => {
+    const v = currentAppVersion();
+    await makeBackup({ registry: v.registry, tenant: v.tenant + 1 }, null);
+    const h = harness();
+    expect(await runRestoreCli(args("--yes"), h.deps)).toBe(1);
+    expect(h.err.join("\n")).toContain(
+      "このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください",
     );
     expect(siblings()).toEqual([]);
   });

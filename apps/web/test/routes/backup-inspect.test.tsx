@@ -94,11 +94,19 @@ describe("バックアップの検査（008 の D9: 解錠中の鍵で検査す�
     expect(screen.queryByRole("region", { name: "復元の手順" })).not.toBeInTheDocument();
   });
 
-  it("アプリの版が一致しないときの文言", async () => {
+  it("新しい版のアプリで作られたバックアップのときの文言", async () => {
     open(() => apiError(422, "BACKUP_VERSION_MISMATCH", "x"));
     await submit();
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください",
+      "このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください",
+    );
+  });
+
+  it("応答の details.release があれば、作った版を文言に示す", async () => {
+    open(() => apiError(422, "BACKUP_VERSION_MISMATCH", "x", { release: "0.2.0" }));
+    await submit();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "このバックアップは v0.2.0 で作られています。今のアプリより新しい版で作られたため、アプリを更新してから復元してください。",
     );
   });
 

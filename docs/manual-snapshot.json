@@ -54,15 +54,15 @@
   "articles": {
     "start": {
       "sources": {
-        "apps/web/src/features/auth": "151577232414c44283e42c43069bddb2ac302a17827b404068ec5882cfe642b9",
+        "apps/web/src/features/auth": "ec3d457926f19479e71b14e502b08d80b299d35abf4fecbf1fe69f58e83d8d6d",
         "apps/server/src/lib/vault.ts": "76db56c5b46ee5552573bec5034f1932399a54a5078a71d73bdd39a316c06b82",
         "apps/server/src/routes/auth.ts": "d7c599568da569d47aa06c7015eb482dc17cea2d2d05262e47672ecbc9559006",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/index.tsx": "db159753e0acf0cd1c937fe0fcad00c4a6f3c6afd5388f2390cbbb5f9b042dcd",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/index.tsx": "1c03e1688b2879fd0f0a3be4ae8c7aa0be8d50d427ac3c65f7217f289b06e0ae",
         "article": "c63982a73449ab6473448aa58e0f609be22598f6462bcb1119990b25d0cc0771"
       },
       "images": {
@@ -71,16 +71,16 @@
     },
     "entities": {
       "sources": {
-        "apps/web/src/features/entities": "65234914ccb0bb1e493d2c0ca9ba04e6a0f35f2850e70be3713820251d40564c",
+        "apps/web/src/features/entities": "5ac6d0eeb5cab653133bfb4f0a5a6e61c4dadf53e4312e7f4f96ffd7c961af13",
         "packages/domain/src/usecases/create-entity.ts": "5cf9d945b51584e3fa828c7c7d7488e244ba1ed25379945eaa11d7ab073417c9",
         "packages/domain/src/usecases/demo-entity.ts": "dc185d7f5f8a2a6e853e0850ac636504f6b8856edb44468f052ff3636853b6e0",
         "apps/web/src/components/layout/DemoBanner.tsx": "9045fce5cece43ef4b98a66f7032c519d3107fbf6e2d8be5abbf2be1d0d0a41d",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/list.tsx": "2ef348e6ac40c743961353a9794a4b1eaafa59560b92d70edb59252b16aa2cf9",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/list.tsx": "450028241237d72adae19b40d5e7a9579807f3c9994f4e4b9a195e7e32474f23",
         "article": "020705457df8b2d20fd77059e38d5d15a31d80fbedf34e7e87a94b1726768331"
       },
       "images": {
@@ -89,88 +89,88 @@
     },
     "entity-lifecycle": {
       "sources": {
-        "apps/web/src/features/entities/EntityListPage.tsx": "09b10dda3fad2b6d830dad443b0ced9dda51a69833c9ab9b8c64a0d8c2d43181",
+        "apps/web/src/features/entities/EntityListPage.tsx": "3fc26d27fec440963c1e355bd9deb7657dc87539858497dfc1753d1695f2335b",
         "packages/domain/src/usecases/entity-lifecycle.ts": "ccb04759865131bc04493972e3485c1d93749dcef1bf6f7971074fd853f7b39f",
-        "packages/db/src/tenant-store.ts": "2a61cdccb7f4561765bfcf715765e45fa0f01df69adc2e0382f112d6a4ff3425",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "packages/db/src/tenant-store.ts": "602f50605ff0ca11185c87ba18bc6a3e390cffb9402f182c5e5dd199384ced30",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
         "article": "3dd7bf86eb37b940673ab62f76e9af354b90e9166b6378e30a6d06c84bfe6689"
       },
       "images": {
-        "apps/web/public/manual/entity-lifecycle.png": "9c59e1bd5be276bd65f11cefb8ee1ac39703c338d2a342020c42100b344200b4"
+        "apps/web/public/manual/entity-lifecycle.png": "b5d9d13cf599a14209faa902e127f622561575bf6cdbb19674c5ee64aa733290"
       }
     },
     "home": {
       "sources": {
-        "apps/web/src/features/home": "36129f11d27a5f0846423f9df917ddd5c9e170ba19dbf39f5e3afef719627646",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
+        "apps/web/src/features/home": "252d2e7d21596661bf68e732001f436beffb61ad534cce21134132db205a6a2a",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
         "apps/server/src/routes/home.ts": "26e4d784edc0e3fa80488f0fcc110392aff4220a22d227751f569f6ab833f200",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/index.tsx": "48493eafe3d7095caaa702f8dc24023db57a14a65faebda8c98f81b32cbc938d",
-        "apps/web/src/routes/e/$entityId/route.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/index.tsx": "8e4beef8d4748bfc92c724fff660c3f44168af576cf84f77170a83dc1411c638",
+        "apps/web/src/routes/e/$entityId/route.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
         "article": "53f31cc2e51e8d8444c36c688fd5f3c3fc6de946b434f780d336eb60c19f08d3"
       },
       "images": {
-        "apps/web/public/manual/home.png": "6190e96b4bdd6fd28a5f7b83b650291300148c84aa4a6d83715d8a64c27418bf"
+        "apps/web/public/manual/home.png": "f5a6e49dfdcc7f93197020a5c16407a771639cda7eb92d84816f88b8d4adfd0f"
       }
     },
     "journals": {
       "sources": {
-        "apps/web/src/features/journals": "4c13156e85357a1685c611352bfcece1d80de58ab0f873006e0f4ac3c75f4290",
-        "apps/web/src/features/ai-assist": "fbce6c9877e49456988bdc544049238ea4b54ff73f14ff38ecc2f6e5dc6d3185",
+        "apps/web/src/features/journals": "63ed7a91c374c36c56c281d37c94172228743d414c68e3f541dc4adeffc91974",
+        "apps/web/src/features/ai-assist": "9d53e2cebacc5bb0b563a8bfac160530fdb75b9c625881735488edbdb52a60b9",
         "packages/domain/src/usecases/create-journal.ts": "49d810c34595383b7a4711dda94082081ffb0b5956f9f2a65cc3bb3c9bccf33c",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/journals/new.tsx": "c5c8e3f4601937371dea5f49da07a603ecae0e2ba3ad8f54f51a5a5bc89bfa69",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/journals/new.tsx": "05442227da40d06b18aa14309e7dbd8d8410f44142df745933c662d1ca241a29",
         "article": "7b169388fb9cb3e4b3d531e7a42e69e136d7fb5c20fdc376add14400cc70e7e3"
       },
       "images": {
         "apps/web/public/manual/journals.png": "5c2d8baead0fc5949230b46a91305ebadba21b7540b4aadb08362740893c7fad",
         "apps/web/public/manual/journals-detailed.png": "77fe4c2dc4c1860ee698fcfa502bfe4f153e663d207c3be1d9e662b017a4e676",
-        "apps/web/public/manual/journal-detail.png": "968bb855572119cc68634fc806f8ab02bcaae6a22f476de8082c625d3fe42d7d"
+        "apps/web/public/manual/journal-detail.png": "7115cb2dd748b3c4f4f0b89fabd6fabca57758e09d77e42b3b1b77493ed98569"
       }
     },
     "journal-detail": {
       "sources": {
-        "apps/web/src/features/journals/JournalDetailContent.tsx": "633f68287caeac95aeb00564e7ac9b2d0fcf61e3ff7caeb88e4b1c876f956345",
-        "apps/web/src/routes/e/$entityId/journals": "628d5541da0ca0eb61236645ed077224c1f86c649ae45dc7cb0a687af449be95",
+        "apps/web/src/features/journals/JournalDetailContent.tsx": "b6d4706464df0a6fbf385f87e22f373d4114ff2997cf7d2e1f6e64c39bb3d49a",
+        "apps/web/src/routes/e/$entityId/journals": "2bcd318f351413a7ed3850ed028b924110335f4316b62c1274da853edfc76bd5",
         "packages/domain/src/usecases/journal-edit.ts": "ee41382d7ba2c9bc2ee1490ab0824201afec1478e42cee7d00d90c6548d6bd5f",
         "packages/domain/src/usecases/correct-journal.ts": "965b853affe9d46856b7d5654542f4a367ad77dd6989356901d5e05395047f6e",
         "packages/domain/src/usecases/void-journal.ts": "3f434b5b794ca66c50e49ca3b7bf9860130a27646700cd9159650a41042b169f",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/journals/$journalId.tsx": "3c28c3b8bb9fb1b80f6b72203991219dfa875d76c5a203c1c4d4d65640b5546c",
-        "apps/web/src/routes/e/$entityId/journals/index.tsx": "73a91e0fef1f7ddc8cb8a60b9b0c9fae88bdf3a8195d7c3111bbf6c34c62ffdc",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/journals/$journalId.tsx": "fc6720f1640ab2410fd2d637740aafc4dfce92069da05f35f84311bb675c68ed",
+        "apps/web/src/routes/e/$entityId/journals/index.tsx": "d5d0c574c48477e8f054f53876c6f7a7b4244f4f9281eb3c9084b2e3e7672710",
         "article": "7e3e6a35050fec796a323bfddf37c589bbe3364827c4467a9de2d678b34e0fc1"
       },
       "images": {
-        "apps/web/public/manual/journal-detail.png": "968bb855572119cc68634fc806f8ab02bcaae6a22f476de8082c625d3fe42d7d"
+        "apps/web/public/manual/journal-detail.png": "7115cb2dd748b3c4f4f0b89fabd6fabca57758e09d77e42b3b1b77493ed98569"
       }
     },
     "recurring": {
       "sources": {
-        "apps/web/src/features/recurring": "7ce200492fcf21323f6b3314ae7b7d2ff19a1ea839d0bcff7df869b178d4561d",
+        "apps/web/src/features/recurring": "44a226f06e85fcfed826f730ce1f94a0c4fd9230f214b9400ba87b43f5a085a9",
         "packages/domain/src/usecases/recurring.ts": "ffde9076b4713ce62752c220ed432e1a33345fe3a33f851dd9d62c8b04af5439",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/recurring/$recurringId.tsx": "229d998cf4e8e974c5bbbf8a190d33349d53e5d44762b5d35c8331916f3df536",
-        "apps/web/src/routes/e/$entityId/recurring/index.tsx": "3e6af58ad4182d86d062bda45f97acb77688f11469fb34b7473e70b7b7a7f281",
-        "apps/web/src/routes/e/$entityId/recurring/new.tsx": "9111bfe3cb56b74a7b48c7f113651fcedad64f7ede7eaeb535c529d3c579473c",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/recurring/$recurringId.tsx": "b999d27a0bb9a4deb989bc2501b5ab34420e93aed267a8024ebeb01c06757cbc",
+        "apps/web/src/routes/e/$entityId/recurring/index.tsx": "d0faa1c094162bb5b166c03260a14f93692b32ea4517534110a91783e5754999",
+        "apps/web/src/routes/e/$entityId/recurring/new.tsx": "378c3d59809b8e8d5421b7e73f63b7ce393ed5e02acdc003941bd60a45165ab4",
         "article": "8ff322f5a6077c7621de46c3a88a8304cc6af8ba2caf4a377666b033196d0b51"
       },
       "images": {
@@ -179,15 +179,15 @@
     },
     "statements-import": {
       "sources": {
-        "apps/web/src/features/statements": "546f949288286eb8afde5df2d48e51945906063122fa384cc4506cbb015f496c",
+        "apps/web/src/features/statements": "9d98e030b56086381a1de7e4cf170039bfc0383ddc428e183c379d30817e1758",
         "packages/domain/src/statements": "65aba2b7eafedcc49d0bb055ff96d46ee153ea32c685cded7d89659bd47ee857",
         "packages/domain/src/usecases/statements.ts": "cd5f2d2cf4394a15fcf24ea8efbcbca84bfbf4d2cf4697cb66f0695474d6a0b2",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/statements/import.tsx": "4db04569f71f0770f9a17496ef8607f6785b0867858b0556042166c5666fc1ad",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/statements/import.tsx": "5490a3e4c2d54f9361619166151a89bafdc7b46502ded165311e220d06be1829",
         "article": "dd1b9b1d5903a5dd47902252af57441c3e818dc2f774a1420fa5c16b6ce4d680"
       },
       "images": {
@@ -198,15 +198,15 @@
     },
     "statements-review": {
       "sources": {
-        "apps/web/src/features/statements/ReviewTable.tsx": "afa3431fcd37af750a0a8fbbd8956e93dd4fccf8a288a82369aa81e3cf3deb4a",
+        "apps/web/src/features/statements/ReviewTable.tsx": "d0b18b5a5339731a06d50349557fe97a256028d5853ff041dabbf032890daa1a",
         "apps/web/src/features/statements/StatementList.tsx": "14b8605a34c33d559ca9fcc89506918411c3d1204a495017ea670159f1a77af3",
         "packages/domain/src/usecases/statements.ts": "cd5f2d2cf4394a15fcf24ea8efbcbca84bfbf4d2cf4697cb66f0695474d6a0b2",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/statements/index.tsx": "35db7da8b454787bd2b3d83b846d67e935fc71a0951bf7384e04fe789da1792b",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/statements/index.tsx": "a590ba8358103dbabbcedfdde69ef7d9bd148687d3de9fc7190c798056bab37a",
         "article": "8a45789f4d0f9b7640092a7921fe1fceefc5250aafc5897fa4b80bb25df584cf"
       },
       "images": {
@@ -215,33 +215,33 @@
     },
     "statement-settings": {
       "sources": {
-        "apps/web/src/features/statements": "546f949288286eb8afde5df2d48e51945906063122fa384cc4506cbb015f496c",
+        "apps/web/src/features/statements": "9d98e030b56086381a1de7e4cf170039bfc0383ddc428e183c379d30817e1758",
         "packages/domain/src/statements/rules.ts": "7d05913b6c47cba51d8e34c7aaa0735962199549f9b1e32a95bc7b48c5098397",
         "packages/domain/src/usecases/inference-rules.ts": "efb20022fadf5a0c3c71c108efd3ee58b85425a7065e7c1361a55724a8f2f80f",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/statements/rules.tsx": "b9d3265a6c6747093f5a9e012ab096a2ff189a523f0764ab693254b060519f47",
-        "apps/web/src/routes/e/$entityId/statements/settings.tsx": "da35bce508190bfe138426b9b22e0a99779a08ad6fbb2926fa332db9c5fc91fd",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/statements/rules.tsx": "8ea88d2c796baae3c667e6d28e84102513ea3d16a18d3a5132428ede658d4d4d",
+        "apps/web/src/routes/e/$entityId/statements/settings.tsx": "cec7f04dd7a336557295da7d4062eb0baf12eac61a42d3b3b5ce5e034bf1676b",
         "article": "a137b85d29cfa897998078726e81e7b6a74a9768393f548f60d5cb4ed4150e34"
       },
       "images": {
-        "apps/web/public/manual/statement-settings.png": "f81ea2572e15938bf26d3274f0428a68a68f68b6fe0a4bcb988f89d6691f972f"
+        "apps/web/public/manual/statement-settings.png": "c370ee79bd61f5a13ab609d7be3df745c42298bb5cd9d097d3626b9e4063ff5e"
       }
     },
     "receipts": {
       "sources": {
-        "apps/web/src/features/receipts": "6d8df246c368e1777d6bc021ff9f5a1a6dffccc35a119ee6bc48ec6c9c615ad8",
+        "apps/web/src/features/receipts": "c39d547ea92f1b08412e47ec58ad70d94a0900fe4d5a4644b30eaff9d4d4e542",
         "packages/schema/src/receipts.ts": "4b97b07aae7f1814f6ae3f90fce6ee899167215ab2a6a7e8f72c1cc0e6e6a5e8",
         "packages/domain/src/usecases/receipts.ts": "686b02f2d1ffb672785cb15eb8529a64b9197196c6ba41ce8ec5fb2f722e17cd",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/receipts/new.tsx": "5f9224cf29100183a59f685603e76bfb1e2968a45695c3bfbcce3ae3d3017bb5",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/receipts/new.tsx": "52d7f77ceec0229330df20b83b446c7e4400fc3ab93f1bba3bd322a919635ad7",
         "article": "836a9010c2106810bf04779743cc104b820b47f40f49ddf6ce2b8c91cc1f3aec"
       },
       "images": {
@@ -251,15 +251,15 @@
     },
     "receipt-detail": {
       "sources": {
-        "apps/web/src/features/receipts": "6d8df246c368e1777d6bc021ff9f5a1a6dffccc35a119ee6bc48ec6c9c615ad8",
+        "apps/web/src/features/receipts": "c39d547ea92f1b08412e47ec58ad70d94a0900fe4d5a4644b30eaff9d4d4e542",
         "packages/domain/src/usecases/receipts.ts": "686b02f2d1ffb672785cb15eb8529a64b9197196c6ba41ce8ec5fb2f722e17cd",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/receipts/$receiptId.tsx": "f811ca6a6bcb1db8e70b8550bf7735b2840b777caf13817d4bb1162581123161",
-        "apps/web/src/routes/e/$entityId/receipts/index.tsx": "c35355a8b3f5c193a8d4eaf52db123b882a93f0208f6c3fe17e003765417377e",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/receipts/$receiptId.tsx": "eeef8881cbf8a85c9937024dc62c24ff709258644d98cc44f0514121ac583d55",
+        "apps/web/src/routes/e/$entityId/receipts/index.tsx": "7ba0e0f497da848f69a8c84f1775b915540e90c345f8ef55232732370debc8c8",
         "article": "99ffe6cd58922101a4dad2020e894432d7418db5b2fb1b7be1d170d87d252f1e"
       },
       "images": {
@@ -268,50 +268,50 @@
     },
     "invoices": {
       "sources": {
-        "apps/web/src/features/invoicing": "69f5c92173a7206287494b9a2ca2c46ebe42ba6720393fb89e376539fe56fe56",
+        "apps/web/src/features/invoicing": "1cfe24a48f9d6f12124dbc02c046188a7303349765cd3dd3280af8a56564afe8",
         "packages/domain/src/usecases/invoicing.ts": "0c2d4c011abb9226eb411dafabfbaaafdf9fc942e8037879baa725cb6b8443c4",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/invoices/index.tsx": "a73d306216f5a8aa93bbbd709c7ef9ad281407760b4b94ebabe340202b35e32c",
-        "apps/web/src/routes/e/$entityId/invoices/new.tsx": "a510bae1893a1287f13969b7d2c495b8ccb2f80f5c76370d37dfb197dc4d9994",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/invoices/index.tsx": "99fa1e6605f9ccff5bcba5f050b83608374c62b8cce868723364e939a49e5a87",
+        "apps/web/src/routes/e/$entityId/invoices/new.tsx": "3c35efcf76e5223b51ceb553f02b3b8f5f58ce07415fac370b9b1b3ceaf1ded6",
         "article": "c01b509133dc487445692ba3300292cd621ea2033454313e8907b1845d9efb52"
       },
       "images": {
-        "apps/web/public/manual/invoices.png": "2d345f2c3a486098768e1ef7f87d3fc9a833abb9c6345d3c79949331ffab61a2",
-        "apps/web/public/manual/payments.png": "ca5482df83e3dad1569ab75d4d63c23ceb70585048d8021b40cb2c0c52370ef3"
+        "apps/web/public/manual/invoices.png": "5c1d027d432fd78c96dc6d244c505dc51cede6419ab75dccd69e332cd5550134",
+        "apps/web/public/manual/payments.png": "de38f5dce5284fa0b4b8a624c71a9f27e6a459a92a78222bb9d6f0db8fc93922"
       }
     },
     "payments": {
       "sources": {
-        "apps/web/src/features/invoicing/InvoiceDetail.tsx": "a571d233b0d6165c45d6a8093ea13f075db00398809b1e2833e694f43545eb61",
-        "apps/web/src/features/invoicing/PaymentForm.tsx": "ab97eb8c5d12ffbd3785823861cb23f1cd11dc6ba14208c20f6eaebfdbe37f55",
-        "apps/web/src/features/invoicing/WithholdingList.tsx": "fc4ec6e3d4d11974f2d085e50f1ebd779a78898dfce02bfdec5fc203bd912c73",
+        "apps/web/src/features/invoicing/InvoiceDetail.tsx": "4964923c9b46e57a90fd9b535abfe8d09053aeb8bf0e86e03108560b0ba02d4c",
+        "apps/web/src/features/invoicing/PaymentForm.tsx": "bdd20b03981037dc516f2141d2c74f5acd66b0dceb5b9e8d5b4ee44e75b440ac",
+        "apps/web/src/features/invoicing/WithholdingList.tsx": "9b61049a81cbe96e520c8ec69a46082cf0c3f4d0425acb246efe22ebf0e0f7c4",
         "packages/domain/src/usecases/invoicing.ts": "0c2d4c011abb9226eb411dafabfbaaafdf9fc942e8037879baa725cb6b8443c4",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/invoices/$invoiceId.tsx": "e0b71d5a347dde4621c759adefc953bb67786e33ebb3ad6f0be6fa1c67e142e7",
-        "apps/web/src/routes/e/$entityId/invoices/withholding.tsx": "16d5ad8ec5924af4c7b79a36611a9a751e190a207a073a49752ef1f654a07bd8",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/invoices/$invoiceId.tsx": "54f9dd443e040c9d40a486daeca7ca12784ed810ab5c6dd88adf2bf1827940f3",
+        "apps/web/src/routes/e/$entityId/invoices/withholding.tsx": "da11b894a76f0ee82781292285d03586b03068f90381e9bb0393ddf892d725fa",
         "article": "8ef393527d7666f22fe79abca75226f4823a0260dd1dc0f5932d469e0e71c747"
       },
       "images": {
-        "apps/web/public/manual/payments.png": "ca5482df83e3dad1569ab75d4d63c23ceb70585048d8021b40cb2c0c52370ef3"
+        "apps/web/public/manual/payments.png": "de38f5dce5284fa0b4b8a624c71a9f27e6a459a92a78222bb9d6f0db8fc93922"
       }
     },
     "work-hours": {
       "sources": {
-        "apps/web/src/features/invoicing/WorkHoursTable.tsx": "eddd9122a4025230293f7973f2f4a04786df4dc04a875320fedd78010e197b8d",
-        "apps/web/src/routes/e/$entityId/work-hours.tsx": "0846509b8446067c5ce216df9f715ef2a6873d1525a73db85f45da58e3865a3c",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/features/invoicing/WorkHoursTable.tsx": "69a57783fdb71faa7d585fe8d76cda1ef2413edfc45b51df90a741044c8b3242",
+        "apps/web/src/routes/e/$entityId/work-hours.tsx": "2599405b3a303c1499ccdea98a4956b076a01d9d4bc876419e1aabaf8918c3cd",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
         "article": "d75297f066beb6cb51f36ec000cefe309f6daa76d6a12c789c4c63767c07aa14"
       },
       "images": {
@@ -320,13 +320,13 @@
     },
     "invoice-settings": {
       "sources": {
-        "apps/web/src/features/invoicing": "69f5c92173a7206287494b9a2ca2c46ebe42ba6720393fb89e376539fe56fe56",
-        "apps/web/src/routes/e/$entityId/invoice-settings.tsx": "5fba1f3d8f1fb079738ad5c1ccfebd4ee30fe22917d6e7ec6df0c9d190eceb4a",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/features/invoicing": "1cfe24a48f9d6f12124dbc02c046188a7303349765cd3dd3280af8a56564afe8",
+        "apps/web/src/routes/e/$entityId/invoice-settings.tsx": "95096050006fb855c4fe0b4190eb8c3ed055e5bdf72e9e5f69159731a39958d9",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
         "article": "ff146c425f11108656deab9b3b366e4d636f4847348035c451b265bf1c50251b"
       },
       "images": {
@@ -335,20 +335,20 @@
     },
     "reports": {
       "sources": {
-        "apps/web/src/features/reports": "eca0d02bc3cb07735faa4cf8a5262eaf5d77d9471d8398d242c444a55f296c84",
-        "apps/web/src/routes/e/$entityId/reports": "f46ae0ffb32da273027234a7c29ab6352bf0e8cac74ac8dcb3814ee96c3fb117",
+        "apps/web/src/features/reports": "bdb89a4773088f5165287a403570c10e93836cfdd3aa473d743ce5da1ba1cb04",
+        "apps/web/src/routes/e/$entityId/reports": "4c6af72e03cfc0bf154a99aa4c9b8af0f357cb210a4bc18564f4f9c91acbeea3",
         "packages/domain/src/reports": "a3c9cbaf33c0a941dcf8588a53a870367f82703c81a333570c5070032a676c8b",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/reports/balance-sheet.tsx": "5770835f75ceb4b904fc2f2f1de813d909873f7c57cc65045d95bd741253071f",
-        "apps/web/src/routes/e/$entityId/reports/general-ledger.tsx": "96ed499d545a1fbfc655ae1799de6a4ea30f3bf059ce53e469bf201384c60343",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/reports/balance-sheet.tsx": "1c962a03b80459eb5b951c40bd6ef3e52ac52eb3370704aba6b1f501d8aa99b9",
+        "apps/web/src/routes/e/$entityId/reports/general-ledger.tsx": "87ef70310aba0746e02e365d5d41f0aedb6a6674c054f322aa976feeb8d12eef",
         "apps/web/src/routes/e/$entityId/reports/index.tsx": "a9bb33cc45d4248f109bb0b977f6ad1db802488d3c5372d7f081eeff46d128ca",
-        "apps/web/src/routes/e/$entityId/reports/journal-book.tsx": "8cdbf4e293507a8068f495ca512e88fa63be8bc437fcfbc63677dca3b792bf9c",
-        "apps/web/src/routes/e/$entityId/reports/profit-and-loss.tsx": "1048a8762dfdd6b642a39a8ab0e28792e90c9b402948ff7800a964a1e63f6446",
-        "apps/web/src/routes/e/$entityId/reports/trial-balance.tsx": "180c7c61c55522368403c33a8d0e17dc90b34aaa1096b255ace973fa2b84fe71",
+        "apps/web/src/routes/e/$entityId/reports/journal-book.tsx": "b923ad00df5f2e05f435ee4c164c19ab15e564fccfb67d77b443b7623cab681f",
+        "apps/web/src/routes/e/$entityId/reports/profit-and-loss.tsx": "b347911c1cd25d3831cca2fd96dbf9903a8ca4011586c59efe1f1f178d4a3dff",
+        "apps/web/src/routes/e/$entityId/reports/trial-balance.tsx": "be62a5467bb1b1c93fa7872441c1870790e0b4910c8863218d7dc1dcc96313c0",
         "article": "259cb63f70b531fd292f5b4df3a2214734abcd981213697d73759ae6a727dac3"
       },
       "images": {
@@ -357,16 +357,16 @@
     },
     "blue-return": {
       "sources": {
-        "apps/web/src/features/blue-return": "ab62ddb5c8e69d5a96ab4770f40ceff63ab47994ebd446fe7a960abd67b98dbd",
+        "apps/web/src/features/blue-return": "ca458fe45fff52d3418a51c21c3c7f057d5f013b2d915be14bd8050e8fbd3731",
         "packages/domain/src/blue-return": "704a68e6ddb0be163ce846061af5dd3898abb67caef658c65db2ec3a77896681",
         "packages/domain/src/usecases/blue-return.ts": "b36590a0b3e1dcbb75b6ca56dfffb64e1f6a803b21033a0002a26a8dd0f24bd2",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/blue-return/$year/index.tsx": "a7e94ea5f7eddfbae2f6842d9d22da29a81cd17f393e4ca217cdb88dbadff65e",
-        "apps/web/src/routes/e/$entityId/blue-return/index.tsx": "ebb1bcf0e7e60b65b3901cdb82e34ff50823f94afad7b4022a19694e6c07565e",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/blue-return/$year/index.tsx": "a7d74fe28bdd61439f3c31148671de2c8cc89bfa2ca318700067dd13c999eb2b",
+        "apps/web/src/routes/e/$entityId/blue-return/index.tsx": "0dc5c60b13b062d1485d3c868469d295c3de2d5dfb39d937c5e345cbc1240c66",
         "article": "56bb32599101356723a6bf498acc64b08a999236750a3816bdee4ed67c464344"
       },
       "images": {
@@ -375,15 +375,15 @@
     },
     "home-use": {
       "sources": {
-        "apps/web/src/features/blue-return/HomeUseForm.tsx": "22f22dfd9906f4fad80626363e4f4e08b6694d63a9cc49d85814ecb06c6cba26",
-        "apps/web/src/features/blue-return/RentDetailsTable.tsx": "0cec4194e313af3ecd98dde02230eecb8a0da199bf545d66ecb96a55e9c9a732",
+        "apps/web/src/features/blue-return/HomeUseForm.tsx": "5931df9f051406a66888c0d675bd9eb118de763d13ac92dba12a49d386b37353",
+        "apps/web/src/features/blue-return/RentDetailsTable.tsx": "2a5aa6e120ff0958617695e3bc893805a74e424c2a17ff0b9f40f93d7d160181",
         "packages/domain/src/blue-return/home-use.ts": "83c3e2c4fa6d5555ef00b35738c7f87c56c7dcf95a040e26e4d06ef49d7c3f23",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/blue-return/$year/home-use.tsx": "027392944dddb2e0506c8580288cdf51de8f15bafe2aed4e9490d39c5b39537b",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/blue-return/$year/home-use.tsx": "3db2e5799c77a25099d09895a82bd17bbbe6beb2ccfc4b5c2117feb82ca941be",
         "article": "1bf55ddb4fd0e8e98c4f29b8b9429a5e9d4a88ed58ffd5520dcc23b90d82bab1"
       },
       "images": {
@@ -392,15 +392,15 @@
     },
     "fixed-assets": {
       "sources": {
-        "apps/web/src/features/fixed-assets": "ce37fc103a381bd8762c0aa9cbaf8c4a48da2d74e4a95fb41a21d90e321142de",
+        "apps/web/src/features/fixed-assets": "95f27b2295e8885152c47344e9a54a88871da0bab22230b4beef35ef7fe95248",
         "packages/domain/src/blue-return/depreciation.ts": "b5c7fa4f057d0f1cc31059c4e5ca9867fbd5606f746ea8f712a2edfc1cd56397",
         "packages/domain/src/usecases/blue-return.ts": "b36590a0b3e1dcbb75b6ca56dfffb64e1f6a803b21033a0002a26a8dd0f24bd2",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/fixed-assets/index.tsx": "144329b65449fed037ca70b38f2b789bb1c17b2ac34830032738ccf84109053d",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/fixed-assets/index.tsx": "aba0b0d965de87daf294d4ecf1ba1682f870a16ceeab72fb89d3e861e4cf4c4e",
         "article": "a9745dd8862508877ed05a4027ba524ab4aa1c038be8e1862d6d780f8556cc69"
       },
       "images": {
@@ -409,14 +409,14 @@
     },
     "deferred-assets": {
       "sources": {
-        "apps/web/src/features/deferred-assets": "3acd06def33ccf4276b449ae15b69dc9e0bf5b42be21df33d15932161d109c24",
+        "apps/web/src/features/deferred-assets": "73e29508bdb5f77bb8d48fd64333c05cf0b5a5d5e942c715e1e2b46ab12e28a0",
         "packages/domain/src/usecases/deferred-assets.ts": "347cd03260e0bd98d80d47d3fb062e81a904fdfbb1f5475278dc060463c3677d",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/deferred-assets/index.tsx": "a31995e32ef34864da8715ce9c9dbc0998f7286a158df52af80f55b2c600ebc5",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/deferred-assets/index.tsx": "069e6e98e9e9a6d18340a4088c1bddd3dbc8e9cfe8e50d7a909473a62d6e1410",
         "article": "3cb0add125687dde3570fc812de3462cea4e90ed630ad07a9c87b16586cc8147"
       },
       "images": {
@@ -425,19 +425,19 @@
     },
     "masters": {
       "sources": {
-        "apps/web/src/features/masters": "366c046dd8b42b9f2771f1a61d639ee3da1a77e4b9f19d9bfee666a40b1e415b",
-        "apps/web/src/features/entities": "65234914ccb0bb1e493d2c0ca9ba04e6a0f35f2850e70be3713820251d40564c",
-        "apps/web/src/features/invoicing/BillingTermsFields.tsx": "8ed69256ae0241a2fbe74c8b388b27b06d5618237b2a9585273770230b69570c",
+        "apps/web/src/features/masters": "85bbb85a785e8f07a67c15753aeddfef4601796647c9fc6a6f84935e8652996e",
+        "apps/web/src/features/entities": "5ac6d0eeb5cab653133bfb4f0a5a6e61c4dadf53e4312e7f4f96ffd7c961af13",
+        "apps/web/src/features/invoicing/BillingTermsFields.tsx": "a6c7e40d5be5c5c9c9550f09c82a7991cc0c106b9286b3f2b2b7bb61e911ad03",
         "packages/domain/src/usecases/masters.ts": "cf50d692cbad940be6a87f169660e2aaaa5202e2f909c3ce86721484f2ef8c1f",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/accounts.tsx": "b8472e8a0b44689e52c530656c068be4d2d54f5e8a463801938360db199e9b73",
-        "apps/web/src/routes/e/$entityId/partners.tsx": "8ff584fb161fa4aa7b3dd182ceb36d4852311279de611a7ee5291da8981beb27",
-        "apps/web/src/routes/e/$entityId/settings.tsx": "7afc5a685e1fd96a8e16700c6ac7627f984d2cff6f1991658f6f71219198f5b3",
-        "apps/web/src/routes/e/$entityId/tags.tsx": "dbde52734b76593f28bf69546ac739279791d0238ea2d5239d84843369d626f9",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/accounts.tsx": "2f07e466c996f4951c558ddccc9813a1537564074c63cab9dbed11e5cc0a276d",
+        "apps/web/src/routes/e/$entityId/partners.tsx": "26b2652d3238b5a06e7d52bb356c04498332b992e932e2b116acda821f58774a",
+        "apps/web/src/routes/e/$entityId/settings.tsx": "12a44c82a0b5cdb9bd98eb6bfeebac49bb5916a73d2c2db35068c37f785bb3f0",
+        "apps/web/src/routes/e/$entityId/tags.tsx": "f0a4e16235af91657476e3b8ee797e7a6ba49eae2635e94578daa3bbb6adcd06",
         "article": "2096fe3e49004916849c84bd6d562c32158834de9ecd7be89007a7ccf985deaf"
       },
       "images": {
@@ -447,15 +447,15 @@
     "periods": {
       "sources": {
         "apps/web/src/features/periods": "14d7b697795d26e8529fa91a66d81e30e4315a3adf6f4b9353a82e4e02d65248",
-        "apps/web/src/routes/e/$entityId/periods": "216cbcb24ac9176d163760ed4c5b16c8102561827d301c6beda634830c8f9e60",
+        "apps/web/src/routes/e/$entityId/periods": "5a8463ab310539443aacd3380c9e75e52e78bd6e302edbdeff535144a690aa02",
         "packages/domain/src/usecases/close-period.ts": "793c4281effcc52cd775197e9d7bf1c90a3bbeb1fd09736439a06e78853e1383",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/periods/$year/opening-balances.tsx": "ee1b3b350366ec5be909e1ae61a1e809bd114e89ad19cc99c0c4fbaf8580837b",
-        "apps/web/src/routes/e/$entityId/periods/index.tsx": "6f0509e4f536df77c4482748b494ed0d6d1c50bad27fc81524a860955dd646e3",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/periods/$year/opening-balances.tsx": "48c6a809ca2738eaf92870d26244722b441798a1ddeb524837ebb27cd7a68bb1",
+        "apps/web/src/routes/e/$entityId/periods/index.tsx": "bdf5885c73b9900365aec386dea3ab1b5b56503cc00114719502eddf050de24f",
         "article": "85ff40f55b86475f3d1027c21e75cbfd3a5832e9466d6707fb28fe3ccf73e667"
       },
       "images": {
@@ -464,19 +464,19 @@
     },
     "freee": {
       "sources": {
-        "apps/web/src/features/imports": "66afc4aedf345aac5bff5f4b0679daaf621272b50f8bd667db0a04b5238ea373",
-        "apps/web/src/routes/e/$entityId/imports": "75c23d85484827b8f5dd8851f209ede6fd1ead1e97066d8c0f767abf316b9220",
+        "apps/web/src/features/imports": "046b7a9251f0646a2d801ad58019e1faf2469f9fc7ff31bd3ee3b15c52a14ada",
+        "apps/web/src/routes/e/$entityId/imports": "18e061ed55f26e02b8fcc96be1ec81a5455a85d0ee68deb7514f6abb990fd1fc",
         "packages/domain/src/import": "f3b6b2d4ff9124bbf25d65ce2ff20e53f2effbbcee55e9c4b3db7b5cbda395d9",
         "packages/domain/src/usecases/import-freee.ts": "843a7f32794a4047d952e5a0033b430784154cdb86adb0d8fd87ea80b49eb9bb",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/e/$entityId/imports/$batchId.tsx": "77f1c8d4520b0e9332c666c8c843eb5a178b67269cd08603c180ef1f3839d71e",
-        "apps/web/src/routes/e/$entityId/imports/index.tsx": "521c3a84fb146ee29c0b4581bcb189bdd05c7e1f3dec40be86f2d91deb31d1b7",
-        "apps/web/src/routes/e/$entityId/imports/new.tsx": "5a0074dd52cf3e2584c308cb9c2ecf4ae3a406e9e5a53436a8a52f6b58e321ab",
-        "apps/web/src/routes/e/$entityId/imports/reconcile.tsx": "1d989fa6c206f6105161138145c5cde36aede83d485cb7fee905d34e19a5e592",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/e/$entityId/imports/$batchId.tsx": "1db4295dc327e0e39e7c49a49d71acfa18c6786a6a0b7ce087d72749558aaab9",
+        "apps/web/src/routes/e/$entityId/imports/index.tsx": "4b1e27b095abd6163255fadc0f39a3b904df6f9ad9fc82c5f36c1b0577a43de1",
+        "apps/web/src/routes/e/$entityId/imports/new.tsx": "b753bbced271df3dab32401ae11ee8b1b34ecebdeb3bcffd48a6cdf0b7814854",
+        "apps/web/src/routes/e/$entityId/imports/reconcile.tsx": "229fb2647fd7fd7779a5f93abfc05e51bd8d4317d96494e5779b1a72d02b6e2e",
         "article": "6e3240b91bf8361ed62607ce1e2f3830b757ca62f23d5d7aaf128bfbce43929d"
       },
       "images": {
@@ -485,14 +485,14 @@
     },
     "tax-settings": {
       "sources": {
-        "apps/web/src/routes/e/$entityId/tax-settings.tsx": "241debe22ba600f4873432b27925d809ed96071e65f8d26e7c97e6edd32107fb",
+        "apps/web/src/routes/e/$entityId/tax-settings.tsx": "e70a807f74b15947fc034d7225b8c0c59f451e273d112813e1ded37c55f7f8e1",
         "apps/web/src/features/entities/tax-help.ts": "e93fcfdc0f73f796cfccf5b4f21819782e6e8ce004286df3c665c262818df070",
         "packages/domain/src/tax-settings.ts": "0486e153506b2620eb4559d670e3694d55aafd64c372cfd06e0bebd508802923",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
         "article": "5b9522c4d9e58e4acdaed785695afe05e7beefadcaaf0c3f863256e066c7840e"
       },
       "images": {
@@ -501,49 +501,49 @@
     },
     "security": {
       "sources": {
-        "apps/web/src/features/auth": "151577232414c44283e42c43069bddb2ac302a17827b404068ec5882cfe642b9",
-        "apps/web/src/routes/settings/security.tsx": "baf9e99e5195237a8059281a8a19ec73ff153f184d51215cc5d762a22c3bdcda",
+        "apps/web/src/features/auth": "ec3d457926f19479e71b14e502b08d80b299d35abf4fecbf1fe69f58e83d8d6d",
+        "apps/web/src/routes/settings/security.tsx": "cb2bd66adecfaa54ea9be1536d5623e8c949a1d20d5841fbb78a3803d79cc4b5",
         "apps/server/src/routes/auth.ts": "d7c599568da569d47aa06c7015eb482dc17cea2d2d05262e47672ecbc9559006",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
         "apps/web/src/routes/settings/route.tsx": "7fc44763593dda4a7b6dce125389da5c91592ace1361b6e300f166c20f4b49e9",
         "article": "f6a05b30be6eba03d68408bf199aeb1b48cdb35e60f973a41b482985e2b9fb67"
       },
       "images": {
-        "apps/web/public/manual/security.png": "bec598ecbb21d5d3cefcea2dc4708a97852927b387d7359d65eed5f9862e7cfc"
+        "apps/web/public/manual/security.png": "a1ba1def29f007c38c6d264231be564189cbe8544b9194b4c5d8b9548bb142c9"
       }
     },
     "backup": {
       "sources": {
-        "apps/web/src/features/backup": "4142b3b108b8b6d143367c7dc47fb1edc092a2292fdffb2b470ae8822e40e833",
-        "apps/web/src/routes/settings/backup.tsx": "683c2b112af48cf82dd3e91c782317e610e80de167f624b8d4ec5d94525c4e87",
+        "apps/web/src/features/backup": "13762b620d7331a3caf8eee4c914e4fc8f628ca751211bd9aeaf234d673f01cf",
+        "apps/web/src/routes/settings/backup.tsx": "fb9cbf5247427f715f25b8dcf389ea09eb4cf1d7456e7e9e3274e7af1dad8977",
         "apps/server/src/lib/backup-folder.ts": "720b3c52036f0bcd88c54a9dffb8b0b2bdb1e60ca8a95235289e4818d9499646",
-        "scripts/restore-backup.ts": "867e8575d8a5ee6c1c636ccf7c4eeddae05f7c41be2f94c856b5cab3afa62f24",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "scripts/restore-backup.ts": "6b0e59b0f04ad5236a53e2281a559d80deba54304a52a0c2340436e8d8425827",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "article": "a57fe0f819f7f571cbc786dc59cfc946d25a788cbb81dc02adff0fd433415cef"
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "article": "271e8274d2a4bb4703b2997c9d6b9a8d30cf966c3f8a7857aa18cbaaa5840a93"
       },
       "images": {
-        "apps/web/public/manual/backup.png": "23f28b627570e38b82c43a26a10165163b4f5ee4b42653c271e5ad89954440ed"
+        "apps/web/public/manual/backup.png": "860d48a1ea84849077fbd77ce55cf8286d99a033550709a10148d1f1bcea7aa7"
       }
     },
     "ai": {
       "sources": {
-        "apps/web/src/features/ai-settings": "2804f76795a75071fa2964c8d6b943d4e6bc18c6fc6cd2306ba00dc2054608f9",
-        "apps/web/src/routes/settings/ai.tsx": "46450f4fc5d531ac3a89650c7fcd72ea724351d22a703d689b3b1b520bf16238",
+        "apps/web/src/features/ai-settings": "4f82b393db93800a8b6b78aea33b164507f8af1c9bea964f3cdd04b112fb83f3",
+        "apps/web/src/routes/settings/ai.tsx": "7f2995b180537bdee49fee5dab6d2571b990b80703e6fc5fc7c71694c6181ab8",
         "apps/server/src/lib/ai-client.ts": "25ccda601f96173615cf310bd60835451db10256a2fb3c6d810f46243f7d3114",
         "packages/domain/src/statements/mask.ts": "423ad5fa639fe4d2f57bdb0195b195d8d524a2b3fdd763e62aa545cfdf1c55d8",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
         "article": "ef910d7d61367b239928993e531707d0e2a07601e2c9a6a56d2a2d60a7d341b4"
       },
       "images": {
@@ -552,17 +552,17 @@
     },
     "remote": {
       "sources": {
-        "apps/web/src/features/remote": "4dba2ce79a364dfb73c1566cbb94a0ff41cce6e9396de44c164377339607678a",
-        "apps/web/src/features/auth/Pair.tsx": "72e167606619adbba0f1e62a88565ed1ba129daf81cc0c19dd05931df8452eee",
+        "apps/web/src/features/remote": "75ffb21ef0757033e5390b6378351857e398a2aba8b8bcc233067949667e3735",
+        "apps/web/src/features/auth/Pair.tsx": "b28460cccb98851b2ecbc8f8e46fa93dfbe660441f9575bbf1d4d82b97c1f5c2",
         "apps/server/src/routes/pairing.ts": "84e830a2b4a032c633f9914557ed8e4c9760dbb4f7d56f39a71940b75de8e751",
         "apps/server/src/lib/origin.ts": "9689f42b6a312c52109378e5f6d52d70b5c50db6add5fcef831ceca98c4da737",
-        "apps/web/src/components/layout": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "apps/web/src/components/ui": "126ec86a387ed08b0f50cca1a634030bb9e5f7c2a7f585efc1a7dc3a6a46c03b",
+        "apps/web/src/components/layout": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "apps/web/src/components/ui": "086cb6fc2fc090697f34e30a11fca8d8380dac10fadcb7ed92d36e4f522624cb",
         "apps/web/src/index.css": "860afd5d7d948ce21c20cfcb81d411024b7051a9840080e8f9ca40f12ced798b",
-        "apps/web/src/routes/__root.tsx": "7a26cb3602b5468845596bff1693938c80f58422738e01e622abb174a0143a89",
-        "packages/schema/src": "7de2cf9a1a5f7a95c64caa1a1abde557d99a6c094a06ceb88a6912991930f72e",
-        "apps/web/src/routes/pair.tsx": "b944d0d982a9a9b7235f963867a6bdbc4d684826e0f590d459393f3e2ab95840",
-        "apps/web/src/routes/settings/remote.tsx": "458e97fa39da520d73bc05b145b7fb9adc4812375bff3cd8f24e69f6e01eea37",
+        "apps/web/src/routes/__root.tsx": "c852d8735863685a4425912322df02cc9f661c6500341a2a84365dd3d4021124",
+        "packages/schema/src": "484c043c983642f9f91ef40f1f8ca3dbbaaf8a5f250040b329d1d36427d17a20",
+        "apps/web/src/routes/pair.tsx": "b7f26c39fa5a1539a907388e32e8c7401483bc0a38db43ea73f2a36368889663",
+        "apps/web/src/routes/settings/remote.tsx": "e815d69ea204a8143558639878ad8e03809407057bc3c4663cb2d9802ef2befc",
         "article": "d969212f1e18288466aeff6e83495e93fef3e1a5e72f7e411c5395f86b817de4"
       },
       "images": {

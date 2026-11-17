@@ -1,0 +1,459 @@
+{
+  "release": "0.1.0",
+  "appVersion": {
+    "registry": 6,
+    "tenant": 23
+  },
+  "createdAt": "2026-11-16T03:00:00.000Z",
+  "recoveryKey": "TEST-0000-0000-0000-0000-0000-0000-0001",
+  "registry": {
+    "rows": {
+      "entities": 2
+    }
+  },
+  "entities": [
+    {
+      "id": "01a1e9cd-aeaa-7388-8e04-e75dc534fd8e",
+      "name": "デモ事業（サンプル）",
+      "journals": 58,
+      "journalsDigest": "adbc6fb09bcd4a50306bc502b442ca99f9b1c757068af5fe1a0c65dc6127a767",
+      "trialBalances": [
+        {
+          "fiscalYear": 2026,
+          "rows": [
+            {
+              "accountId": "01a1e9cd-aebc-7934-a1c2-eb2326ee225e",
+              "code": "1010",
+              "opening": 100000,
+              "debit": 30000,
+              "credit": 20708,
+              "closing": 109292
+            },
+            {
+              "accountId": "01a1e9cd-aebc-78d5-a875-3df02e314ea9",
+              "code": "1020",
+              "opening": 2200000,
+              "debit": 2114580,
+              "credit": 1917960,
+              "closing": 2396620
+            },
+            {
+              "accountId": "01a1e9cd-aebc-72fe-ac5a-c57bd298d0b3",
+              "code": "1030",
+              "opening": 0,
+              "debit": 418000,
+              "credit": 220000,
+              "closing": 198000
+            },
+            {
+              "accountId": "01a1e9cd-aebc-76f8-86bb-5b572e4d094a",
+              "code": "1060",
+              "opening": 0,
+              "debit": 338000,
+              "credit": 60000,
+              "closing": 278000
+            },
+            {
+              "accountId": "01a1e9cd-aebc-75f6-b55e-6e7c6f868546",
+              "code": "1070",
+              "opening": 0,
+              "debit": 150000,
+              "credit": 50000,
+              "closing": 100000
+            },
+            {
+              "accountId": "01a1e9cd-aebc-74e0-9b67-1a456c7776b6",
+              "code": "1080",
+              "opening": 0,
+              "debit": 180000,
+              "credit": 10000,
+              "closing": 170000
+            },
+            {
+              "accountId": "01a1e9cd-aebc-76e7-8887-c7ee26693a8d",
+              "code": "3090",
+              "opening": 0,
+              "debit": 768148,
+              "credit": 0,
+              "closing": 768148
+            },
+            {
+              "accountId": "01a1e9cd-aebc-7c2d-8090-4a6ee5f7eb5c",
+              "code": "3010",
+              "opening": 0,
+              "debit": 0,
+              "credit": 50000,
+              "closing": 50000
+            },
+            {
+              "accountId": "01a1e9cd-aebc-7361-8feb-75c964fb0c0b",
+              "code": "3020",
+              "opening": 2300000,
+              "debit": 0,
+              "credit": 0,
+              "closing": 2300000
+            },
+            {
+              "accountId": "01a1e9cd-aebc-7816-be83-edb1a01f5c3c",
+              "code": "4010",
+              "opening": 0,
+              "debit": 0,
+              "credit": 2283000,
+              "closing": 2283000
+            },
+            {
+              "accountId": "01a1e9cd-aebd-7812-bf40-d74e9899d01a",
+              "code": "5100",
+              "opening": 0,
+              "debit": 33860,
+              "credit": 23702,
+              "closing": 10158
+            },
+            {
+              "accountId": "01a1e9cd-aebd-764a-a58e-fc435352af42",
+              "code": "5110",
+              "opening": 0,
+              "debit": 36810,
+              "credit": 0,
+              "closing": 36810
+            },
+            {
+              "accountId": "01a1e9cd-aebd-722d-8842-f72dc255a4fc",
+              "code": "5120",
+              "opening": 0,
+              "debit": 13420,
+              "credit": 4026,
+              "closing": 9394
+            },
+            {
+              "accountId": "01a1e9cd-aebd-774e-b962-536764aa44e5",
+              "code": "5130",
+              "opening": 0,
+              "debit": 12000,
+              "credit": 0,
+              "closing": 12000
+            },
+            {
+              "accountId": "01a1e9cd-aebd-7af9-adb9-b623cfd286d0",
+              "code": "5170",
+              "opening": 0,
+              "debit": 16218,
+              "credit": 0,
+              "closing": 16218
+            },
+            {
+              "accountId": "01a1e9cd-aebd-7465-9094-ba5290d2c0be",
+              "code": "5180",
+              "opening": 0,
+              "debit": 120000,
+              "credit": 0,
+              "closing": 120000
+            },
+            {
+              "accountId": "01a1e9cd-aebd-74b6-beaa-b42367b7b02e",
+              "code": "5230",
+              "opening": 0,
+              "debit": 800000,
+              "credit": 400000,
+              "closing": 400000
+            },
+            {
+              "accountId": "01a1e9cd-aebd-776f-b390-dee711e7afc7",
+              "code": "5250",
+              "opening": 0,
+              "debit": 440,
+              "credit": 0,
+              "closing": 440
+            },
+            {
+              "accountId": "01a1e9cd-aebd-7036-a610-1ec92d7bea82",
+              "code": "5260",
+              "opening": 0,
+              "debit": 7920,
+              "credit": 0,
+              "closing": 7920
+            }
+          ],
+          "totals": {
+            "debit": 5039396,
+            "credit": 5039396,
+            "closingDebit": 4633000,
+            "closingCredit": 4633000
+          }
+        }
+      ],
+      "rows": {
+        "accounts": 42,
+        "adjustment_journal_refs": 6,
+        "audit_log": 61,
+        "blue_deduction_answers": 0,
+        "closing_audit_log": 9,
+        "closing_notes": 0,
+        "consumption_tax_settings": 1,
+        "deferred_amortizations": 1,
+        "deferred_assets": 1,
+        "entity_profile": 1,
+        "fiscal_periods": 1,
+        "fixed_assets": 3,
+        "home_use_allocations": 3,
+        "import_account_mappings": 0,
+        "import_batches": 0,
+        "import_journal_refs": 0,
+        "import_tax_mappings": 0,
+        "inference_rule_history": 0,
+        "inference_rules": 0,
+        "invoice_items": 2,
+        "invoice_payments": 1,
+        "invoice_settings": 1,
+        "invoices": 2,
+        "invoicing_audit_log": 19,
+        "journal_drafts": 0,
+        "journal_line_tags": 0,
+        "journal_lines": 117,
+        "journals": 58,
+        "opening_balances": 4,
+        "partner_billing_terms": 2,
+        "partners": 3,
+        "receipt_audit_log": 7,
+        "receipt_files": 3,
+        "receipt_links": 3,
+        "receipt_readings": 1,
+        "receipts": 3,
+        "recurring_journal_lines": 2,
+        "recurring_journals": 1,
+        "recurring_runs": 10,
+        "rent_details": 1,
+        "statement_accounts": 1,
+        "statement_audit_log": 6,
+        "statement_batches": 1,
+        "statement_candidates": 10,
+        "statement_links": 1,
+        "statement_settings": 1,
+        "statement_sources": 1,
+        "statements": 10,
+        "straight_line_rates": 49,
+        "sub_accounts": 2,
+        "tags": 0,
+        "tax_categories": 7,
+        "tax_parameters": 20,
+        "tax_rates": 4,
+        "work_hours": 2
+      }
+    },
+    {
+      "id": "01a1e9cd-af35-728b-8656-f2f47a458d21",
+      "name": "見本の事業（合成）",
+      "journals": 20,
+      "journalsDigest": "2de15a8c165395260012fe0f84092520f8641b23a75ae69edf7d34159e50e8af",
+      "trialBalances": [
+        {
+          "fiscalYear": 2025,
+          "rows": [
+            {
+              "accountId": "01a1e9cd-af45-7a14-974c-fb9e34ba843b",
+              "code": "1010",
+              "opening": 0,
+              "debit": 10000,
+              "credit": 8800,
+              "closing": 1200
+            },
+            {
+              "accountId": "01a1e9cd-af45-7a0f-9871-848beed589fa",
+              "code": "1020",
+              "opening": 0,
+              "debit": 564710,
+              "credit": 73800,
+              "closing": 490910
+            },
+            {
+              "accountId": "01a1e9cd-af45-76b8-ab32-c7fff4fba4cd",
+              "code": "1030",
+              "opening": 0,
+              "debit": 440000,
+              "credit": 420000,
+              "closing": 20000
+            },
+            {
+              "accountId": "01a1e9cd-af45-7355-91c2-f5925782c158",
+              "code": "1060",
+              "opening": 0,
+              "debit": 0,
+              "credit": 60000,
+              "closing": -60000
+            },
+            {
+              "accountId": "01a1e9cd-af45-76b7-a843-4c0f106e3926",
+              "code": "3090",
+              "opening": 0,
+              "debit": 50000,
+              "credit": 0,
+              "closing": 50000
+            },
+            {
+              "accountId": "01a1e9cd-af45-774d-97db-7879cf219870",
+              "code": "2020",
+              "opening": 0,
+              "debit": 15000,
+              "credit": 12060,
+              "closing": -2940
+            },
+            {
+              "accountId": "01a1e9cd-af46-7c1d-8fe9-96436de66cc3",
+              "code": "3010",
+              "opening": 0,
+              "debit": 0,
+              "credit": 3300,
+              "closing": 3300
+            },
+            {
+              "accountId": "01a1e9cd-af46-77f1-99fc-f395c43f8bde",
+              "code": "4010",
+              "opening": 0,
+              "debit": 0,
+              "credit": 622600,
+              "closing": 622600
+            },
+            {
+              "accountId": "01a1e9cd-af46-7908-81e9-339b99593dad",
+              "code": "4020",
+              "opening": 0,
+              "debit": 0,
+              "credit": 3400,
+              "closing": 3400
+            },
+            {
+              "accountId": "01a1e9cd-af46-76bc-9d21-9f7fb3e25c11",
+              "code": "5120",
+              "opening": 0,
+              "debit": 4400,
+              "credit": 0,
+              "closing": 4400
+            },
+            {
+              "accountId": "01a1e9cd-af46-7bad-98b6-729018e1b40b",
+              "code": "5140",
+              "opening": 0,
+              "debit": 14260,
+              "credit": 0,
+              "closing": 14260
+            },
+            {
+              "accountId": "01a1e9cd-af46-7a19-9f2b-6a630acdce34",
+              "code": "5170",
+              "opening": 0,
+              "debit": 14300,
+              "credit": 0,
+              "closing": 14300
+            },
+            {
+              "accountId": "01a1e9cd-af46-7f9c-b923-e6de667ad37c",
+              "code": "5180",
+              "opening": 0,
+              "debit": 60000,
+              "credit": 0,
+              "closing": 60000
+            },
+            {
+              "accountId": "01a1e9cd-af46-7ef7-aadf-70dbc85127b7",
+              "code": "5250",
+              "opening": 0,
+              "debit": 31290,
+              "credit": 0,
+              "closing": 31290
+            }
+          ],
+          "totals": {
+            "debit": 1203960,
+            "credit": 1203960,
+            "closingDebit": 689300,
+            "closingCredit": 689300
+          }
+        },
+        {
+          "fiscalYear": 2026,
+          "rows": [
+            {
+              "accountId": "01a1e9cd-af45-7a14-974c-fb9e34ba843b",
+              "code": "1010",
+              "opening": 0,
+              "debit": 0,
+              "credit": 3300,
+              "closing": -3300
+            },
+            {
+              "accountId": "01a1e9cd-af46-7a19-9f2b-6a630acdce34",
+              "code": "5170",
+              "opening": 0,
+              "debit": 3300,
+              "credit": 0,
+              "closing": 3300
+            }
+          ],
+          "totals": {
+            "debit": 3300,
+            "credit": 3300,
+            "closingDebit": 3300,
+            "closingCredit": 3300
+          }
+        }
+      ],
+      "rows": {
+        "accounts": 42,
+        "adjustment_journal_refs": 0,
+        "audit_log": 23,
+        "blue_deduction_answers": 1,
+        "closing_audit_log": 2,
+        "closing_notes": 1,
+        "consumption_tax_settings": 1,
+        "deferred_amortizations": 0,
+        "deferred_assets": 0,
+        "entity_profile": 1,
+        "fiscal_periods": 2,
+        "fixed_assets": 0,
+        "home_use_allocations": 0,
+        "import_account_mappings": 1,
+        "import_batches": 1,
+        "import_journal_refs": 14,
+        "import_tax_mappings": 1,
+        "inference_rule_history": 1,
+        "inference_rules": 1,
+        "invoice_items": 0,
+        "invoice_payments": 0,
+        "invoice_settings": 0,
+        "invoices": 0,
+        "invoicing_audit_log": 0,
+        "journal_drafts": 1,
+        "journal_line_tags": 4,
+        "journal_lines": 44,
+        "journals": 20,
+        "opening_balances": 0,
+        "partner_billing_terms": 0,
+        "partners": 2,
+        "receipt_audit_log": 0,
+        "receipt_files": 0,
+        "receipt_links": 0,
+        "receipt_readings": 0,
+        "receipts": 0,
+        "recurring_journal_lines": 0,
+        "recurring_journals": 0,
+        "recurring_runs": 0,
+        "rent_details": 0,
+        "statement_accounts": 0,
+        "statement_audit_log": 1,
+        "statement_batches": 0,
+        "statement_candidates": 0,
+        "statement_links": 0,
+        "statement_settings": 0,
+        "statement_sources": 0,
+        "statements": 0,
+        "straight_line_rates": 49,
+        "sub_accounts": 1,
+        "tags": 2,
+        "tax_categories": 7,
+        "tax_parameters": 20,
+        "tax_rates": 4,
+        "work_hours": 0
+      }
+    }
+  ]
+}

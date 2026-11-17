@@ -6,6 +6,7 @@ import {
   BackupSettingsInput,
   BackupStatus,
   BackupTrigger,
+  backupVersionMismatchMessage,
 } from "../src/index.ts";
 
 const ID = "0190f3a0-0000-7000-8000-000000000001";
@@ -148,5 +149,18 @@ describe("BackupInspection", () => {
   it("appVersion の欠落を拒否", () => {
     const { appVersion: _, ...rest } = ok;
     expect(BackupInspection.safeParse(rest).success).toBe(false);
+  });
+});
+
+describe("backupVersionMismatchMessage（server・web・復元の CLI が共有する拒否の文言）", () => {
+  it("release がなければ、新しい版で作られた旨と更新の案内", () => {
+    expect(backupVersionMismatchMessage(undefined)).toBe(
+      "このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください",
+    );
+  });
+  it("release があれば、作った版を先に示す", () => {
+    expect(backupVersionMismatchMessage("0.2.0")).toBe(
+      "このバックアップは v0.2.0 で作られています。今のアプリより新しい版で作られたため、アプリを更新してから復元してください",
+    );
   });
 });

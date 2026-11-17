@@ -1,8 +1,8 @@
 # ADR 0007: バックアップをパスフレーズで暗号化した 1 ファイルにし、復元はコマンドで行う
 
-- 状態: 採用（一部を置き換え: ADR 0011。置き換わったのは、決定の「形式」の鍵の導出（Argon2id）と「パスフレーズ」の項、「自動の判断」の「パスフレーズを変えていないとき」「パスフレーズが使えないとき」の条件、「復元は server を止めて行うコマンド」の鍵の入力、影響の復元後の記述、決定の「スナップショット」の registry の写しの除外の説明。今は、認証の表が `auth.sqlite` に分かれたので registry の写しで全行を消すのは `app_settings`・`backup_runs`・`ai_settings` の 3 表で、削除禁止のトリガーを控えて外して作り直す手順は変わらない。加えて、`deleting`・`preparing`〔011・014〕の事業体と、tenant の DB のない事業体の行も写しから消す。`packages/db/src/backup/snapshot.ts` の `EXCLUDED_REGISTRY_TABLES`）
+- 状態: 採用（一部を置き換え: ADR 0011。置き換わったのは、決定の「形式」の鍵の導出（Argon2id）と「パスフレーズ」の項、「自動の判断」の「パスフレーズを変えていないとき」「パスフレーズが使えないとき」の条件、「復元は server を止めて行うコマンド」の鍵の入力、影響の復元後の記述、決定の「スナップショット」の registry の写しの除外の説明。今は、認証の表が `auth.sqlite` に分かれたので registry の写しで全行を消すのは `app_settings`・`backup_runs`・`ai_settings` の 3 表で、削除禁止のトリガーを控えて外して作り直す手順は変わらない。加えて、`deleting`・`preparing`〔011・014〕の事業体と、tenant の DB のない事業体の行も写しから消す。`packages/db/src/backup/snapshot.ts` の `EXCLUDED_REGISTRY_TABLES`。また ADR 0016 が、決定の「版」の項、理由の「版の完全一致」、代替案の「版の新旧を比べて古いものを移行する」を置き換えた。今は古い版を受け付けて移行してから入れ替え、新しい版だけを拒否する）
 - 日付: 2026-10-24
-- 関連: specs/004-auth-backup/research.md R8, R9, R10, R11, R12, R13、[ADR 0011](0011-passkey-prf-vault.md)（置き換えた節の新しい決定）
+- 関連: specs/004-auth-backup/research.md R8, R9, R10, R11, R12, R13、[ADR 0011](0011-passkey-prf-vault.md)（置き換えた節の新しい決定）、[ADR 0016](0016-restore-older-backups.md)（版の受け入れ）
 
 > **008 での変更（2026-10-30）**: 暗号の鍵は、パスフレーズ + Argon2id から `HKDF-SHA256(DK, ヘッダーの salt, "trebuchet/backup/v1")` に替わった。ヘッダーには、取った時点の recovery の包み（`salt`・`iv`・`tag`・`wrapped`）が入り、回復キーだけで復元できる。パスフレーズ、キーチェーンへの保存（`/usr/bin/security`。`SecretStore` は 006 の外部の AI の API キーのために残る）、設定・変更の画面と API、「パスフレーズが使えない」の警告はなくなった。`pnpm restore` は回復キーを標準入力から読み、ヘッダーの包み → 今の `auth.sqlite` の包みの順に試す。復元の後は `auth.sqlite` を recovery の包みだけで作り直し、次の起動で回復キーで解錠してパスキーを登録する。定期実行は解錠中だけ。AES-256-GCM とヘッダー全体の AAD、スナップショット（`VACUUM INTO`）、世代、版の完全一致は、この ADR のまま。中の SQLite の写しは平文（外側の AES-GCM が守る）。詳細は [ADR 0011](0011-passkey-prf-vault.md)。以下のうち該当する項は 004 の時点の記録。
 

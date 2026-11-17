@@ -1,11 +1,13 @@
 import { hkdfSync, randomUUID } from "node:crypto";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { WrappedKey } from "@trebuchet/domain";
 import { SHA256_PATTERN } from "@trebuchet/schema";
 import { and, eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { readMigrationFiles } from "drizzle-orm/migrator";
+import { compactStamp } from "./backup/file.ts";
 import { Database, type DrizzleDb, drizzleOf } from "./driver.ts";
 import * as authSchema from "./schema/auth.ts";
 import * as registrySchema from "./schema/registry.ts";
@@ -278,6 +280,155 @@ function openSqlite(
   return { client, created: true };
 }
 
+// ---- マイグレーション（足すだけ。適用済みを書き換えない） ----
+
+/**
+ * 未適用のマイグレーションの数。drizzle の migrator と同じ判定（`__drizzle_migrations` の `created_at` の最大より
+ * `folderMillis` が新しいものを当てる）で、`meta/_journal.json` と比べる。表がない・空なら全件
+ */
+export function pendingMigrationCount(client: Database.Database, migrationsFolder: string): number {
+  const migrations = readMigrationFiles({ migrationsFolder });
+  const table = client
+    .prepare(
+      "SELECT 1 AS found FROM sqlite_schema WHERE type = 'table' AND name = '__drizzle_migrations'",
+    )
+    .get();
+  if (table === undefined) return migrations.length;
+  const last = client
+    .prepare("SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1")
+    .get() as { created_at: number | string | null } | undefined;
+  if (last === undefined || last.created_at === null) return migrations.length;
+  const applied = Number(last.created_at);
+  return migrations.filter((m) => applied < m.folderMillis).length;
+}
+
+/** このアプリの最後のマイグレーションより新しいもの（新しい版のアプリで当てたもの）が当たっているか */
+function hasNewerMigrations(client: Database.Database, migrationsFolder: string): boolean {
+  const latest = Math.max(
+    0,
+    ...readMigrationFiles({ migrationsFolder }).map((m) => m.folderMillis),
+  );
+  const row = client.prepare("SELECT max(created_at) AS last FROM __drizzle_migrations").get() as
+    | { last: number | string | null }
+    | undefined;
+  return row?.last != null && Number(row.last) > latest;
+}
+
+/**
+ * 復元の仮の場所の DB（展開して暗号化したもの、今の帳簿の写し）に、今の版までのマイグレーションを当てる
+ * （暗号化のまま。WAL にしない）。起動時と同じく foreign_keys を有効にして当てる。当てた後に未適用が残る、
+ * またはこのアプリより新しい版のマイグレーションが当たっていれば例外。`folder` はテストが失敗を注入するための
+ * 差し替え（既定は今のマイグレーション）
+ */
+export function migrateEncryptedFile(
+  file: string,
+  scope: DbKeyScope,
+  folder?: string | undefined,
+): void {
+  const migrationsFolder =
+    folder ?? (scope === "registry" ? MIGRATIONS.registry : MIGRATIONS.tenant);
+  const client = openEncryptedSqlite(file, scope, { fileMustExist: true });
+  try {
+    client.pragma("foreign_keys = ON");
+    migrate(drizzleOf(client, {}), { migrationsFolder });
+    if (pendingMigrationCount(client, migrationsFolder) !== 0) {
+      throw new Error("未適用のマイグレーションが残った");
+    }
+    if (hasNewerMigrations(client, migrationsFolder)) {
+      throw new Error("このアプリより新しい版のマイグレーションが当たっている");
+    }
+  } finally {
+    client.close();
+  }
+}
+
+/** 起動時のマイグレーションの前の写しの置き場所（`<データ場所>/pre-migrate/`） */
+export const PRE_MIGRATE_DIR_NAME = "pre-migrate";
+/** 写しを残す数（種類ごと。事業体は事業体ごと） */
+export const PRE_MIGRATE_KEEP = 3;
+
+/** 写しの名前の頭: `registry`・`auth`・`tenant-<entityId 小文字>` */
+type PreMigrateTarget = "registry" | "auth" | { tenant: string };
+
+function preMigratePrefix(target: PreMigrateTarget): string {
+  return typeof target === "string" ? target : `tenant-${target.tenant.toLowerCase()}`;
+}
+
+export function preMigrateDir(dir: string = dataDir()): string {
+  return join(dir, PRE_MIGRATE_DIR_NAME);
+}
+
+/** `<頭>-<YYYYMMDD-HHmmss>[-<n>].sqlite`（同じ秒の 2 つ目から -2, -3 …） */
+function preMigrateEntries(dir: string, prefix: string): { name: string; key: [string, number] }[] {
+  if (!existsSync(dir)) return [];
+  const pattern = /^(.+)-(\d{8}-\d{6})(?:-(\d+))?\.sqlite$/;
+  const out: { name: string; key: [string, number] }[] = [];
+  for (const name of readdirSync(dir)) {
+    const m = pattern.exec(name);
+    if (m === null || m[1] !== prefix || m[2] === undefined) continue;
+    out.push({ name, key: [m[2], m[3] === undefined ? 1 : Number(m[3])] });
+  }
+  return out.sort((a, b) =>
+    a.key[0] === b.key[0] ? a.key[1] - b.key[1] : a.key[0] < b.key[0] ? -1 : 1,
+  );
+}
+
+const sqlQuote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+
+/**
+ * マイグレーションの前に DB の写しを取る（`VACUUM INTO`。開いている接続から読むので WAL の中身を含めて整合し、
+ * 暗号化した DB は同じ鍵で暗号化された写しになる）。`.partial` に書いてから改名する。失敗したら例外
+ * （呼び出し側はマイグレーションを当てない）。写しの後に、同じ頭の古いものを PRE_MIGRATE_KEEP 個まで減らす
+ */
+function copyBeforeMigrate(client: Database.Database, target: PreMigrateTarget): void {
+  const dir = preMigrateDir();
+  const prefix = preMigratePrefix(target);
+  mkdirSync(dir, { recursive: true });
+  for (const name of readdirSync(dir)) {
+    if (name.startsWith(`${prefix}-`) && name.endsWith(".partial")) {
+      rmSync(join(dir, name), { force: true });
+    }
+  }
+  const stamp = compactStamp(new Date());
+  let name = `${prefix}-${stamp}.sqlite`;
+  for (let n = 2; existsSync(join(dir, name)); n++) name = `${prefix}-${stamp}-${n}.sqlite`;
+  const partial = join(dir, `${name}.partial`);
+  try {
+    client.exec(`VACUUM INTO ${sqlQuote(partial)}`);
+    renameSync(partial, join(dir, name));
+  } catch (e) {
+    rmSync(partial, { force: true });
+    throw e;
+  }
+  try {
+    const entries = preMigrateEntries(dir, prefix);
+    for (const old of entries.slice(0, Math.max(0, entries.length - PRE_MIGRATE_KEEP))) {
+      rmSync(join(dir, old.name), { force: true });
+    }
+  } catch {
+    // 古い写しを消せなくても、写しは取れているのでマイグレーションは続ける（次の起動で再び減らす）
+  }
+}
+
+/**
+ * 起動時（ハンドルを開いた初回）のマイグレーション。既存の DB（表がある）に未適用があるときだけ、先に写しを取る。
+ * 新しく作った DB（表がない）・未適用がない DB は写さない
+ */
+function migrateOnOpen(
+  client: Database.Database,
+  db: Parameters<typeof migrate>[0],
+  migrationsFolder: string,
+  target: PreMigrateTarget,
+): void {
+  const objects = client
+    .prepare("SELECT count(*) AS n FROM sqlite_schema WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\'")
+    .get() as { n: number };
+  if (objects.n > 0 && pendingMigrationCount(client, migrationsFolder) > 0) {
+    copyBeforeMigrate(client, target);
+  }
+  migrate(db, { migrationsFolder });
+}
+
 const tenantDbs = new WeakMap<Database.Database, TenantDb>();
 const registryDbs = new WeakMap<Database.Database, RegistryDb>();
 const authDbs = new WeakMap<Database.Database, AuthDb>();
@@ -288,7 +439,7 @@ export function openTenant(entityId: string): TenantDb {
   const existing = tenantDbs.get(client);
   if (existing && !created) return existing;
   const db = drizzleOf(client, tenantSchema);
-  migrate(db, { migrationsFolder: MIGRATIONS.tenant });
+  migrateOnOpen(client, db, MIGRATIONS.tenant, { tenant: entityId });
   tenantDbs.set(client, db);
   return db;
 }
@@ -299,7 +450,7 @@ export function openRegistry(): RegistryDb {
   const existing = registryDbs.get(client);
   if (existing && !created) return existing;
   const db = drizzleOf(client, registrySchema);
-  migrate(db, { migrationsFolder: MIGRATIONS.registry });
+  migrateOnOpen(client, db, MIGRATIONS.registry, "registry");
   registryDbs.set(client, db);
   return db;
 }
@@ -310,7 +461,7 @@ export function openAuth(): AuthDb {
   const existing = authDbs.get(client);
   if (existing && !created) return existing;
   const db = drizzleOf(client, authSchema);
-  migrate(db, { migrationsFolder: MIGRATIONS.auth });
+  migrateOnOpen(client, db, MIGRATIONS.auth, "auth");
   authDbs.set(client, db);
   return db;
 }
@@ -333,6 +484,14 @@ export function removeTenantData(entityId: string): void {
     rmSync(receiptsDir(entityId), { recursive: true, force: true });
     for (const suffix of ["-wal", "-shm", "-journal", ""])
       rmSync(`${file}${suffix}`, { force: true });
+    // マイグレーションの前の写しも消す（消した事業体の帳簿を残さない）
+    const dir = preMigrateDir();
+    const prefix = `${preMigratePrefix({ tenant: entityId })}-`;
+    if (existsSync(dir)) {
+      for (const name of readdirSync(dir)) {
+        if (name.startsWith(prefix)) rmSync(join(dir, name), { force: true });
+      }
+    }
   });
 }
 

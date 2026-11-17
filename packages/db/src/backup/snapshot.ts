@@ -28,6 +28,29 @@ const MIGRATION_JOURNALS = {
   tenant: fileURLToPath(new URL("../../drizzle/tenant/meta/_journal.json", import.meta.url)),
 };
 
+/** ルートの package.json（`version` がアプリのリリースの版。`pnpm start` もソースから動くので同じ場所を読める） */
+const ROOT_PACKAGE_JSON = fileURLToPath(new URL("../../../../package.json", import.meta.url));
+
+/** リリースの版の形（`x.y.z` と任意の `-pre`）。.tbk のヘッダーの `release` の検査にも使う */
+export const RELEASE_PATTERN = /^\d{1,4}\.\d{1,4}\.\d{1,4}(-[0-9A-Za-z.]{1,20})?$/;
+
+let cachedRelease: string | undefined;
+
+/**
+ * 今のアプリのリリースの版（ルートの package.json の `version`。例 "0.1.0"）。表示と .tbk のヘッダーの
+ * `release` に使う。バックアップの受け入れの判定には使わない（判定はマイグレーションの数。ADR 0016）
+ */
+export function currentRelease(): string {
+  if (cachedRelease === undefined) {
+    const pkg = JSON.parse(readFileSync(ROOT_PACKAGE_JSON, "utf8")) as { version?: unknown };
+    if (typeof pkg.version !== "string" || !RELEASE_PATTERN.test(pkg.version)) {
+      throw new Error("package.json の version がリリースの版の形ではない");
+    }
+    cachedRelease = pkg.version;
+  }
+  return cachedRelease;
+}
+
 let cachedVersion: AppVersion | undefined;
 
 /** 今のアプリの版 = registry と tenant のマイグレーションの適用数（R8） */

@@ -12,7 +12,7 @@ pnpm restore -- --file <path/to/backup.tbk> [--data-dir <dir>] [--yes]
 - `--data-dir` の既定は `TREBUCHET_DATA_DIR`、なければリポジトリ直下の `data/`
 - 手順と出力:
   1. server が 127.0.0.1:8787 で応答すれば中止（終了コード 3）
-  2. 復号と検証。失敗は「パスフレーズが違うか、ファイルが壊れています」（終了コード 1）。アプリの版が今と一致しなければ「アプリの版が一致しません。このバックアップを取った版のアプリで復元してください」（終了コード 1）。マイグレーションでの更新はしない
+  2. 復号と検証。失敗は「パスフレーズが違うか、ファイルが壊れています」（終了コード 1）。アプリの版が今より新しければ「このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください」（終了コード 1）。今より古ければ、展開した仮の場所で今の版までのマイグレーションを当ててから入れ替える（ADR 0016）
   3. 要約（作成日時、作った Mac、事業体ごとの年度と仕訳の件数）を表示する。データ場所に同じ事業体があれば、事業体ごとの差（仕訳の件数、最後の更新）も表示する。`--yes` がなければ確認を求める
   4. データ場所に帳簿があれば、今の帳簿を同じパスフレーズでバックアップし、場所を表示する（db の `snapshotDataDir`・`encryptBackup`・`writeBackupFile` だけで書く。server の関数は使わない。`<dataDir>/../trebuchet-before-restore-<日時>.tbk`）
   5. `<dataDir>.restore-<日時>/` に展開し、`PRAGMA integrity_check`（マイグレーションは当てない）
@@ -33,10 +33,12 @@ pnpm start   # web をビルドし、server が http://localhost:8787 で web �
 |---|---|---|
 | `snapshotDataDir(dataDir, tmpDir)` | データ場所、`.tmp/` の下の作業場所 | `{ files: { path, bytes }[], manifest }`。各 DB に `VACUUM INTO`。registry の写しは、トリガーを `DROP` → 認証の表・`app_settings`・`backup_runs`・`pairing_tokens` の行を消す → トリガーを作り直す → `VACUUM`（R9）。平文の写しは `tmpDir` の下に作り、`finally` で必ず消す（呼び出し側が `tmpDir` ごと消す） |
 | `currentAppVersion()` | — | `{ registry, tenant }`（マイグレーションの適用数） |
+| `currentRelease()` | — | アプリのリリースの版（ルートの `package.json` の `version`。例 `"0.1.0"`）。`encryptBackup` がヘッダーの任意の項目 `release` に書く（AAD に含まれる。`format` は 1 のまま。`release` のない以前のファイルも読む） |
+| `readBackupRelease(bytes)` | | ヘッダーの `release`（復号しない。表示だけに使う）。なければ `undefined`。`VERSION_MISMATCH` の文言（schema の `backupVersionMismatchMessage`）に作った版を示す |
 | `removeStaleSnapshots(tmpRoot)` | `.tmp/` | 前回の異常終了で残った `.tmp/backup-snapshot-*/` を消す（server の起動時に呼ぶ） |
 | `packArchive(snapshot)` / `unpackArchive(bytes)` | | アーカイブのバイト列 / `{ manifest, files }`（各ファイルの SHA-256 を検査） |
 | `encryptBackup(archive, passphrase, header)` | | `.tbk` のバイト列（Argon2id ＋ AES-256-GCM、ヘッダーを AAD） |
-| `decryptBackup(bytes, passphrase, currentVersion)` | | `Result<{ header, archive }, "INVALID" \| "VERSION_MISMATCH">`（版が `currentVersion` と一致しなければ `VERSION_MISMATCH`） |
+| `decryptBackup(bytes, passphrase, currentVersion)` | | `Result<{ header, archive }, "INVALID" \| "VERSION_MISMATCH">`（版が `currentVersion` より新しければ `VERSION_MISMATCH`。ADR 0016） |
 | `writeBackupFile(folder, name, bytes)` | | 一時名で書き、読み戻して検証し、改名 |
 | `listBackupFiles(folder)` | | `{ name, macId, createdAt }[]` |
 | `restoreBackup(options)` | ファイル、パスフレーズ、データ場所、`confirm` | 復元の手順 3〜6（R13） |

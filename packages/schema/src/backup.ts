@@ -70,3 +70,13 @@ export const BackupInspection = z.object({
   entities: z.array(BackupEntitySummary),
 });
 export type BackupInspection = z.infer<typeof BackupInspection>;
+
+/**
+ * 新しい版のアプリで作られたバックアップを拒否するときの文言（server の `BACKUP_VERSION_MISMATCH`・web・復元の
+ * CLI が共有する。末尾の句点は付けない）。`release` は .tbk のヘッダーの作った版（以前のバックアップにはない）
+ */
+export function backupVersionMismatchMessage(release: string | undefined): string {
+  return release === undefined
+    ? "このバックアップは新しい版のアプリで作られています。アプリを更新してから復元してください"
+    : `このバックアップは v${release} で作られています。今のアプリより新しい版で作られたため、アプリを更新してから復元してください`;
+}

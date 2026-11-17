@@ -4,11 +4,12 @@
  * （標準入力から読む。引数は `ps` に出る）。
  * ルートは @trebuchet/* に依存しないため、ワークスペースのソースを相対パスで読み込む。
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { LOOPBACK_HOST, SERVER_PORT } from "../../apps/server/src/lib/origin.ts";
+import { readBackupRelease } from "../../packages/db/src/backup/crypto.ts";
 import { RECEIPT_STORE_DIRNAME } from "../../packages/db/src/backup/receipts.ts";
 import {
   type RestoreErrorCode,
@@ -16,6 +17,7 @@ import {
   type RestoreSummary,
   restoreBackup,
 } from "../../packages/db/src/backup/restore.ts";
+import { backupVersionMismatchMessage } from "../../packages/schema/src/backup.ts";
 
 const EXIT_OK = 0;
 const EXIT_INVALID = 1;
@@ -56,10 +58,19 @@ export function isServerRunning(port: number = SERVER_PORT, timeoutMs = 1000): P
 const USAGE =
   "使い方: pnpm restore -- --file <backup.tbk> [--data-dir <dir>] [--receipts-dir <dir>] [--allow-missing-receipts] [--yes]";
 
+/** .tbk のヘッダーの release（作った版）。読めなければ undefined */
+function releaseOf(file: string): string | undefined {
+  try {
+    return readBackupRelease(readFileSync(file));
+  } catch {
+    return undefined;
+  }
+}
+
 const MESSAGES: Record<RestoreErrorCode, string> = {
   INVALID: "回復キーが違うか、ファイルが壊れています",
-  VERSION_MISMATCH:
-    "アプリの版が一致しません。このバックアップを取った版のアプリで復元してください",
+  // 実際の文言はヘッダーの release を入れて backupVersionMismatchMessage で作る
+  VERSION_MISMATCH: backupVersionMismatchMessage(undefined),
   CANCELLED: "取り消しました",
   BEFORE_BACKUP_FAILED:
     "復元の前の帳簿のバックアップを書けなかったため、中止しました。帳簿は変わっていません",
@@ -170,7 +181,11 @@ export async function runRestoreCli(argv: string[], deps: RestoreCliDeps): Promi
     },
   });
   if (!result.ok) {
-    deps.stderr(MESSAGES[result.error]);
+    deps.stderr(
+      result.error === "VERSION_MISMATCH"
+        ? backupVersionMismatchMessage(releaseOf(file))
+        : MESSAGES[result.error],
+    );
     if (result.error === "RECEIPTS_MISSING") {
       deps.stderr(`見つからない、または壊れている証憑のファイル: ${missingReceipts} 件`);
     }

@@ -9,6 +9,8 @@ data/
 
 # バックアップのファイルと、復元の作業用のフォルダ（004。.tmp/ の下は上で除外済み）
 *.tbk
+# リリースごとの見本のバックアップ（合成の帳簿とテスト専用の鍵。CI が復元して照合する）はコミットする
+!packages/db/test/fixtures/backups/**/*.tbk
 data.before-restore-*/
 data.restore-*/
 
