@@ -19,7 +19,7 @@
     "@trebuchet/db": "workspace:*",
     "@trebuchet/domain": "workspace:*",
     "@trebuchet/schema": "workspace:*",
-    "hono": "^4.13.13"
+    "hono": "^4.13.16"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
